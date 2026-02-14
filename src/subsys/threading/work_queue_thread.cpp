@@ -5,8 +5,13 @@
 
 namespace eerie_leap::subsys::threading {
 
-WorkQueueThread::WorkQueueThread(std::string name, int stack_size, int priority, bool is_cooperative)
-    : ThreadBase(std::move(name), stack_size, priority, is_cooperative) {
+WorkQueueThread::WorkQueueThread(
+    std::string name,
+    int stack_size,
+    int priority,
+    bool is_cooperative,
+    std::pmr::memory_resource* mr)
+    : ThreadBase(std::move(name), stack_size, priority, is_cooperative, mr) {
 
     k_mutex_init(&runner_tasks_mutex_);
 }

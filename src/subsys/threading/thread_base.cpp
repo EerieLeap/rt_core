@@ -4,8 +4,14 @@
 
 namespace eerie_leap::subsys::threading {
 
-ThreadBase::ThreadBase(std::string name, int stack_size, int priority, bool is_cooperative)
-    : k_stack_size_(stack_size),
+ThreadBase::ThreadBase(
+    std::string name,
+    int stack_size,
+    int priority,
+    bool is_cooperative,
+    std::pmr::memory_resource* mr)
+    : mr_(mr),
+      k_stack_size_(stack_size),
       k_priority_(is_cooperative
         ? std::abs(priority) * -1 : std::abs(priority)),
       stack_area_(nullptr),
@@ -15,11 +21,17 @@ ThreadBase::~ThreadBase() {
     if(stack_area_ == nullptr)
         return;
 
-    k_thread_stack_free(stack_area_);
+    if(mr_ == nullptr)
+        k_thread_stack_free(stack_area_);
+    else
+        mr_->deallocate(stack_area_, k_stack_size_, Z_KERNEL_STACK_OBJ_ALIGN);
 }
 
 void ThreadBase::InitializeStack() {
-    stack_area_ = k_thread_stack_alloc(k_stack_size_, 0);
+    if(mr_ == nullptr)
+        stack_area_ = k_thread_stack_alloc(k_stack_size_, 0);
+    else
+        stack_area_ = static_cast<k_thread_stack_t*>(mr_->allocate(k_stack_size_, Z_KERNEL_STACK_OBJ_ALIGN));
 }
 
 [[nodiscard]] const k_thread_stack_t* ThreadBase::GetStack() const {

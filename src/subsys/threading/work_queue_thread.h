@@ -24,7 +24,12 @@ private:
     static void RunnerTaskHandler(k_work* work);
 
 public:
-    WorkQueueThread(std::string name, int stack_size, int priority, bool is_cooperative = false);
+    WorkQueueThread(
+        std::string name,
+        int stack_size,
+        int priority,
+        bool is_cooperative = false,
+        std::pmr::memory_resource* mr = nullptr);
     ~WorkQueueThread();
 
     void Initialize();
