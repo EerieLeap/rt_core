@@ -26,8 +26,6 @@ using namespace eerie_leap::domain::sensor_domain::isr_sensor_readers;
 
 class SensorsProcessingService : public ISensorsProcessingService {
 private:
-    static constexpr int thread_stack_size_ = 8192;
-    static constexpr int thread_priority_ = 6;
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
 
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;

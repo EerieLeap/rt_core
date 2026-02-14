@@ -35,8 +35,8 @@ SensorsProcessingService::SensorsProcessingService(
 
     work_queue_thread_ = std::make_shared<WorkQueueThread>(
         "processing_service",
-        thread_stack_size_,
-        thread_priority_);
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
 
     reading_processors_->push_back(std::make_shared<ScriptProcessor>("pre_process_sensor_value", sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<AdcReadingProcessor>(sensor_readings_frame_));

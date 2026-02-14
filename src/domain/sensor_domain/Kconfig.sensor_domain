@@ -1,0 +1,17 @@
+config EERIE_LEAP_DOMAIN_SENSOR
+    depends on EERIE_LEAP_CONFIGURATION
+    bool "EerieLeap Sensor Domain"
+    help
+      Add EerieLeap Sensor Domain.
+
+menu "EerieLeap Sensor Domain config"
+    depends on EERIE_LEAP_DOMAIN_SENSOR
+
+    config EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE
+        int "Sensor processing service stack size"
+        default 8192
+
+    config EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
+        int "Sensor processing service priority"
+        default 6
+endmenu
