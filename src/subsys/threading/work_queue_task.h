@@ -37,6 +37,10 @@ public:
         k_work_reschedule_for_queue(work_q_, &work, delay);
     }
 
+    bool IsScheduled() {
+        return k_work_delayable_busy_get(&work) && K_WORK_QUEUED;
+    }
+
     bool Cancel() {
         return k_work_cancel_delayable_sync(&work, sync_);
     }
