@@ -2,8 +2,17 @@
 
 namespace eerie_leap::subsys::threading {
 
-Thread::Thread(std::string name, IThread* instance, int stack_size, int priority, bool is_cooperative)
-    : ThreadBase(std::move(name), stack_size, priority, is_cooperative), instance_(instance), is_running_(ATOMIC_INIT(0)), is_initialized_(false) {}
+Thread::Thread(
+    std::string name,
+    IThread* instance,
+    int stack_size,
+    int priority,
+    bool is_cooperative,
+    std::pmr::memory_resource* resource)
+        : ThreadBase(std::move(name), stack_size, priority, is_cooperative, resource),
+        instance_(instance),
+        is_running_(ATOMIC_INIT(0)),
+        is_initialized_(false) {}
 
 void Thread::Initialize() {
     InitializeStack();

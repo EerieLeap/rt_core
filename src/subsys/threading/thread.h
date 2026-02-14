@@ -21,7 +21,13 @@ private:
     static void TaskHandler(k_work* work);
 
 public:
-    Thread(std::string name, IThread* instance, int stack_size, int priority, bool is_cooperative = false);
+    Thread(
+        std::string name,
+        IThread* instance,
+        int stack_size,
+        int priority,
+        bool is_cooperative = false,
+        std::pmr::memory_resource* resource = nullptr);
     ~Thread() = default;
 
     Thread(const Thread&) = delete;

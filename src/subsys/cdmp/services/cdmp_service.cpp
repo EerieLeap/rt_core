@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 
+#include "utilities/memory/memory_resource_manager.h"
+
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "cdmp_network_service.h"
 #include "cdmp_heartbeat_service.h"
@@ -10,6 +12,8 @@
 LOG_MODULE_REGISTER(cdmp_service, LOG_LEVEL_INF);
 
 namespace eerie_leap::subsys::cdmp::services {
+
+using namespace eerie_leap::utilities::memory;
 
 CdmpService::CdmpService(
     std::shared_ptr<Canbus> canbus,
@@ -29,7 +33,9 @@ CdmpService::CdmpService(
         "cdmp_service_thread",
         this,
         CONFIG_EERIE_LEAP_CDMP_SERVICE_THREAD_STACK_SIZE,
-        CONFIG_EERIE_LEAP_CDMP_SERVICE_THREAD_PRIORITY);
+        CONFIG_EERIE_LEAP_CDMP_SERVICE_THREAD_PRIORITY,
+        false,
+        Mrm::GetExtPmr());
     work_queue_thread_ = std::make_shared<WorkQueueThread>(
         "cdmp_work_queue",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
