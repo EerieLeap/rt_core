@@ -56,7 +56,7 @@ private:
     // and should have highest priority, or have MetaIRQ priority level,
     // for that set CONFIG_NUM_METAIRQ_PRIORITIES to be > 0
     static constexpr int thread_priority_ = K_HIGHEST_THREAD_PRIO;
-    static constexpr bool thread_is_cooperative = true;
+    static constexpr bool thread_is_cooperative_ = true;
     static constexpr int thread_stack_size_ = 2048;
     std::unique_ptr<Thread> thread_;
 

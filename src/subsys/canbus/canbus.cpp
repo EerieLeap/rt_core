@@ -38,7 +38,7 @@ Canbus::Canbus(
         this,
         thread_stack_size_,
         thread_priority_,
-        thread_is_cooperative);
+        thread_is_cooperative_);
 }
 
 Canbus::~Canbus() {
