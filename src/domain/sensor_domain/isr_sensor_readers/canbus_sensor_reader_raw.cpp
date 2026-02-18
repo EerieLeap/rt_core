@@ -37,6 +37,11 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
 
             work_queue_thread_->Run(
                 [this, frame]() {
+                    if(atomic_get(&is_destroying_)) {
+                        k_sem_give(&processing_semaphore_);
+                        return;
+                    }
+
                     AddOrUpdateReading(frame);
                     process_sensor_callback_(*sensor_);
 
@@ -51,15 +56,17 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     if(handler_id < 0)
         throw std::runtime_error("Failed to register CAN frame handler for frame ID: " + std::to_string(frame_id));
 
-    if(!registered_handler_ids_.contains(frame_id))
-        registered_handler_ids_.insert({frame_id, {}});
-    registered_handler_ids_[frame_id].push_back(handler_id);
+    frame_id_ = frame_id;
+    frame_handler_id_ = handler_id;
 }
 
 CanbusSensorReaderRaw::~CanbusSensorReaderRaw() {
-    for(const auto& [frame_id, handler_ids] : registered_handler_ids_)
-        for(const auto& handler_id : handler_ids)
-            canbus_->RemoveFrameReceivedHandler(frame_id, handler_id);
+    atomic_set(&is_destroying_, 1);
+
+    canbus_->RemoveFrameReceivedHandler(frame_id_, frame_handler_id_);
+
+    k_sem_take(&processing_semaphore_, K_FOREVER);
+    k_sem_give(&processing_semaphore_);
 }
 
 std::optional<SensorReading> CanbusSensorReaderRaw::CreateRawReading(const CanFrame& can_frame) {

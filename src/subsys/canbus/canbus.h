@@ -36,8 +36,9 @@ private:
     k_msgq frame_msgq_;
 
     const device *canbus_dev_;
-    std::unordered_map<uint32_t, can_filter> can_filters_;
-    std::unordered_map<uint32_t, std::unordered_map<int, CanFrameHandler>> handlers_;
+    std::unordered_map<uint32_t, int> can_filter_ids_; // <can_id, filter_id>
+    std::unordered_map<uint32_t, can_filter> can_filters_; // <can_id, can_filter>
+    std::unordered_map<uint32_t, std::unordered_map<int, CanFrameHandler>> handlers_; // <can_id, handlers>
 
     bool is_initialized_ = false;
     CanbusType type_;

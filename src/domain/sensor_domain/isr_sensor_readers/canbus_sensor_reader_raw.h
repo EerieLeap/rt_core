@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+// #include <atomic>
 #include <chrono>
 #include <vector>
 #include <unordered_map>
@@ -25,8 +26,10 @@ private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<Canbus> canbus_;
 
+    atomic_t is_destroying_{ATOMIC_INIT(0)};
     k_sem processing_semaphore_;
-    std::unordered_map<uint32_t, std::vector<int>> registered_handler_ids_;
+    uint32_t frame_id_;
+    int frame_handler_id_;
 
     static constexpr int FRAME_PROCESSING_DELAY_MS = 4;
 

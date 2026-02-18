@@ -251,7 +251,8 @@ bool Canbus::RegisterFilter(uint32_t can_id) {
             return false;
         }
 
-        can_filters_.insert({can_id, filter});
+        can_filter_ids_.insert({ can_id, filter_id });
+        can_filters_.insert({ can_id, filter });
     }
 
     return true;
@@ -263,6 +264,12 @@ bool Canbus::RemoveFrameReceivedHandler(uint32_t can_id, int handler_id) {
         return false;
     }
 
+    if(!can_filter_ids_.contains(can_id))
+        return false;
+
+    if(!can_filters_.contains(can_id))
+        return false;
+
     if(!handlers_.contains(can_id))
         return false;
 
@@ -272,13 +279,13 @@ bool Canbus::RemoveFrameReceivedHandler(uint32_t can_id, int handler_id) {
         return false;
 
     handler_list.erase(handler_id);
+
     if(handler_list.empty()) {
         // Remove filter
-        if(can_filters_.contains(can_id)) {
-            can_remove_rx_filter(canbus_dev_, can_filters_.at(can_id).id);
-            can_filters_.erase(can_id);
-        }
+        can_remove_rx_filter(canbus_dev_, can_filter_ids_.at(can_id));
 
+        can_filters_.erase(can_id);
+        can_filter_ids_.erase(can_id);
         handlers_.erase(can_id);
     }
 
