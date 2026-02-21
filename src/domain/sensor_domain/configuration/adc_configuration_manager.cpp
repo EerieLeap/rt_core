@@ -47,36 +47,41 @@ AdcConfigurationManager::AdcConfigurationManager(
         LOG_INF("ADC Configuration Manager initialized successfully.");
     }
 
-    ApplyJsonConfiguration();
+    ApplyJsonConfiguration(true);
 }
 
-bool AdcConfigurationManager::ApplyJsonConfiguration() {
-    if(!json_configuration_service_->IsAvailable())
+bool AdcConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data) {
+    if(fs_load && !json_configuration_service_->IsAvailable())
         return false;
 
-    auto json_config_loaded = json_configuration_service_->Load();
-    if(json_config_loaded.has_value()) {
-        if(json_config_loaded->checksum == json_config_checksum_)
-            return true;
+    auto json_config_loaded = fs_load
+        ? json_configuration_service_->Load()
+        : json_configuration_service_->Load(data);
+    if(!json_config_loaded.has_value())
+        return false;
 
-        try {
-            auto configuration = json_parser_->Deserialize(Mrm::GetDefaultPmr(), *json_config_loaded->config);
-
-            json_config_checksum_ = json_config_loaded->checksum;
-
-            if(!Update(*configuration, true))
-                return false;
-        } catch(const std::exception& e) {
-            LOG_ERR("Failed to deserialize JSON configuration. %s", e.what());
-            return false;
-        }
-
-        LOG_INF("JSON configuration loaded successfully.");
-
+    if(json_config_loaded->checksum == json_config_checksum_)
         return true;
+
+    try {
+        auto configuration = json_parser_->Deserialize(Mrm::GetDefaultPmr(), *json_config_loaded->config);
+
+        json_config_checksum_ = json_config_loaded->checksum;
+
+        if(!Update(*configuration, true))
+            return false;
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to deserialize JSON configuration. %s", e.what());
+        return false;
     }
 
+    LOG_INF("JSON configuration loaded successfully.");
+
     return true;
+}
+
+bool AdcConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
+    return ApplyJsonConfiguration(false, data);
 }
 
 bool AdcConfigurationManager::Update(const AdcConfiguration& configuration, bool internal_only) {

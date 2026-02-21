@@ -70,6 +70,29 @@ private:
         return fs_service_->WriteFile(configuration_file_path_, json_str.c_str(), json_str.size());
     }
 
+    std::optional<LoadedConfig<T>> LoadProcessor(std::span<const uint8_t> data) {
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
+        std::string_view json_str(reinterpret_cast<const char*>(data.data()), data.size());
+        auto configuration = serializer_->Deserialize(json_str);
+
+        if (configuration == nullptr) {
+            LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());
+            return std::nullopt;
+        }
+
+        uint32_t crc = crc32_ieee(data.data(), data.size());
+
+        LoadedConfig<T> loaded_config {
+            .config = std::move(configuration),
+            .checksum = crc
+        };
+
+        LOG_INF("%s configuration loaded successfully.", configuration_file_path_.c_str());
+
+        return loaded_config;
+    }
+
     std::optional<LoadedConfig<T>> LoadProcessor() {
         if(!fs_service_)
             return std::nullopt;
@@ -90,24 +113,7 @@ private:
             return std::nullopt;
         }
 
-        std::string_view json_str(reinterpret_cast<const char*>(buffer.data()), out_len);
-        auto configuration = serializer_->Deserialize(json_str);
-
-        if (configuration == nullptr) {
-            LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());
-            return std::nullopt;
-        }
-
-        uint32_t crc = crc32_ieee(buffer.data(), buffer_size);
-
-        LoadedConfig<T> loaded_config {
-            .config = std::move(configuration),
-            .checksum = crc
-        };
-
-        LOG_INF("%s configuration loaded successfully.", configuration_file_path_.c_str());
-
-        return loaded_config;
+        return LoadProcessor({buffer.data(), buffer_size});
     }
 
     static void WorkTaskSave(k_work* work) {
@@ -158,6 +164,10 @@ public:
         k_work_flush(&task_load_.work, &work_sync_);
 
         return std::move(task_load_.result);
+    }
+
+    std::optional<LoadedConfig<T>> Load(std::span<const uint8_t> data) {
+        return LoadProcessor(data);
     }
 };
 

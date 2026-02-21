@@ -44,40 +44,45 @@ SensorsConfigurationManager::SensorsConfigurationManager(
         LOG_INF("Sensors Configuration Manager initialized successfully.");
     }
 
-    ApplyJsonConfiguration();
+    ApplyJsonConfiguration(true);
 }
 
-bool SensorsConfigurationManager::ApplyJsonConfiguration() {
-    if(!json_configuration_service_->IsAvailable())
+bool SensorsConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data) {
+    if(fs_load && !json_configuration_service_->IsAvailable())
         return false;
 
-    auto json_config_loaded = json_configuration_service_->Load();
-    if(json_config_loaded.has_value()) {
-        if(json_config_loaded->checksum == json_config_checksum_)
-            return true;
+    auto json_config_loaded = fs_load
+        ? json_configuration_service_->Load()
+        : json_configuration_service_->Load(data);
+    if(!json_config_loaded.has_value())
+        return false;
 
-        try {
-            auto sensors = json_parser_->Deserialize(
-                Mrm::GetExtPmr(),
-                *json_config_loaded->config,
-                gpio_channel_count_,
-                adc_channel_count_);
-
-            json_config_checksum_ = json_config_loaded->checksum;
-
-            if(!Update(sensors, true))
-                return false;
-        } catch(const std::exception& e) {
-            LOG_ERR("Failed to deserialize JSON configuration. %s", e.what());
-            return false;
-        }
-
-        LOG_INF("JSON configuration loaded successfully.");
-
+    if(json_config_loaded->checksum == json_config_checksum_)
         return true;
+
+    try {
+        auto sensors = json_parser_->Deserialize(
+            Mrm::GetExtPmr(),
+            *json_config_loaded->config,
+            gpio_channel_count_,
+            adc_channel_count_);
+
+        json_config_checksum_ = json_config_loaded->checksum;
+
+        if(!Update(sensors, true))
+            return false;
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to deserialize JSON configuration. %s", e.what());
+        return false;
     }
 
+    LOG_INF("JSON configuration loaded successfully.");
+
     return true;
+}
+
+bool SensorsConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
+    return ApplyJsonConfiguration(false, data);
 }
 
 bool SensorsConfigurationManager::Update(const std::vector<std::shared_ptr<Sensor>>& sensors, bool internal_only) {

@@ -12,6 +12,7 @@
 #include "subsys/adc/i_adc_manager.h"
 #include "subsys/adc/adc_factory.hpp"
 
+#include "domain/configuration_domain/utilities/i_json_configuration_manager.h"
 #include "domain/sensor_domain/configuration/parsers/adc_configuration_cbor_parser.h"
 #include "domain/sensor_domain/configuration/parsers/adc_configuration_json_parser.h"
 
@@ -21,9 +22,10 @@ using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::configuration::services;
 using namespace eerie_leap::subsys::adc;
 using namespace eerie_leap::subsys::adc::models;
+using namespace eerie_leap::domain::configuration_domain::utilities;
 using namespace eerie_leap::domain::sensor_domain::configuration::parsers;
 
-class AdcConfigurationManager {
+class AdcConfigurationManager : public IJsonConfigurationManager {
 private:
     std::unique_ptr<CborConfigurationService<CborAdcConfig>> cbor_configuration_service_;
     std::unique_ptr<JsonConfigurationService<JsonAdcConfig>> json_configuration_service_;
@@ -36,7 +38,7 @@ private:
 
     uint32_t json_config_checksum_;
 
-    bool ApplyJsonConfiguration();
+    bool ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data = {});
     bool CreateDefaultConfiguration();
 
 public:
@@ -47,6 +49,8 @@ public:
 
     bool Update(const AdcConfiguration& configuration, bool internal_only = false);
     std::shared_ptr<IAdcManager> Get(bool force_load = false);
+
+    bool ApplyJsonConfiguration(std::span<const uint8_t> data) override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::configuration
