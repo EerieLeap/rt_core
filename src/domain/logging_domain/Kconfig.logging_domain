@@ -1,0 +1,39 @@
+config EERIE_LEAP_DOMAIN_LOGGING
+    depends on EERIE_LEAP_CONFIGURATION
+    bool "EerieLeap Logging Domain"
+    help
+      Add EerieLeap Logging Domain.
+
+menu "EerieLeap Logging Domain config"
+    depends on EERIE_LEAP_DOMAIN_LOGGING
+
+    config EERIE_LEAP_LOG_METADATA_FILE_VERSION
+        int "Log metadata file version"
+        range 0 65535
+        default 0
+
+    config EERIE_LEAP_LOG_METADATA_FILE_DIR
+        string "Log metadata file directory"
+        default "logs_metadata"
+
+    config EERIE_LEAP_LOG_METADATA_FILE_NAME
+        string "Log metadata file name"
+        default "log_metadata"
+
+    config EERIE_LEAP_LOG_DATA_FILE_VERSION
+        int "Log data file version"
+        range 0 65535
+        default 0
+
+    config EERIE_LEAP_LOG_DATA_FILES_DIR
+        string "Log data files directory"
+        default "data_logs"
+
+    config EERIE_LEAP_LOG_DATA_FILE_PREFIX
+        string "Log data files prefix"
+        default "log_data"
+
+    config EERIE_LEAP_LOG_WRITER_STACK_SIZE
+        int "Log writer stack size"
+        default 8192
+endmenu

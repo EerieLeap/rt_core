@@ -62,12 +62,6 @@ config EERIE_LEAP_DOMAIN_SCRIPT
     help
       Add EerieLeap Script Domain.
 
-config EERIE_LEAP_DOMAIN_SYSTEM
-    depends on EERIE_LEAP_CONFIGURATION
-    bool "EerieLeap System Domain"
-    help
-      Add EerieLeap System Domain.
-
 module = EERIE_LEAP_COMMON
 module-str = eerie_leap_common
 
@@ -80,6 +74,8 @@ rsource "src/subsys/cdmp/Kconfig.cdmp"
 rsource "src/subsys/fs/Kconfig.fs"
 rsource "src/subsys/modbus/Kconfig.modbus"
 
+rsource "src/domain/system_domain/Kconfig.system_domain"
 rsource "src/domain/canbus_com_domain/Kconfig.canbus_com_domain"
 rsource "src/domain/sensor_domain/Kconfig.sensor_domain"
+rsource "src/domain/logging_domain/Kconfig.logging_domain"
 endmenu
