@@ -18,7 +18,8 @@ public:
         AdcJson = 0x02,
         CanbusJson = 0x03,
         SensorsJson = 0x04,
-        UiJson = 0x05,
+        LoggingJson = 0x05,
+        UiJson = 0x06,
     };
 
 private:
