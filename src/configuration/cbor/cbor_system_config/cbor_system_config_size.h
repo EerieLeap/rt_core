@@ -11,8 +11,6 @@ static size_t cbor_get_size_CborSystemConfig(const CborSystemConfig& config) {
     builder.AddIndefiniteArrayStart();
 
     builder.AddUint(config.device_id)
-        .AddUint(config.hw_version)
-        .AddUint(config.sw_version)
         .AddUint(config.build_number)
         .AddUint(config.json_config_checksum);
 

@@ -12,8 +12,6 @@ pmr_unique_ptr<CborSystemConfig> SystemConfigurationCborParser::Serialize(const 
     memset(config.get(), 0, sizeof(CborSystemConfig));
 
     config->device_id = configuration.device_id;
-    config->hw_version = configuration.hw_version;
-    config->sw_version = configuration.sw_version;
     config->build_number = configuration.build_number;
 
     return config;
@@ -26,8 +24,6 @@ pmr_unique_ptr<SystemConfiguration> SystemConfigurationCborParser::Deserialize(
     auto configuration = make_unique_pmr<SystemConfiguration>(mr);
 
     configuration->device_id = config.device_id;
-    configuration->hw_version = config.hw_version;
-    configuration->sw_version = config.sw_version;
     configuration->build_number = config.build_number;
 
     SystemConfigurationValidator::Validate(*configuration);

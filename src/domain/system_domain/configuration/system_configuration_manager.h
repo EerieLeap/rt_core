@@ -24,8 +24,6 @@ private:
 
     std::shared_ptr<SystemConfiguration> configuration_;
 
-    bool UpdateHwVersion(uint32_t hw_version);
-    bool UpdateSwVersion(uint32_t sw_version);
     bool CreateDefaultConfiguration();
 
 public:

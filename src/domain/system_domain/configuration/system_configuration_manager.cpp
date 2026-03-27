@@ -33,9 +33,6 @@ SystemConfigurationManager::SystemConfigurationManager(
         configuration = Get();
     }
 
-    UpdateHwVersion(configuration->hw_version);
-    UpdateSwVersion(configuration->sw_version);
-
     LOG_INF("System Configuration Manager initialized successfully.");
 
     LOG_INF("HW Version: %s, SW Version: %s",
@@ -56,45 +53,6 @@ bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
             return false;
 
         LOG_INF("Build number updated to %u.", configuration->build_number);
-    }
-
-    return true;
-}
-
-bool SystemConfigurationManager::UpdateHwVersion(uint32_t hw_version) {
-    auto configuration = Get();
-    if(configuration == nullptr)
-        return false;
-
-    uint32_t config_hw_version = SystemConfiguration::GetConfigHwVersion();
-    if(hw_version != config_hw_version) {
-        configuration->hw_version = config_hw_version;
-
-        bool result = Update(*configuration, true);
-        if(!result)
-            return false;
-
-        LOG_INF("HW version updated to %s.", configuration->GetFormattedHwVersion().c_str());
-    }
-
-    return true;
-}
-
-bool SystemConfigurationManager::UpdateSwVersion(uint32_t sw_version) {
-    auto configuration = Get();
-    if(configuration == nullptr)
-        return false;
-
-    uint32_t config_sw_version = SystemConfiguration::GetConfigSwVersion();
-    if(sw_version != config_sw_version) {
-        configuration->sw_version = config_sw_version;
-        configuration->build_number = 0;
-
-        bool result = Update(*configuration, true);
-        if(!result)
-            return false;
-
-        LOG_INF("SW version updated to %s.", configuration->GetFormattedSwVersion().c_str());
     }
 
     return true;
@@ -134,8 +92,6 @@ bool SystemConfigurationManager::CreateDefaultConfiguration() {
     auto configuration = make_unique_pmr<SystemConfiguration>(Mrm::GetDefaultPmr());
 
     configuration->device_id = Rng::Get64(true);
-    configuration->hw_version = 0;
-    configuration->sw_version = 0;
     configuration->build_number = 0;
 
     return Update(*configuration);

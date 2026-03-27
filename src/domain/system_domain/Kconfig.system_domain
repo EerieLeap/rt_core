@@ -7,33 +7,86 @@ config EERIE_LEAP_DOMAIN_SYSTEM
 menu "EerieLeap System Domain config"
     depends on EERIE_LEAP_DOMAIN_SYSTEM
 
+    choice EERIE_LEAP_PRODUCT_FAMILY
+        prompt "EerieLeap Product Family"
+        default EERIE_LEAP_PRODUCT_FAMILY_NONE
+        help
+            Add EerieLeap Product Family.
+
+        config EERIE_LEAP_PRODUCT_FAMILY_NONE
+            bool "Product family None"
+        config EERIE_LEAP_PRODUCT_FAMILY_PROCESSING_MODULE
+            bool "Product family Processing Module"
+        config EERIE_LEAP_PRODUCT_FAMILY_DISPLAY_MODULE
+            bool "Product family Display Module"
+        config EERIE_LEAP_PRODUCT_FAMILY_INPUT_MODULE
+            bool "Product family Input Module"
+    endchoice
+
+    config EERIE_LEAP_PRODUCT_FAMILY
+        int
+        default 0 if EERIE_LEAP_PRODUCT_FAMILY_NONE
+        default 1 if EERIE_LEAP_PRODUCT_FAMILY_PROCESSING_MODULE
+        default 2 if EERIE_LEAP_PRODUCT_FAMILY_DISPLAY_MODULE
+        default 3 if EERIE_LEAP_PRODUCT_FAMILY_INPUT_MODULE
+
+    config EERIE_LEAP_PRODUCT_ID
+        int "Product ID (16-bit)"
+        range 0 65535
+        default 0
+
+    # EERIE_LEAP_FEATURES 16-bit bitmask
+    config EERIE_LEAP_FEATURES_ANALOG_INPUTS
+        bool "Analog inputs feature"
+        default n
+    config EERIE_LEAP_FEATURES_DIGITAL_INPUTS
+        bool "Digital inputs feature"
+        default n
+    config EERIE_LEAP_FEATURES_CANBUS
+        bool "CANBus feature"
+        default n
+    config EERIE_LEAP_FEATURES_LOGGING
+        bool "Logging feature"
+        default n
+    config EERIE_LEAP_FEATURES_BLUETOOTH
+        bool "Bluetooth feature"
+        default n
+    config EERIE_LEAP_FEATURES_DISPLAY
+        bool "Display feature"
+        default n
+
+    config EERIE_LEAP_REVISION
+        int "Revision (8-bit)"
+        range 0 255
+        default 0
+
     config EERIE_LEAP_HW_VERSION_MAJOR
-        int "Hardware version major"
+        int "Hardware version major (8-bit)"
         range 0 255
         default 0
 
     config EERIE_LEAP_HW_VERSION_MINOR
-        int "Hardware version minor"
+        int "Hardware version minor (8-bit)"
         range 0 255
         default 0
 
     config EERIE_LEAP_HW_VERSION_PATCH
-        int "Hardware version patch"
+        int "Hardware version patch (16-bit)"
         range 0 65535
         default 0
 
     config EERIE_LEAP_SW_VERSION_MAJOR
-        int "Software version major"
+        int "Software version major (8-bit)"
         range 0 255
         default 0
 
     config EERIE_LEAP_SW_VERSION_MINOR
-        int "Software version minor"
+        int "Software version minor (8-bit)"
         range 0 255
         default 0
 
     config EERIE_LEAP_SW_VERSION_PATCH
-        int "Software version patch"
+        int "Software version patch (16-bit)"
         range 0 65535
         default 0
 

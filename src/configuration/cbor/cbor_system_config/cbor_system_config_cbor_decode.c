@@ -34,8 +34,6 @@ static bool decode_CborSystemConfig(
 	zcbor_log("%s\r\n", __func__);
 
 	bool res = (((zcbor_list_start_decode(state) && ((((zcbor_uint64_decode(state, (&(*result).device_id))))
-	&& ((zcbor_uint32_decode(state, (&(*result).hw_version))))
-	&& ((zcbor_uint32_decode(state, (&(*result).sw_version))))
 	&& ((zcbor_uint32_decode(state, (&(*result).build_number))))
 	&& ((zcbor_uint32_decode(state, (&(*result).json_config_checksum))))) || (zcbor_list_map_end_force_decode(state), false)) && zcbor_list_end_decode(state))));
 

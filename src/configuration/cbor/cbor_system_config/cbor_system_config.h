@@ -27,8 +27,6 @@ extern "C" {
 
 struct CborSystemConfig {
 	uint64_t device_id;
-	uint32_t hw_version;
-	uint32_t sw_version;
 	uint32_t build_number;
 	uint32_t json_config_checksum;
 };

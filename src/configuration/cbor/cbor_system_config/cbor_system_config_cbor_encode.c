@@ -33,11 +33,9 @@ static bool encode_CborSystemConfig(
 {
 	zcbor_log("%s\r\n", __func__);
 
-	bool res = (((zcbor_list_start_encode(state, 5) && ((((zcbor_uint64_encode(state, (&(*input).device_id))))
-	&& ((zcbor_uint32_encode(state, (&(*input).hw_version))))
-	&& ((zcbor_uint32_encode(state, (&(*input).sw_version))))
+	bool res = (((zcbor_list_start_encode(state, 3) && ((((zcbor_uint64_encode(state, (&(*input).device_id))))
 	&& ((zcbor_uint32_encode(state, (&(*input).build_number))))
-	&& ((zcbor_uint32_encode(state, (&(*input).json_config_checksum))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 5))));
+	&& ((zcbor_uint32_encode(state, (&(*input).json_config_checksum))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 3))));
 
 	log_result(state, res, __func__);
 	return res;
