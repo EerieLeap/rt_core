@@ -48,8 +48,7 @@ bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
     if(build_number != configuration->build_number) {
         configuration->build_number = build_number;
 
-        bool result = Update(*configuration, true);
-        if(!result)
+        if(!Update(*configuration))
             return false;
 
         LOG_INF("Build number updated to %u.", configuration->build_number);
@@ -58,7 +57,7 @@ bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
     return true;
 }
 
-bool SystemConfigurationManager::Update(const SystemConfiguration& configuration, bool internal_only) {
+bool SystemConfigurationManager::Update(const SystemConfiguration& configuration) {
     try {
         auto cbor_config = cbor_parser_->Serialize(configuration);
 

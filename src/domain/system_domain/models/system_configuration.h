@@ -31,8 +31,8 @@ struct SystemConfiguration {
     SystemConfiguration(SystemConfiguration&&) noexcept = default;
 
     SystemConfiguration(SystemConfiguration&& other, [[maybe_unused]] allocator_type alloc)
-        : device_id(std::move(other.device_id)),
-        build_number(std::move(other.build_number)) {}
+        : device_id(other.device_id),
+        build_number(other.build_number) {}
 
     std::string GetFormattedHwVersion() const {
         uint8_t hw_version_major = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR;

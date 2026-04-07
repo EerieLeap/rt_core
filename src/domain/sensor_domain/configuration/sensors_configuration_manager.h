@@ -56,6 +56,7 @@ public:
     const std::vector<std::shared_ptr<Sensor>>* Get(bool force_load = false);
 
     bool ApplyJsonConfiguration(std::span<const uint8_t> data) override;
+    std::pmr::string GetJsonConfiguration() override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::configuration

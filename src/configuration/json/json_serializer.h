@@ -26,10 +26,9 @@ private:
         boost::json::serializer sr;
         sr.reset(&jv);
 
-        char buffer[1024];
-
+        std::array<char, 1024> buffer;
         while(!sr.done()) {
-            boost::json::string_view sv = sr.read(buffer, sizeof(buffer));
+            boost::json::string_view sv = sr.read(buffer.data(), buffer.size());
             result.append(sv.data(), sv.size());
         }
 
@@ -43,9 +42,9 @@ private:
     }
 
 public:
-    JsonSerializer() = default;
+    JsonSerializer() = delete;
 
-    std::pmr::string Serialize(const T& obj, size_t *payload_len_out = nullptr) {
+    static std::pmr::string Serialize(const T& obj) {
         LOG_MODULE_DECLARE(json_serializer_logger);
 
         auto json_str = Encode(obj);
@@ -57,7 +56,7 @@ public:
         return json_str;
     }
 
-    pmr_unique_ptr<T> Deserialize(std::string_view json_str) {
+    static pmr_unique_ptr<T> Deserialize(std::string_view json_str) {
         LOG_MODULE_DECLARE(json_serializer_logger);
 
         try {

@@ -30,7 +30,6 @@ private:
 
     std::string configuration_name_;
     std::shared_ptr<IFsService> fs_service_;
-    std::unique_ptr<JsonSerializer<T>> serializer_;
 
     const std::string configuration_file_path_ = configuration_dir_ + "/" + configuration_name_ + ".json";
 
@@ -60,7 +59,7 @@ private:
 
         LOG_MODULE_DECLARE(configuration_service_logger);
 
-        auto json_str = serializer_->Serialize(*configuration);
+        auto json_str = JsonSerializer<T>::Serialize(*configuration);
 
         if(json_str.empty()) {
             LOG_ERR("Failed to serialize configuration %s.", configuration_file_path_.c_str());
@@ -74,7 +73,7 @@ private:
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         std::string_view json_str(reinterpret_cast<const char*>(data.data()), data.size());
-        auto configuration = serializer_->Deserialize(json_str);
+        auto configuration = JsonSerializer<T>::Deserialize(json_str);
 
         if (configuration == nullptr) {
             LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());
@@ -138,8 +137,6 @@ public:
         task_load_.instance = this;
         k_work_init(&task_load_.work, WorkTaskLoad);
 
-        serializer_ = std::make_unique<JsonSerializer<T>>();
-
         if(!fs_service_)
             return;
 
@@ -147,7 +144,7 @@ public:
             fs_service_->CreateDirectory(configuration_dir_);
     }
 
-    bool IsAvailable() {
+    bool IsAvailable() const {
         return fs_service_ != nullptr && fs_service_->IsAvailable();
     }
 

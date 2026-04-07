@@ -30,6 +30,7 @@ public:
     virtual ~ConfigurationService() = default;
 
     bool ApplyJsonConfiguration(Type type, std::span<const uint8_t> data);
+    std::pmr::string GetJsonConfiguration(Type type);
     void RegisterJsonConfigurationManager(
         Type type,
         std::shared_ptr<IJsonConfigurationManager> json_configuration_manager);

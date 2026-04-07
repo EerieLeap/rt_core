@@ -2,9 +2,13 @@
 
 #include <zephyr/logging/log.h>
 
+#include "configuration/json/json_serializer.h"
+
 #include "sensors_configuration_manager.h"
 
 namespace eerie_leap::domain::sensor_domain::configuration {
+
+using namespace eerie_leap::configuration::json;
 
 LOG_MODULE_REGISTER(sensors_config_ctrl_logger);
 
@@ -83,6 +87,14 @@ bool SensorsConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span
 
 bool SensorsConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
     return ApplyJsonConfiguration(false, data);
+}
+
+std::pmr::string SensorsConfigurationManager::GetJsonConfiguration() {
+    auto json_config = json_parser_->Serialize(
+        sensors_,
+        gpio_channel_count_,
+        adc_channel_count_);
+    return JsonSerializer<JsonSensorsConfig>::Serialize(*json_config);
 }
 
 bool SensorsConfigurationManager::Update(const std::vector<std::shared_ptr<Sensor>>& sensors, bool internal_only) {

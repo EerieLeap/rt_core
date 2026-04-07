@@ -46,6 +46,7 @@ public:
     std::shared_ptr<LoggingConfiguration> Get(bool force_load = false);
 
     bool ApplyJsonConfiguration(std::span<const uint8_t> data) override;
+    std::pmr::string GetJsonConfiguration() override;
 };
 
 } // namespace eerie_leap::domain::logging_domain::configuration

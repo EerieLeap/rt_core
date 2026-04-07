@@ -32,7 +32,7 @@ public:
 
     bool UpdateBuildNumber(uint32_t build_number);
 
-    bool Update(const SystemConfiguration& configuration, bool internal_only = false);
+    bool Update(const SystemConfiguration& configuration);
     std::shared_ptr<SystemConfiguration> Get(bool force_load = false);
 };
 

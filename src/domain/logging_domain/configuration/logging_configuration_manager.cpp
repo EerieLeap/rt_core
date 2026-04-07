@@ -1,8 +1,12 @@
 #include <zephyr/logging/log.h>
 
+#include "configuration/json/json_serializer.h"
+
 #include "logging_configuration_manager.h"
 
 namespace eerie_leap::domain::logging_domain::configuration {
+
+using namespace eerie_leap::configuration::json;
 
 LOG_MODULE_REGISTER(logging_config_ctrl_logger);
 
@@ -69,6 +73,11 @@ bool LoggingConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span
 
 bool LoggingConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
     return ApplyJsonConfiguration(false, data);
+}
+
+std::pmr::string LoggingConfigurationManager::GetJsonConfiguration() {
+    auto json_config = json_parser_->Serialize(*configuration_);
+    return JsonSerializer<JsonLoggingConfig>::Serialize(*json_config);
 }
 
 bool LoggingConfigurationManager::Update(const LoggingConfiguration& configuration, bool internal_only) {

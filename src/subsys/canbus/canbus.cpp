@@ -7,7 +7,7 @@
 
 #include "canbus.h"
 
-LOG_MODULE_REGISTER(canbus_logger);
+LOG_MODULE_REGISTER(canbus_logger, CONFIG_CAN_LOG_LEVEL);
 
 namespace eerie_leap::subsys::canbus {
 

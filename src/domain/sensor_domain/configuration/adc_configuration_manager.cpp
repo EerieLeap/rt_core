@@ -3,12 +3,14 @@
 
 #include "utilities/voltage_interpolator/calibration_data.h"
 #include "utilities/voltage_interpolator/interpolation_method.h"
+#include "configuration/json/json_serializer.h"
 
 #include "adc_configuration_manager.h"
 
 namespace eerie_leap::domain::sensor_domain::configuration {
 
 using namespace eerie_leap::utilities::voltage_interpolator;
+using namespace eerie_leap::configuration::json;
 using namespace eerie_leap::subsys::adc;
 
 LOG_MODULE_REGISTER(adc_config_ctrl_logger);
@@ -84,6 +86,11 @@ bool AdcConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> da
     return ApplyJsonConfiguration(false, data);
 }
 
+std::pmr::string AdcConfigurationManager::GetJsonConfiguration() {
+    auto json_config = json_parser_->Serialize(*configuration_);
+    return JsonSerializer<JsonAdcConfig>::Serialize(*json_config);
+}
+
 bool AdcConfigurationManager::Update(const AdcConfiguration& configuration, bool internal_only) {
     try {
         if(!internal_only && json_configuration_service_->IsAvailable()) {
@@ -137,12 +144,12 @@ std::shared_ptr<IAdcManager> AdcConfigurationManager::Get(bool force_load) {
 // TODO: Refine default configuration
 bool AdcConfigurationManager::CreateDefaultConfiguration() {
     std::pmr::vector<CalibrationData> adc_calibration_data_samples {
-        {0.501, 0.469},
-        {1.0, 0.968},
-        {2.0, 1.970},
-        {3.002, 2.98},
-        {4.003, 4.01},
-        {5.0, 5.0}
+        {0.501f, 0.469f},
+        {1.0f, 0.968f},
+        {2.0f, 1.970f},
+        {3.002f, 2.98f},
+        {4.003f, 4.01f},
+        {5.0f, 5.0f}
     };
 
     auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(adc_calibration_data_samples);

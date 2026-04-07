@@ -1,8 +1,12 @@
 #include <zephyr/sys/crc.h>
 
+#include "configuration/json/json_serializer.h"
+
 #include "canbus_configuration_manager.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration {
+
+using namespace eerie_leap::configuration::json;
 
 LOG_MODULE_REGISTER(canbus_config_mngr_logger);
 
@@ -22,7 +26,9 @@ CanbusConfigurationManager::CanbusConfigurationManager(
 
     try {
         configuration = Get(true);
-    } catch(const std::exception& e) {}
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to load CAN Bus configuration: %s", e.what());
+    }
 
     if(configuration == nullptr) {
         if(!CreateDefaultConfiguration()) {
@@ -68,6 +74,13 @@ bool CanbusConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span<
 
 bool CanbusConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
     return ApplyJsonConfiguration(false, data);
+}
+
+std::pmr::string CanbusConfigurationManager::GetJsonConfiguration() {
+    auto configuration = Get();
+
+    auto json_config = json_parser_->Serialize(*configuration);
+    return JsonSerializer<JsonCanbusConfig>::Serialize(*json_config);
 }
 
 bool CanbusConfigurationManager::Update(const CanbusConfiguration& configuration) {
