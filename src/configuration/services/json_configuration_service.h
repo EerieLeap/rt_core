@@ -69,10 +69,9 @@ private:
         return fs_service_->WriteFile(configuration_file_path_, json_str.c_str(), json_str.size());
     }
 
-    std::optional<LoadedConfig<T>> LoadProcessor(std::span<const uint8_t> data) {
+    std::optional<LoadedConfig<T>> LoadProcessor(std::string_view json_str) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
-        std::string_view json_str(reinterpret_cast<const char*>(data.data()), data.size());
         auto configuration = JsonSerializer<T>::Deserialize(json_str);
 
         if (configuration == nullptr) {
@@ -80,7 +79,7 @@ private:
             return std::nullopt;
         }
 
-        uint32_t crc = crc32_ieee(data.data(), data.size());
+        uint32_t crc = crc32_ieee(reinterpret_cast<const uint8_t*>(json_str.data()), json_str.size());
 
         LoadedConfig<T> loaded_config {
             .config = std::move(configuration),
@@ -112,7 +111,9 @@ private:
             return std::nullopt;
         }
 
-        return LoadProcessor({buffer.data(), buffer_size});
+        std::string_view json_str(reinterpret_cast<const char*>(buffer.data()), buffer_size);
+
+        return LoadProcessor(json_str);
     }
 
     static void WorkTaskSave(k_work* work) {
@@ -163,8 +164,8 @@ public:
         return std::move(task_load_.result);
     }
 
-    std::optional<LoadedConfig<T>> Load(std::span<const uint8_t> data) {
-        return LoadProcessor(data);
+    std::optional<LoadedConfig<T>> Load(std::string_view json_str) {
+        return LoadProcessor(json_str);
     }
 };
 

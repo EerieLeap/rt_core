@@ -2,11 +2,11 @@
 
 namespace eerie_leap::domain::configuration_domain::services {
 
-bool ConfigurationService::ApplyJsonConfiguration(Type type, std::span<const uint8_t> data) {
+bool ConfigurationService::ApplyJsonConfiguration(Type type, std::string_view json_str) {
     if(!json_configuration_managers_.contains(type))
         return false;
 
-    return json_configuration_managers_.at(type)->ApplyJsonConfiguration(data);
+    return json_configuration_managers_.at(type)->ApplyJsonConfiguration(json_str);
 }
 
 std::pmr::string ConfigurationService::GetJsonConfiguration(Type type) {

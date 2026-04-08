@@ -35,7 +35,7 @@ private:
     bool ApplyJsonConfiguration();
     bool CreateDefaultConfiguration();
 
-    bool ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data = {});
+    bool ApplyJsonConfiguration(bool fs_load, std::string_view json_str = {});
 
 public:
     LoggingConfigurationManager(
@@ -45,7 +45,7 @@ public:
     bool Update(const LoggingConfiguration& configuration, bool internal_only = false);
     std::shared_ptr<LoggingConfiguration> Get(bool force_load = false);
 
-    bool ApplyJsonConfiguration(std::span<const uint8_t> data) override;
+    bool ApplyJsonConfiguration(std::string_view json_str) override;
     std::pmr::string GetJsonConfiguration() override;
 };
 

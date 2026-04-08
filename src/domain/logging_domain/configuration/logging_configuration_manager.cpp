@@ -41,13 +41,13 @@ LoggingConfigurationManager::LoggingConfigurationManager(
     ApplyJsonConfiguration(true);
 }
 
-bool LoggingConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data) {
+bool LoggingConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::string_view json_str) {
     if(fs_load && !json_configuration_service_->IsAvailable())
         return false;
 
     auto json_config_loaded = fs_load
         ? json_configuration_service_->Load()
-        : json_configuration_service_->Load(data);
+        : json_configuration_service_->Load(json_str);
     if(!json_config_loaded.has_value())
         return false;
 
@@ -71,8 +71,8 @@ bool LoggingConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span
     return true;
 }
 
-bool LoggingConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
-    return ApplyJsonConfiguration(false, data);
+bool LoggingConfigurationManager::ApplyJsonConfiguration(std::string_view json_str) {
+    return ApplyJsonConfiguration(false, json_str);
 }
 
 std::pmr::string LoggingConfigurationManager::GetJsonConfiguration() {

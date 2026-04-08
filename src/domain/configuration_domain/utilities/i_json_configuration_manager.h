@@ -10,7 +10,7 @@ class IJsonConfigurationManager {
 public:
     virtual ~IJsonConfigurationManager() = default;
 
-    virtual bool ApplyJsonConfiguration(std::span<const uint8_t> data) = 0;
+    virtual bool ApplyJsonConfiguration(std::string_view json_str) = 0;
     virtual std::pmr::string GetJsonConfiguration() = 0;
 };
 

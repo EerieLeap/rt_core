@@ -41,7 +41,7 @@ private:
 
     uint32_t json_config_checksum_;
 
-    bool ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data = {});
+    bool ApplyJsonConfiguration(bool fs_load, std::string_view json_str = {});
     bool CreateDefaultConfiguration();
 
 public:
@@ -55,7 +55,7 @@ public:
     bool Update(const std::vector<std::shared_ptr<Sensor>>& sensors, bool internal_only = false);
     const std::vector<std::shared_ptr<Sensor>>* Get(bool force_load = false);
 
-    bool ApplyJsonConfiguration(std::span<const uint8_t> data) override;
+    bool ApplyJsonConfiguration(std::string_view json_str) override;
     std::pmr::string GetJsonConfiguration() override;
 };
 

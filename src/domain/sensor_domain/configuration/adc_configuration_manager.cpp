@@ -52,13 +52,13 @@ AdcConfigurationManager::AdcConfigurationManager(
     ApplyJsonConfiguration(true);
 }
 
-bool AdcConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span<const uint8_t> data) {
+bool AdcConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::string_view json_str) {
     if(fs_load && !json_configuration_service_->IsAvailable())
         return false;
 
     auto json_config_loaded = fs_load
         ? json_configuration_service_->Load()
-        : json_configuration_service_->Load(data);
+        : json_configuration_service_->Load(json_str);
     if(!json_config_loaded.has_value())
         return false;
 
@@ -82,8 +82,8 @@ bool AdcConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::span<con
     return true;
 }
 
-bool AdcConfigurationManager::ApplyJsonConfiguration(std::span<const uint8_t> data) {
-    return ApplyJsonConfiguration(false, data);
+bool AdcConfigurationManager::ApplyJsonConfiguration(std::string_view json_str) {
+    return ApplyJsonConfiguration(false, json_str);
 }
 
 std::pmr::string AdcConfigurationManager::GetJsonConfiguration() {

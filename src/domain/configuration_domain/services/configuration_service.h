@@ -29,7 +29,7 @@ public:
     ConfigurationService() = default;
     virtual ~ConfigurationService() = default;
 
-    bool ApplyJsonConfiguration(Type type, std::span<const uint8_t> data);
+    bool ApplyJsonConfiguration(Type type, std::string_view json_str);
     std::pmr::string GetJsonConfiguration(Type type);
     void RegisterJsonConfigurationManager(
         Type type,
