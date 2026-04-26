@@ -30,6 +30,7 @@ public:
 private:
     int canbus_handler_id_;
     int canbus_response_handler_id_;
+    atomic_t is_running_ = ATOMIC_INIT(0);
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<CdmpTransactionService> transaction_service_;
@@ -52,7 +53,6 @@ private:
 
 public:
     CdmpCommandService(
-        std::shared_ptr<Canbus> canbus,
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device,
         std::shared_ptr<WorkQueueThread> work_queue_thread);

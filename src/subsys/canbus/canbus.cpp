@@ -2,6 +2,8 @@
 #include <span>
 #include <algorithm>
 #include <memory>
+#include <string>
+#include <numeric>
 
 #include <zephyr/logging/log.h>
 
@@ -11,30 +13,14 @@ LOG_MODULE_REGISTER(canbus_logger, CONFIG_CAN_LOG_LEVEL);
 
 namespace eerie_leap::subsys::canbus {
 
-Canbus::Canbus(
-    const device *canbus_dev,
-    CanbusType type,
-    uint32_t bitrate,
-    uint32_t data_bitrate,
-    bool is_extended_id)
-        : canbus_dev_(canbus_dev),
-        type_(type),
-        is_extended_id_(is_extended_id),
-        bitrate_(bitrate),
-        data_bitrate_(data_bitrate),
-        auto_detect_running_(ATOMIC_INIT(0)) {
+Canbus::Canbus(const CanbusConfig& config)
+        : config_(config) {
 
-    k_msgq_init(
-        &frame_msgq_,
-        frame_msgq_buffer_,
-        sizeof(IsrCanFrameWrapper),
-        FRAME_MSGQ_SIZE);
-
-    if(type_ == CanbusType::CANFD && data_bitrate_ == 0)
-        data_bitrate_ = bitrate_;
+    if(config_.type == CanbusType::CANFD && config_.data_bitrate == 0)
+        config_.data_bitrate = config_.bitrate;
 
     thread_ = std::make_unique<Thread>(
-        "can_" + std::string(canbus_dev_->name),
+        "can_" + std::string(config_.canbus_dev->name),
         this,
         thread_stack_size_,
         thread_priority_,
@@ -43,83 +29,129 @@ Canbus::Canbus(
 
 Canbus::~Canbus() {
     StopActivityMonitoring();
-    if(canbus_dev_ != nullptr && is_initialized_)
-        can_stop(canbus_dev_);
+    if(config_.canbus_dev != nullptr && is_initialized_)
+        can_stop(config_.canbus_dev);
 
+    atomic_set(&is_thread_running_, 0);
     if(thread_)
         thread_->Join();
 }
 
 bool Canbus::Initialize() {
-    if(!device_is_ready(canbus_dev_)) {
-		LOG_ERR("Device driver not ready.");
-		return false;
-	}
+    if(state_ != CanbusState::STOPPED) {
+        LOG_ERR("Cannot initialize CAN bus when not in STOPPED state.");
+        return false;
+    }
+
+    // Initialize thread only
+    thread_->Initialize();
+
+    // Initialize message queue
+    k_msgq_init(
+        &frame_msgq_,
+        frame_msgq_buffer_,
+        sizeof(IsrCanFrameWrapper),
+        FRAME_MSGQ_SIZE);
+
+    // Clear any existing state
+    can_filter_ids_.clear();
+    can_filters_.clear();
+    handlers_.clear();
+    bitrate_detected_ = false;
+
+    // Configure with current config
+    if(!Configure(config_)) {
+        LOG_ERR("Failed to configure CAN bus during initialization.");
+        return false;
+    }
+
+    LOG_INF("CANBus initialized and configured successfully.");
+    return true;
+}
+
+bool Canbus::Configure(const CanbusConfig& config) {
+    if(state_ != CanbusState::STOPPED) {
+        LOG_ERR("Cannot configure CAN bus when not in STOPPED state.");
+        return false;
+    }
+
+    // Validate new configuration
+    if(!device_is_ready(config.canbus_dev)) {
+        LOG_ERR("CAN device is not ready.");
+        return false;
+    }
+
+    if(!IsBitrateSupported(config.type, config.bitrate)) {
+        LOG_ERR("Bitrate %u is not supported for CAN type %d.", config.bitrate, static_cast<int>(config.type));
+        return false;
+    }
+
+    if(config.type == CanbusType::CANFD && config.data_bitrate > 0 &&
+       !IsBitrateSupported(config.type, config.data_bitrate)) {
+        LOG_ERR("Data bitrate %u is not supported for CAN FD.", config.data_bitrate);
+        return false;
+    }
+
+    // Update configuration
+    config_ = config;
 
     can_mode_t capabilities;
-    int ret = can_get_capabilities(canbus_dev_, &capabilities);
+    int ret = can_get_capabilities(config_.canbus_dev, &capabilities);
     if(ret != 0) {
         LOG_ERR("Failed to get capabilities.");
         return false;
     }
 
-    thread_->Initialize();
-
     can_mode_t can_mode = CAN_MODE_NORMAL;
-    if(type_ == CanbusType::CANFD && (capabilities & CAN_MODE_FD))
+    if(config_.type == CanbusType::CANFD && (capabilities & CAN_MODE_FD))
         can_mode = CAN_MODE_FD;
     else
-        type_ = CanbusType::CLASSICAL_CAN;
+        config_.type = CanbusType::CLASSICAL_CAN;
 
-    ret = can_set_mode(canbus_dev_, can_mode);
-	if(ret != 0) {
-		LOG_ERR("Failed to set mode [%d].", ret);
-		return false;
-	}
+    ret = can_set_mode(config_.canbus_dev, can_mode);
+    if(ret != 0) {
+        LOG_ERR("Failed to set mode [%d].", ret);
+        return false;
+    }
     LOG_INF("CAN mode set to %d.", can_mode);
 
-    if(bitrate_ == 0) {
+    if(config_.bitrate == 0) {
         LOG_INF("Auto-bitrate mode enabled - will detect on bus activity");
-
         if(!StartActivityMonitoring()) {
             LOG_ERR("Failed to start activity monitoring.");
             return false;
         }
     } else {
-        if(!SetTiming(bitrate_)) {
+        if(!SetTiming(config_.bitrate)) {
             PrintCanLimits();
             return false;
         }
 
-        if(type_ == CanbusType::CANFD && !SetDataTiming(data_bitrate_)) {
+        if(config_.type == CanbusType::CANFD && !SetDataTiming(config_.data_bitrate)) {
             PrintCanFdLimits();
             return false;
         }
 
-        ret = can_start(canbus_dev_);
+        ret = can_start(config_.canbus_dev);
         if(ret != 0) {
             LOG_ERR("Failed to start device [%d].", ret);
             return false;
         }
 
         bitrate_detected_ = true;
-
-        LOG_INF("Bitrate set to: %d.", bitrate_);
+        LOG_INF("Bitrate set to: %d.", config_.bitrate);
     }
 
-    LOG_INF("CANBus initialized successfully.");
     is_initialized_ = true;
-
-    thread_->Start();
-
+    LOG_INF("CANBus configured successfully.");
     return true;
 }
 
-bool Canbus::SetTiming(uint32_t bitrate) {
+bool Canbus::SetTiming(uint32_t bitrate) const {
     if(bitrate == 0)
         return false;
 
-    int ret = can_set_bitrate(canbus_dev_, bitrate);
+    int ret = can_set_bitrate(config_.canbus_dev, bitrate);
     if(ret != 0) {
         LOG_ERR("Failed to set bitrate [%d].", ret);
         return false;
@@ -128,14 +160,14 @@ bool Canbus::SetTiming(uint32_t bitrate) {
     return true;
 }
 
-bool Canbus::SetDataTiming(uint32_t bitrate) {
+bool Canbus::SetDataTiming(uint32_t bitrate) const {
     if(bitrate == 0)
         return false;
 
-    if(type_ != CanbusType::CANFD)
+    if(config_.type != CanbusType::CANFD)
         return false;
 
-    int ret = can_set_bitrate_data(canbus_dev_, bitrate);
+    int ret = can_set_bitrate_data(config_.canbus_dev, bitrate);
     if(ret != 0) {
         LOG_ERR("Failed to set CANFD bitrate [%d].", ret);
         return false;
@@ -144,16 +176,16 @@ bool Canbus::SetDataTiming(uint32_t bitrate) {
     return true;
 }
 
-void Canbus::SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) {
-    if(!is_initialized_ || !bitrate_detected_)
+void Canbus::SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) const {
+    if(!is_initialized_ || !bitrate_detected_ || state_ != CanbusState::RUNNING)
         return;
 
     uint8_t flags = 0;
 
-    if(type_ == CanbusType::CANFD)
+    if(config_.type == CanbusType::CANFD)
         flags |= CAN_FRAME_FDF | CAN_FRAME_BRS;
 
-    if(is_extended_id_)
+    if(config_.is_extended_id)
         flags |= CAN_FRAME_IDE;
 
     struct can_frame can_frame = {
@@ -164,7 +196,7 @@ void Canbus::SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) {
     memcpy(can_frame.data, frame_data.data(), frame_data.size());
 
     int res = can_send(
-        canbus_dev_,
+        config_.canbus_dev,
         &can_frame,
         FRAME_SEND_TIMEOUT_MS,
         SendFrameCallback,
@@ -245,7 +277,7 @@ bool Canbus::RegisterFilter(uint32_t can_id) {
             .flags = 0
         };
 
-        int filter_id = can_add_rx_filter(canbus_dev_, CanFrameReceivedCallback, this, &filter);
+        int filter_id = can_add_rx_filter(config_.canbus_dev, CanFrameReceivedCallback, this, &filter);
         if(filter_id < 0) {
             LOG_ERR("Unable to add rx filter [%d].", filter_id);
             return false;
@@ -282,7 +314,7 @@ bool Canbus::RemoveFrameReceivedHandler(uint32_t can_id, int handler_id) {
 
     if(handler_list.empty()) {
         // Remove filter
-        can_remove_rx_filter(canbus_dev_, can_filter_ids_.at(can_id));
+        can_remove_rx_filter(config_.canbus_dev, can_filter_ids_.at(can_id));
 
         can_filters_.erase(can_id);
         can_filter_ids_.erase(can_id);
@@ -306,7 +338,7 @@ void Canbus::StopActivityMonitoring() {
 void Canbus::ThreadEntry() {
     LOG_INF("CANBus thread started.");
 
-    while(true) {
+    while(atomic_get(&is_thread_running_)) {
         if(atomic_get(&auto_detect_running_) && !bitrate_detected_)
             BitrateAutodetectTask();
 
@@ -319,10 +351,10 @@ void Canbus::BitrateAutodetectTask() {
 
     while(atomic_get(&auto_detect_running_) && !bitrate_detected_) {
         if(AutoDetectBitrate()) {
-            LOG_INF("Bitrate successfully detected: %u bps", bitrate_);
+            LOG_INF("Bitrate successfully detected: %u bps", config_.bitrate);
 
             if(bitrate_detected_fn_)
-                bitrate_detected_fn_(bitrate_);
+                bitrate_detected_fn_(config_.bitrate);
 
             for(const auto& [can_id, _] : handlers_)
                 RegisterFilter(can_id);
@@ -338,7 +370,7 @@ void Canbus::BitrateAutodetectTask() {
 
 void Canbus::ProcessFramesTask() {
     IsrCanFrameWrapper frame_wrapper;
-    if(k_msgq_get(&frame_msgq_, &frame_wrapper, K_FOREVER) != 0)
+    if(k_msgq_get(&frame_msgq_, &frame_wrapper, K_MSEC(MSGQ_GET_TIMEOUT_MS)) != 0)
         return;
 
     auto* canbus = frame_wrapper.canbus;
@@ -362,7 +394,7 @@ void Canbus::ProcessFramesTask() {
 
 bool Canbus::AutoDetectBitrate() {
     std::span<const uint32_t> supported_bitrates;
-    if(type_ == CanbusType::CANFD)
+    if(config_.type == CanbusType::CANFD)
         supported_bitrates = canfd_supported_bitrates_;
     else
         supported_bitrates = classical_can_supported_bitrates_;
@@ -376,15 +408,15 @@ bool Canbus::AutoDetectBitrate() {
         uint32_t frame_count = 0;
         if(TestBitrate(supported_bitrates[i], frame_count)) {
             bitrate_detected_ = true;
-            bitrate_ = supported_bitrates[i];
+            config_.bitrate = supported_bitrates[i];
 
-            if(type_ == CanbusType::CANFD && data_bitrate_ == 0)
-                data_bitrate_ = supported_bitrates[i];
+            if(config_.type == CanbusType::CANFD && config_.data_bitrate == 0)
+                config_.data_bitrate = supported_bitrates[i];
 
             return true;
         }
 
-        can_stop(canbus_dev_);
+        can_stop(config_.canbus_dev);
         k_sleep(K_MSEC(50));
     }
 
@@ -401,17 +433,17 @@ bool Canbus::IsBitrateSupported(CanbusType type, uint32_t bitrate) {
         return std::ranges::find(classical_can_supported_bitrates_, bitrate) != classical_can_supported_bitrates_.end();
 }
 
-bool Canbus::TestBitrate(uint32_t bitrate, uint32_t &frame_count) {
+bool Canbus::TestBitrate(uint32_t bitrate, uint32_t &frame_count) const {
     if(!SetTiming(bitrate))
         return false;
 
-    if(type_ == CanbusType::CANFD) {
-        uint32_t data_bitrate = data_bitrate_ == 0 ? bitrate : data_bitrate_;
+    if(config_.type == CanbusType::CANFD) {
+        uint32_t data_bitrate = config_.data_bitrate == 0 ? bitrate : config_.data_bitrate;
         if(!SetDataTiming(data_bitrate))
             return false;
     }
 
-    int ret = can_start(canbus_dev_);
+    int ret = can_start(config_.canbus_dev);
     if(ret != 0) {
         LOG_WRN("Failed to start CAN for bitrate %u [%d]", bitrate, ret);
         return false;
@@ -425,7 +457,7 @@ bool Canbus::TestBitrate(uint32_t bitrate, uint32_t &frame_count) {
 
     volatile uint32_t received_frames = 0;
 
-    int filter_id = can_add_rx_filter(canbus_dev_,
+    int filter_id = can_add_rx_filter(config_.canbus_dev,
         [](const device *dev, can_frame *frame, void *user_data) {
             volatile uint32_t *counter = static_cast<volatile uint32_t*>(user_data);
             (*counter)++;
@@ -435,20 +467,20 @@ bool Canbus::TestBitrate(uint32_t bitrate, uint32_t &frame_count) {
 
     if(filter_id < 0) {
         LOG_WRN("Failed to add test filter [%d]", filter_id);
-        can_stop(canbus_dev_);
+        can_stop(config_.canbus_dev);
 
         return false;
     }
 
     k_sleep(K_MSEC(AUTO_DETECT_TIMEOUT_MS));
-    can_remove_rx_filter(canbus_dev_, filter_id);
+    can_remove_rx_filter(config_.canbus_dev, filter_id);
     frame_count = received_frames;
 
     if(received_frames >= MIN_FRAMES_FOR_DETECTION) {
         enum can_state state;
         struct can_bus_err_cnt err_cnt;
 
-        int ret = can_get_state(canbus_dev_, &state, &err_cnt);
+        ret = can_get_state(config_.canbus_dev, &state, &err_cnt);
         if(ret != 0)
             return false;
 
@@ -498,8 +530,8 @@ static void PrintCanLimitsDetails(uint32_t bitrate, int ret) {
 void Canbus::PrintCanLimits() {
     LOG_INF("Hardware CAN bitrate capabilities:");
 
-    uint32_t min_bitrate = can_get_bitrate_min(canbus_dev_);
-    uint32_t max_bitrate = can_get_bitrate_max(canbus_dev_);
+    uint32_t min_bitrate = can_get_bitrate_min(config_.canbus_dev);
+    uint32_t max_bitrate = can_get_bitrate_max(config_.canbus_dev);
     LOG_INF("CAN bitrate range: %u - %u bps.", min_bitrate, max_bitrate);
 
     auto bitrates = classical_can_supported_bitrates_;
@@ -508,7 +540,7 @@ void Canbus::PrintCanLimits() {
     for(auto bitrate : bitrates) {
         struct can_timing timing_data = {0};
         uint16_t sample_pnt = sample_point_for_bitrate(bitrate);
-        int ret = can_calc_timing(canbus_dev_, &timing_data, bitrate, sample_pnt);
+        int ret = can_calc_timing(config_.canbus_dev, &timing_data, bitrate, sample_pnt);
 
         PrintCanLimitsDetails(bitrate, ret);
     }
@@ -517,8 +549,8 @@ void Canbus::PrintCanLimits() {
 void Canbus::PrintCanFdLimits() {
     LOG_INF("Hardware CAN FD data bitrate capabilities:");
 
-    uint32_t min_bitrate = can_get_bitrate_min(canbus_dev_);
-    uint32_t max_bitrate = can_get_bitrate_max(canbus_dev_);
+    uint32_t min_bitrate = can_get_bitrate_min(config_.canbus_dev);
+    uint32_t max_bitrate = can_get_bitrate_max(config_.canbus_dev);
     LOG_INF("CAN FD data bitrate range: %u - %u bps.", min_bitrate, max_bitrate);
 
     auto bitrates = canfd_supported_bitrates_;
@@ -527,10 +559,87 @@ void Canbus::PrintCanFdLimits() {
     for(auto bitrate : bitrates) {
         struct can_timing timing_data = {0};
         uint16_t sample_pnt = sample_point_for_bitrate(bitrate);
-        int ret = can_calc_timing_data(canbus_dev_, &timing_data, bitrate, sample_pnt);
+        int ret = can_calc_timing_data(config_.canbus_dev, &timing_data, bitrate, sample_pnt);
 
         PrintCanLimitsDetails(bitrate, ret);
     }
 }
+
+bool Canbus::Stop() {
+    if(state_ == CanbusState::STOPPED) {
+        LOG_WRN("CAN bus is already stopped.");
+        return true;
+    }
+
+    if(state_ == CanbusState::STOPPING) {
+        LOG_WRN("CAN bus is already stopping.");
+        return false;
+    }
+
+    state_ = CanbusState::STOPPING;
+
+    // Stop activity monitoring
+    StopActivityMonitoring();
+
+    // Stop the CAN hardware
+    if(config_.canbus_dev != nullptr && is_initialized_) {
+        int ret = can_stop(config_.canbus_dev);
+        if(ret != 0) {
+            LOG_ERR("Failed to stop CAN device [%d].", ret);
+            state_ = CanbusState::RUNNING; // Restore state on failure
+            return false;
+        }
+    }
+
+    // Stop the thread
+    atomic_set(&is_thread_running_, 0);
+    if(thread_) {
+        thread_->Join();
+    }
+
+    // Clear filters and handlers
+    for(const auto& [can_id, filter_id] : can_filter_ids_) {
+        can_remove_rx_filter(config_.canbus_dev, filter_id);
+    }
+    can_filter_ids_.clear();
+    can_filters_.clear();
+    handlers_.clear();
+
+    // Reset state
+    is_initialized_ = false;
+    bitrate_detected_ = false;
+    state_ = CanbusState::STOPPED;
+
+    LOG_INF("CAN bus stopped successfully.");
+    return true;
+}
+
+bool Canbus::Start() {
+    if(state_ == CanbusState::RUNNING) {
+        LOG_WRN("CAN bus is already running.");
+        return true;
+    }
+
+    if(state_ == CanbusState::STARTING) {
+        LOG_WRN("CAN bus is already starting.");
+        return false;
+    }
+
+    if(!is_initialized_) {
+        LOG_ERR("CAN bus must be initialized before starting. Call Initialize() first.");
+        return false;
+    }
+
+    state_ = CanbusState::STARTING;
+
+    // Start the processing thread
+    atomic_set(&is_thread_running_, 1);
+    thread_->Start();
+
+    state_ = CanbusState::RUNNING;
+    LOG_INF("CAN bus started successfully.");
+    return true;
+}
+
 
 }  // namespace eerie_leap::subsys::canbus

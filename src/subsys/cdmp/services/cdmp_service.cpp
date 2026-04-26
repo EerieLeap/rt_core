@@ -1,3 +1,5 @@
+#include <utility>
+
 #include <zephyr/logging/log.h>
 
 #include "utilities/memory/memory_resource_manager.h"
@@ -16,15 +18,10 @@ namespace eerie_leap::subsys::cdmp::services {
 using namespace eerie_leap::utilities::memory;
 
 CdmpService::CdmpService(
-    std::shared_ptr<Canbus> canbus,
     CdmpDeviceType device_type,
     uint32_t uid,
     uint32_t base_can_id)
-        : canbus_(std::move(canbus)),
-        base_can_id_(base_can_id) {
-
-    if(canbus_ == nullptr)
-        throw std::runtime_error("Canbus interface is undefined");
+        : base_can_id_(base_can_id) {
 
     can_id_manager_ = std::make_shared<CdmpCanIdManager>(base_can_id_);
     device_ = std::make_shared<CdmpDevice>(uid, device_type);
@@ -42,14 +39,14 @@ CdmpService::CdmpService(
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY);
 
     auto network_service = std::make_shared<CdmpNetworkService>(
-        canbus_, can_id_manager_, device_, work_queue_thread_);
+        can_id_manager_, device_, work_queue_thread_);
     canbus_services_.push_back(network_service);
 
     canbus_services_.emplace_back(std::make_shared<CdmpHeartbeatService>(
-        canbus_, can_id_manager_, device_, work_queue_thread_, network_service));
+        can_id_manager_, device_, work_queue_thread_, network_service));
 
     command_service_ = std::make_shared<CdmpCommandService>(
-        canbus_, can_id_manager_, device_, work_queue_thread_);
+        can_id_manager_, device_, work_queue_thread_);
     canbus_services_.push_back(command_service_);
 
     // canbus_services_.emplace_back(std::make_shared<CdmpStateService>(
@@ -58,28 +55,33 @@ CdmpService::CdmpService(
 }
 
 CdmpService::~CdmpService() {
-    Stop();
+    Reset();
+
+    work_queue_thread_->Stop();
+    thread_->Join();
 }
 
 void CdmpService::ThreadEntry() {
     LOG_INF("CDMP service started");
 
-    for(auto& service : canbus_services_)
+    for(const auto& service : canbus_services_)
         service->Start();
 
     if(auto_discovery_enabled_)
         device_->StartDiscovery();
 
-    is_running_ = true;
+    atomic_set(&is_running_, 1);
 
-    k_sleep(K_FOREVER);
+    while(atomic_get(&is_running_)) {
+        k_sleep(K_MSEC(100));
+    }
 }
 
 bool CdmpService::Initialize() {
     work_queue_thread_->Initialize();
     thread_->Initialize();
 
-    for(auto& service : canbus_services_)
+    for(const auto& service : canbus_services_)
         service->Initialize();
 
     LOG_INF("CDMP service initialized with device type %d, unique ID 0x%08X",
@@ -88,26 +90,45 @@ bool CdmpService::Initialize() {
     return true;
 }
 
+void CdmpService::Configure(std::shared_ptr<Canbus> canbus) {
+    if(atomic_get(&is_running_) != 0)
+        return;
+
+    canbus_ = std::move(canbus);
+
+    if(canbus_ == nullptr)
+        throw std::runtime_error("Canbus interface is undefined");
+
+    for(const auto& service : canbus_services_)
+        service->Configure(canbus_);
+}
+
 void CdmpService::Start() {
     thread_->Start();
 }
 
-void CdmpService::Stop() {
-    for(auto& service : canbus_services_)
+void CdmpService::Reset() {
+    if(atomic_get(&is_running_) == 0) {
+        atomic_set(&is_running_, 0);
+        thread_->Join();
+    }
+
+    for(const auto& service : canbus_services_)
         service->Stop();
 
-    thread_->Join();
+    for(const auto& service : canbus_services_)
+        service->Reset();
 
     if(device_)
         device_->Reset();
 
-    is_running_ = false;
+    canbus_.reset();
 
-    LOG_INF("CDMP service stopped");
+    LOG_INF("CDMP service reset");
 }
 
 bool CdmpService::IsRunning() const {
-    return is_running_;
+    return atomic_get(&is_running_) != 0;
 }
 
 void CdmpService::SetAutoDiscovery(bool enabled) {

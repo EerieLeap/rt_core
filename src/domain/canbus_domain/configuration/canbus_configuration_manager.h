@@ -10,6 +10,7 @@
 
 #include "subsys/fs/services/i_fs_service.h"
 
+#include "domain/configuration_domain/utilities/i_configuration_manager.h"
 #include "domain/configuration_domain/utilities/i_json_configuration_manager.h"
 #include "domain/canbus_domain/configuration/parsers/canbus_configuration_cbor_parser.h"
 #include "domain/canbus_domain/configuration/parsers/canbus_configuration_json_parser.h"
@@ -25,7 +26,7 @@ using namespace eerie_leap::domain::configuration_domain::utilities;
 using namespace eerie_leap::domain::canbus_domain::configuration::parsers;
 using namespace eerie_leap::domain::canbus_domain::models;
 
-class CanbusConfigurationManager : public IJsonConfigurationManager {
+class CanbusConfigurationManager : public IConfigurationManager, public IJsonConfigurationManager {
 private:
     std::unique_ptr<CborConfigurationService<CborCanbusConfig>> cbor_configuration_service_;
     std::unique_ptr<JsonConfigurationService<JsonCanbusConfig>> json_configuration_service_;
@@ -35,8 +36,9 @@ private:
     std::unique_ptr<CanbusConfigurationJsonParser> json_parser_;
 
     std::shared_ptr<CanbusConfiguration> configuration_;
-
     uint32_t json_config_checksum_;
+
+    ConfigurationUpdatedHandler configuration_updated_handler_;
 
     bool ApplyJsonConfiguration(bool fs_load, std::string_view json_str = {});
     bool CreateDefaultConfiguration();
@@ -46,6 +48,8 @@ public:
         std::unique_ptr<CborConfigurationService<CborCanbusConfig>> cbor_configuration_service,
         std::unique_ptr<JsonConfigurationService<JsonCanbusConfig>> json_configuration_service,
         std::shared_ptr<IFsService> sd_fs_service);
+
+    void RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) override;
 
     bool Update(const CanbusConfiguration& configuration);
     std::shared_ptr<CanbusConfiguration> Get(bool force_load = false);

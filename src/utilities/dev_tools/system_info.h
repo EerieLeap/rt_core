@@ -17,6 +17,7 @@ public:
     static void PrintStackInfo(int cpu = 0, const char *thread_name = nullptr);
     static void PrintCpuInfo(int cpu = 0, const char *thread_name = nullptr);
     static void PrintHeapInfo();
+    static void PrintThreadIds();
 };
 
 } // namespace eerie_leap::utilities::dev_tools

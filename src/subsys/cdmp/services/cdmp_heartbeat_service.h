@@ -17,6 +17,7 @@ class CdmpHeartbeatService : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<CdmpNetworkService> network_service_;
+    atomic_t is_running_ = ATOMIC_INIT(0);
 
     std::optional<WorkQueueTask<CdmpHeartbeatService>> heartbeat_task_;
     bool is_heartbeat_task_running_ = false;
@@ -39,7 +40,6 @@ private:
 
 public:
     CdmpHeartbeatService(
-        std::shared_ptr<Canbus> canbus,
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device,
         std::shared_ptr<WorkQueueThread> work_queue_thread,

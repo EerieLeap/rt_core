@@ -24,6 +24,29 @@ using namespace eerie_leap::subsys::threading;
 
 using CanFrameHandler = std::function<void (const CanFrame&)>;
 
+enum class CanbusState {
+    STOPPED,
+    STARTING,
+    RUNNING,
+    STOPPING
+};
+
+struct CanbusConfig {
+    const device *canbus_dev;
+    CanbusType type;
+    uint32_t bitrate;
+    uint32_t data_bitrate;
+    bool is_extended_id;
+
+    CanbusConfig(
+        const device *dev,
+        CanbusType t,
+        uint32_t br,
+        uint32_t data_br = 0,
+        bool ext_id = false)
+        : canbus_dev(dev), type(t), bitrate(br), data_bitrate(data_br), is_extended_id(ext_id) {}
+};
+
 class Canbus : public IThread {
 private:
     struct IsrCanFrameWrapper {
@@ -32,21 +55,19 @@ private:
     };
 
     static constexpr int FRAME_MSGQ_SIZE = 4;
+    static constexpr int MSGQ_GET_TIMEOUT_MS = 10;
     char frame_msgq_buffer_[FRAME_MSGQ_SIZE * sizeof(IsrCanFrameWrapper)];
     k_msgq frame_msgq_;
 
-    const device *canbus_dev_;
+    CanbusConfig config_;
     std::unordered_map<uint32_t, int> can_filter_ids_; // <can_id, filter_id>
     std::unordered_map<uint32_t, can_filter> can_filters_; // <can_id, can_filter>
     std::unordered_map<uint32_t, std::unordered_map<int, CanFrameHandler>> handlers_; // <can_id, handlers>
 
+    CanbusState state_ = CanbusState::STOPPED;
     bool is_initialized_ = false;
-    CanbusType type_;
-    bool is_extended_id_ = false;
-    uint32_t bitrate_;
-    uint32_t data_bitrate_;
     bool bitrate_detected_ = false;
-    atomic_t auto_detect_running_;
+    atomic_t auto_detect_running_ = ATOMIC_INIT(0);
     std::function<void (uint32_t bitrate)> bitrate_detected_fn_;
 
     static constexpr k_timeout_t FRAME_SEND_TIMEOUT_MS = K_MSEC(2);
@@ -60,6 +81,7 @@ private:
     static constexpr bool thread_is_cooperative_ = true;
     static constexpr int thread_stack_size_ = 2048;
     std::unique_ptr<Thread> thread_;
+    atomic_t is_thread_running_ = ATOMIC_INIT(0);
 
     // Ordered by most common first
     static constexpr std::array<uint32_t, 9> classical_can_supported_bitrates_ = {
@@ -79,11 +101,11 @@ private:
     bool StartActivityMonitoring();
     void StopActivityMonitoring();
     bool AutoDetectBitrate();
-    bool TestBitrate(uint32_t bitrate, uint32_t &frame_count);
+    bool TestBitrate(uint32_t bitrate, uint32_t &frame_count) const;
 
     static void SendFrameCallback(const device* dev, int error, void* user_data);
-    bool SetTiming(uint32_t bitrate);
-    bool SetDataTiming(uint32_t bitrate);
+    bool SetTiming(uint32_t bitrate) const;
+    bool SetDataTiming(uint32_t bitrate) const;
     bool RegisterFilter(uint32_t can_id);
     static void CanFrameReceivedCallback(const device *dev, can_frame *frame, void *user_data);
     void PrintCanLimits();
@@ -92,21 +114,22 @@ private:
 public:
     using BitrateDetectedCallback = std::function<void (uint32_t bitrate)>;
 
-    Canbus(
-        const device *canbus_dev,
-        CanbusType type,
-        uint32_t bitrate,
-        uint32_t data_bitrate = 0,
-        bool is_extended_id = false);
+    explicit Canbus(const CanbusConfig& config);
     ~Canbus();
 
     bool Initialize();
+    bool Configure(const CanbusConfig& config);
+    bool Start();
+    bool Stop();
+
     int RegisterFrameReceivedHandler(uint32_t can_id, CanFrameHandler handler);
     bool RemoveFrameReceivedHandler(uint32_t can_id, int handler_id);
 
-    CanbusType GetType() const { return type_; }
-    void SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data);
-    uint32_t GetDetectedBitrate() const { return bitrate_; }
+    CanbusType GetType() const { return config_.type; }
+    CanbusState GetState() const { return state_; }
+    const CanbusConfig& GetConfig() const { return config_; }
+    void SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) const;
+    uint32_t GetDetectedBitrate() const { return config_.bitrate; }
     bool IsBitrateDetected() const { return bitrate_detected_; }
     void RegisterBitrateDetectedCallback(const BitrateDetectedCallback& callback);
 

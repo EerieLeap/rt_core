@@ -18,6 +18,7 @@ using namespace eerie_leap::subsys::threading;
 class CdmpNetworkService : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
+    atomic_t is_running_ = ATOMIC_INIT(0);
 
     std::optional<WorkQueueTask<CdmpNetworkService>> validation_task_;
     bool is_validation_task_running_ = false;
@@ -65,7 +66,6 @@ private:
 
 public:
     CdmpNetworkService(
-        std::shared_ptr<Canbus> canbus,
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device,
         std::shared_ptr<WorkQueueThread> work_queue_thread);

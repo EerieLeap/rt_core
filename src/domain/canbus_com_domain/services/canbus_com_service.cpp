@@ -1,4 +1,5 @@
 #include <utility>
+#include <exception>
 
 #include <zephyr/logging/log.h>
 
@@ -15,28 +16,34 @@ LOG_MODULE_REGISTER(canbus_com_logger);
 CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service)
     : canbus_service_(std::move(canbus_service)) {
 
-    auto com_canbus = canbus_service_->GetComCanbus();
-    if(!com_canbus)
-        return;
-
     cdmp_service_ = std::make_shared<CdmpService>(
-        com_canbus,
         static_cast<CdmpDeviceType>(CONFIG_EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE),
         Rng::Get32(true));
+
+    if(cdmp_service_ == nullptr)
+        throw std::runtime_error("Failed to create CDMP service");
 }
 
 void CanbusComService::Initialize() {
-    if(!cdmp_service_)
-        return;
-
     cdmp_service_->Initialize();
 }
 
-void CanbusComService::Start() {
+bool CanbusComService::Start() {
+    auto com_canbus = canbus_service_->GetComCanbus();
+    if(!com_canbus)
+        return false;
+
+    cdmp_service_->Configure(com_canbus);
+    cdmp_service_->Start();
+
+    return true;
+}
+
+void CanbusComService::Stop() {
     if(!cdmp_service_)
         return;
 
-    cdmp_service_->Start();
+    cdmp_service_->Reset();
 }
 
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {

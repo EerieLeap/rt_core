@@ -8,12 +8,11 @@ LOG_MODULE_REGISTER(cdmp_heartbeat_service, LOG_LEVEL_INF);
 namespace eerie_leap::subsys::cdmp::services {
 
 CdmpHeartbeatService::CdmpHeartbeatService(
-    std::shared_ptr<Canbus> canbus,
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CdmpNetworkService> network_service)
-    : CdmpCanbusServiceBase(std::move(canbus), std::move(can_id_manager), std::move(device)),
+    : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
     work_queue_thread_(std::move(work_queue_thread)),
     network_service_(std::move(network_service)) {}
 
@@ -27,11 +26,20 @@ void CdmpHeartbeatService::Initialize() {
 }
 
 void CdmpHeartbeatService::Start() {
+    if(atomic_get(&is_running_) != 0)
+        return;
+
+    atomic_set(&is_running_, 1);
     RegisterCanHandlers();
     StartHeartbeatTask();
 }
 
 void CdmpHeartbeatService::Stop() {
+    if(atomic_get(&is_running_) == 0)
+        return;
+
+    atomic_set(&is_running_, 0);
+
     is_heartbeat_task_running_ = false;
     if(heartbeat_task_.has_value())
         heartbeat_task_.value().Cancel();

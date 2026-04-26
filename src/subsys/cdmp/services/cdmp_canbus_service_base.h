@@ -30,13 +30,14 @@ protected:
 
 public:
     CdmpCanbusServiceBase(
-        std::shared_ptr<Canbus> canbus,
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device);
 
     virtual ~CdmpCanbusServiceBase();
 
     void Initialize() override {}
+    void Configure(std::shared_ptr<Canbus> canbus) override;
+    void Reset() override;
 };
 
 } // namespace eerie_leap::subsys::cdmp::services

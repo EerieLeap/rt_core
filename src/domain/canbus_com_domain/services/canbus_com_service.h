@@ -44,7 +44,8 @@ public:
     virtual ~CanbusComService() = default;
 
     void Initialize();
-    void Start();
+    bool Start();
+    void Stop();
 
     template<SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {

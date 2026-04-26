@@ -44,6 +44,10 @@ CanbusConfigurationManager::CanbusConfigurationManager(
     ApplyJsonConfiguration(true);
 }
 
+void CanbusConfigurationManager::RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) {
+    configuration_updated_handler_ = handler;
+}
+
 bool CanbusConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::string_view json_str) {
     if(fs_load && !json_configuration_service_->IsAvailable())
         return false;
@@ -110,7 +114,12 @@ bool CanbusConfigurationManager::Update(const CanbusConfiguration& configuration
         return false;
     }
 
-    return Get(true) != nullptr;
+    bool result = Get(true) != nullptr;
+
+    if(result && configuration_updated_handler_)
+        configuration_updated_handler_();
+
+    return result;
 }
 
 std::shared_ptr<CanbusConfiguration> CanbusConfigurationManager::Get(bool force_load) {

@@ -38,7 +38,7 @@ private:
     std::vector<std::shared_ptr<ICdmpCanbusService>> canbus_services_;
 
     // Configuration
-    bool is_running_ = false;
+    atomic_t is_running_ = ATOMIC_INIT(0);
     uint32_t base_can_id_;
     bool auto_discovery_enabled_ = true;
 
@@ -46,7 +46,6 @@ private:
 
 public:
     CdmpService(
-        std::shared_ptr<Canbus> canbus,
         CdmpDeviceType device_type,
         uint32_t uid,
         uint32_t base_can_id = CdmpCanIdManager::DEFAULT_BASE_CAN_ID);
@@ -54,8 +53,9 @@ public:
 
     // Service lifecycle
     bool Initialize();
+    void Configure(std::shared_ptr<Canbus> canbus);
     void Start();
-    void Stop();
+    void Reset();
     bool IsRunning() const;
 
     // Configuration

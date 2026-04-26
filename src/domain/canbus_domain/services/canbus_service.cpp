@@ -1,3 +1,6 @@
+#include <exception>
+#include <vector>
+
 #include <zephyr/logging/log.h>
 
 #include "subsys/fs/services/fs_service_stream_buf.h"
@@ -11,33 +14,98 @@ LOG_MODULE_REGISTER(canbus_service_logger);
 CanbusService::CanbusService(
     std::function<const device*(uint8_t)> dt_canbus_provider,
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager)
-        : canbus_configuration_manager_(std::move(canbus_configuration_manager)) {
+        : canbus_configuration_manager_(std::move(canbus_configuration_manager)),
+          dt_canbus_provider_(std::move(dt_canbus_provider)) {
 
-    for(const auto& [bus_channel, channel_configuration] : canbus_configuration_manager_->Get()->channel_configurations) {
-        auto canbus = std::make_shared<Canbus>(
-            dt_canbus_provider(bus_channel),
-            channel_configuration.type,
-            channel_configuration.bitrate,
-            channel_configuration.data_bitrate,
-            channel_configuration.is_extended_id);
+    Configure();
+}
 
-        if(!canbus->Initialize()) {
-            LOG_ERR("Failed to initialize CAN channel %d.", bus_channel);
+// NOTE: At the point when Configure called there should strictly be
+// absolutely no one using Canbus instances. All services should be stopped
+// and resumed only after configuration is finished.
+void CanbusService::Configure() {
+    for(const auto& [_, canbus]: canbuses_) {
+        if(canbus.use_count() > 1)
+            throw std::runtime_error("Canbus instance is still in use, cannot configure");
+    }
+
+    auto canbus_configuration = canbus_configuration_manager_->Get();
+
+    // Stop all existing canbuses
+    for(const auto& [bus_channel, canbus]: canbuses_) {
+        if(canbus->GetState() != CanbusState::STOPPED) {
+            canbus->Stop();
+        }
+    }
+
+    // Create missing canbuses for new configurations
+    for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
+        const auto* canbus_device = dt_canbus_provider_(bus_channel);
+        if(canbus_device == nullptr) {
+            LOG_ERR("CAN device for channel %d not found.", bus_channel);
             continue;
         }
 
-        canbus->RegisterBitrateDetectedCallback([this, bus_channel](uint32_t bitrate) {
-            BitrateUpdated(bus_channel, bitrate);
-        });
+        if(!canbuses_.contains(bus_channel)) {
+            CanbusConfig config(
+                canbus_device,
+                channel_configuration.type,
+                channel_configuration.bitrate,
+                channel_configuration.data_bitrate,
+                channel_configuration.is_extended_id);
 
-        canbuses_.emplace(bus_channel, std::move(canbus));
+            auto new_canbus = std::make_shared<Canbus>(config);
 
-        ConfigureUserSignals(channel_configuration);
+            if(!new_canbus->Initialize()) {
+                LOG_ERR("Failed to initialize CAN channel %d.", bus_channel);
+                continue;
+            }
+
+            if(!new_canbus->Start()) {
+                LOG_ERR("Failed to start CAN channel %d.", bus_channel);
+                continue;
+            }
+
+            new_canbus->RegisterBitrateDetectedCallback([this, bus_channel](uint32_t bitrate) {
+                BitrateUpdated(bus_channel, bitrate);
+            });
+
+            canbuses_.emplace(bus_channel, std::move(new_canbus));
+        }
+    }
+
+    // Configure newly added Canbuses
+    for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
+        if(canbuses_.contains(bus_channel) && canbuses_.at(bus_channel)->GetState() != CanbusState::RUNNING) {
+            auto canbus_instance = canbuses_.at(bus_channel);
+
+            CanbusConfig new_config(
+                dt_canbus_provider_(bus_channel),
+                channel_configuration.type,
+                channel_configuration.bitrate,
+                channel_configuration.data_bitrate,
+                channel_configuration.is_extended_id);
+
+            if(!canbus_instance->Configure(new_config)) {
+                LOG_ERR("Failed to configure CAN channel %d.", bus_channel);
+                continue;
+            }
+
+            if(!canbus_instance->Start()) {
+                LOG_ERR("Failed to start CAN channel %d.", bus_channel);
+                continue;
+            }
+        }
+    }
+
+    for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
+        if(canbuses_.contains(bus_channel))
+            ConfigureUserSignals(channel_configuration);
     }
 }
 
 std::shared_ptr<Canbus> CanbusService::GetCanbus(uint8_t bus_channel) const {
-    if(!canbuses_.contains(bus_channel))
+    if(!canbuses_.contains(bus_channel) || canbuses_.at(bus_channel)->GetState() != CanbusState::RUNNING)
         return nullptr;
 
     return canbuses_.at(bus_channel);
@@ -68,7 +136,7 @@ std::shared_ptr<Canbus> CanbusService::GetComCanbus() const {
     return com_canbus;
 }
 
-void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) {
+void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const {
     auto canbus_configuration = canbus_configuration_manager_->Get();
     bool is_bus_channel_valid = canbus_configuration->channel_configurations.contains(bus_channel);
 
@@ -78,7 +146,7 @@ void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) {
         LOG_ERR("Failed to update bitrate for bus channel %d.", bus_channel);
 }
 
-void CanbusService::ConfigureUserSignals(const CanChannelConfiguration& channel_configuration) {
+void CanbusService::ConfigureUserSignals(const CanChannelConfiguration& channel_configuration) const {
     for(const auto& message_configuration : channel_configuration.message_configurations) {
         DbcMessage* message = nullptr;
 

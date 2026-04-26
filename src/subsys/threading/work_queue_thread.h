@@ -33,6 +33,7 @@ public:
     ~WorkQueueThread();
 
     void Initialize();
+    void Stop();
     [[nodiscard]] k_work_q* GetWorkQueue();
 
     template<typename T>

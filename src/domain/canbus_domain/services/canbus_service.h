@@ -21,16 +21,18 @@ using namespace eerie_leap::domain::canbus_domain::configuration;
 class CanbusService {
 private:
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager_;
+    std::function<const device*(uint8_t)> dt_canbus_provider_;
 
     std::unordered_map<uint8_t, std::shared_ptr<Canbus>> canbuses_;
 
-    void BitrateUpdated(uint8_t bus_channel, uint32_t bitrate);
-    void ConfigureUserSignals(const CanChannelConfiguration& channel_configuration);
+    void BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const;
+    void ConfigureUserSignals(const CanChannelConfiguration& channel_configuration) const;
 
 public:
     CanbusService(
         std::function<const device*(uint8_t)> dt_canbus_provider,
         std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager);
+    void Configure();
 
     [[nodiscard]] std::shared_ptr<Canbus> GetCanbus(uint8_t bus_channel) const;
     [[nodiscard]] std::shared_ptr<Canbus> GetComCanbus() const;

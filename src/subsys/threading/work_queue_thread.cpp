@@ -1,7 +1,10 @@
 #include <ranges>
 #include <algorithm>
+#include <zephyr/logging/log.h>
 
 #include "work_queue_thread.h"
+
+LOG_MODULE_REGISTER(work_queue_thread);
 
 namespace eerie_leap::subsys::threading {
 
@@ -34,6 +37,17 @@ void WorkQueueThread::Initialize() {
     k_thread_name_set(&work_q_.thread, name_.c_str());
 
     initialized_ = true;
+}
+
+void WorkQueueThread::Stop() {
+    IsValid();
+
+    k_work_queue_drain(&work_q_, true);
+
+    int ret = k_work_queue_stop(&work_q_, K_FOREVER);
+    if(ret != 0) {
+        LOG_ERR("Failed to stop work queue: %d", ret);
+    }
 }
 
 [[nodiscard]] k_work_q* WorkQueueThread::GetWorkQueue() {

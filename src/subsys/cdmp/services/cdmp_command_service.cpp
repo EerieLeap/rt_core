@@ -7,11 +7,10 @@ LOG_MODULE_REGISTER(cdmp_command_service, LOG_LEVEL_INF);
 namespace eerie_leap::subsys::cdmp::services {
 
 CdmpCommandService::CdmpCommandService(
-    std::shared_ptr<Canbus> canbus,
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,
     std::shared_ptr<WorkQueueThread> work_queue_thread)
-        : CdmpCanbusServiceBase(std::move(canbus), std::move(can_id_manager), std::move(device))
+        : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device))
         , canbus_handler_id_(-1)
         , canbus_response_handler_id_(-1)
         , work_queue_thread_(std::move(work_queue_thread)) {
@@ -28,12 +27,20 @@ CdmpCommandService::~CdmpCommandService() {
 }
 
 void CdmpCommandService::Start() {
+    if(atomic_get(&is_running_) != 0)
+        return;
+
+    atomic_set(&is_running_, 1);
     RegisterCanHandlers();
 
     LOG_INF("CDMP Command Service started");
 }
 
 void CdmpCommandService::Stop() {
+    if(atomic_get(&is_running_) == 0)
+        return;
+
+    atomic_set(&is_running_, 0);
     UnregisterCanHandlers();
 
     LOG_INF("CDMP Command Service stopped");
