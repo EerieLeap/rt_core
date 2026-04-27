@@ -32,8 +32,7 @@ Canbus::~Canbus() {
     if(config_.canbus_dev != nullptr && is_initialized_)
         can_stop(config_.canbus_dev);
 
-    atomic_set(&is_thread_running_, 0);
-    if(thread_)
+    if(thread_ && thread_->IsRunning())
         thread_->Join();
 }
 
@@ -338,7 +337,7 @@ void Canbus::StopActivityMonitoring() {
 void Canbus::ThreadEntry() {
     LOG_INF("CANBus thread started.");
 
-    while(atomic_get(&is_thread_running_)) {
+    while(thread_->IsRunning()) {
         if(atomic_get(&auto_detect_running_) && !bitrate_detected_)
             BitrateAutodetectTask();
 
@@ -592,15 +591,13 @@ bool Canbus::Stop() {
     }
 
     // Stop the thread
-    atomic_set(&is_thread_running_, 0);
-    if(thread_) {
+    if(thread_ && thread_->IsRunning())
         thread_->Join();
-    }
 
     // Clear filters and handlers
-    for(const auto& [can_id, filter_id] : can_filter_ids_) {
+    for(const auto& [can_id, filter_id] : can_filter_ids_)
         can_remove_rx_filter(config_.canbus_dev, filter_id);
-    }
+
     can_filter_ids_.clear();
     can_filters_.clear();
     handlers_.clear();
@@ -633,7 +630,6 @@ bool Canbus::Start() {
     state_ = CanbusState::STARTING;
 
     // Start the processing thread
-    atomic_set(&is_thread_running_, 1);
     thread_->Start();
 
     state_ = CanbusState::RUNNING;

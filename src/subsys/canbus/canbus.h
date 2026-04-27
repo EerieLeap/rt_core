@@ -81,7 +81,6 @@ private:
     static constexpr bool thread_is_cooperative_ = true;
     static constexpr int thread_stack_size_ = 2048;
     std::unique_ptr<Thread> thread_;
-    atomic_t is_thread_running_ = ATOMIC_INIT(0);
 
     // Ordered by most common first
     static constexpr std::array<uint32_t, 9> classical_can_supported_bitrates_ = {

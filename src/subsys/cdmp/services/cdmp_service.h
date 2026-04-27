@@ -38,7 +38,6 @@ private:
     std::vector<std::shared_ptr<ICdmpCanbusService>> canbus_services_;
 
     // Configuration
-    atomic_t is_running_ = ATOMIC_INIT(0);
     uint32_t base_can_id_;
     bool auto_discovery_enabled_ = true;
 

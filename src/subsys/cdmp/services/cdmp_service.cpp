@@ -70,9 +70,7 @@ void CdmpService::ThreadEntry() {
     if(auto_discovery_enabled_)
         device_->StartDiscovery();
 
-    atomic_set(&is_running_, 1);
-
-    while(atomic_get(&is_running_)) {
+    while(thread_->IsRunning()) {
         k_sleep(K_MSEC(100));
     }
 }
@@ -91,8 +89,10 @@ bool CdmpService::Initialize() {
 }
 
 void CdmpService::Configure(std::shared_ptr<Canbus> canbus) {
-    if(atomic_get(&is_running_) != 0)
+    if(thread_->IsRunning()) {
+        LOG_ERR("Cannot configure while service is running.");
         return;
+    }
 
     canbus_ = std::move(canbus);
 
@@ -108,10 +108,7 @@ void CdmpService::Start() {
 }
 
 void CdmpService::Reset() {
-    if(atomic_get(&is_running_) == 0) {
-        atomic_set(&is_running_, 0);
-        thread_->Join();
-    }
+    thread_->Join();
 
     for(const auto& service : canbus_services_)
         service->Stop();
@@ -128,7 +125,7 @@ void CdmpService::Reset() {
 }
 
 bool CdmpService::IsRunning() const {
-    return atomic_get(&is_running_) != 0;
+    return thread_->IsRunning();
 }
 
 void CdmpService::SetAutoDiscovery(bool enabled) {
