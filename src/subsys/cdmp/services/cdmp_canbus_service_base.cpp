@@ -22,12 +22,8 @@ CdmpCanbusServiceBase::~CdmpCanbusServiceBase() {
         device_->GetStatusMachine().UnregisterStatusChangeHandler(status_handler_id_);
 }
 
-void CdmpCanbusServiceBase::Configure(std::shared_ptr<Canbus> canbus) {
+void CdmpCanbusServiceBase::Configure(std::shared_ptr<CanbusProxy> canbus) {
     canbus_ = std::move(canbus);
-}
-
-void CdmpCanbusServiceBase::Reset() {
-    canbus_.reset();
 }
 
 void CdmpCanbusServiceBase::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {}

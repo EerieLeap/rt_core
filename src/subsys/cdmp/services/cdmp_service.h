@@ -6,7 +6,7 @@
 #include <vector>
 #include <zephyr/kernel.h>
 
-#include "subsys/canbus/canbus.h"
+#include "subsys/canbus/canbus_proxy.hpp"
 #include <subsys/threading/thread.h>
 #include "subsys/threading/work_queue_thread.h"
 
@@ -31,7 +31,7 @@ private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
 
     std::shared_ptr<CdmpDevice> device_;
-    std::shared_ptr<Canbus> canbus_;
+    std::shared_ptr<CanbusProxy> canbus_;
     std::shared_ptr<CdmpCanIdManager> can_id_manager_;
     std::shared_ptr<CdmpCommandService> command_service_;
 
@@ -52,9 +52,9 @@ public:
 
     // Service lifecycle
     bool Initialize();
-    void Configure(std::shared_ptr<Canbus> canbus);
+    void Configure(std::shared_ptr<CanbusProxy> canbus);
     void Start();
-    void Reset();
+    void Stop();
     bool IsRunning() const;
 
     // Configuration

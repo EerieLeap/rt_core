@@ -13,7 +13,7 @@ namespace eerie_leap::subsys::cdmp::services {
 
 using namespace eerie_leap::subsys::threading;
 
-class CdmpHeartbeatService : public CdmpCanbusServiceBase {
+class CdmpHeartbeatService final : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<CdmpNetworkService> network_service_;

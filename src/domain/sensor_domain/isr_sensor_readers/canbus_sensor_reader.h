@@ -6,7 +6,7 @@
 #include <zephyr/spinlock.h>
 #include <zephyr/sys/atomic.h>
 
-#include "subsys/canbus/canbus.h"
+#include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/dbc/dbc.h"
 
 #include "canbus_sensor_reader_raw.h"
@@ -30,7 +30,7 @@ public:
         std::shared_ptr<Sensor> sensor,
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<Canbus> canbus,
+        std::shared_ptr<CanbusProxy> canbus,
         std::shared_ptr<Dbc> dbc);
     virtual ~CanbusSensorReader() = default;
 };

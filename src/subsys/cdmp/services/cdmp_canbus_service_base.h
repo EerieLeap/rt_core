@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "subsys/canbus/canbus.h"
+#include "subsys/canbus/canbus_proxy.hpp"
 
 #include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
 #include "subsys/cdmp/utilities/cdmp_status_machine.h"
@@ -22,7 +22,7 @@ private:
     int status_handler_id_;
 
 protected:
-    std::shared_ptr<Canbus> canbus_;
+    std::shared_ptr<CanbusProxy> canbus_;
     std::shared_ptr<CdmpCanIdManager> can_id_manager_;
     std::shared_ptr<CdmpDevice> device_;
 
@@ -36,8 +36,7 @@ public:
     virtual ~CdmpCanbusServiceBase();
 
     void Initialize() override {}
-    void Configure(std::shared_ptr<Canbus> canbus) override;
-    void Reset() override;
+    void Configure(std::shared_ptr<CanbusProxy> canbus) override;
 };
 
 } // namespace eerie_leap::subsys::cdmp::services

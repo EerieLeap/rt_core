@@ -59,7 +59,12 @@ void CdmpNetworkService::StartValidationTask() {
 }
 
 void CdmpNetworkService::RegisterCanHandlers() {
-    canbus_handler_id_ = canbus_->RegisterFrameReceivedHandler(
+    if (!canbus_ || !canbus_->IsValid()) {
+        LOG_ERR("Cannot register CAN handlers: CAN bus is not valid");
+        return;
+    }
+
+    canbus_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
         can_id_manager_->GetManagementCanId(),
         [this](const CanFrame& frame) {
             work_queue_thread_->Run([this, frame]() { ProcessFrame(frame.data); }); });
@@ -71,11 +76,11 @@ void CdmpNetworkService::RegisterCanHandlers() {
 }
 
 void CdmpNetworkService::UnregisterCanHandlers() {
-    if(!canbus_)
+    if(!canbus_ || !canbus_->IsValid())
         return;
 
     if(canbus_handler_id_ >= 0)
-        canbus_->RemoveFrameReceivedHandler(can_id_manager_->GetManagementCanId(), canbus_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetManagementCanId(), canbus_handler_id_);
     canbus_handler_id_ = -1;
 }
 
@@ -203,15 +208,21 @@ void CdmpNetworkService::ProcessDiscoveryResponseFrame(std::span<const uint8_t> 
 }
 
 void CdmpNetworkService::SendDiscoveryRequest() {
+    if(!canbus_ || !canbus_->IsValid())
+        return;
+
     CdmpDiscoveryRequestMessage message{};
     message.uid = device_->GetUniqueIdentifier();
     auto frame_data = message.ToCanFrame();
     uint32_t frame_id = can_id_manager_->GetDiscoveryRequestCanId();
-    canbus_->SendFrame(frame_id, frame_data);
+    (*canbus_)->SendFrame(frame_id, frame_data);
 }
 
 void CdmpNetworkService::SendDiscoveryResponse() {
     if(!device_->IsOnline())
+        return;
+
+    if(!canbus_ || !canbus_->IsValid())
         return;
 
     CdmpDiscoveryResponseMessage message = {};
@@ -223,12 +234,15 @@ void CdmpNetworkService::SendDiscoveryResponse() {
 
     auto frame_data = message.ToCanFrame();
     uint32_t frame_id = can_id_manager_->GetDiscoveryResponseCanId();
-    canbus_->SendFrame(frame_id, frame_data);
+    (*canbus_)->SendFrame(frame_id, frame_data);
 
     LOG_INF("Sent discovery response for device %d", message.device_id);
 }
 
 void CdmpNetworkService::SendIdClaim() {
+    if(!canbus_ || !canbus_->IsValid())
+        return;
+
     try {
         claiming_device_id_ = GetLowestAvailableId(claiming_device_id_);
     } catch (const std::exception& e) {
@@ -248,7 +262,7 @@ void CdmpNetworkService::SendIdClaim() {
 
         auto frame_data = message.ToCanFrame();
         uint32_t frame_id = can_id_manager_->GetIdClaimRequestCanId();
-        canbus_->SendFrame(frame_id, frame_data);
+        (*canbus_)->SendFrame(frame_id, frame_data);
         LOG_INF("Sent ID claim for device %d", message.claiming_device_id);
 
         k_msleep(CdmpConstants::ID_CLAIM_RESPONSE_TIMEOUT_MS);
@@ -280,6 +294,9 @@ void CdmpNetworkService::SendIdClaim() {
 }
 
 void CdmpNetworkService::ProcessIdClaimRequestFrame(std::span<const uint8_t> frame_data) {
+    if(!canbus_ || !canbus_->IsValid())
+        return;
+
     try {
         if(!device_->IsOnline())
             return;
@@ -315,7 +332,7 @@ void CdmpNetworkService::ProcessIdClaimRequestFrame(std::span<const uint8_t> fra
         if(send_response) {
             auto frame_data = message.ToCanFrame();
             uint32_t response_id = can_id_manager_->GetIdClaimResponseCanId();
-            canbus_->SendFrame(response_id, frame_data);
+            (*canbus_)->SendFrame(response_id, frame_data);
 
             return;
         }

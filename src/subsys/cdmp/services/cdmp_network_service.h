@@ -15,7 +15,7 @@ namespace eerie_leap::subsys::cdmp::services {
 
 using namespace eerie_leap::subsys::threading;
 
-class CdmpNetworkService : public CdmpCanbusServiceBase {
+class CdmpNetworkService final : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     atomic_t is_running_ = ATOMIC_INIT(0);

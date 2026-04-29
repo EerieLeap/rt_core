@@ -15,7 +15,7 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     std::shared_ptr<Sensor> sensor,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<Canbus> canbus)
+    std::shared_ptr<CanbusProxy> canbus)
         : IsrSensorReaderBase(
             std::move(time_service),
             std::move(guid_generator),
@@ -29,7 +29,10 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
 
     uint32_t frame_id = sensor_->configuration.canbus_source->frame_id;
 
-    int handler_id = canbus_->RegisterFrameReceivedHandler(
+    if(!canbus_->IsValid())
+        throw std::runtime_error("CANBus proxy is not valid");
+
+    int handler_id = (*canbus_)->RegisterFrameReceivedHandler(
         frame_id,
         [this](const CanFrame& frame) {
             if(k_sem_take(&processing_semaphore_, K_NO_WAIT) != 0)
@@ -63,9 +66,10 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
 CanbusSensorReaderRaw::~CanbusSensorReaderRaw() {
     atomic_set(&is_destroying_, 1);
 
-    canbus_->RemoveFrameReceivedHandler(frame_id_, frame_handler_id_);
+    if(canbus_->IsValid())
+        (*canbus_)->RemoveFrameReceivedHandler(frame_id_, frame_handler_id_);
 
-    k_sem_take(&processing_semaphore_, K_FOREVER);
+    k_sem_take(&processing_semaphore_, K_MSEC(100));
     k_sem_give(&processing_semaphore_);
 }
 

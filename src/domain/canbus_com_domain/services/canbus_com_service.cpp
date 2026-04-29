@@ -22,6 +22,12 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
 
     if(cdmp_service_ == nullptr)
         throw std::runtime_error("Failed to create CDMP service");
+
+    canbus_service_->RegisterConfigurationResetHandler(
+        [this]() { Stop(); });
+
+    canbus_service_->RegisterConfigurationUpdatedHandler(
+        [this]() { Start(); });
 }
 
 void CanbusComService::Initialize() {
@@ -43,7 +49,7 @@ void CanbusComService::Stop() {
     if(!cdmp_service_)
         return;
 
-    cdmp_service_->Reset();
+    cdmp_service_->Stop();
 }
 
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {

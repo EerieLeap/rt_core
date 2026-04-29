@@ -11,7 +11,7 @@ CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<Sensor> sensor,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<Canbus> canbus,
+    std::shared_ptr<CanbusProxy> canbus,
     std::shared_ptr<Dbc> dbc)
         : CanbusSensorReaderRaw(
             std::move(time_service),

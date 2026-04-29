@@ -47,29 +47,33 @@ void CdmpCommandService::Stop() {
 }
 
 void CdmpCommandService::RegisterCanHandlers() {
-    if (!canbus_) return;
+    if (!canbus_ || !canbus_->IsValid()) {
+        LOG_ERR("Cannot register CAN handlers: CAN bus is not valid");
+        return;
+    }
 
-    canbus_handler_id_ = canbus_->RegisterFrameReceivedHandler(
+    canbus_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
         can_id_manager_->GetCommandRequestCanId(),
         [this](const CanFrame& frame) {
             work_queue_thread_->Run([this, frame]() { ProcessRequestFrame(frame.data); }); });
 
-    canbus_response_handler_id_ = canbus_->RegisterFrameReceivedHandler(
+    canbus_response_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
         can_id_manager_->GetCommandResponseCanId(),
         [this](const CanFrame& frame) {
             work_queue_thread_->Run([this, frame]() { ProcessResponseFrame(frame.data); }); });
 }
 
 void CdmpCommandService::UnregisterCanHandlers() {
-    if (!canbus_) return;
+    if (!canbus_ || !canbus_->IsValid())
+        return;
 
     if (canbus_handler_id_ >= 0) {
-        canbus_->RemoveFrameReceivedHandler(can_id_manager_->GetCommandRequestCanId(), canbus_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetCommandRequestCanId(), canbus_handler_id_);
         canbus_handler_id_ = -1;
     }
 
     if (canbus_response_handler_id_ >= 0) {
-        canbus_->RemoveFrameReceivedHandler(can_id_manager_->GetCommandResponseCanId(), canbus_response_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetCommandResponseCanId(), canbus_response_handler_id_);
         canbus_response_handler_id_ = -1;
     }
 }
@@ -173,6 +177,9 @@ void CdmpCommandService::ProcessResponseFrame(std::span<const uint8_t> frame_dat
 }
 
 void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const CdmpCommandResponseMessage& response) {
+    if(!canbus_ || !canbus_->IsValid())
+        return;
+
     try {
         auto frame = response.ToCanFrame();
         uint32_t can_id = can_id_manager_->GetCommandResponseCanId();
@@ -180,7 +187,7 @@ void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const Cdm
         if(target_device_id != device_->GetDeviceId())
             k_msleep(device_->GetStaggeredMessageDelay());
 
-        canbus_->SendFrame(can_id, frame);
+        (*canbus_)->SendFrame(can_id, frame);
 
         LOG_DBG("Sent command response for transaction %d", response.transaction_id);
     } catch (const std::exception& e) {
@@ -228,6 +235,9 @@ uint8_t CdmpCommandService::SendCommand(
     std::span<const uint8_t> data,
     CdmpTransactionCallback callback) {
 
+    if(!canbus_ || !canbus_->IsValid())
+        return 0;
+
     try {
         if(command_code == 0)
             throw std::runtime_error("Command code 0 is not allowed");
@@ -246,7 +256,7 @@ uint8_t CdmpCommandService::SendCommand(
 
         auto frame_data = command.ToCanFrame();
         uint32_t frame_id = can_id_manager_->GetCommandRequestCanId();
-        canbus_->SendFrame(frame_id, frame_data);
+        (*canbus_)->SendFrame(frame_id, frame_data);
 
         LOG_DBG("Sent command %d to device %d, transaction %d",
             command_code, target_device_id, transaction_id);

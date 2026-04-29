@@ -11,7 +11,7 @@
 #include <zephyr/sys/atomic.h>
 
 #include "subsys/threading/work_queue_thread.h"
-#include "subsys/canbus/canbus.h"
+#include "subsys/canbus/canbus_proxy.hpp"
 
 #include "isr_sensor_reader_base.h"
 
@@ -24,7 +24,7 @@ using namespace eerie_leap::subsys::canbus;
 class CanbusSensorReaderRaw : public IsrSensorReaderBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
-    std::shared_ptr<Canbus> canbus_;
+    std::shared_ptr<CanbusProxy> canbus_;
 
     atomic_t is_destroying_{ATOMIC_INIT(0)};
     k_sem processing_semaphore_;
@@ -45,7 +45,7 @@ public:
         std::shared_ptr<Sensor> sensor,
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<Canbus> canbus);
+        std::shared_ptr<CanbusProxy> canbus);
     virtual ~CanbusSensorReaderRaw();
 };
 

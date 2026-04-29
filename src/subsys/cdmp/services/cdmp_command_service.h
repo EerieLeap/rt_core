@@ -23,7 +23,7 @@ struct CdmpCommandResult {
     std::vector<uint8_t> data;
 };
 
-class CdmpCommandService : public CdmpCanbusServiceBase {
+class CdmpCommandService final : public CdmpCanbusServiceBase {
 public:
     using CommandHandler = std::function<CdmpCommandResult(uint8_t transaction_id, std::span<const uint8_t> data)>;
 

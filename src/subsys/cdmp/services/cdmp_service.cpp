@@ -55,10 +55,7 @@ CdmpService::CdmpService(
 }
 
 CdmpService::~CdmpService() {
-    Reset();
-
-    work_queue_thread_->Stop();
-    thread_->Join();
+    Stop();
 }
 
 void CdmpService::ThreadEntry() {
@@ -88,7 +85,7 @@ bool CdmpService::Initialize() {
     return true;
 }
 
-void CdmpService::Configure(std::shared_ptr<Canbus> canbus) {
+void CdmpService::Configure(std::shared_ptr<CanbusProxy> canbus) {
     if(thread_->IsRunning()) {
         LOG_ERR("Cannot configure while service is running.");
         return;
@@ -107,21 +104,18 @@ void CdmpService::Start() {
     thread_->Start();
 }
 
-void CdmpService::Reset() {
+void CdmpService::Stop() {
     thread_->Join();
 
     for(const auto& service : canbus_services_)
         service->Stop();
 
-    for(const auto& service : canbus_services_)
-        service->Reset();
-
     if(device_)
         device_->Reset();
 
-    canbus_.reset();
+    thread_->Join();
 
-    LOG_INF("CDMP service reset");
+    LOG_INF("CDMP service stopped");
 }
 
 bool CdmpService::IsRunning() const {
