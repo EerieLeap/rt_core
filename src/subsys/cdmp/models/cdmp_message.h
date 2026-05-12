@@ -16,6 +16,8 @@
 
 namespace eerie_leap::subsys::cdmp::models {
 
+using eerie_leap::subsys::cdmp::utilities::CdmpStateType;
+
 // TODO: Rethink state change notification and response messages
 // probably should be removed
 

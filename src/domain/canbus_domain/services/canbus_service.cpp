@@ -9,6 +9,9 @@
 
 namespace eerie_leap::domain::canbus_domain::services {
 
+using namespace eerie_leap::subsys::canbus;
+using namespace eerie_leap::subsys::dbc;
+
 LOG_MODULE_REGISTER(canbus_service_logger);
 
 CanbusService::CanbusService(

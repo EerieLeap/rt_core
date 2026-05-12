@@ -7,6 +7,7 @@
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
 using namespace eerie_leap::subsys::adc::utilities;
+using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderPhysicalAnalogCalibrator::SensorReaderPhysicalAnalogCalibrator(
     std::shared_ptr<ITimeService> time_service,

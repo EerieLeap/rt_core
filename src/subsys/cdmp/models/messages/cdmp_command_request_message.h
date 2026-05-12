@@ -10,8 +10,6 @@
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
-
 // (Base + 2)
 struct CdmpCommandRequestMessage {
     uint8_t target_device_id;

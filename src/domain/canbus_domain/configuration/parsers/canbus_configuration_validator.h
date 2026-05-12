@@ -5,8 +5,11 @@
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
 
-using namespace eerie_leap::subsys::fs::services;
-using namespace eerie_leap::domain::canbus_domain::models;
+using eerie_leap::subsys::fs::services::IFsService;
+using eerie_leap::subsys::canbus::CanbusType;
+using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 
 class CanbusConfigurationValidator {
 private:

@@ -2,6 +2,7 @@
 #include <optional>
 
 #include "utilities/cbor/cbor_helpers.hpp"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "canbus_configuration_validator.h"
 #include "canbus_configuration_parser_helpers.hpp"
@@ -9,7 +10,11 @@
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
 
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::cbor;
+using namespace eerie_leap::subsys::lua_script;
+using namespace eerie_leap::domain::canbus_domain::models;
 
 CanbusConfigurationCborParser::CanbusConfigurationCborParser(std::shared_ptr<IFsService> sd_fs_service)
     : sd_fs_service_(std::move(sd_fs_service)) {}

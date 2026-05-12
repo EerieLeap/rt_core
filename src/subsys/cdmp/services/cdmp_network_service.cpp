@@ -9,6 +9,10 @@ LOG_MODULE_REGISTER(cdmp_network_service, LOG_LEVEL_INF);
 
 namespace eerie_leap::subsys::cdmp::services {
 
+using namespace eerie_leap::subsys::canbus;
+using namespace eerie_leap::subsys::cdmp::utilities;
+using namespace eerie_leap::subsys::cdmp::models;
+
 CdmpNetworkService::CdmpNetworkService(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,

@@ -6,7 +6,7 @@
 
 namespace eerie_leap::domain::canbus_com_domain::commands {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
 
 enum class CanbusComCommandCode : uint8_t {
     LOGGING = CdmpConstants::USER_COMMAND_CODE_MIN + 0

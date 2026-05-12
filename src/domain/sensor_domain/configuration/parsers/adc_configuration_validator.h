@@ -4,7 +4,7 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 
-using namespace eerie_leap::subsys::adc::models;
+using eerie_leap::subsys::adc::models::AdcConfiguration;
 
 class AdcConfigurationValidator {
 private:

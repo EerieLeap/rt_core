@@ -6,7 +6,6 @@
 #include "subsys/time/i_time_service.h"
 #include "subsys/threading/work_queue_thread.h"
 
-#include "domain/sensor_domain/configuration/adc_configuration_manager.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/canbus_domain/services/canbus_service.h"
@@ -14,14 +13,12 @@
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
-using namespace eerie_leap::utilities::guid;
-using namespace eerie_leap::subsys::time;
-using namespace eerie_leap::subsys::threading;
+using eerie_leap::utilities::guid::GuidGenerator;
+using eerie_leap::subsys::time::ITimeService;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
-using namespace eerie_leap::domain::sensor_domain::configuration;
-using namespace eerie_leap::domain::sensor_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::domain::canbus_domain::services;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::canbus_domain::services::CanbusService;
 
 class IsrSensorReaderFactory {
 protected:

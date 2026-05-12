@@ -12,8 +12,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class DataGroupBlock : public BlockBase {
 private:
     enum class LinkType: int {
@@ -23,7 +21,7 @@ private:
         MetadataComment
     };
 
-    BlockLinks<LinkType, 4> links_;
+    utilities::BlockLinks<LinkType, 4> links_;
 
     uint8_t record_id_size_bytes_;      // 1 byte, Length of record ID bytes
     // uint8_t reserved_1_[7];          // 7 bytes, Reserved

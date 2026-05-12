@@ -11,8 +11,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class FileHistoryBlock : public BlockBase {
 private:
     enum class LinkType: int {
@@ -20,7 +18,7 @@ private:
         MetadataComment
     };
 
-    BlockLinks<LinkType, 2> links_;
+    utilities::BlockLinks<LinkType, 2> links_;
 
     uint64_t time_ns_;                  // 8 bytes, Absolute time in ns since midnight Jan 1st, 1970
     uint16_t tz_offset_min_;            // 2 bytes, Timezone offset in minutes

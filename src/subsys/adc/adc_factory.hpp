@@ -14,7 +14,7 @@
 
 namespace eerie_leap::subsys::adc {
 
-using namespace eerie_leap::subsys::device_tree;
+using eerie_leap::subsys::device_tree::AdcDTInfo;
 
 class AdcFactory {
 private:

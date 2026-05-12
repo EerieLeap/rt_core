@@ -10,7 +10,7 @@
 
 namespace eerie_leap::domain::canbus_domain::models {
 
-using namespace eerie_leap::subsys::lua_script;
+using eerie_leap::subsys::lua_script::LuaScript;
 
 struct CanMessageConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;

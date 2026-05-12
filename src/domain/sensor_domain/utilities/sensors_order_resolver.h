@@ -9,7 +9,7 @@
 
 namespace eerie_leap::domain::sensor_domain::utilities {
 
-using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::domain::sensor_domain::models::Sensor;
 
 class SensorsOrderResolver {
 private:

@@ -5,8 +5,9 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 
-using namespace eerie_leap::subsys::fs::services;
-using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::subsys::fs::services::IFsService;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorConfiguration;
 
 class SensorValidator {
 private:

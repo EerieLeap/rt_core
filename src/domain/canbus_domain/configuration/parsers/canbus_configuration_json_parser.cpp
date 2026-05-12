@@ -1,10 +1,20 @@
 #include <optional>
 
+#include "utilities/memory/memory_resource_manager.h"
+
 #include "canbus_configuration_validator.h"
 #include "canbus_configuration_parser_helpers.hpp"
 #include "canbus_configuration_json_parser.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
+
+namespace json = boost::json;
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
+using namespace eerie_leap::subsys::canbus;
+using namespace eerie_leap::subsys::lua_script;
+using namespace eerie_leap::configuration::json::configs;
+using namespace eerie_leap::domain::canbus_domain::models;
 
 CanbusConfigurationJsonParser::CanbusConfigurationJsonParser(std::shared_ptr<IFsService> sd_fs_service)
     : sd_fs_service_(std::move(sd_fs_service)) {}

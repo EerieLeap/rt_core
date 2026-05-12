@@ -9,8 +9,6 @@
 
 namespace eerie_leap::subsys::math_parser {
 
-using namespace mu;
-
 class MathParser {
 private:
     mu::Parser parser_;
@@ -40,7 +38,7 @@ public:
     }
 
     void SetVariableFactory(const VariableFactoryHandler& handler) {
-        parser_.SetVarFactory([handler](string_type& name, void*) {
+        parser_.SetVarFactory([handler](mu::string_type& name, void*) {
             return handler(name);
         });
     }

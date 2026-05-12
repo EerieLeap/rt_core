@@ -12,10 +12,10 @@
 
 namespace eerie_leap::domain::canbus_domain::services {
 
-using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::domain::canbus_domain::configuration;
-
+using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
+using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 
 class CanbusService {
 public:

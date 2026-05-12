@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "utilities/memory/heap_allocator.h"
 #include "configuration/cbor/cbor_system_config/cbor_system_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 #include "configuration/services/json_configuration_service.h"
@@ -11,14 +10,13 @@
 
 namespace eerie_leap::domain::system_domain::configuration {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::configuration::services;
-using namespace eerie_leap::domain::system_domain::configuration::parsers;
-using namespace eerie_leap::domain::system_domain::models;
+namespace config_service = eerie_leap::configuration::services;
+using eerie_leap::domain::system_domain::configuration::parsers::SystemConfigurationCborParser;
+using eerie_leap::domain::system_domain::models::SystemConfiguration;
 
 class SystemConfigurationManager {
 private:
-    std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service_;
+    std::unique_ptr<config_service::CborConfigurationService<CborSystemConfig>> cbor_configuration_service_;
 
     std::unique_ptr<SystemConfigurationCborParser> cbor_parser_;
 
@@ -28,7 +26,7 @@ private:
 
 public:
     explicit SystemConfigurationManager(
-        std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service);
+        std::unique_ptr<config_service::CborConfigurationService<CborSystemConfig>> cbor_configuration_service);
 
     bool UpdateBuildNumber(uint32_t build_number);
 

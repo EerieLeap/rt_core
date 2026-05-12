@@ -8,7 +8,7 @@
 
 namespace eerie_leap::domain::sensor_domain::models::sources {
 
-using namespace eerie_leap::utilities::string;
+using eerie_leap::utilities::string::StringHelpers;
 
 // NOTE:: connection_string format:
 // "bus_channel/frame_id</signal_name>"

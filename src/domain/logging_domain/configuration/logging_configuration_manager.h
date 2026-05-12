@@ -14,16 +14,18 @@
 
 namespace eerie_leap::domain::logging_domain::configuration {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::configuration::services;
-using namespace eerie_leap::domain::configuration_domain::utilities;
-using namespace eerie_leap::domain::logging_domain::configuration::parsers;
-using namespace eerie_leap::domain::logging_domain::models;
+namespace config_service = eerie_leap::configuration::services;
+
+using eerie_leap::configuration::json::configs::JsonLoggingConfig;
+using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
+using eerie_leap::domain::logging_domain::configuration::parsers::LoggingConfigurationCborParser;
+using eerie_leap::domain::logging_domain::configuration::parsers::LoggingConfigurationJsonParser;
+using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
 
 class LoggingConfigurationManager : public IJsonConfigurationManager {
 private:
-    std::unique_ptr<CborConfigurationService<CborLoggingConfig>> cbor_configuration_service_;
-    std::unique_ptr<JsonConfigurationService<JsonLoggingConfig>> json_configuration_service_;
+    std::unique_ptr<config_service::CborConfigurationService<CborLoggingConfig>> cbor_configuration_service_;
+    std::unique_ptr<config_service::JsonConfigurationService<JsonLoggingConfig>> json_configuration_service_;
 
     std::unique_ptr<LoggingConfigurationCborParser> cbor_parser_;
     std::unique_ptr<LoggingConfigurationJsonParser> json_parser_;
@@ -39,8 +41,8 @@ private:
 
 public:
     LoggingConfigurationManager(
-        std::unique_ptr<CborConfigurationService<CborLoggingConfig>> cbor_configuration_service,
-        std::unique_ptr<JsonConfigurationService<JsonLoggingConfig>> json_configuration_service);
+        std::unique_ptr<config_service::CborConfigurationService<CborLoggingConfig>> cbor_configuration_service,
+        std::unique_ptr<config_service::JsonConfigurationService<JsonLoggingConfig>> json_configuration_service);
 
     bool Update(const LoggingConfiguration& configuration, bool internal_only = false);
     std::shared_ptr<LoggingConfiguration> Get(bool force_load = false);

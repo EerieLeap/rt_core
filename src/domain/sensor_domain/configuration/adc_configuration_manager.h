@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <memory_resource>
+#include <string_view>
 
 #include "utilities/memory/heap_allocator.h"
 #include "configuration/cbor/cbor_adc_config/cbor_adc_config.h"
@@ -18,17 +20,19 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::configuration::services;
-using namespace eerie_leap::subsys::adc;
-using namespace eerie_leap::subsys::adc::models;
-using namespace eerie_leap::domain::configuration_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::configuration::parsers;
+namespace config_service = eerie_leap::configuration::services;
+
+using eerie_leap::configuration::json::configs::JsonAdcConfig;
+using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
+using eerie_leap::domain::sensor_domain::configuration::parsers::AdcConfigurationCborParser;
+using eerie_leap::domain::sensor_domain::configuration::parsers::AdcConfigurationJsonParser;
+using eerie_leap::subsys::adc::IAdcManager;
+using eerie_leap::subsys::adc::models::AdcConfiguration;
 
 class AdcConfigurationManager : public IJsonConfigurationManager {
 private:
-    std::unique_ptr<CborConfigurationService<CborAdcConfig>> cbor_configuration_service_;
-    std::unique_ptr<JsonConfigurationService<JsonAdcConfig>> json_configuration_service_;
+    std::unique_ptr<config_service::CborConfigurationService<CborAdcConfig>> cbor_configuration_service_;
+    std::unique_ptr<config_service::JsonConfigurationService<JsonAdcConfig>> json_configuration_service_;
 
     std::unique_ptr<AdcConfigurationCborParser> cbor_parser_;
     std::unique_ptr<AdcConfigurationJsonParser> json_parser_;
@@ -43,8 +47,8 @@ private:
 
 public:
     AdcConfigurationManager(
-        std::unique_ptr<CborConfigurationService<CborAdcConfig>> cbor_configuration_service,
-        std::unique_ptr<JsonConfigurationService<JsonAdcConfig>> json_configuration_service,
+        std::unique_ptr<config_service::CborConfigurationService<CborAdcConfig>> cbor_configuration_service,
+        std::unique_ptr<config_service::JsonConfigurationService<JsonAdcConfig>> json_configuration_service,
         std::shared_ptr<IAdcManager> adc_manager);
 
     bool Update(const AdcConfiguration& configuration, bool internal_only = false);

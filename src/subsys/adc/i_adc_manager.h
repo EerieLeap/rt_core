@@ -8,7 +8,8 @@
 
 namespace eerie_leap::subsys::adc {
 
-using namespace eerie_leap::subsys::adc::models;
+using eerie_leap::subsys::adc::models::AdcConfiguration;
+using eerie_leap::subsys::adc::models::AdcChannelConfiguration;
 
 class IAdcManager {
 public:

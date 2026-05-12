@@ -6,7 +6,7 @@
 
 namespace eerie_leap::domain::logging_domain::loggers::simple_logger_sensor_reading::models {
 
-using namespace eerie_leap::utilities::constants::logging;
+using eerie_leap::utilities::constants::logging::LOG_METADATA_FILE_TYPE;
 
 struct LogMetadataHeader {
     uint32_t file_type;

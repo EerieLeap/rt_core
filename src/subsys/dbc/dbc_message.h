@@ -9,11 +9,7 @@
 
 #include <dbcppp/Network.h>
 
-#include <eerie_memory.hpp>
-
 namespace eerie_leap::subsys::dbc {
-
-using namespace eerie_memory;
 
 class DbcMessage {
 public:

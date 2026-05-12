@@ -27,7 +27,7 @@ Mdf4File::Mdf4File(bool is_finalized): is_finalized_(is_finalized) {
 
 // NOTE: Incorrect start time in Header Block time seems to
 // cause asammdf gui to fail parsing the file
-void Mdf4File::UpdateCurrentTime(system_clock::time_point time) {
+void Mdf4File::UpdateCurrentTime(time_point time) {
     header_block_->SetCurrentTimeNs(TimeHelpers::ToUint64(time));
 }
 

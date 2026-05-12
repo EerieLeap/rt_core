@@ -14,7 +14,8 @@
 
 namespace eerie_leap::subsys::fs::services {
 
-using namespace subsys::threading;
+using eerie_leap::subsys::threading::IThread;
+using eerie_leap::subsys::threading::Thread;
 
 class SdmmcService : public FsService, public IThread {
 private:

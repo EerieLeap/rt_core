@@ -10,6 +10,7 @@
 namespace eerie_leap::domain::canbus_com_domain::services {
 
 using namespace eerie_leap::subsys::random;
+using namespace eerie_leap::subsys::cdmp::models;
 
 LOG_MODULE_REGISTER(canbus_com_logger);
 

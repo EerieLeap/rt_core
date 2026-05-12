@@ -9,9 +9,12 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration {
 
+using namespace eerie_memory;
 using namespace eerie_leap::utilities::voltage_interpolator;
 using namespace eerie_leap::configuration::json;
+using namespace eerie_leap::configuration::services;
 using namespace eerie_leap::subsys::adc;
+using namespace eerie_leap::subsys::adc::utilities;
 
 LOG_MODULE_REGISTER(adc_config_ctrl_logger);
 

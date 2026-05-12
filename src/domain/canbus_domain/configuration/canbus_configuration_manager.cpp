@@ -1,4 +1,5 @@
 #include <zephyr/sys/crc.h>
+#include <eerie_memory.hpp>
 
 #include "configuration/json/json_serializer.h"
 
@@ -6,7 +7,9 @@
 
 namespace eerie_leap::domain::canbus_domain::configuration {
 
+using namespace eerie_memory;
 using namespace eerie_leap::configuration::json;
+using namespace eerie_leap::configuration::services;
 
 LOG_MODULE_REGISTER(canbus_config_mngr_logger);
 

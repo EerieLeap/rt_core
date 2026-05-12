@@ -17,12 +17,10 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::domain::sensor_domain::configuration;
-using namespace eerie_leap::domain::sensor_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::processors;
-using namespace eerie_leap::domain::sensor_domain::sensor_readers;
-using namespace eerie_leap::domain::sensor_domain::isr_sensor_readers;
+using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
+using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
 
 class SensorsProcessingService : public ISensorsProcessingService {
 private:

@@ -8,8 +8,6 @@
 
 namespace eerie_leap::subsys::adc::models {
 
-using namespace eerie_leap::utilities::voltage_interpolator;
-
 struct AdcConfiguration {
     uint16_t samples = 0;
 

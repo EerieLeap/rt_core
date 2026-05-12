@@ -10,7 +10,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/crc.h>
 
-#include "utilities/memory/heap_allocator.h"
 #include "subsys/fs/services/i_fs_service.h"
 
 #include "configuration/cbor/cbor_serializer.h"
@@ -19,9 +18,10 @@
 
 namespace eerie_leap::configuration::services {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::configuration::cbor;
-using namespace eerie_leap::subsys::fs::services;
+namespace cbor = eerie_leap::configuration::cbor;
+
+using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::subsys::fs::services::IFsService;
 
 template <typename T>
 class CborConfigurationService {
@@ -30,7 +30,7 @@ private:
 
     std::string configuration_name_;
     std::shared_ptr<IFsService> fs_service_;
-    std::unique_ptr<CborSerializer<T>> serializer_;
+    std::unique_ptr<cbor::CborSerializer<T>> serializer_;
 
     const std::string configuration_file_path_ = configuration_dir_ + "/" + configuration_name_ + ".cbor";
 
@@ -127,8 +127,8 @@ public:
         task_load_.instance = this;
         k_work_init(&task_load_.work, WorkTaskLoad);
 
-        auto funcs = CborTraitRegistry::Get<T>();
-        serializer_ = std::make_unique<CborSerializer<T>>();
+        auto funcs = cbor::CborTraitRegistry::Get<T>();
+        serializer_ = std::make_unique<cbor::CborSerializer<T>>();
 
         if(!fs_service_->Exists(configuration_dir_))
             fs_service_->CreateDirectory(configuration_dir_);

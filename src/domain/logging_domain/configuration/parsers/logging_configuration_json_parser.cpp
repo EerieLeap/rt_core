@@ -1,7 +1,14 @@
+#include "utilities/memory/memory_resource_manager.h"
+
 #include "logging_configuration_validator.h"
 #include "logging_configuration_json_parser.h"
 
 namespace eerie_leap::domain::logging_domain::configuration::parsers {
+
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
+using namespace eerie_leap::configuration::json::configs;
+using namespace eerie_leap::domain::logging_domain::models;
 
 pmr_unique_ptr<JsonLoggingConfig> LoggingConfigurationJsonParser::Serialize(const LoggingConfiguration& configuration) {
     LoggingConfigurationValidator::Validate(configuration);

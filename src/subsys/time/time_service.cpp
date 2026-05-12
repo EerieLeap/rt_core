@@ -13,11 +13,11 @@ void TimeService::Initialize() {
     LOG_INF("Time Service initialized");
 }
 
-system_clock::time_point TimeService::GetCurrentTime() {
+time_point TimeService::GetCurrentTime() {
     return rtc_provider_->GetTime();
 }
 
-system_clock::time_point TimeService::GetTimeSinceBoot() {
+time_point TimeService::GetTimeSinceBoot() {
     return boot_elapsed_time_provider_->GetTime();
 }
 

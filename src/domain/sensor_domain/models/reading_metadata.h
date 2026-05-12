@@ -12,7 +12,7 @@
 
 namespace eerie_leap::domain::sensor_domain::models {
 
-using namespace eerie_leap::subsys::canbus;
+using eerie_leap::subsys::canbus::CanFrame;
 
 using ReadingMetadataValue = std::variant<
     std::monostate,

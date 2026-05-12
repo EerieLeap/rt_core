@@ -5,8 +5,8 @@
 
 namespace eerie_leap::subsys::time {
 
-system_clock::time_point BootElapsedTimeProvider::GetTime() {
-	return system_clock::time_point(milliseconds(k_uptime_get()));
+time_point BootElapsedTimeProvider::GetTime() {
+	return time_point(std::chrono::milliseconds(k_uptime_get()));
 }
 
 } // namespace eerie_leap::subsys::time

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <memory_resource>
+#include <string_view>
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
@@ -18,18 +20,20 @@
 
 namespace eerie_leap::domain::canbus_domain::configuration {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::configuration::json::configs;
-using namespace eerie_leap::configuration::services;
-using namespace eerie_leap::subsys::fs::services;
-using namespace eerie_leap::domain::configuration_domain::utilities;
-using namespace eerie_leap::domain::canbus_domain::configuration::parsers;
-using namespace eerie_leap::domain::canbus_domain::models;
+namespace config_service = eerie_leap::configuration::services;
+
+using eerie_leap::configuration::json::configs::JsonCanbusConfig;
+using eerie_leap::domain::configuration_domain::utilities::IConfigurationManager;
+using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
+using eerie_leap::domain::canbus_domain::configuration::parsers::CanbusConfigurationCborParser;
+using eerie_leap::domain::canbus_domain::configuration::parsers::CanbusConfigurationJsonParser;
+using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
+using eerie_leap::subsys::fs::services::IFsService;
 
 class CanbusConfigurationManager : public IConfigurationManager, public IJsonConfigurationManager {
 private:
-    std::unique_ptr<CborConfigurationService<CborCanbusConfig>> cbor_configuration_service_;
-    std::unique_ptr<JsonConfigurationService<JsonCanbusConfig>> json_configuration_service_;
+    std::unique_ptr<config_service::CborConfigurationService<CborCanbusConfig>> cbor_configuration_service_;
+    std::unique_ptr<config_service::JsonConfigurationService<JsonCanbusConfig>> json_configuration_service_;
     std::shared_ptr<IFsService> sd_fs_service_;
 
     std::unique_ptr<CanbusConfigurationCborParser> cbor_parser_;
@@ -45,8 +49,8 @@ private:
 
 public:
     explicit CanbusConfigurationManager(
-        std::unique_ptr<CborConfigurationService<CborCanbusConfig>> cbor_configuration_service,
-        std::unique_ptr<JsonConfigurationService<JsonCanbusConfig>> json_configuration_service,
+        std::unique_ptr<config_service::CborConfigurationService<CborCanbusConfig>> cbor_configuration_service,
+        std::unique_ptr<config_service::JsonConfigurationService<JsonCanbusConfig>> json_configuration_service,
         std::shared_ptr<IFsService> sd_fs_service);
 
     void RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) override;

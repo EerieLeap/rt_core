@@ -5,8 +5,8 @@
 
 namespace eerie_leap::domain::script_domain::utilities {
 
-using namespace eerie_leap::subsys::lua_script;
-using namespace eerie_leap::domain::sensor_domain::utilities;
+using eerie_leap::subsys::lua_script::LuaScript;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 
 class GlobalFunctionsRegistry {
 private:

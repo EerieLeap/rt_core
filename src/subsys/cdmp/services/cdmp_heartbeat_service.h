@@ -11,7 +11,10 @@
 #include "cdmp_network_service.h"
 namespace eerie_leap::subsys::cdmp::services {
 
-using namespace eerie_leap::subsys::threading;
+namespace threading = eerie_leap::subsys::threading;
+
+using threading::WorkQueueThread;
+using threading::WorkQueueTaskResult;
 
 class CdmpHeartbeatService final : public CdmpCanbusServiceBase {
 private:
@@ -19,7 +22,7 @@ private:
     std::shared_ptr<CdmpNetworkService> network_service_;
     atomic_t is_running_ = ATOMIC_INIT(0);
 
-    std::optional<WorkQueueTask<CdmpHeartbeatService>> heartbeat_task_;
+    std::optional<threading::WorkQueueTask<CdmpHeartbeatService>> heartbeat_task_;
     bool is_heartbeat_task_running_ = false;
     static WorkQueueTaskResult ProcessPeriodicHeartbeat(CdmpHeartbeatService* instance);
 

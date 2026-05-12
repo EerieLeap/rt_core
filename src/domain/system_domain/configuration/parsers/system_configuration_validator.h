@@ -4,7 +4,7 @@
 
 namespace eerie_leap::domain::system_domain::configuration::parsers {
 
-using namespace eerie_leap::domain::system_domain::models;
+using eerie_leap::domain::system_domain::models::SystemConfiguration;
 
 class SystemConfigurationValidator {
 public:

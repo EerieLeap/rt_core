@@ -8,6 +8,8 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
+using eerie_leap::subsys::mdf::utilities::IBlockLinks;
+
 class BlockBase : public SerializableBlockBase, public IBlock {
 protected:
     std::string id_;                        // 4 bytes, File identifier

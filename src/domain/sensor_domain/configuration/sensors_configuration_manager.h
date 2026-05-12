@@ -1,10 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 #include <vector>
 #include <unordered_map>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/fs/services/i_fs_service.h"
 #include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/services/cbor_configuration_service.h"
@@ -18,17 +18,19 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::subsys::fs::services;
-using namespace eerie_leap::configuration::services;
-using namespace eerie_leap::domain::configuration_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::domain::sensor_domain::configuration::parsers;
+namespace config_service = eerie_leap::configuration::services;
+
+using eerie_leap::configuration::json::configs::JsonSensorsConfig;
+using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
+using eerie_leap::domain::sensor_domain::configuration::parsers::SensorsCborParser;
+using eerie_leap::domain::sensor_domain::configuration::parsers::SensorsJsonParser;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::subsys::fs::services::IFsService;
 
 class SensorsConfigurationManager : public IJsonConfigurationManager {
 private:
-    std::unique_ptr<CborConfigurationService<CborSensorsConfig>> cbor_configuration_service_;
-    std::unique_ptr<JsonConfigurationService<JsonSensorsConfig>> json_configuration_service_;
+    std::unique_ptr<config_service::CborConfigurationService<CborSensorsConfig>> cbor_configuration_service_;
+    std::unique_ptr<config_service::JsonConfigurationService<JsonSensorsConfig>> json_configuration_service_;
 
     std::shared_ptr<IFsService> sd_fs_service_;
 
@@ -46,8 +48,8 @@ private:
 
 public:
     SensorsConfigurationManager(
-        std::unique_ptr<CborConfigurationService<CborSensorsConfig>> cbor_configuration_service,
-        std::unique_ptr<JsonConfigurationService<JsonSensorsConfig>> json_configuration_service,
+        std::unique_ptr<config_service::CborConfigurationService<CborSensorsConfig>> cbor_configuration_service,
+        std::unique_ptr<config_service::JsonConfigurationService<JsonSensorsConfig>> json_configuration_service,
         std::shared_ptr<IFsService> sd_fs_service,
         int gpio_channel_count,
         int adc_channel_count);

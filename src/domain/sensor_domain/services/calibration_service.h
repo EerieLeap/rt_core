@@ -15,21 +15,22 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::utilities::guid;
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::subsys::time;
-using namespace eerie_leap::subsys::adc;
-using namespace eerie_leap::domain::sensor_domain::configuration;
-using namespace eerie_leap::domain::sensor_domain::processors;
-using namespace eerie_leap::domain::sensor_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::services;
+namespace threading = eerie_leap::subsys::threading;
+
+using eerie_leap::utilities::guid::GuidGenerator;
+using threading::WorkQueueThread;
+using threading::WorkQueueTaskResult;
+using eerie_leap::subsys::time::ITimeService;
+using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
+using eerie_leap::domain::sensor_domain::services::SensorTask;
+using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
 
 class CalibrationService {
 private:
     static constexpr int thread_stack_size_ = 4096;
     static constexpr int thread_priority_ = 6;
    std::unique_ptr<WorkQueueThread> work_queue_thread_;
-   std::optional<WorkQueueTask<SensorTask>> calibration_task_;
+   std::optional<threading::WorkQueueTask<SensorTask>> calibration_task_;
 
     std::shared_ptr<ITimeService> time_service_;
     std::shared_ptr<GuidGenerator> guid_generator_;

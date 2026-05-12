@@ -9,12 +9,13 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_instance.h>
 #include <zephyr/data/json.h>
+#include <eerie_memory.hpp>
 
 #include "utilities/memory/memory_resource_manager.h"
 
 namespace eerie_leap::configuration::json {
 
-using namespace eerie_leap::utilities::memory;
+using eerie_leap::utilities::memory::Mrm;
 
 template <typename T>
 class JsonSerializer {
@@ -56,11 +57,11 @@ public:
         return json_str;
     }
 
-    static pmr_unique_ptr<T> Deserialize(std::string_view json_str) {
+    static eerie_memory::pmr_unique_ptr<T> Deserialize(std::string_view json_str) {
         LOG_MODULE_DECLARE(json_serializer_logger);
 
         try {
-            return make_unique_pmr<T>(Mrm::GetExtPmr(), Decode(json_str));
+            return eerie_memory::make_unique_pmr<T>(Mrm::GetExtPmr(), Decode(json_str));
         } catch(...) {
             LOG_ERR("Failed to deserialize object.");
             return {};

@@ -4,7 +4,7 @@
 
 #include "cbor_adc_config.h"
 
-using namespace eerie_leap::utilities::cbor;
+using eerie_leap::utilities::cbor::CborSizeBuilder;
 
 static size_t cbor_get_size_CborAdcConfig(const CborAdcConfig& config) {
     CborSizeBuilder builder;

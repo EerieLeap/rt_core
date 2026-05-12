@@ -9,6 +9,7 @@
 namespace eerie_leap::domain::sensor_domain::configuration {
 
 using namespace eerie_leap::configuration::json;
+using namespace eerie_leap::configuration::services;
 
 LOG_MODULE_REGISTER(sensors_config_ctrl_logger);
 

@@ -2,8 +2,8 @@
 
 #include <memory_resource>
 #include <optional>
+#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "utilities/voltage_interpolator/i_voltage_interpolator.h"
 #include "subsys/math_parser/expression_evaluator.h"
 #include "subsys/lua_script/lua_script.h"
@@ -14,11 +14,10 @@
 
 namespace eerie_leap::domain::sensor_domain::models {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::utilities::voltage_interpolator;
-using namespace eerie_leap::subsys::math_parser;
-using namespace eerie_leap::subsys::lua_script;
-using namespace eerie_leap::domain::sensor_domain::models::sources;
+using eerie_leap::utilities::voltage_interpolator::IVoltageInterpolator;
+using eerie_leap::subsys::math_parser::ExpressionEvaluator;
+using eerie_leap::subsys::lua_script::LuaScript;
+using eerie_leap::domain::sensor_domain::models::sources::CanbusSource;
 
 struct SensorConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;
@@ -31,12 +30,12 @@ struct SensorConfiguration {
     // TODO: make optional
     std::optional<int> sampling_rate_ms = std::nullopt;
 
-    pmr_unique_ptr<IVoltageInterpolator> voltage_interpolator = nullptr;
-    pmr_unique_ptr<ExpressionEvaluator> expression_evaluator = nullptr;
+    eerie_memory::pmr_unique_ptr<IVoltageInterpolator> voltage_interpolator = nullptr;
+    eerie_memory::pmr_unique_ptr<ExpressionEvaluator> expression_evaluator = nullptr;
     std::shared_ptr<LuaScript> lua_script = nullptr;
 
     // connection_string data source decomposition objects
-    pmr_unique_ptr<CanbusSource> canbus_source = nullptr;
+    eerie_memory::pmr_unique_ptr<CanbusSource> canbus_source = nullptr;
 
     SensorConfiguration(
         std::allocator_arg_t, allocator_type alloc)
@@ -79,7 +78,7 @@ struct SensorConfiguration {
 
     void UnwrapConnectionString() {
         if(type == SensorType::CANBUS_RAW || type == SensorType::CANBUS_ANALOG || type == SensorType::CANBUS_INDICATOR)
-            canbus_source = make_unique_pmr<CanbusSource>(alloc_, CanbusSource::FromConnectionString(alloc_, connection_string));
+            canbus_source = eerie_memory::make_unique_pmr<CanbusSource>(alloc_, CanbusSource::FromConnectionString(alloc_, connection_string));
     }
 
 private:

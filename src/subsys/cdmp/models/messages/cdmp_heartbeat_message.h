@@ -10,7 +10,7 @@
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::cdmp::utilities::CdmpHealthStatus;
 
 // Base message structures (Base + 1)
 struct CdmpHeartbeatMessage {

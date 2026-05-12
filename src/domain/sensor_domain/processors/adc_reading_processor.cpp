@@ -5,6 +5,8 @@
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
+using namespace eerie_leap::domain::sensor_domain::models;
+
 AdcReadingProcessor::AdcReadingProcessor(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
     : sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 

@@ -1,10 +1,14 @@
+#include "eerie_memory.hpp"
+
 #include "subsys/random/rng.h"
 
 #include "system_configuration_manager.h"
 
 namespace eerie_leap::domain::system_domain::configuration {
 
+using namespace eerie_memory;
 using namespace eerie_leap::subsys::random;
+using namespace eerie_leap::configuration::services;
 
 LOG_MODULE_REGISTER(system_config_mngr_logger);
 

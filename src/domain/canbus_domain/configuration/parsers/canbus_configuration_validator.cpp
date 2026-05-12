@@ -1,6 +1,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <algorithm>
 
 #include "canbus_configuration_validator.h"
 #include "domain/canbus_domain/models/can_channel_configuration.h"

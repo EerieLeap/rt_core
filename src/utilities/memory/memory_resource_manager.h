@@ -1,13 +1,9 @@
 #pragma once
 
-#include <eerie_memory.hpp>
-
 #include "memory_resource.h"
 #include "boost_memory_resource.h"
 
 namespace eerie_leap::utilities::memory {
-
-using namespace eerie_memory;
 
 class Mrm {
 private:

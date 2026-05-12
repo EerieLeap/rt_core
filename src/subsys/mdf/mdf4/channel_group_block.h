@@ -13,8 +13,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class ChannelGroupBlock : public BlockBase {
 public:
     enum class Flag: uint16_t {
@@ -36,7 +34,7 @@ private:
         MetadataComment
     };
 
-    BlockLinks<LinkType, 6> links_;
+    utilities::BlockLinks<LinkType, 6> links_;
 
     uint64_t record_id_;                 // 8 bytes, Record ID
     uint64_t cycle_count_;               // 8 bytes, Number of cycles

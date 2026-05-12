@@ -16,6 +16,7 @@ namespace eerie_leap::domain::sensor_domain::services {
 
 using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::subsys::lua_script;
+using namespace eerie_leap::domain::sensor_domain::processors;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::script_domain::utilities;
 

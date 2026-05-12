@@ -4,7 +4,7 @@
 
 #include "cbor_logging_config.h"
 
-using namespace eerie_leap::utilities::cbor;
+using eerie_leap::utilities::cbor::CborSizeBuilder;
 
 static size_t cbor_get_size_CborLoggingConfig(const CborLoggingConfig& config) {
     CborSizeBuilder builder;

@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <eerie_memory.hpp>
 
 #include "dbc.h"
 #include "dbcppp/Message.h"
@@ -13,7 +14,7 @@ dbcppp::Network* Dbc::GetOrCreateDbcNetwork() {
    if(net_ != nullptr)
       return net_.get();
 
-   net_ = make_shared_pmr<dbcppp::Network>(allocator_);
+   net_ = eerie_memory::make_shared_pmr<dbcppp::Network>(allocator_);
 
    return net_.get();
 }

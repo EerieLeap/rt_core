@@ -10,8 +10,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class SourceInformationBlock : public BlockBase {
 public:
     enum class SourceType : uint8_t {
@@ -47,7 +45,7 @@ private:
         MetadataComment
     };
 
-    BlockLinks<LinkType, 3> links_;
+    utilities::BlockLinks<LinkType, 3> links_;
 
     SourceType source_type_;        // 1 bytes, Source type
     BusType bus_type_;              // 1 bytes, Bus type

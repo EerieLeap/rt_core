@@ -13,9 +13,9 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
-using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::subsys::cdmp::models;
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::cdmp::models::CdmpDevice;
+using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
 
 class CdmpCanbusServiceBase : public ICdmpCanbusService {
 private:

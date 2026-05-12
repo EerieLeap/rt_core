@@ -8,7 +8,7 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
-using namespace eerie_leap::subsys::lua_script;
+using eerie_leap::subsys::lua_script::LuaScript;
 
 class SensorReaderUserValueType : public SensorReaderBase {
 private:

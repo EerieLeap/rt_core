@@ -20,10 +20,12 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
-using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::subsys::cdmp::models;
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::subsys::threading::IThread;
+using eerie_leap::subsys::threading::Thread;
+using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 
 class CdmpService : public IThread {
 private:

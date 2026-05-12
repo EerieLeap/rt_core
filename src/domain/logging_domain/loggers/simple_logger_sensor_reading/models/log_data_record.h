@@ -10,7 +10,7 @@
 
 namespace eerie_leap::domain::logging_domain::loggers::simple_logger_sensor_reading::models {
 
-using namespace eerie_leap::utilities::constants::logging;
+using eerie_leap::utilities::constants::logging::LOG_DATA_RECORD_START_MARK;
 
 // LogDataRecord<std::array<uint8_t, 9>> record;
 
@@ -25,10 +25,10 @@ struct LogDataRecord {
 
     LogDataRecord() : data_length(sizeof(T)) {}
 
-    static LogDataRecord Create(system_clock::duration timestamp_delta, uint32_t sensor_id, T data) {
+    static LogDataRecord Create(std::chrono::system_clock::duration timestamp_delta, uint32_t sensor_id, T data) {
         LogDataRecord record;
         record.record_start_mark = LOG_DATA_RECORD_START_MARK;
-        record.timestamp_delta = duration_cast<milliseconds>(timestamp_delta).count();
+        record.timestamp_delta = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp_delta).count();
         record.sensor_id = sensor_id;
         record.data = data;
         record.crc = crc32_ieee((uint8_t*)(&record), sizeof(record) - sizeof(record.crc));

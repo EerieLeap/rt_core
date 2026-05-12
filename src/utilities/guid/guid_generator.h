@@ -1,7 +1,6 @@
 #pragma once
 
-#include <atomic>
-#include <memory>
+#include <zephyr/sys/atomic.h>
 
 #include "subsys/random/rng.h"
 
@@ -9,15 +8,16 @@
 
 namespace eerie_leap::utilities::guid {
 
-using namespace eerie_leap::subsys::random;
+using eerie_leap::subsys::random::Rng;
 
 class GuidGenerator {
 private:
-    const uint16_t device_hash_;
-    std::atomic<uint16_t> counter_;
+    static constexpr uint16_t COUNTER_MASK = 0xFFFF;
+    const uint16_t device_hash_ = Rng::Get16(true);
+    atomic_val_t counter_ = ATOMIC_INIT(0);
 
 public:
-    explicit GuidGenerator() : device_hash_(Rng::Get16(true)), counter_(0) {}
+    GuidGenerator() = default;
 
     Guid Generate();
 };

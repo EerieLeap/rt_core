@@ -9,8 +9,6 @@
 
 namespace eerie_leap::subsys::cdmp::utilities {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
-
 class CdmpHelpers {
 public:
     static uint32_t CalculateStaggeredMessageTimeOffset(std::span<const uint8_t> device_ids, uint8_t device_id) {

@@ -6,6 +6,8 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
+using namespace eerie_leap::domain::sensor_domain::models;
+
 SensorReaderPhysicalIndicator::SensorReaderPhysicalIndicator(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<GuidGenerator> guid_generator,

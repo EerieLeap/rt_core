@@ -3,7 +3,6 @@
 #include <memory>
 #include <zephyr/kernel.h>
 
-#include "subsys/threading/work_queue_thread.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/sensor_readers/i_sensor_reader.h"
@@ -11,11 +10,10 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::domain::sensor_domain::processors;
-using namespace eerie_leap::domain::sensor_domain::sensor_readers;
-using namespace eerie_leap::domain::sensor_domain::utilities;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::sensor_readers::ISensorReader;
+using eerie_leap::domain::sensor_domain::processors::IReadingProcessor;
 
 struct SensorTask {
     k_timeout_t sampling_rate_ms;

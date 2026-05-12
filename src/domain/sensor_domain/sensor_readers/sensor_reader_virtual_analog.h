@@ -7,6 +7,8 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
+using eerie_leap::domain::sensor_domain::models::Sensor;
+
 class SensorReaderVirtualAnalog : public SensorReaderBase {
 public:
     SensorReaderVirtualAnalog(

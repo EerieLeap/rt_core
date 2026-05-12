@@ -7,7 +7,7 @@
 
 namespace eerie_leap::subsys::mdf {
 
-using namespace eerie_leap::subsys::mdf::utilities;
+using eerie_leap::subsys::mdf::utilities::IBlockLinks;
 
 class IBlock : public virtual ISerializableBlock {
 public:

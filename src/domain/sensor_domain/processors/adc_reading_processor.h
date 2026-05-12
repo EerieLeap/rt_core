@@ -8,7 +8,7 @@
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
-using namespace eerie_leap::domain::sensor_domain::utilities;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 
 class AdcReadingProcessor : public IReadingProcessor {
 private:

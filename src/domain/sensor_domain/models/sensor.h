@@ -10,7 +10,7 @@
 
 namespace eerie_leap::domain::sensor_domain::models {
 
-using namespace eerie_leap::utilities::string;
+using eerie_leap::utilities::string::StringHelpers;
 
 struct Sensor {
     using allocator_type = std::pmr::polymorphic_allocator<>;

@@ -8,7 +8,9 @@
 
 namespace eerie_leap::subsys::adc::utilities {
 
-using namespace eerie_leap::utilities::voltage_interpolator;
+using eerie_leap::utilities::voltage_interpolator::CalibrationData;
+using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
+using eerie_leap::utilities::voltage_interpolator::IVoltageInterpolator;
 
 class AdcCalibrator {
 private:
@@ -18,11 +20,11 @@ private:
 public:
     AdcCalibrator(InterpolationMethod interpolation_method, const std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_data);
 
-    static float InterpolateToInputRange(float value);
+    [[nodiscard]] static float InterpolateToInputRange(float value);
 
-    float InterpolateToCalibratedRange(float value);
-    InterpolationMethod GetInterpolationMethod() const;
-    std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const;
+    [[nodiscard]] float InterpolateToCalibratedRange(float value);
+    [[nodiscard]] InterpolationMethod GetInterpolationMethod() const;
+    [[nodiscard]] std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const;
 };
 
 } // namespace eerie_leap::subsys::adc::utilities

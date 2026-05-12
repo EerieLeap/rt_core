@@ -14,8 +14,13 @@
 
 namespace eerie_leap::subsys::cdmp::services::command_service {
 
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::subsys::cdmp::models;
+namespace threading = eerie_leap::subsys::threading;
+
+using threading::WorkQueueThread;
+using threading::WorkQueueTaskResult;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using eerie_leap::subsys::cdmp::models::CdmpDevice;
+using eerie_leap::subsys::cdmp::models::CdmpCommandResponseMessage;
 
 using CdmpTransactionCallback = std::function<void(uint8_t transaction_id, const CdmpResultCode, std::span<const uint8_t>)>;
 
@@ -32,7 +37,7 @@ private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<CdmpDevice> device_;
 
-    std::optional<WorkQueueTask<CdmpTransactionService>> timeout_task_;
+    std::optional<threading::WorkQueueTask<CdmpTransactionService>> timeout_task_;
     bool is_timeout_task_running_ = false;
     static WorkQueueTaskResult ProcessTransactionTimeouts(CdmpTransactionService* instance);
 

@@ -12,8 +12,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class HeaderBlock : public BlockBase {
 private:
     enum class LinkType: int {
@@ -25,7 +23,7 @@ private:
         MetadataComment
     };
 
-    BlockLinks<LinkType, 6> links_;
+    utilities::BlockLinks<LinkType, 6> links_;
 
     uint64_t start_time_ns_;                // 8 bytes, Start time in ns
     uint16_t tz_offset_min_;                // 2 bytes, Timezone offset in minutes

@@ -50,7 +50,7 @@ void LogWriterService::Initialize() {
     LOG_INF("Log writer service initialized.");
 }
 
-std::string LogWriterService::GetNewLogDataFileName(const system_clock::time_point& tp) {
+std::string LogWriterService::GetNewLogDataFileName(const time_point& tp) {
     std::string file_name_prefix = CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX;
     if(file_name_prefix.length() > 0)
         file_name_prefix += '_';

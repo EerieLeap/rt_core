@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/canbus/canbus_type.h"
 #include "subsys/dbc/dbc.h"
 
@@ -13,9 +13,8 @@
 
 namespace eerie_leap::domain::canbus_domain::models {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::subsys::dbc;
+using eerie_leap::subsys::canbus::CanbusType;
+using eerie_leap::subsys::dbc::Dbc;
 
 struct CanChannelConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;
@@ -33,7 +32,7 @@ struct CanChannelConfiguration {
     CanChannelConfiguration(std::allocator_arg_t, allocator_type alloc)
         : dbc_file_path(alloc),
         message_configurations(alloc),
-        dbc(make_shared_pmr<Dbc>(alloc)) {}
+        dbc(eerie_memory::make_shared_pmr<Dbc>(alloc)) {}
 
     CanChannelConfiguration(const CanChannelConfiguration&) = delete;
 	CanChannelConfiguration& operator=(const CanChannelConfiguration&) noexcept = default;

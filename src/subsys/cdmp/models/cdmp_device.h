@@ -8,7 +8,9 @@
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::cdmp::utilities::CdmpHealthStatus;
+using eerie_leap::subsys::cdmp::utilities::CdmpStatusMachine;
 
 enum class CdmpDeviceType : uint8_t {
     NONE = 0,

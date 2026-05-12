@@ -9,7 +9,7 @@
 
 namespace eerie_leap::domain::configuration_domain::services {
 
-using namespace eerie_leap::domain::configuration_domain::utilities;
+using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
 
 class ConfigurationService {
 public:

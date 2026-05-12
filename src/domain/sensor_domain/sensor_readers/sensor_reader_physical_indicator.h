@@ -8,7 +8,7 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
-using namespace eerie_leap::subsys::gpio;
+using eerie_leap::subsys::gpio::IGpio;
 
 class SensorReaderPhysicalIndicator : public SensorReaderBase {
 private:

@@ -6,7 +6,7 @@
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
-using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::domain::sensor_domain::models::Sensor;
 
 using ProcessSensorCallback = std::function<void(const Sensor&)>;
 

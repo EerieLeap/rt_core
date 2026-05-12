@@ -5,9 +5,10 @@
 namespace eerie_leap::utilities::guid {
 
 Guid GuidGenerator::Generate() {
+    atomic_inc(&counter_);
     return Guid {
         .device_hash = device_hash_,
-        .counter = counter_.fetch_add(1, std::memory_order_relaxed),
+        .counter = static_cast<uint16_t>(atomic_get(&counter_) & GuidGenerator::COUNTER_MASK),
         .timestamp = k_uptime_get_32()
     };
 }

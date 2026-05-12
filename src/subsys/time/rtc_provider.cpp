@@ -5,9 +5,9 @@
 
 namespace eerie_leap::subsys::time {
 
-system_clock::time_point RtcProvider::GetTime() {
+time_point RtcProvider::GetTime() {
 	uint64_t fake_start_time = 1761106217000;
-	return system_clock::time_point(milliseconds(fake_start_time + k_uptime_get()));
+	return time_point(std::chrono::milliseconds(fake_start_time + k_uptime_get()));
 }
 
 } // namespace eerie_leap::subsys::time

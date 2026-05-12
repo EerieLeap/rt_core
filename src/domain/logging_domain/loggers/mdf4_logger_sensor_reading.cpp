@@ -9,6 +9,9 @@
 namespace eerie_leap::domain::logging_domain::loggers {
 
 using namespace eerie_leap::subsys::time;
+using namespace eerie_leap::domain::sensor_domain::models;
+using namespace eerie_leap::subsys::mdf;
+using namespace eerie_leap::subsys::mdf::mdf4;
 
 Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
@@ -66,7 +69,7 @@ const char* Mdf4LoggerSensorReading::GetFileExtension() const {
     return Mdf4File::LOG_DATA_FILE_EXTENSION;
 }
 
-bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const system_clock::time_point& start_time) {
+bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const time_point& start_time) {
     stream_ = &stream;
     start_time_ = start_time;
     current_file_size_bytes_ = 0;
@@ -128,7 +131,7 @@ bool Mdf4LoggerSensorReading::LogCanbusRawReading(float time_delta_s, const Sens
     return true;
 }
 
-bool Mdf4LoggerSensorReading::LogReading(const system_clock::time_point& time, const SensorReading& reading) {
+bool Mdf4LoggerSensorReading::LogReading(const time_point& time, const SensorReading& reading) {
     if(stream_ == nullptr)
         return false;
 

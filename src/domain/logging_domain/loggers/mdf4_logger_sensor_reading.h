@@ -14,11 +14,13 @@
 
 namespace eerie_leap::domain::logging_domain::loggers {
 
-using namespace std::chrono;
-using namespace eerie_leap::subsys::mdf;
-using namespace eerie_leap::subsys::mdf::mdf4;
-using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::domain::logging_domain::configuration;
+namespace mdf4 = eerie_leap::subsys::mdf::mdf4;
+
+using time_point = std::chrono::system_clock::time_point;
+using eerie_leap::subsys::mdf::Mdf4File;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
+using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 
 class Mdf4LoggerSensorReading : public ILogger<SensorReading> {
 private:
@@ -27,14 +29,14 @@ private:
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager_;
 
     std::unique_ptr<Mdf4File> mdf4_file_;
-    std::unordered_map<uint32_t, std::unique_ptr<DataRecord>> records_;
-    std::unordered_map<uint32_t, std::shared_ptr<ChannelGroupBlock>> can_raw_channel_groups_;
+    std::unordered_map<uint32_t, std::unique_ptr<mdf4::DataRecord>> records_;
+    std::unordered_map<uint32_t, std::shared_ptr<mdf4::ChannelGroupBlock>> can_raw_channel_groups_;
     std::streambuf* stream_;
-    system_clock::time_point start_time_;
+    time_point start_time_;
 
     uint32_t vlsd_channel_group_id_ = 0;
     uint64_t current_file_size_bytes_;
-    std::unordered_map<uint32_t, system_clock::time_point> last_reading_time_;
+    std::unordered_map<uint32_t, time_point> last_reading_time_;
 
     bool LogValueReading(float time_delta_s, const SensorReading& reading);
     bool LogCanbusRawReading(float time_delta_s, const SensorReading& reading);
@@ -44,9 +46,9 @@ public:
     virtual ~Mdf4LoggerSensorReading() = default;
 
     const char* GetFileExtension() const override;
-    bool StartLogging(std::streambuf& stream, const system_clock::time_point& start_time) override;
+    bool StartLogging(std::streambuf& stream, const time_point& start_time) override;
     bool StopLogging() override;
-    bool LogReading(const system_clock::time_point& time, const SensorReading& reading) override;
+    bool LogReading(const time_point& time, const SensorReading& reading) override;
 };
 
 } // namespace eerie_leap::domain::logging_domain::loggers

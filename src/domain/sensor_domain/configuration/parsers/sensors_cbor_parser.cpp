@@ -2,6 +2,7 @@
 
 #include <zephyr/kernel.h>
 
+#include "utilities/memory/memory_resource_manager.h"
 #include "utilities/cbor/cbor_helpers.hpp"
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 #include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
@@ -13,10 +14,13 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::utilities::voltage_interpolator;
 using namespace eerie_leap::subsys::lua_script;
 using namespace eerie_leap::domain::sensor_domain::utilities;
+using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorsCborParser::SensorsCborParser(std::shared_ptr<IFsService> sd_fs_service)
     : sd_fs_service_(std::move(sd_fs_service)) {}

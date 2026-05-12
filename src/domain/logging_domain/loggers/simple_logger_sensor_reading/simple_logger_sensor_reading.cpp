@@ -11,6 +11,7 @@
 namespace eerie_leap::domain::logging_domain::loggers::simple_logger_sensor_reading {
 
 using namespace eerie_leap::utilities::constants::logging;
+using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::logging_domain::loggers::simple_logger_sensor_reading::models;
 
 LOG_MODULE_REGISTER(simple_logger_sensor_reading);
@@ -73,7 +74,7 @@ const char* SimpleLoggerSensorReading::GetFileExtension() const {
     return LOG_DATA_FILE_EXTENSION;
 }
 
-bool SimpleLoggerSensorReading::StartLogging(std::streambuf& stream, const system_clock::time_point& start_time) {
+bool SimpleLoggerSensorReading::StartLogging(std::streambuf& stream, const time_point& start_time) {
     stream_ = &stream;
     start_time_ = start_time;
 
@@ -97,7 +98,7 @@ bool SimpleLoggerSensorReading::StopLogging() {
     return true;
 }
 
-bool SimpleLoggerSensorReading::LogReading(const system_clock::time_point& time, const SensorReading& reading) {
+bool SimpleLoggerSensorReading::LogReading(const time_point& time, const SensorReading& reading) {
     if(!stream_)
         return false;
 

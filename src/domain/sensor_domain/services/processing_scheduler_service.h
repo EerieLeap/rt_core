@@ -16,10 +16,12 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::domain::sensor_domain::configuration;
-using namespace eerie_leap::domain::sensor_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::processors;
+namespace threading = eerie_leap::subsys::threading;
+
+using threading::WorkQueueThread;
+using threading::WorkQueueTaskResult;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
 
 class ProcessingSchedulerService : public ISensorsProcessingService {
 private:
@@ -28,7 +30,7 @@ private:
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory_;
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
-    std::vector<WorkQueueTask<SensorTask>> work_queue_tasks_;
+    std::vector<threading::WorkQueueTask<SensorTask>> work_queue_tasks_;
 
     std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors_;
 

@@ -12,8 +12,10 @@
 
 namespace eerie_leap::domain::sensor_domain::utilities {
 
-using namespace eerie_leap::utilities::string;
-using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::utilities::string::StringHelpers;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
+using eerie_leap::domain::sensor_domain::models::ReadingStatus;
+using eerie_leap::domain::sensor_domain::models::ReadingSource;
 
 class SensorReadingsFrame {
 private:

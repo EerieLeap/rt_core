@@ -2,7 +2,9 @@
 #include <vector>
 #include <zephyr/sys/util.h>
 #include <zephyr/kernel.h>
+#include <eerie_memory.hpp>
 
+#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/time/time_helpers.hpp"
 #include "subsys/adc/utilities/adc_calibrator.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
@@ -11,7 +13,10 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::adc::utilities;
+using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::sensor_readers;
 

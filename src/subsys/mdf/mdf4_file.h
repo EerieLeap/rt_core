@@ -12,12 +12,13 @@
 #include "subsys/mdf/mdf4/header_block.h"
 #include "subsys/mdf/mdf4/data_record.h"
 #include "subsys/mdf/mdf4/vlsd_data_record.h"
+
 #include "mdf_data_type.h"
 
 namespace eerie_leap::subsys::mdf {
 
-using namespace std::chrono;
-using namespace eerie_leap::subsys::canbus;
+using time_point = std::chrono::system_clock::time_point;
+using eerie_leap::subsys::canbus::CanFrame;
 
 class Mdf4File {
 private:
@@ -42,7 +43,7 @@ public:
     Mdf4File(bool is_finalized = true);
     virtual ~Mdf4File() = default;
 
-    void UpdateCurrentTime(system_clock::time_point time);
+    void UpdateCurrentTime(time_point time);
 
     std::shared_ptr<mdf4::DataGroupBlock> CreateDataGroup(uint8_t record_id_size_bytes);
     const std::vector<std::shared_ptr<mdf4::DataGroupBlock>> GetDataGroups() const;

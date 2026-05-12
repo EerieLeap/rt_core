@@ -9,7 +9,8 @@
 namespace eerie_leap::configuration::json::configs {
 
 namespace json = boost::json;
-using namespace eerie_leap::utilities::memory;
+
+using eerie_leap::utilities::memory::Mrm;
 
 struct JsonSensorLoggingConfig {
     uint32_t sensor_id_hash;

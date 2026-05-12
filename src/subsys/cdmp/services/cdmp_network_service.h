@@ -13,14 +13,22 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
-using namespace eerie_leap::subsys::threading;
+namespace threading = eerie_leap::subsys::threading;
+
+using threading::WorkQueueThread;
+using threading::WorkQueueTaskResult;
+using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
+using eerie_leap::subsys::cdmp::models::CdmpDiscoveryResponseMessage;
+using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
+using eerie_leap::subsys::cdmp::models::CdmpDiscoveryRequestMessage;
 
 class CdmpNetworkService final : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     atomic_t is_running_ = ATOMIC_INIT(0);
 
-    std::optional<WorkQueueTask<CdmpNetworkService>> validation_task_;
+    std::optional<threading::WorkQueueTask<CdmpNetworkService>> validation_task_;
     bool is_validation_task_running_ = false;
     static WorkQueueTaskResult ProcessPeriodicValidation(CdmpNetworkService* instance);
 

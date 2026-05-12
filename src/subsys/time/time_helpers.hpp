@@ -9,14 +9,14 @@
 
 namespace eerie_leap::subsys::time {
 
-using namespace std::chrono;
+using std::chrono::system_clock;
 
 class TimeHelpers {
 public:
     static std::string GetFormattedString(const system_clock::time_point& tp) {
         auto duration = tp.time_since_epoch();
-        auto secs = duration_cast<seconds>(duration);
-        auto millis = duration_cast<milliseconds>(duration - secs).count();
+        auto secs = duration_cast<std::chrono::seconds>(duration);
+        auto millis = duration_cast<std::chrono::milliseconds>(duration - secs).count();
 
         std::time_t time_sec = system_clock::to_time_t(tp);
         std::tm* timeinfo = localtime(&time_sec);
@@ -28,19 +28,19 @@ public:
         return formatted_time + "." + std::to_string(millis);
     }
 
-    static milliseconds ToMilliseconds(const system_clock::time_point& tp) {
-        return duration_cast<milliseconds>(tp.time_since_epoch());
+    static std::chrono::milliseconds ToMilliseconds(const system_clock::time_point& tp) {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch());
     }
 
-    static system_clock::time_point FromMilliseconds(const milliseconds& ms) {
+    static system_clock::time_point FromMilliseconds(const std::chrono::milliseconds& ms) {
         return system_clock::time_point(ms);
     }
 
-    static nanoseconds ToNanoseconds(const system_clock::time_point& tp) {
-        return duration_cast<nanoseconds>(tp.time_since_epoch());
+    static std::chrono::nanoseconds ToNanoseconds(const system_clock::time_point& tp) {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch());
     }
 
-    static system_clock::time_point FromNanoseconds(const nanoseconds& ns) {
+    static system_clock::time_point FromNanoseconds(const std::chrono::nanoseconds& ns) {
         return system_clock::time_point(ns);
     }
 

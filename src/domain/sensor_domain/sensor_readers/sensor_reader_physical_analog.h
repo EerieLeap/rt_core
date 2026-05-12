@@ -11,8 +11,10 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
-using namespace eerie_leap::subsys::adc;
-using namespace eerie_leap::domain::sensor_domain::configuration;
+using eerie_leap::subsys::adc::IAdcManager;
+using eerie_leap::subsys::adc::AdcChannelConfiguration;
+using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
+using eerie_leap::domain::sensor_domain::models::Sensor;
 
 class SensorReaderPhysicalAnalog : public SensorReaderBase {
 private:

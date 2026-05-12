@@ -1,12 +1,8 @@
 #pragma once
 
-#include <memory>
-
-#include "models/adc_channel_configuration.h"
+#include <cstdint>
 
 namespace eerie_leap::subsys::adc {
-
-using namespace eerie_leap::subsys::adc::models;
 
 class IAdc {
 public:

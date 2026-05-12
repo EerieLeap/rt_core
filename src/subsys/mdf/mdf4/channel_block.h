@@ -12,8 +12,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class ChannelBlock : public BlockBase {
 public:
     enum class Type: uint8_t {
@@ -86,7 +84,7 @@ private:
         MetadataComment
     };
 
-    BlockLinks<LinkType, 8> links_;
+    utilities::BlockLinks<LinkType, 8> links_;
 
     Type type_;                         // 1 byte, Channel type
     SyncType sync_type_;                // 1 byte, Sync type

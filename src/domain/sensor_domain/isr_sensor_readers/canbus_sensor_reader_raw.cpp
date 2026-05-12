@@ -7,6 +7,7 @@
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
 using namespace eerie_leap::subsys::canbus;
+using namespace eerie_leap::domain::sensor_domain::models;
 
 CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     std::shared_ptr<ITimeService> time_service,

@@ -10,7 +10,10 @@
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
+using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::cdmp::utilities::CdmpHealthStatus;
 
 // (Base + 3)
 struct CdmpCommandResponseMessage {

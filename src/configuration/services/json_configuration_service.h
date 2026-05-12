@@ -10,7 +10,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/crc.h>
 
-#include "utilities/memory/heap_allocator.h"
 #include "subsys/fs/services/i_fs_service.h"
 
 #include "configuration/json/json_serializer.h"
@@ -19,9 +18,9 @@
 
 namespace eerie_leap::configuration::services {
 
-using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::configuration::json;
-using namespace eerie_leap::subsys::fs::services;
+namespace json = eerie_leap::configuration::json;
+
+using eerie_leap::subsys::fs::services::IFsService;
 
 template <typename T>
 class JsonConfigurationService {
@@ -59,7 +58,7 @@ private:
 
         LOG_MODULE_DECLARE(configuration_service_logger);
 
-        auto json_str = JsonSerializer<T>::Serialize(*configuration);
+        auto json_str = json::JsonSerializer<T>::Serialize(*configuration);
 
         if(json_str.empty()) {
             LOG_ERR("Failed to serialize configuration %s.", configuration_file_path_.c_str());
@@ -72,7 +71,7 @@ private:
     std::optional<LoadedConfig<T>> LoadProcessor(std::string_view json_str) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
-        auto configuration = JsonSerializer<T>::Deserialize(json_str);
+        auto configuration = json::JsonSerializer<T>::Deserialize(json_str);
 
         if (configuration == nullptr) {
             LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());

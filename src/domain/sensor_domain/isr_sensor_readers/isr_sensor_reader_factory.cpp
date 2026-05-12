@@ -8,6 +8,8 @@
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
+using namespace eerie_leap::domain::sensor_domain::models;
+
 LOG_MODULE_REGISTER(isr_sr_factory_logger);
 
 IsrSensorReaderFactory::IsrSensorReaderFactory(

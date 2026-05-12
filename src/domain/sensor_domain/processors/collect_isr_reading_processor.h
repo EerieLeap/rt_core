@@ -4,11 +4,10 @@
 
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/processors/i_reading_processor.h"
-#include "domain/sensor_domain/models/sensor_reading.h"
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
-using namespace eerie_leap::domain::sensor_domain::utilities;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 
 class CollectIsrReadingProcessor : public IReadingProcessor {
 private:

@@ -4,7 +4,7 @@
 
 #include "cbor_canbus_config.h"
 
-using namespace eerie_leap::utilities::cbor;
+using eerie_leap::utilities::cbor::CborSizeBuilder;
 
 static size_t cbor_get_size_CborCanbusConfig(const CborCanbusConfig& config) {
     CborSizeBuilder builder;

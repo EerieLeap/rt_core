@@ -10,8 +10,6 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-using namespace eerie_leap::subsys::mdf::utilities;
-
 class ChannelConversionBlock : public BlockBase {
 public:
     enum class ConversionType : uint8_t {
@@ -99,7 +97,7 @@ private:
         ChannelConversionInverse    // Inverse channel conversion
     };
 
-    BlockLinks<LinkType, 4> links_;
+    utilities::BlockLinks<LinkType, 4> links_;
     // BlockLink references_[reference_count_]; // 8 bytes * reference_count_, reference parameters
 
     ConversionType conversion_type_;    // 1 bytes, conversion type
@@ -118,9 +116,9 @@ public:
 
     static ChannelConversionBlock CreateAlgebraicConversion(const std::string& formula);
 
-    uint64_t GetBlockSize() const override;
+    [[nodiscard]] uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
-    const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    [[nodiscard]] const IBlockLinks* GetBlockLinks() const override { return &links_; }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
         return links_.GetLinks();
     }

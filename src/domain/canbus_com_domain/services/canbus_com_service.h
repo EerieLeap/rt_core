@@ -16,13 +16,17 @@
 
 namespace eerie_leap::domain::canbus_com_domain::services {
 
-using namespace eerie_leap::utilities::concepts;
+namespace concepts = eerie_leap::utilities::concepts;
 
-using namespace eerie_leap::subsys::cdmp::utilities;
-using namespace eerie_leap::subsys::cdmp::services;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
+using eerie_leap::subsys::cdmp::services::CdmpService;
+using eerie_leap::subsys::cdmp::services::CdmpCommandResult;
 
-using namespace eerie_leap::domain::canbus_domain::services;
-using namespace eerie_leap::domain::canbus_com_domain::commands;
+using eerie_leap::domain::canbus_domain::services::CanbusService;
+using eerie_leap::domain::canbus_com_domain::commands::ICanbusComCommand;
+using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
+using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandResultBase;
 
 class CanbusComService {
 private:
@@ -31,13 +35,13 @@ private:
 
 public:
     using CommandAckCallback = std::function<void(bool success)>;
-    template<SpanConstructible TResponse>
+    template<concepts::SpanConstructible TResponse>
     using CommandDataResponseCallback = std::function<void(bool success, std::optional<TResponse> response)>;
 
-    template<SpanConstructible TRequest>
+    template<concepts::SpanConstructible TRequest>
     using CommandDataRequestCallback = std::function<bool(std::optional<TRequest> request)>;
 
-    template<SpanConstructible TRequest>
+    template<concepts::SpanConstructible TRequest>
     using CommandDataRequestWithResponseCallback = std::function<std::optional<CanbusComCommandResultBase>(std::optional<TRequest> request)>;
 
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
@@ -47,7 +51,7 @@ public:
     bool Start();
     void Stop();
 
-    template<SpanConstructible TRequest>
+    template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {
         if(!cdmp_service_)
             return;
@@ -79,7 +83,7 @@ public:
 
     //         return result;
     //     });
-    template<SpanConstructible TRequest>
+    template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestWithResponseCallback<TRequest> callback) {
         if(!cdmp_service_)
             return;
@@ -110,7 +114,7 @@ public:
         CommandAckCallback callback = nullptr,
         uint8_t device_id = CdmpConstants::COMMAND_BROADCAST_ID);
 
-    template<SpanConstructible TResponse>
+    template<concepts::SpanConstructible TResponse>
     void SendCommand(
         ICanbusComCommand& command,
         CommandDataResponseCallback<TResponse> callback,

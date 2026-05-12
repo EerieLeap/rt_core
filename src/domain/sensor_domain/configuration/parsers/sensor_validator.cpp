@@ -2,6 +2,8 @@
 
 namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 
+using namespace eerie_leap::domain::sensor_domain::models;
+
 static void InvalidSensorConfiguration(std::string_view sensor_id, std::string_view message) {
     throw std::invalid_argument(
         "Invalid Sensor configuration. Sensor ID: "

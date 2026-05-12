@@ -1,9 +1,16 @@
 #include <algorithm>
 
+#include "utilities/memory/memory_resource_manager.h"
+
 #include "adc_configuration_validator.h"
 #include "adc_configuration_cbor_parser.h"
 
 namespace eerie_leap::domain::sensor_domain::configuration::parsers {
+
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
+using namespace eerie_leap::utilities::voltage_interpolator;
+using namespace eerie_leap::subsys::adc::models;
 
 pmr_unique_ptr<CborAdcConfig> AdcConfigurationCborParser::Serialize(const AdcConfiguration& configuration) {
     AdcConfigurationValidator::Validate(configuration);

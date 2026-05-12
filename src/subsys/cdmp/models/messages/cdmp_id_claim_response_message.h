@@ -11,7 +11,8 @@
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
+using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
+using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
 
 // Base message structures (Base + 0)
 struct CdmpIdClaimResponseMessage {

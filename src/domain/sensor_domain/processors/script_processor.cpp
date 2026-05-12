@@ -2,6 +2,8 @@
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
+using namespace eerie_leap::domain::sensor_domain::models;
+
 ScriptProcessor::ScriptProcessor(const std::string& function_name, std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
     : function_name_(function_name), sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 

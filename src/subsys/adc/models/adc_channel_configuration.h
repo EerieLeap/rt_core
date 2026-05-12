@@ -6,7 +6,7 @@
 
 namespace eerie_leap::subsys::adc::models {
 
-using namespace eerie_leap::subsys::adc::utilities;
+using eerie_leap::subsys::adc::utilities::AdcCalibrator;
 
 struct AdcChannelConfiguration {
     std::shared_ptr<AdcCalibrator> calibrator = nullptr;

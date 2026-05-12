@@ -15,8 +15,13 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
-using namespace eerie_leap::subsys::threading;
-using namespace eerie_leap::subsys::cdmp::services::command_service;
+using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
+using eerie_leap::subsys::cdmp::models::CdmpCommandRequestMessage;
+using eerie_leap::subsys::cdmp::models::CdmpCommandResponseMessage;
+using eerie_leap::subsys::cdmp::services::command_service::CdmpTransactionService;
+using eerie_leap::subsys::cdmp::services::command_service::CdmpTransactionCallback;
 
 struct CdmpCommandResult {
     CdmpResultCode result_code;

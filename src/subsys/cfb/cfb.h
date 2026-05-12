@@ -11,8 +11,11 @@
 
 namespace eerie_leap::subsys::cfb {
 
-using namespace eerie_leap::utilities::gui;
-using namespace eerie_leap::subsys::threading;
+namespace threading = eerie_leap::subsys::threading;
+
+using eerie_leap::utilities::gui::Coordinate;
+using threading::WorkQueueThread;
+using threading::WorkQueueTaskResult;
 
 class Cfb {
 private:
@@ -21,7 +24,7 @@ private:
     static constexpr int thread_stack_size_ = 2048;
     static constexpr int thread_priority_ = 6;
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
-    std::optional<WorkQueueTask<CfbTask>> work_queue_task_;
+    std::optional<threading::WorkQueueTask<CfbTask>> work_queue_task_;
 
     uint16_t x_res_;
     uint16_t y_res_;

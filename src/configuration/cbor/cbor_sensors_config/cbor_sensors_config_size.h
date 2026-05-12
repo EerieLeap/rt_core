@@ -4,7 +4,8 @@
 
 #include "cbor_sensors_config.h"
 
-using namespace eerie_leap::utilities::cbor;
+using eerie_leap::utilities::cbor::CborSizeBuilder;
+using eerie_leap::utilities::cbor::CborSizeCalc;
 
 static size_t cbor_get_size_CborSensorsConfig(const CborSensorsConfig& config) {
     CborSizeBuilder builder;

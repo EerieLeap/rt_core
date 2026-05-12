@@ -13,13 +13,12 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
-using namespace eerie_leap::utilities::guid;
-using namespace eerie_leap::subsys::time;
-using namespace eerie_leap::subsys::gpio;
-
-using namespace eerie_leap::domain::sensor_domain::configuration;
-using namespace eerie_leap::domain::sensor_domain::utilities;
-using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::utilities::guid::GuidGenerator;
+using eerie_leap::subsys::time::ITimeService;
+using eerie_leap::subsys::gpio::IGpio;
+using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::sensor_domain::models::Sensor;
 
 class SensorReaderFactory {
 protected:

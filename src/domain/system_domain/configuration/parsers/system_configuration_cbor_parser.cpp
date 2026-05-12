@@ -1,9 +1,14 @@
 #include <utility>
 
+#include "utilities/memory/memory_resource_manager.h"
+
 #include "system_configuration_validator.h"
 #include "system_configuration_cbor_parser.h"
 
 namespace eerie_leap::domain::system_domain::configuration::parsers {
+
+using namespace eerie_memory;
+using namespace eerie_leap::utilities::memory;
 
 pmr_unique_ptr<CborSystemConfig> SystemConfigurationCborParser::Serialize(const SystemConfiguration& configuration) {
     SystemConfigurationValidator::Validate(configuration);

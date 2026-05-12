@@ -4,6 +4,9 @@ namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
 using namespace eerie_leap::subsys::canbus;
 
+using namespace eerie_leap::subsys::canbus;
+using namespace eerie_leap::domain::sensor_domain::models;
+
 CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<GuidGenerator> guid_generator,

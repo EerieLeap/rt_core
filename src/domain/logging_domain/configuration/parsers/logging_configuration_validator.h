@@ -4,7 +4,7 @@
 
 namespace eerie_leap::domain::logging_domain::configuration::parsers {
 
-using namespace eerie_leap::domain::logging_domain::models;
+using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
 
 class LoggingConfigurationValidator {
 private:

@@ -8,7 +8,7 @@
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
-using namespace eerie_leap::domain::sensor_domain::utilities;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 
 // NOTE: calls lua function named according to function_name_ argument
 // with reading string sensor id as argument

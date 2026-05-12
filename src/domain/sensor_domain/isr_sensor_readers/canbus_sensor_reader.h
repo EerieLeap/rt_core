@@ -13,8 +13,9 @@
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
-using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::subsys::dbc;
+using eerie_leap::subsys::canbus::CanFrame;
+using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::subsys::dbc::Dbc;
 
 class CanbusSensorReader : public CanbusSensorReaderRaw {
 private:

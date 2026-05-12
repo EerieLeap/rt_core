@@ -12,8 +12,6 @@
 
 namespace eerie_leap::subsys::cdmp::utilities {
 
-using namespace eerie_leap::subsys::cdmp::utilities;
-
 class CdmpStatusMachine {
 public:
     using StatusChangeCallback = std::function<void(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status)>;
