@@ -1,4 +1,4 @@
-name: el_common
+name: eerie_leap_rt_core
 build:
   cmake: .
-  kconfig: Kconfig.el_common_module
+  kconfig: Kconfig.rt_core_module

@@ -1,6 +1,6 @@
-menu "EerieLeap Common"
+menu "EerieLeap Core Module"
 
-config EERIE_LEAP_COMMON
+config EERIE_LEAP_RT_CORE
     bool "EerieLeap Common Module"
     help
       Add EerieLeap common code.
@@ -62,8 +62,8 @@ config EERIE_LEAP_DOMAIN_SCRIPT
     help
       Add EerieLeap Script Domain.
 
-module = EERIE_LEAP_COMMON
-module-str = eerie_leap_common
+module = EERIE_LEAP_RT_CORE
+module-str = eerie_leap_rt_core
 
 source "subsys/logging/Kconfig.template.log_config"
 
