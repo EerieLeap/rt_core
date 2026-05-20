@@ -3,7 +3,6 @@
 #include "subsys/time/time_helpers.hpp"
 #include "subsys/lua_script/lua_script.h"
 #include "domain/sensor_domain/processors/collect_isr_reading_processor.h"
-#include "domain/sensor_domain/processors/adc_reading_processor.h"
 #include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/processors/script_processor.h"
 #include "domain/script_domain/utilities/global_fuctions_registry.h"
@@ -39,8 +38,6 @@ SensorsProcessingService::SensorsProcessingService(
         CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
         CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
 
-    reading_processors_->push_back(std::make_shared<ScriptProcessor>("pre_process_sensor_value", sensor_readings_frame_));
-    reading_processors_->push_back(std::make_shared<AdcReadingProcessor>(sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value", sensor_readings_frame_));
 

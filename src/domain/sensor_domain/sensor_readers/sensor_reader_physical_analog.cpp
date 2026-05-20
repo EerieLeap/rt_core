@@ -38,12 +38,12 @@ void SensorReaderPhysicalAnalog::Read() {
 
     float voltage = AdcChannelReader();
     float voltage_calibrated = adc_channel_configuration_->calibrator->InterpolateToCalibratedRange(voltage);
-
-    reading.value = voltage_calibrated;
-    reading.status = ReadingStatus::RAW;
-
     reading.metadata.AddTag<float>(ReadingMetadataTag::VOLTAGE, voltage_calibrated);
 
+    reading.value = reading.sensor->configuration.voltage_interpolator->Interpolate(voltage_calibrated, true);
+    reading.metadata.AddTag<float>(ReadingMetadataTag::RAW_VALUE, reading.value.value());
+
+    reading.status = ReadingStatus::INTERPOLATED;
     sensor_readings_frame_->AddOrUpdateReading(reading);
 }
 
