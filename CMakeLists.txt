@@ -275,4 +275,8 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         ${SRC}
         PROPERTIES LANGUAGE CXX
     )
+
+    # Linker script to define .debug_gdb_scripts section, in order to
+    # suppress warnings for orphan debug sections
+    zephyr_linker_sources(SECTIONS ${EL_COMMON_DIR}/debug_gdb_scripts.ld)
 endif()
