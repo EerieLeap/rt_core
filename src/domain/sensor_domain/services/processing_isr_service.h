@@ -24,7 +24,7 @@ using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFact
 using eerie_leap::domain::sensor_domain::processors::CollectIsrReadingProcessor;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 
-class ProcessingIsrService : public ISensorsProcessingService {
+class ProcessingIsrService final : public ISensorsProcessingService {
 private:
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
@@ -45,7 +45,6 @@ public:
         std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors);
-    ~ProcessingIsrService() = default;
 
     void Initialize() override {}
     void Start() override;

@@ -63,7 +63,7 @@ SensorsProcessingService::SensorsProcessingService(
 void SensorsProcessingService::Initialize() {
     work_queue_thread_->Initialize();
 
-    for(auto& processing_service : processing_services_)
+    for(const auto& processing_service : processing_services_)
         processing_service->Initialize();
 }
 
@@ -72,14 +72,14 @@ void SensorsProcessingService::Start() {
     for(const auto& sensor : *sensors)
         InitializeScript(sensor);
 
-    for(auto& processing_service : processing_services_)
+    for(const auto& processing_service : processing_services_)
         processing_service->Start();
 
     LOG_INF("Processing Service started.");
 }
 
 void SensorsProcessingService::Stop() {
-    for(auto& processing_service : processing_services_)
+    for(const auto& processing_service : processing_services_)
         processing_service->Stop();
 
     sensor_readings_frame_->ClearReadings();
@@ -88,24 +88,24 @@ void SensorsProcessingService::Stop() {
 }
 
 void SensorsProcessingService::Pause() {
-    for(auto& processing_service : processing_services_)
+    for(const auto& processing_service : processing_services_)
         processing_service->Pause();
 
     LOG_INF("Processing Service paused.");
 }
 
 void SensorsProcessingService::Resume() {
-    for(auto& processing_service : processing_services_)
+    for(const auto& processing_service : processing_services_)
         processing_service->Resume();
 
     LOG_INF("Processing Service resumed.");
 }
 
-void SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) {
+void SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) const {
     reading_processors_->push_back(processor);
 }
 
-void SensorsProcessingService::InitializeScript(std::shared_ptr<Sensor> sensor) {
+void SensorsProcessingService::InitializeScript(std::shared_ptr<Sensor> sensor) const {
     auto lua_script = sensor->configuration.lua_script;
 
     if(lua_script == nullptr)

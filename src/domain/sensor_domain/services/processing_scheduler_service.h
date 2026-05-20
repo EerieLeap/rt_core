@@ -23,7 +23,7 @@ using threading::WorkQueueTaskResult;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
 
-class ProcessingSchedulerService : public ISensorsProcessingService {
+class ProcessingSchedulerService final : public ISensorsProcessingService {
 private:
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
@@ -45,7 +45,6 @@ public:
         std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors);
-    ~ProcessingSchedulerService() = default;
 
     void Initialize() override {}
     void Start() override;
