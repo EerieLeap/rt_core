@@ -40,7 +40,6 @@ bool Cfb::Initialize() {
 	}
 
 	cfb_framebuffer_clear(display_dev_, true);
-    cfb_framebuffer_invert(display_dev_);
 
 	display_blanking_off(display_dev_);
     cfb_framebuffer_finalize(display_dev_);
