@@ -12,10 +12,13 @@ namespace eerie_leap::utilities::voltage_interpolator {
 
 class CubicSplineVoltageInterpolator : public IVoltageInterpolator {
 private:
+    struct CubicCoefficients{
+        float a, b, c, d; // cubic coefficients: a + b*t + c*t^2 + d*t^3
+    };
+
     static const InterpolationMethod INTERPOLATION_METHOD = InterpolationMethod::CUBIC_SPLINE;
     std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table_;
-    std::vector<float> h_, alpha_, l_, mu_, z_;
-    std::vector<float> a_, b_, c_, d_;
+    std::vector<CubicCoefficients> coefficients_;
 
 public:
     explicit CubicSplineVoltageInterpolator(std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table)
@@ -27,43 +30,40 @@ public:
         const auto& table = *calibration_table_;
 
         const size_t n = table.size();
-        h_.resize(n - 1);
-        alpha_.resize(n - 1);
-        l_.resize(n);
-        mu_.resize(n);
-        z_.resize(n);
-        a_.resize(n);
-        b_.resize(n - 1);
-        c_.resize(n);
-        d_.resize(n - 1);
+        std::vector<float> h(n - 1);
+        std::vector<float> alpha(n - 1);
+        std::vector<float> l(n);
+        std::vector<float> mu(n);
+        std::vector<float> z(n);
+        coefficients_.resize(n);
 
         for(size_t i = 0; i < n; ++i)
-            a_[i] = table[i].value;
+            coefficients_[i].a = table[i].value;
 
         for(size_t i = 0; i < n - 1; ++i)
-            h_[i] = table[i + 1].voltage - table[i].voltage;
+            h[i] = table[i + 1].voltage - table[i].voltage;
 
         for(size_t i = 1; i < n - 1; ++i)
-            alpha_[i] = (3.0f / h_[i]) * (a_[i + 1] - a_[i]) - (3.0f / h_[i - 1]) * (a_[i] - a_[i - 1]);
+            alpha[i] = (3.0f / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a) - (3.0f / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
 
-        l_[0] = 1.0f;
-        mu_[0] = 0.0f;
-        z_[0] = 0.0f;
+        l[0] = 1.0f;
+        mu[0] = 0.0f;
+        z[0] = 0.0f;
 
         for(size_t i = 1; i < n - 1; ++i) {
-            l_[i] = 2.0f * (table[i + 1].voltage - table[i - 1].voltage) - h_[i - 1] * mu_[i - 1];
-            mu_[i] = h_[i] / l_[i];
-            z_[i] = (alpha_[i] - h_[i - 1] * z_[i - 1]) / l_[i];
+            l[i] = 2.0f * (table[i + 1].voltage - table[i - 1].voltage) - h[i - 1] * mu[i - 1];
+            mu[i] = h[i] / l[i];
+            z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
         }
 
-        l_[n - 1] = 1.0f;
-        z_[n - 1] = 0.0f;
-        c_[n - 1] = 0.0f;
+        l[n - 1] = 1.0f;
+        z[n - 1] = 0.0f;
+        coefficients_[n - 1].c = 0.0f;
 
         for(int j = n - 2; j >= 0; --j) {
-            c_[j] = z_[j] - mu_[j] * c_[j + 1];
-            b_[j] = (a_[j + 1] - a_[j]) / h_[j] - h_[j] * (c_[j + 1] + 2.0f * c_[j]) / 3.0f;
-            d_[j] = (c_[j + 1] - c_[j]) / (3.0f * h_[j]);
+            coefficients_[j].c = z[j] - mu[j] * coefficients_[j + 1].c;
+            coefficients_[j].b = (coefficients_[j + 1].a - coefficients_[j].a) / h[j] - h[j] * (coefficients_[j + 1].c + 2.0f * coefficients_[j].c) / 3.0f;
+            coefficients_[j].d = (coefficients_[j + 1].c - coefficients_[j].c) / (3.0f * h[j]);
         }
     }
 
@@ -83,7 +83,7 @@ public:
         size_t i = std::distance(table.begin(), it) - 1;
         float dx = voltage - table[i].voltage;
 
-        return a_[i] + b_[i] * dx + c_[i] * dx * dx + d_[i] * dx * dx * dx;
+        return coefficients_[i].a + coefficients_[i].b * dx + coefficients_[i].c * dx * dx + coefficients_[i].d * dx * dx * dx;
     }
 
     const std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
