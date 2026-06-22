@@ -1,9 +1,16 @@
+#include <cstring>
+#include <system_error>
+
+#include "utilities/string/filesystem_path.hpp"
+
 #include "fs_service_stream_buf.h"
 
 namespace eerie_leap::subsys::fs::services {
 
-FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, const std::string& relative_path, OpenMode mode)
-    : fs_service_(fs_service), relative_path_(relative_path), file_opened_(false), input_buffer_(BUFFER_SIZE) {
+using namespace eerie_leap::utilities::string;
+
+FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode)
+    : fs_service_(fs_service), file_opened_(false), input_buffer_(BUFFER_SIZE) {
 
     if(!fs_service_)
         throw std::invalid_argument("fs_service cannot be null");
@@ -11,13 +18,10 @@ FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, const std::string
     if(!fs_service_->IsAvailable())
         throw std::runtime_error("Filesystem not available");
 
-    std::filesystem::path full_path(fs_service_->GetMountpoint().mnt_point);
-    full_path /= relative_path_;
-
     if(mode == OpenMode::Write || mode == OpenMode::Append) {
-        auto parent = std::filesystem::path(relative_path_).parent_path();
-        if(!fs_service_->Exists(parent.string()) && !parent.empty())
-            fs_service_->CreateDirectory(parent.string());
+        auto parent = FilesystemPath<PATH_BUFFER_SIZE>(relative_path).parent_path();
+        if(!fs_service_->Exists(parent.String().ToString()) && !parent.String().Empty())
+            fs_service_->CreateDirectory(parent.String().ToString());
     }
 
     fs_mode_t open_mode = 0;
@@ -33,11 +37,14 @@ FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, const std::string
             break;
     }
 
+    FilesystemPath<PATH_BUFFER_SIZE> full_path{fs_service_->GetMountpoint().mnt_point};
+    full_path /= relative_path;
+
     fs_file_t_init(&file_);
-    int rc = fs_open(&file_, full_path.string().c_str(), open_mode);
+    int rc = fs_open(&file_, full_path.String().CStr(), open_mode);
 
     if(rc < 0)
-        throw std::runtime_error("Failed to open file: " + std::to_string(rc));
+        throw std::system_error(-rc, std::generic_category(), "Failed to open file");
 
     file_opened_ = true;
 

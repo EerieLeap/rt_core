@@ -7,6 +7,8 @@
 
 #include "subsys/time/time_helpers.hpp"
 #include "subsys/random/rng.h"
+#include "utilities/string/static_string.hpp"
+#include "utilities/string/string_helpers.h"
 
 #include "log_writer_service.h"
 
@@ -14,6 +16,7 @@ namespace eerie_leap::domain::logging_domain::services {
 
 using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::subsys::random;
+using namespace eerie_leap::utilities::string;
 
 LOG_MODULE_REGISTER(log_writer_service_logger);
 
@@ -50,17 +53,17 @@ void LogWriterService::Initialize() {
     LOG_INF("Log writer service initialized.");
 }
 
-std::string LogWriterService::GetNewLogDataFileName(const time_point& tp) {
-    std::string file_name_prefix = CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX;
-    if(file_name_prefix.length() > 0)
-        file_name_prefix += '_';
+StaticString<LogWriterService::FILE_PATH_MAX_LENGTH> LogWriterService::GetNewLogDataFilePath(const time_point& tp) {
+    StaticString<FILE_PATH_MAX_LENGTH> path;
 
-    std::string path = CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR;
+    path += CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR;
     path += "/";
-    path += file_name_prefix;
-    path += std::to_string(TimeHelpers::ToUint32(tp));
+    path += CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX;
+    if(strlen(CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX) > 0)
+        path += "_";
+    path += StringHelpers::UInt32ToStaticString(TimeHelpers::ToUint32(tp)).ToString();
     path += "_";
-    path += std::to_string(Rng::Get16());
+    path += StringHelpers::UInt16ToStaticString(Rng::Get16()).ToString();
 
     return path;
 }
@@ -92,27 +95,31 @@ int LogWriterService::LogWriterStart() {
     }
 
     auto start_time = time_service_->GetCurrentTime();
-    std::string file_name;
+    StaticString<FILE_PATH_MAX_LENGTH> file_path;
+
     for(int i = 0; i < 10; i++) {
-        auto new_file_name = GetNewLogDataFileName(start_time) + "." + logger_->GetFileExtension();
-        if(!fs_service_->Exists(new_file_name)) {
-            file_name = new_file_name;
+        auto new_file_path = GetNewLogDataFilePath(start_time);
+        new_file_path += ".";
+        new_file_path += logger_->GetFileExtension();
+
+        if(!fs_service_->Exists(new_file_path.ToString())) {
+            file_path = new_file_path;
             break;
         }
     }
 
-    if(file_name.empty()) {
+    if(file_path.Empty()) {
         LOG_ERR("Failed to create log file name");
         return -1;
     }
 
     fs_stream_buf_ = std::make_unique<FsServiceStreamBuf>(
         fs_service_.get(),
-        file_name,
+        file_path.ToString(),
         FsServiceStreamBuf::OpenMode::Append);
     logger_->StartLogging(*fs_stream_buf_, start_time);
 
-    LOG_INF("Logging started. Log file created: %s", file_name.c_str());
+    LOG_INF("Logging started. Log file created: %s", file_path.CStr());
 
     work_queue_task_.value().GetUserdata()->logging_interval_ms =
         K_MSEC(logging_configuration_manager_->Get()->logging_interval_ms);

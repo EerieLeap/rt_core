@@ -1,8 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <chrono>
-#include <span>
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
@@ -22,6 +20,7 @@ namespace eerie_leap::domain::logging_domain::services {
 
 namespace threading = eerie_leap::subsys::threading;
 
+using eerie_leap::utilities::string::StaticString;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::fs::services::FsServiceStreamBuf;
 using threading::WorkQueueThread;
@@ -34,6 +33,8 @@ using eerie_leap::domain::logging_domain::loggers::ILogger;
 
 class LogWriterService {
 private:
+    static constexpr size_t FILE_PATH_MAX_LENGTH = 128;
+
     static constexpr int thread_stack_size_ = CONFIG_EERIE_LEAP_LOG_WRITER_STACK_SIZE;
     static constexpr int thread_priority_ = 8;
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
@@ -49,7 +50,7 @@ private:
     atomic_t logger_running_;
 
     static WorkQueueTaskResult ProcessWorkTask(LogWriterTask* task);
-    static std::string GetNewLogDataFileName(const time_point& tp);
+    static StaticString<FILE_PATH_MAX_LENGTH> GetNewLogDataFilePath(const time_point& tp);
 
 public:
     LogWriterService(

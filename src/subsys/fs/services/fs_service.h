@@ -2,13 +2,23 @@
 
 #include <string>
 #include <vector>
+
 #include <zephyr/device.h>
 #include <zephyr/fs/fs.h>
+
+#include "utilities/string/filesystem_path.hpp"
+
 #include "i_fs_service.h"
 
 namespace eerie_leap::subsys::fs::services {
 
+using eerie_leap::utilities::string::FilesystemPath;
+
 class FsService : public IFsService {
+private:
+    static constexpr size_t PATH_BUFFER_SIZE = 256;
+    bool DeleteRecursive(FilesystemPath<PATH_BUFFER_SIZE>* full_path);
+
 protected:
     struct fs_mount_t mountpoint_;
 
