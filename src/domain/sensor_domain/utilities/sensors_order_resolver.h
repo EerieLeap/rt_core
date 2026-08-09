@@ -13,17 +13,17 @@ using eerie_leap::domain::sensor_domain::models::Sensor;
 
 class SensorsOrderResolver {
 private:
-    std::unordered_map<std::string, std::unordered_set<std::string>> dependencies_;
-    std::unordered_map<std::string, std::shared_ptr<Sensor>> sensors_;
+    std::unordered_map<std::string_view, std::unordered_set<std::string>> dependencies_;
+    std::unordered_map<std::string_view, std::shared_ptr<Sensor>> sensors_;
 
     bool HasCyclicDependency(
-        const std::string& sensor_id,
-        std::unordered_set<std::string>& visited,
-        std::unordered_set<std::string>& temp);
+        std::string_view sensor_id,
+        std::unordered_set<std::string_view>& visited,
+        std::unordered_set<std::string_view>& temp);
 
     void ResolveDependencies(
-        const std::string& sensor_id,
-        std::unordered_set<std::string>& visited,
+        std::string_view sensor_id,
+        std::unordered_set<std::string_view>& visited,
         std::vector<std::shared_ptr<Sensor>>& ordered_sensors);
 
 public:

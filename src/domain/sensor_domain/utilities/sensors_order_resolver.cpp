@@ -9,18 +9,18 @@ void SensorsOrderResolver::AddSensor(std::shared_ptr<Sensor> sensor) {
         auto sensor_ids = sensor->configuration.expression_evaluator->GetVariableNames();
         sensor_ids.erase("x");
 
-        dependencies_.emplace(sensor->id, std::unordered_set<std::string>(sensor_ids.begin(), sensor_ids.end()));
+        dependencies_.try_emplace(sensor->id, std::unordered_set<std::string>(sensor_ids.begin(), sensor_ids.end()));
     } else {
-        dependencies_.emplace(sensor->id, std::unordered_set<std::string>());
+        dependencies_.try_emplace(sensor->id, std::unordered_set<std::string>());
     }
 
-    sensors_.emplace(sensor->id, std::move(sensor));
+    sensors_.try_emplace(sensor->id, std::move(sensor));
 }
 
 bool SensorsOrderResolver::HasCyclicDependency(
-    const std::string& sensor_id,
-    std::unordered_set<std::string>& visited,
-    std::unordered_set<std::string>& temp) {
+    std::string_view sensor_id,
+    std::unordered_set<std::string_view>& visited,
+    std::unordered_set<std::string_view>& temp) {
 
     if(temp.contains(sensor_id))
         return true;
@@ -30,12 +30,13 @@ bool SensorsOrderResolver::HasCyclicDependency(
     temp.insert(sensor_id);
 
     for(const auto& dep : dependencies_.at(sensor_id)) {
-        if(!sensors_.contains(dep))
+        if(!sensors_.contains(dep)) {
             throw std::runtime_error("Sensor "
-                + sensor_id
+                + std::string(sensor_id)
                 + " depends on non-existent sensor "
                 + dep
                 + ".");
+        }
 
         if(HasCyclicDependency(dep, visited, temp))
             return true;
@@ -48,8 +49,8 @@ bool SensorsOrderResolver::HasCyclicDependency(
 }
 
 void SensorsOrderResolver::ResolveDependencies(
-    const std::string& sensor_id,
-    std::unordered_set<std::string>& visited,
+    std::string_view sensor_id,
+    std::unordered_set<std::string_view>& visited,
     std::vector<std::shared_ptr<Sensor>>& ordered_sensors) {
 
     if(visited.contains(sensor_id))
@@ -64,15 +65,16 @@ void SensorsOrderResolver::ResolveDependencies(
 }
 
 std::vector<std::shared_ptr<Sensor>> SensorsOrderResolver::GetProcessingOrder() {
-    std::unordered_set<std::string> visited;
-    std::unordered_set<std::string> temp;
+    std::unordered_set<std::string_view> visited;
+    std::unordered_set<std::string_view> temp;
 
     for(const auto& [sensor_id, _] : sensors_) {
         if(!visited.contains(sensor_id)) {
-            if(HasCyclicDependency(sensor_id, visited, temp))
+            if(HasCyclicDependency(sensor_id, visited, temp)) {
                 throw std::runtime_error("Cyclic dependency detected in sensor "
-                    + sensor_id
+                    + std::string(sensor_id)
                     + ".");
+            }
         }
     }
 

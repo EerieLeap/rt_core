@@ -13,6 +13,8 @@ target_link_libraries(dbcppp PUBLIC
     zephyr_interface
 )
 
+add_dependencies(dbcppp zephyr_generated_headers)
+
 target_include_directories(dbcppp
     PUBLIC
         ${INC_DIR}

@@ -10,6 +10,8 @@ add_library(muparser ${SOURCES})
 
 target_link_libraries(muparser PUBLIC zephyr_interface)
 
+add_dependencies(muparser zephyr_generated_headers)
+
 target_include_directories(muparser
     PUBLIC
         ${INC_DIR}
