@@ -10,6 +10,7 @@ template<size_t N>
 class FilesystemPath {
 private:
     static constexpr char kPathSeparator_ = '/';
+    static constexpr std::string_view kRootPath_{&kPathSeparator_, 1};
     StaticString<N> data_;
 
 public:
@@ -59,30 +60,46 @@ public:
     /**
      * @brief Returns the parent path
      *
-     * Returns everything before the last path separator.
+     * Mirrors std::filesystem::path::parent_path, dropping the last element of
+     * the path. A trailing separator only contributes an empty element, so it is
+     * dropped on its own.
      * "foo/bar/baz" -> "foo/bar"
      * "foo"         -> ""        (no separator -> no parent)
-     * "foo/"        -> "foo"     (trailing slash is ignored, same as std::filesystem)
+     * "foo/"        -> "foo"
+     * "foo//bar"    -> "foo"     (redundant separators are collapsed)
+     * "/foo"        -> "/"
      * "/"           -> "/"       (root has itself as parent)
+     * ""            -> ""
      *
      * @return FilesystemPath representing the parent path
      */
     [[nodiscard]] FilesystemPath parent_path() const noexcept {
-        std::string_view view = data_.ToString();
+        const std::string_view view = data_.ToString();
 
-        // Ignore trailing separator (but preserve bare "/" as root)
-        if(view.size() > 1 && view.back() == kPathSeparator_)
-            view.remove_suffix(1);
+        if(view.empty())
+            return FilesystemPath{};
+
+        constexpr auto trim_separators = [](std::string_view value) {
+            while(!value.empty() && value.back() == kPathSeparator_)
+                value.remove_suffix(1);
+
+            return value;
+        };
+
+        if(view.back() == kPathSeparator_) {
+            const std::string_view trimmed = trim_separators(view);
+
+            return trimmed.empty() ? FilesystemPath{kRootPath_} : FilesystemPath{trimmed};
+        }
 
         const auto pos = view.rfind(kPathSeparator_);
 
         if(pos == std::string_view::npos)
-            return FilesystemPath{};  // no separator -> empty parent
+            return FilesystemPath{};
 
-        if(pos == 0)
-            return FilesystemPath{std::string_view{&view[0], 1}};  // root "/"
+        const std::string_view parent = trim_separators(view.substr(0, pos));
 
-        return FilesystemPath{view.substr(0, pos)};
+        return parent.empty() ? FilesystemPath{kRootPath_} : FilesystemPath{parent};
     }
 };
 
