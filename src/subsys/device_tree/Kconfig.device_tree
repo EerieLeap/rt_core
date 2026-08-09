@@ -1,0 +1,4 @@
+config EERIE_LEAP_DEVICE_TREE
+    bool "EerieLeap Device Tree"
+    help
+      Add EerieLeap device tree accessors.

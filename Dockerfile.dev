@@ -1,0 +1,85 @@
+ARG BASE_IMAGE=ubuntu:24.04
+FROM ${BASE_IMAGE}
+
+ARG USERNAME=ubuntu
+ARG VNCPASSWD=zephyr
+ARG WORKSPACE=/home/ubuntu/zephyr/workspace
+ARG PROJECT_DIR=/home/ubuntu/zephyr/workspace/rt_core
+ARG RENODE_DEST=/opt/renode/
+ARG RENODE_URL=https://builds.renode.io/renode-latest.linux-dotnet.tar.gz
+
+SHELL ["/bin/bash", "-c"]
+
+USER root
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+        sudo locales git curl ca-certificates ninja-build gperf \
+        ccache dfu-util device-tree-compiler wget python3-dev python3-venv python3-tk \
+        xz-utils file make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1 \
+        x11vnc xvfb openbox dos2unix xterm usbutils openocd gdb \
+        iproute2 socat emacs tree \
+        python3-pip telnet dotnet-runtime-8.0 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Renode from the dotnet tarball (avoids the .deb's GUI deps)
+RUN wget ${RENODE_URL} -O /opt/renode.tar.gz && \
+    mkdir -p ${RENODE_DEST} && \
+    tar -xf /opt/renode.tar.gz -C ${RENODE_DEST} --strip-components=1 && \
+    rm /opt/renode.tar.gz
+ENV PATH="$PATH:${RENODE_DEST}"
+
+# Renode's own Python test/tooling requirements
+RUN pip3 install --break-system-packages -r ${RENODE_DEST}tests/requirements.txt --no-cache-dir
+
+RUN usermod -aG sudo ${USERNAME} && \
+    usermod -aG root ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${USERNAME}
+
+# Add entrypoint and permissions
+COPY entrypoint.sh /home/${USERNAME}/entrypoint.sh
+RUN chmod +x /home/${USERNAME}/entrypoint.sh
+
+# Set the locale
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen && \
+    echo "LANG=en_US.UTF-8" > /etc/default/locale && \
+    echo "LANGUAGE=en_US:en" >> /etc/default/locale && \
+    echo "LC_ALL=en_US.UTF-8" >> /etc/default/locale
+
+USER ${USERNAME}
+
+ENV DISPLAY=:0
+
+RUN mkdir -p /home/${USERNAME}/.vnc && \
+    x11vnc -storepasswd ${VNCPASSWD} /home/${USERNAME}/.vnc/passwd
+
+RUN mkdir -p ${PROJECT_DIR}
+
+RUN python3 -m venv /home/${USERNAME}/zephyr/.venv
+RUN echo "source /home/${USERNAME}/zephyr/.venv/bin/activate" >> /home/${USERNAME}/.bashrc && \
+    chmod +x /home/${USERNAME}/zephyr/.venv/bin/activate
+
+RUN source /home/${USERNAME}/zephyr/.venv/bin/activate && \
+    pip install --upgrade pip && \
+    pip install cmake --upgrade && \
+    pip install west && \
+    pip install zcbor
+
+COPY ./west.yml ${PROJECT_DIR}/west.yml
+
+RUN source /home/${USERNAME}/zephyr/.venv/bin/activate && \
+    cd ${WORKSPACE} && \
+    west init -l ${PROJECT_DIR} && \
+    west update && \
+    west packages pip --install && \
+    west zephyr-export
+
+RUN source /home/${USERNAME}/zephyr/.venv/bin/activate && \
+    cd ${WORKSPACE}/zephyr && \
+    west sdk install
+
+RUN git clone https://github.com/zephyrproject-rtos/net-tools /home/${USERNAME}/zephyr/net-tools
+
+WORKDIR /home/ubuntu/zephyr/workspace/rt_core
+CMD ["bash"]

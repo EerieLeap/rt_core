@@ -1,0 +1,9 @@
+common:
+  tags:
+    - domain
+    - adc_subsys
+  platform_allow:
+    - native_sim
+
+tests:
+  functional.adc_subsys: {}

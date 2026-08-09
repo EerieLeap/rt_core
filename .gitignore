@@ -7,13 +7,19 @@
 .clang-format
 .clang-tidy
 
+# python
+.venv
+
+# build
+/build*
+
+# tests
+/twister-out*
+
 __pycache__/
 
 # docs
 /doc/_build*
-
-# docker
-/docker-compose.yml
 
 # tools
 /tools

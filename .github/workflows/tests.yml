@@ -1,0 +1,86 @@
+name: Tests
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  twister:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          path: rt_core
+
+      - name: Resolve Boost revision
+        id: boost
+        working-directory: rt_core
+        run: echo "sha=$(git rev-parse HEAD:repos/boost)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Boost headers
+        id: boost-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            rt_core/libs/boost
+            rt_core/repos/boost/b2
+          key: boost-v2-${{ runner.os }}-${{ steps.boost.outputs.sha }}
+
+      # Done up front because twister builds in parallel and would otherwise race
+      # on the bootstrap that CMakeLists.txt performs on demand.
+      - name: Bootstrap Boost
+        if: steps.boost-cache.outputs.cache-hit != 'true'
+        working-directory: rt_core
+        run: |
+          git submodule update --init --recursive repos/boost
+          mkdir -p libs/boost
+          cd repos/boost
+          ./bootstrap.sh
+          ./b2 headers tools/bcp
+          ./dist/bin/bcp boost/spirit boost/fusion boost/json "$GITHUB_WORKSPACE/rt_core/libs/boost"
+
+      - name: Save Boost headers
+        if: success() && steps.boost-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            rt_core/libs/boost
+            rt_core/repos/boost/b2
+          key: boost-v2-${{ runner.os }}-${{ steps.boost.outputs.sha }}
+
+      # native_sim builds 32-bit binaries.
+      - name: Install multilib toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib g++-multilib
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up Zephyr
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: rt_core
+          toolchains: x86_64-zephyr-elf
+
+      - name: Run tests
+        working-directory: rt_core
+        run: west twister -c --disable-warnings-as-errors -O ./twister-out -T ./tests
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: twister-results
+          path: |
+            rt_core/twister-out/twister.xml
+            rt_core/twister-out/twister.json
+          if-no-files-found: ignore

@@ -112,6 +112,13 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_DEVICE_TREE)
+        list(APPEND SRC
+            "${SRC_DIR}/subsys/device_tree/*.c"
+            "${SRC_DIR}/subsys/device_tree/*.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_FS)
         list(APPEND SRC
             "${SRC_DIR}/subsys/fs/*.c"
@@ -154,13 +161,6 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         list(APPEND SRC
             "${SRC_DIR}/subsys/mdf/*.c"
             "${SRC_DIR}/subsys/mdf/*.cpp"
-        )
-    endif()
-
-    if(CONFIG_EERIE_LEAP_MODBUS)
-        list(APPEND SRC
-            "${SRC_DIR}/subsys/modbus/*.c"
-            "${SRC_DIR}/subsys/modbus/*.cpp"
         )
     endif()
 

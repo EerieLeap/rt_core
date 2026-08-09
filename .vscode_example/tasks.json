@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "west twister -c --disable-warnings-as-errors -O ./twister-out -T ./tests",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "detail": "Run all rt_core test suites using twister",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run Unit Tests",
+            "type": "shell",
+            "command": "west twister -c --disable-warnings-as-errors -O ./twister-out -T ./tests/unit",
+            "group": "test",
+            "detail": "Run the rt_core unit test suites using twister",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run Functional Tests",
+            "type": "shell",
+            "command": "west twister -c --disable-warnings-as-errors -O ./twister-out -T ./tests/functional",
+            "group": "test",
+            "detail": "Run the rt_core functional test suites using twister",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Clean Twister Output",
+            "type": "shell",
+            "command": "rm -rf ./twister-out ./build",
+            "group": "none",
+            "detail": "Clean up the twister and build output directories"
+        }
+    ]
+}
