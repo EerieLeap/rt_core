@@ -40,6 +40,12 @@ public:
                 return data.voltage < v;
             });
 
+        // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
+        if(upper == table.begin())
+            ++upper;
+        else if(upper == table.end())
+            --upper;
+
         auto lower = upper - 1;
 
         float x0 = lower->voltage;
