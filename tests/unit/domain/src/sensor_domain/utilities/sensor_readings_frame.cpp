@@ -225,3 +225,229 @@ ZTEST(sensor_readings_frame, test_ClearReadings) {
     zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).has_value(), false);
     zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[2]->id_hash).has_value(), false);
 }
+
+ZTEST(sensor_readings_frame, test_TryGetIsrReading) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    zassert_false(sensor_readings_frame->TryGetIsrReading(sensors[0]->id_hash).has_value());
+    zassert_false(sensor_readings_frame->TryGetIsrReading("sensor_1").has_value());
+
+    SensorReading reading(guid_generator->Generate(), sensors[0]);
+    reading.source = ReadingSource::ISR;
+    reading.status = ReadingStatus::RAW;
+    reading.value = 2.4;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    auto by_hash = sensor_readings_frame->TryGetIsrReading(sensors[0]->id_hash);
+    auto by_id = sensor_readings_frame->TryGetIsrReading("sensor_1");
+
+    zassert_true(by_hash.has_value());
+    zassert_true(by_id.has_value());
+    zassert_str_equal(by_hash.value().sensor->id.c_str(), "sensor_1");
+    zassert_equal(by_hash.value().status, ReadingStatus::RAW);
+    zassert_equal(by_id.value().id.AsUint64(), by_hash.value().id.AsUint64());
+
+    // An ISR reading is not visible through the processing readings.
+    zassert_false(sensor_readings_frame->TryGetReading("sensor_1").has_value());
+}
+
+ZTEST(sensor_readings_frame, test_TryGetReading_hash_and_id_overloads_agree) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading reading(guid_generator->Generate(), sensors[1]);
+    reading.source = ReadingSource::PROCESSING;
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 3.5;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    auto by_hash = sensor_readings_frame->TryGetReading(sensors[1]->id_hash);
+    auto by_id = sensor_readings_frame->TryGetReading("sensor_2");
+
+    zassert_true(by_hash.has_value());
+    zassert_true(by_id.has_value());
+    zassert_equal(by_hash.value().id.AsUint64(), by_id.value().id.AsUint64());
+
+    zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).value(), 3.5F);
+    zassert_equal(sensor_readings_frame->TryGetReadingValue("sensor_2").value(), 3.5F);
+    zassert_false(sensor_readings_frame->TryGetReadingValue("sensor_3").has_value());
+}
+
+ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    zassert_is_null(sensor_readings_frame->GetReadingValuePtr("sensor_2"));
+
+    SensorReading reading(guid_generator->Generate(), sensors[1]);
+    reading.source = ReadingSource::PROCESSING;
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 1.5;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    float* value_ptr = sensor_readings_frame->GetReadingValuePtr("sensor_2");
+
+    zassert_not_null(value_ptr);
+    zassert_equal(*value_ptr, 1.5F);
+
+    // The pointer aliases the stored value so evaluators observe later updates.
+    SensorReading update(guid_generator->Generate(), sensors[1]);
+    update.source = ReadingSource::PROCESSING;
+    update.status = ReadingStatus::PROCESSED;
+    update.value = 9.5;
+    sensor_readings_frame->AddOrUpdateReading(update);
+
+    zassert_equal(*value_ptr, 9.5F);
+    zassert_equal(sensor_readings_frame->GetReadingValuePtr("sensor_2"), value_ptr);
+}
+
+ZTEST(sensor_readings_frame, test_AddOrUpdateReading_ignores_unset_source) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading reading(guid_generator->Generate(), sensors[0]);
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 1.0;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    zassert_false(sensor_readings_frame->HasReading(sensors[0]->id_hash));
+    zassert_false(sensor_readings_frame->HasIsrReading(sensors[0]->id_hash));
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 0);
+}
+
+ZTEST(sensor_readings_frame, test_processing_reading_supersedes_isr_reading) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading isr_reading(guid_generator->Generate(), sensors[0]);
+    isr_reading.source = ReadingSource::ISR;
+    isr_reading.status = ReadingStatus::RAW;
+    sensor_readings_frame->AddOrUpdateReading(isr_reading);
+
+    zassert_true(sensor_readings_frame->HasIsrReading(sensors[0]->id_hash));
+
+    SensorReading processing_reading(guid_generator->Generate(), sensors[0]);
+    processing_reading.source = ReadingSource::PROCESSING;
+    processing_reading.status = ReadingStatus::PROCESSED;
+    processing_reading.value = 4.2;
+    sensor_readings_frame->AddOrUpdateReading(processing_reading);
+
+    zassert_false(sensor_readings_frame->HasIsrReading(sensors[0]->id_hash));
+    zassert_true(sensor_readings_frame->HasReading(sensors[0]->id_hash));
+    zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[0]->id_hash).value(), 4.2F);
+}
+
+ZTEST(sensor_readings_frame, test_isr_reading_publishes_processed_value) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading reading(guid_generator->Generate(), sensors[0]);
+    reading.source = ReadingSource::ISR;
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 7.25;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    zassert_true(sensor_readings_frame->HasIsrReading(sensors[0]->id_hash));
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 1);
+    zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[0]->id_hash).value(), 7.25F);
+}
+
+ZTEST(sensor_readings_frame, test_processed_reading_requires_a_value) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading reading(guid_generator->Generate(), sensors[1]);
+    reading.source = ReadingSource::PROCESSING;
+    reading.status = ReadingStatus::PROCESSED;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    zassert_true(sensor_readings_frame->HasReading(sensors[1]->id_hash));
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 0);
+    zassert_false(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).has_value());
+}
+
+ZTEST(sensor_readings_frame, test_failed_update_keeps_last_processed_value) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading processed(guid_generator->Generate(), sensors[1]);
+    processed.source = ReadingSource::PROCESSING;
+    processed.status = ReadingStatus::PROCESSED;
+    processed.value = 5.5;
+    sensor_readings_frame->AddOrUpdateReading(processed);
+
+    SensorReading failed(guid_generator->Generate(), sensors[1]);
+    failed.source = ReadingSource::PROCESSING;
+    failed.status = ReadingStatus::ERROR;
+    sensor_readings_frame->AddOrUpdateReading(failed);
+
+    zassert_equal(sensor_readings_frame->TryGetReading(sensors[1]->id_hash).value().status, ReadingStatus::ERROR);
+    zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).value(), 5.5F);
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 1);
+}
+
+ZTEST(sensor_readings_frame, test_GetProcessedReadings_returns_a_snapshot) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading reading(guid_generator->Generate(), sensors[1]);
+    reading.source = ReadingSource::PROCESSING;
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 2.0;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    auto snapshot = sensor_readings_frame->GetProcessedReadings();
+    snapshot.clear();
+
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 1);
+}
+
+ZTEST(sensor_readings_frame, test_ClearProcessedReadings) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading reading(guid_generator->Generate(), sensors[1]);
+    reading.source = ReadingSource::PROCESSING;
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 2.0;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    sensor_readings_frame->ClearProcessedReadings();
+
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 0);
+
+    // Only the processed snapshot is dropped; the reading and its value survive.
+    zassert_true(sensor_readings_frame->HasReading(sensors[1]->id_hash));
+    zassert_true(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).has_value());
+}
