@@ -1,0 +1,7 @@
+common:
+  tags: subsys.adc
+  platform_allow:
+    - native_sim
+
+tests:
+  unit.subsys.adc: {}

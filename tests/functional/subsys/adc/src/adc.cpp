@@ -80,22 +80,22 @@ ZTEST(adc, test_Emulator_ReadChannel_has_config) {
 void ReadChannel_no_config(std::shared_ptr<IAdcManager> adc_manager) {
     adc_manager->Initialize();
 
+    bool threw = false;
     try {
         auto channel_reader = adc_manager->GetChannelReader(2);
         channel_reader();
-        zassert_true(true, "ReadChannel expected to fail, but it didn't.");
-    } catch(...) {
-        zassert_true(false, "ReadChannel failed as expected due to missing config.");
+    } catch(const std::invalid_argument&) {
+        threw = true;
     }
+
+    zassert_true(threw, "ReadChannel should be rejected without a configuration.");
 }
 
-ZTEST_EXPECT_FAIL(adc, test_Simulator_ReadChannel_no_config);
 ZTEST(adc, test_Simulator_ReadChannel_no_config) {
     auto adc = std::make_shared<AdcSimulatorManager>();
     ReadChannel_no_config(adc);
 }
 
-ZTEST_EXPECT_FAIL(adc, test_Emulator_ReadChannel_no_config);
 ZTEST(adc, test_Emulator_ReadChannel_no_config) {
     DtAdc::Initialize();
 
@@ -109,30 +109,24 @@ void ReadChannel_out_of_range(std::shared_ptr<IAdcManager> adc_manager) {
     adc_manager->UpdateConfiguration(adc_configuration);
     adc_manager->Initialize();
 
-    try {
-        auto channel_reader = adc_manager->GetChannelReader(-2);
-        channel_reader();
-        zassert_true(true, "ReadChannel expected to fail, but it didn't.");
-    } catch(...) {
-        zassert_true(false, "ReadChannel failed as expected due to out of range channel.");
-    }
+    for(int channel : { -2, -1, 4, 100 }) {
+        bool threw = false;
+        try {
+            auto channel_reader = adc_manager->GetChannelReader(channel);
+            channel_reader();
+        } catch(const std::invalid_argument&) {
+            threw = true;
+        }
 
-    try {
-        auto channel_reader = adc_manager->GetChannelReader(4);
-        channel_reader();
-        zassert_true(true, "ReadChannel expected to fail, but it didn't.");
-    } catch(...) {
-        zassert_true(false, "ReadChannel failed as expected due to out of range channel.");
+        zassert_true(threw, "channel %d should be rejected", channel);
     }
 }
 
-ZTEST_EXPECT_FAIL(adc, test_Simulator_ReadChannel_out_of_range);
 ZTEST(adc, test_Simulator_ReadChannel_out_of_range) {
     auto adc = std::make_shared<AdcSimulatorManager>();
     ReadChannel_out_of_range(adc);
 }
 
-ZTEST_EXPECT_FAIL(adc, test_Emulator_ReadChannel_out_of_range);
 ZTEST(adc, test_Emulator_ReadChannel_out_of_range) {
     DtAdc::Initialize();
 

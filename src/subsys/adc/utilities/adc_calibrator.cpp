@@ -22,6 +22,9 @@ AdcCalibrator::AdcCalibrator(
     const std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_data)
     : calibration_data_(std::move(calibration_data)) {
 
+    if(calibration_data_ == nullptr)
+        throw std::invalid_argument("Calibration data is missing or invalid.");
+
     std::pmr::vector<CalibrationData> adc_calibration_data_normalized;
     for(auto& calibration_data : *calibration_data_) {
         adc_calibration_data_normalized.push_back({

@@ -28,11 +28,15 @@ protected:
     std::vector<std::shared_ptr<IAdc>> adcs_;
     std::shared_ptr<AdcConfiguration> adc_configuration_;
 
+    using AdcProvider = std::function<std::shared_ptr<IAdc>(const AdcDTInfo&)>;
+
+    AdcManager(std::vector<AdcDTInfo> adc_infos, const AdcProvider& adc_provider);
+
     bool IsChannelValid(int channel);
 
 public:
     AdcManager(std::vector<AdcDTInfo> adc_infos);
-    int Initialize() override;
+    bool Initialize() override;
 
     void UpdateConfiguration(std::shared_ptr<AdcConfiguration> adc_configuration) override;
     std::shared_ptr<AdcChannelConfiguration> GetChannelConfiguration(int channel) override;

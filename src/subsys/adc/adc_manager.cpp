@@ -10,12 +10,15 @@ namespace eerie_leap::subsys::adc {
 
 LOG_MODULE_REGISTER(adc_manager);
 
-AdcManager::AdcManager(std::vector<AdcDTInfo> adc_infos) {
-    adc_infos_ = adc_infos;
+AdcManager::AdcManager(std::vector<AdcDTInfo> adc_infos)
+    : AdcManager(std::move(adc_infos),
+        [](const AdcDTInfo& adc_info) { return std::make_shared<Adc>(adc_info); }) {}
 
-    for(auto& adc_info : adc_infos_) {
-        adcs_.push_back(std::make_shared<Adc>(adc_info));
-    }
+AdcManager::AdcManager(std::vector<AdcDTInfo> adc_infos, const AdcProvider& adc_provider) {
+    adc_infos_ = std::move(adc_infos);
+
+    for(const auto& adc_info : adc_infos_)
+        adcs_.push_back(adc_provider(adc_info));
 }
 
 bool AdcManager::IsChannelValid(int channel) {
@@ -25,16 +28,23 @@ bool AdcManager::IsChannelValid(int channel) {
         && channel < GetChannelCount();
 }
 
-int AdcManager::Initialize() {
-    for(auto& adc : adcs_)
-        adc->Initialize();
+bool AdcManager::Initialize() {
+    for(auto& adc : adcs_) {
+        if(!adc->Initialize()) {
+            LOG_ERR("ADC initialization failed.");
+            return false;
+        }
+    }
 
     LOG_INF("ADC Manager initialized. %d channels configured.", GetChannelCount());
 
-    return 0;
+    return true;
 }
 
 void AdcManager::UpdateConfiguration(std::shared_ptr<AdcConfiguration> adc_configuration) {
+    if(adc_configuration == nullptr)
+        throw std::invalid_argument("ADC configuration cannot be null.");
+
     adc_configuration_ = std::move(adc_configuration);
 
     for(auto& adc : adcs_)
@@ -90,6 +100,9 @@ void AdcManager::UpdateSamplesCount(int samples) {
 }
 
 void AdcManager::ResetSamplesCount() {
+    if(adc_configuration_ == nullptr)
+        throw std::runtime_error("ADC config is not set.");
+
     for(auto& adc : adcs_)
         adc->UpdateConfiguration(adc_configuration_->samples);
 }
