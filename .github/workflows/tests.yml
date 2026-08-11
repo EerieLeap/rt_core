@@ -69,7 +69,7 @@ jobs:
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: rt_core
-          toolchains: x86_64-zephyr-elf
+          toolchains: arm-zephyr-eabi:aarch64-zephyr-elf:riscv64-zephyr-elf:mips-zephyr-elf
 
       - name: Run tests
         working-directory: rt_core

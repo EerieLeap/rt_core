@@ -19,9 +19,10 @@ manifest:
       remote: zephyrproject-rtos
       revision: main
       import:
-        # The test suites only target native_sim, so only the modules they
-        # actually pull in are cloned.
+        # Only the modules the test suites actually pull in are cloned.
         name-allowlist:
+          - cmsis           # required by the ARM port
+          - cmsis_6         # required by the ARM port
           - zcbor           # CBOR light JSON like data format
           - fatfs           # FATFS filesystem
           - littlefs        # littleFS lightweight filesystem
