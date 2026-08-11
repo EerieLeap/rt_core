@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <memory>
+#include <sstream>
 #include <streambuf>
 #include <vector>
 
@@ -68,14 +69,17 @@ ZTEST(mdf_file, test_WriteToStream) {
     // fs_buf.close();
 
     // Will create file in the twister-out directory
-    std::ofstream file("../../../../../../../../test_file.mf4", std::ios::binary);
-    mdf_file.WriteFileToStream(*file.rdbuf());
+    // std::ofstream file("../../../../../../../../test_file.mf4", std::ios::binary);
+    // mdf_file.WriteFileToStream(*file.rdbuf());
+
+    std::stringbuf file(std::ios::out | std::ios::binary);
+    auto header_bytes_written = mdf_file.WriteFileToStream(file);
 
     auto record_1 = mdf_file.CreateDataRecord(channel_group_1);
     for(uint64_t i = 0; i < 10; i++) {
         float time = i * 0.1;
         uint64_t pressure = i * i;
-        record_1.WriteToStream(*file.rdbuf(), {&time, &pressure});
+        record_1.WriteToStream(file, {&time, &pressure});
     }
 
     for(uint64_t i = 10; i < 20; i++) {
@@ -86,14 +90,14 @@ ZTEST(mdf_file, test_WriteToStream) {
             .data = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0}
         };
 
-        mdf_file.WriteCanbusDataRecordToStream(channel_group_3, *file.rdbuf(), can_frame, time);
+        mdf_file.WriteCanbusDataRecordToStream(channel_group_3, file, can_frame, time);
     }
 
     auto record_1_2 = mdf_file.CreateDataRecord(channel_group_1);
     for(uint64_t i = 20; i < 30; i++) {
         float time = i * 0.1;
         uint64_t pressure = i * i;
-        record_1_2.WriteToStream(*file.rdbuf(), {&time, &pressure});
+        record_1_2.WriteToStream(file, {&time, &pressure});
     }
 
 
@@ -153,12 +157,13 @@ ZTEST(mdf_file, test_WriteToStream) {
         std::memcpy(data.data() + offset, data_9_pack_6.data(), vlds_data_size_2);
         offset += vlds_data_size_2;
 
-        record_3_2.WriteToStream(*file.rdbuf(), data);
+        record_3_2.WriteToStream(file, data);
 
         vlds_offset_2 += 4 + vlds_data_size_2;
     }
 
-    file.close();
+    // file.close();
 
-    // zassert_not_equal(bytes_written, 0);
+    zassert_not_equal(header_bytes_written, 0);
+    zassert_true(file.str().size() > header_bytes_written);
 }
