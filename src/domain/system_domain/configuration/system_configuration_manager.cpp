@@ -94,7 +94,7 @@ std::shared_ptr<SystemConfiguration> SystemConfigurationManager::Get(bool force_
 bool SystemConfigurationManager::CreateDefaultConfiguration() {
     auto configuration = make_unique_pmr<SystemConfiguration>(Mrm::GetDefaultPmr());
 
-    configuration->device_id = Rng::Get64(true);
+    configuration->device_id = Rng::Get<uint64_t>(true);
     configuration->build_number = 0;
 
     return Update(*configuration);

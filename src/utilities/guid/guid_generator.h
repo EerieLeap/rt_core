@@ -13,7 +13,7 @@ using eerie_leap::subsys::random::Rng;
 class GuidGenerator {
 private:
     static constexpr uint16_t COUNTER_MASK = 0xFFFF;
-    const uint16_t device_hash_ = Rng::Get16(true);
+    const uint16_t device_hash_ = Rng::Get<uint16_t>(true);
     atomic_val_t counter_ = ATOMIC_INIT(0);
 
 public:

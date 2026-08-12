@@ -63,7 +63,7 @@ StaticString<LogWriterService::FILE_PATH_MAX_LENGTH> LogWriterService::GetNewLog
         path += "_";
     path += StringHelpers::UInt32ToStaticString(TimeHelpers::ToUint32(tp)).ToString();
     path += "_";
-    path += StringHelpers::UInt16ToStaticString(Rng::Get16()).ToString();
+    path += StringHelpers::UInt16ToStaticString(Rng::Get<uint16_t>()).ToString();
 
     return path;
 }

@@ -17,32 +17,4 @@ void Rng::Get(void* dst, size_t len, bool secure) {
 #endif
 }
 
-uint8_t Rng::Get8(bool secure) {
-    uint8_t ret;
-    Get(&ret, sizeof(ret), secure);
-
-    return ret;
-}
-
-uint16_t Rng::Get16(bool secure) {
-    uint16_t ret;
-    Get(&ret, sizeof(ret), secure);
-
-    return ret;
-}
-
-uint32_t Rng::Get32(bool secure) {
-    uint32_t ret;
-    Get(&ret, sizeof(ret), secure);
-
-    return ret;
-}
-
-uint64_t Rng::Get64(bool secure) {
-    uint64_t ret;
-    Get(&ret, sizeof(ret), secure);
-
-    return ret;
-}
-
 } // namespace eerie_leap::subsys::random

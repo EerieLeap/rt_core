@@ -19,7 +19,7 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
 
     cdmp_service_ = std::make_shared<CdmpService>(
         static_cast<CdmpDeviceType>(CONFIG_EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE),
-        Rng::Get32(true));
+        Rng::Get<uint32_t>(true));
 
     if(cdmp_service_ == nullptr)
         throw std::runtime_error("Failed to create CDMP service");
