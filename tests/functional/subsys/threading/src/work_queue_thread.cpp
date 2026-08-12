@@ -1,7 +1,4 @@
-#include <array>
-#include <cstddef>
 #include <memory>
-#include <new>
 #include <stdexcept>
 #include <string>
 
@@ -15,6 +12,7 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 namespace {
 
 constexpr int STACK_SIZE = 4096;
+constexpr int OVERSIZED_STACK_SIZE = 4 * 1024 * 1024;
 constexpr int PRIORITY = 5;
 constexpr int SYNC_TIMEOUT_MS = 1000;
 constexpr int IDLE_TIMEOUT_MS = 100;
@@ -62,23 +60,41 @@ bool ThrowsRuntimeError(TAction&& action) {
     return false;
 }
 
+struct ThreadLookup {
+    const char* name;
+    bool found;
+};
+
+void MatchThreadName(const k_thread* thread, void* user_data) {
+    auto* lookup = static_cast<ThreadLookup*>(user_data);
+    const char* name = k_thread_name_get(const_cast<k_thread*>(thread));
+
+    if(name != nullptr && std::string(name) == lookup->name)
+        lookup->found = true;
+}
+
+bool ThreadExists(const char* name) {
+    ThreadLookup lookup {name, false};
+    k_thread_foreach(MatchThreadName, &lookup);
+
+    return lookup.found;
+}
+
 } // namespace
 
 ZTEST_SUITE(work_queue_thread, NULL, NULL, NULL, NULL, NULL);
 
-ZTEST(work_queue_thread, test_uninitialized_queue_rejects_every_operation) {
-    // The destructor stops work_q_ unconditionally even though only Initialize() sets it up,
-    // so the storage is zeroed to keep this case defined.
-    alignas(WorkQueueThread) std::array<std::byte, sizeof(WorkQueueThread)> storage {};
-    auto* queue_thread = new (storage.data()) WorkQueueThread("wq_uninitialized", STACK_SIZE, PRIORITY);
+ZTEST(work_queue_thread, test_an_unstarted_queue_rejects_every_operation) {
+    WorkQueueThread queue_thread("wq_unstarted", STACK_SIZE, PRIORITY);
 
-    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread->GetWorkQueue(); }));
-    zassert_true(ThrowsRuntimeError([&] { queue_thread->Run([] {}); }));
-    zassert_true(ThrowsRuntimeError([&] { queue_thread->Stop(); }));
+    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread.GetWorkQueue(); }));
+    zassert_true(ThrowsRuntimeError([&] { queue_thread.Run([] {}); }));
     zassert_true(ThrowsRuntimeError([&] {
-        (void)queue_thread->CreateTask(ProbeHandler, std::make_unique<TaskProbe>()); }));
+        (void)queue_thread.CreateTask(ProbeHandler, std::make_unique<TaskProbe>()); }));
 
-    std::destroy_at(queue_thread);
+    queue_thread.Stop();
+
+    zassert_is_null(queue_thread.GetStack());
 }
 
 ZTEST(work_queue_thread, test_Initialize_starts_a_named_queue_thread) {
@@ -93,6 +109,33 @@ ZTEST(work_queue_thread, test_Initialize_starts_a_named_queue_thread) {
     zassert_equal(k_thread_priority_get(queue->thread_id), PRIORITY);
 
     queue_thread->Stop();
+}
+
+ZTEST(work_queue_thread, test_Initialize_is_ignored_when_the_queue_already_runs) {
+    auto queue_thread = MakeQueueThread("wq_reinitialized");
+    k_tid_t queue_tid = queue_thread->GetWorkQueue()->thread_id;
+
+    zassert_true(queue_thread->Initialize());
+    zassert_equal(queue_thread->GetWorkQueue()->thread_id, queue_tid);
+
+    queue_thread->Stop();
+}
+
+ZTEST(work_queue_thread, test_Initialize_reports_a_stack_allocation_failure) {
+    WorkQueueThread queue_thread("wq_oversized", OVERSIZED_STACK_SIZE, PRIORITY);
+
+    zassert_false(queue_thread.Initialize());
+    zassert_is_null(queue_thread.GetStack());
+    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread.GetWorkQueue(); }));
+}
+
+ZTEST(work_queue_thread, test_Stop_can_be_repeated) {
+    auto queue_thread = MakeQueueThread("wq_stopped_twice");
+
+    queue_thread->Stop();
+    queue_thread->Stop();
+
+    zassert_false(ThreadExists("wq_stopped_twice"));
 }
 
 ZTEST(work_queue_thread, test_CreateTask_runs_the_handler_with_owned_user_data) {
@@ -251,6 +294,71 @@ ZTEST(work_queue_thread, test_Stop_drains_the_work_that_is_still_pending) {
     queue_thread->Stop();
 
     zassert_equal(atomic_get(&completed), RUN_COUNT);
+}
+
+ZTEST(work_queue_thread, test_the_destructor_drains_and_stops_the_queue_thread) {
+    constexpr int RUN_COUNT = 5;
+
+    atomic_t completed = ATOMIC_INIT(0);
+
+    {
+        auto queue_thread = MakeQueueThread("wq_destroyed");
+
+        for(int i = 0; i < RUN_COUNT; ++i)
+            queue_thread->Run([&] { atomic_inc(&completed); });
+    }
+
+    zassert_equal(atomic_get(&completed), RUN_COUNT);
+    zassert_false(ThreadExists("wq_destroyed"), "the queue thread outlived its owner");
+}
+
+ZTEST(work_queue_thread, test_Stop_releases_the_runner_task_state) {
+    auto queue_thread = MakeQueueThread("wq_released");
+
+    auto tracker = std::make_shared<int>(0);
+    k_sem done;
+    k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
+
+    queue_thread->Run([tracker, &done] { k_sem_give(&done); });
+
+    zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0);
+
+    queue_thread->Stop();
+
+    zassert_equal(tracker.use_count(), 1);
+}
+
+ZTEST(work_queue_thread, test_a_stopped_queue_rejects_new_work) {
+    auto queue_thread = MakeQueueThread("wq_stopped");
+
+    queue_thread->Stop();
+
+    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread->GetWorkQueue(); }));
+    zassert_true(ThrowsRuntimeError([&] { queue_thread->Run([] {}); }));
+    zassert_false(ThreadExists("wq_stopped"));
+}
+
+ZTEST(work_queue_thread, test_IsScheduled_only_reports_work_that_still_has_to_run) {
+    auto queue_thread = MakeQueueThread("wq_scheduled");
+
+    TaskProbe probe;
+    auto task = queue_thread->CreateTask(ProbeHandler, &probe);
+
+    zassert_false(task.IsScheduled());
+
+    task.Schedule(K_SECONDS(30));
+    zassert_true(task.IsScheduled());
+
+    task.Cancel();
+    zassert_false(task.IsScheduled());
+
+    task.Schedule();
+
+    // The probe is signalled from inside the handler, so the item is running but not scheduled.
+    zassert_true(probe.WaitForRun(SYNC_TIMEOUT_MS));
+    zassert_false(task.IsScheduled());
+
+    queue_thread->Stop();
 }
 
 ZTEST(work_queue_thread, test_queues_are_independent_of_each_other) {

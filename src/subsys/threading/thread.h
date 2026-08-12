@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 #include <string>
 
 #include <zephyr/sys/atomic.h>
@@ -13,12 +12,10 @@ namespace eerie_leap::subsys::threading {
 class Thread : public ThreadBase {
 private:
     IThread* instance_;
-    k_tid_t thread_id_;
     k_thread thread_;
-    bool is_initialized_ = false;
+    bool is_initialized_;
+    bool is_created_;
     atomic_t is_running_;
-
-    static void TaskHandler(k_work* work);
 
 public:
     Thread(
@@ -28,15 +25,15 @@ public:
         int priority,
         bool is_cooperative = false,
         std::pmr::memory_resource* resource = nullptr);
-    ~Thread() = default;
+    ~Thread() override;
 
     Thread(const Thread&) = delete;
     Thread& operator=(const Thread&) = delete;
     Thread(Thread&&) = delete;
     Thread& operator=(Thread&&) = delete;
 
-    void Initialize();
-    void Start();
+    bool Initialize();
+    bool Start();
 
     [[nodiscard]] k_thread* GetThread();
     void Join();

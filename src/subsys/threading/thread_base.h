@@ -24,7 +24,7 @@ public:
         std::pmr::memory_resource* mr = nullptr);
     virtual ~ThreadBase();
 
-    void InitializeStack();
+    bool InitializeStack();
     [[nodiscard]] const k_thread_stack_t* GetStack() const;
 };
 

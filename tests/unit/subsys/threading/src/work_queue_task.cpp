@@ -41,6 +41,12 @@ ZTEST(work_queue_task, test_WorkQueueTaskResult_defaults_to_no_reschedule) {
     zassert_equal(result.delay.ticks, no_wait.ticks);
 }
 
+ZTEST(work_queue_task, test_GetUserdata_is_null_until_user_data_is_set) {
+    auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+
+    zassert_is_null(task.GetUserdata());
+}
+
 ZTEST(work_queue_task, test_Execute_forwards_owned_user_data_to_the_handler) {
     Payload* observed = nullptr;
     auto task = MakeTask([&observed](Payload* payload) {

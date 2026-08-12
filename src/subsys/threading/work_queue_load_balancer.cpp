@@ -7,24 +7,41 @@ WorkQueueLoadBalancer::WorkQueueLoadBalancer() {
 }
 
 void WorkQueueLoadBalancer::AddThread(std::shared_ptr<WorkQueueThread> thread) {
+    // Resolved first so a queue that is not running leaves the balancer untouched.
+    k_work_q* work_queue = thread->GetWorkQueue();
+
+    k_mutex_lock(&balancer_mutex_, K_FOREVER);
+
     work_queue_threads_.emplace_back(std::move(thread));
-    thread_metrics_.emplace_back(work_queue_threads_.back()->GetWorkQueue());
+    thread_metrics_.emplace_back(work_queue);
+
+    k_mutex_unlock(&balancer_mutex_);
 }
 
 void WorkQueueLoadBalancer::OnWorkComplete(WorkQueueThread& thread, uint32_t execution_time_ms) {
-    int index = 0;
-    for(const auto& t : work_queue_threads_) {
-        if(t->GetWorkQueue() == thread.GetWorkQueue())
-            break;
+    k_work_q* work_queue = thread.GetWorkQueue();
 
-        index++;
+    k_mutex_lock(&balancer_mutex_, K_FOREVER);
+
+    for(auto& metrics : thread_metrics_) {
+        if(metrics.work_queue != work_queue)
+            continue;
+
+        metrics.OnWorkComplete(execution_time_ms);
+        break;
     }
 
-    thread_metrics_[index].OnWorkComplete(execution_time_ms);
+    k_mutex_unlock(&balancer_mutex_);
 }
 
 std::shared_ptr<WorkQueueThread> WorkQueueLoadBalancer::GetLeastLoadedQueue() {
     k_mutex_lock(&balancer_mutex_, K_FOREVER);
+
+    if(work_queue_threads_.empty()) {
+        k_mutex_unlock(&balancer_mutex_);
+
+        return nullptr;
+    }
 
     uint64_t now = k_uptime_get();
     int min_score = INT_MAX;

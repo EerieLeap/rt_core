@@ -13,6 +13,9 @@ namespace {
 
 constexpr int STACK_SIZE = 1024;
 
+// Larger than CONFIG_HEAP_MEM_POOL_SIZE, so the kernel allocator has to refuse it.
+constexpr int OVERSIZED_STACK_SIZE = 4 * 1024 * 1024;
+
 // ThreadBase keeps everything the constructor derives in protected state.
 class ProbeThreadBase : public ThreadBase {
 public:
@@ -86,6 +89,12 @@ ZTEST(thread_base, test_constructor_maps_cooperative_priority_to_negative) {
     zassert_equal(from_negative.Priority(), -7);
 }
 
+ZTEST(thread_base, test_constructor_keeps_priority_zero_cooperative) {
+    ProbeThreadBase thread("cooperative_zero", STACK_SIZE, 0, true);
+
+    zassert_true(thread.Priority() < 0, "priority %d is preemptive", thread.Priority());
+}
+
 ZTEST(thread_base, test_constructor_defaults_to_preemptive) {
     ProbeThreadBase thread("defaulted", STACK_SIZE, 3);
 
@@ -101,9 +110,15 @@ ZTEST(thread_base, test_GetStack_is_null_before_initialization) {
 ZTEST(thread_base, test_InitializeStack_uses_the_kernel_allocator_by_default) {
     ProbeThreadBase thread("kernel_stack", STACK_SIZE, 5);
 
-    thread.InitializeStack();
-
+    zassert_true(thread.InitializeStack());
     zassert_not_null(thread.GetStack());
+}
+
+ZTEST(thread_base, test_InitializeStack_reports_an_allocation_failure) {
+    ProbeThreadBase thread("oversized_stack", OVERSIZED_STACK_SIZE, 5);
+
+    zassert_false(thread.InitializeStack());
+    zassert_is_null(thread.GetStack());
 }
 
 ZTEST(thread_base, test_InitializeStack_uses_the_supplied_memory_resource) {
@@ -132,6 +147,19 @@ ZTEST(thread_base, test_InitializeStack_honours_the_stack_alignment) {
     thread.InitializeStack();
 
     zassert_equal(reinterpret_cast<uintptr_t>(thread.GetStack()) % Z_KERNEL_STACK_OBJ_ALIGN, 0);
+}
+
+ZTEST(thread_base, test_InitializeStack_keeps_the_stack_it_already_allocated) {
+    TrackingMemoryResource resource;
+    ProbeThreadBase thread("reinitialized_stack", STACK_SIZE, 5, false, &resource);
+
+    thread.InitializeStack();
+    const k_thread_stack_t* stack = thread.GetStack();
+
+    thread.InitializeStack();
+
+    zassert_equal(resource.allocations, 1);
+    zassert_equal(thread.GetStack(), stack);
 }
 
 ZTEST(thread_base, test_destructor_does_not_free_an_unallocated_stack) {

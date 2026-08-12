@@ -10,6 +10,7 @@ using eerie_leap::subsys::threading::Thread;
 namespace {
 
 constexpr int STACK_SIZE = 2048;
+constexpr int OVERSIZED_STACK_SIZE = 4 * 1024 * 1024;
 constexpr int PRIORITY = 5;
 constexpr int SYNC_TIMEOUT_MS = 500;
 constexpr int IDLE_TIMEOUT_MS = 50;
@@ -46,17 +47,21 @@ public:
 class SleepingWorker : public IThread {
 private:
     int sleep_ms_;
+    atomic_t entries_;
     atomic_t finished_;
 
 public:
-    explicit SleepingWorker(int sleep_ms) : sleep_ms_(sleep_ms), finished_(ATOMIC_INIT(0)) {}
+    explicit SleepingWorker(int sleep_ms)
+        : sleep_ms_(sleep_ms), entries_(ATOMIC_INIT(0)), finished_(ATOMIC_INIT(0)) {}
 
     void ThreadEntry() override {
+        atomic_inc(&entries_);
         k_sleep(K_MSEC(sleep_ms_));
-        atomic_set(&finished_, 1);
+        atomic_inc(&finished_);
     }
 
-    [[nodiscard]] bool Finished() const { return atomic_get(&finished_) != 0; }
+    [[nodiscard]] int Entries() const { return static_cast<int>(atomic_get(&entries_)); }
+    [[nodiscard]] int Finished() const { return static_cast<int>(atomic_get(&finished_)); }
 };
 
 } // namespace
@@ -67,7 +72,7 @@ ZTEST(thread, test_Start_is_ignored_before_Initialize) {
     BlockingWorker worker;
     Thread thread("uninitialized", &worker, STACK_SIZE, PRIORITY);
 
-    thread.Start();
+    zassert_false(thread.Start());
 
     zassert_is_null(thread.GetStack());
     zassert_is_null(thread.GetThread());
@@ -76,11 +81,24 @@ ZTEST(thread, test_Start_is_ignored_before_Initialize) {
     zassert_equal(worker.Entries(), 0);
 }
 
+ZTEST(thread, test_Start_is_ignored_when_the_stack_cannot_be_allocated) {
+    BlockingWorker worker;
+    Thread thread("oversized", &worker, OVERSIZED_STACK_SIZE, PRIORITY);
+
+    zassert_false(thread.Initialize());
+    zassert_false(thread.Start());
+
+    zassert_is_null(thread.GetStack());
+    zassert_is_null(thread.GetThread());
+    zassert_false(thread.IsRunning());
+    zassert_false(worker.WaitForEntry(IDLE_TIMEOUT_MS));
+}
+
 ZTEST(thread, test_Initialize_allocates_the_stack_without_starting) {
     BlockingWorker worker;
     Thread thread("initialized", &worker, STACK_SIZE, PRIORITY);
 
-    thread.Initialize();
+    zassert_true(thread.Initialize());
 
     zassert_not_null(thread.GetStack());
     zassert_is_null(thread.GetThread());
@@ -93,8 +111,8 @@ ZTEST(thread, test_Start_runs_the_entry_point) {
     Thread thread("runner", &worker, STACK_SIZE, PRIORITY);
 
     thread.Initialize();
-    thread.Start();
 
+    zassert_true(thread.Start());
     zassert_true(worker.WaitForEntry(SYNC_TIMEOUT_MS));
     zassert_true(thread.IsRunning());
     zassert_not_null(thread.GetThread());
@@ -157,7 +175,7 @@ ZTEST(thread, test_Start_is_ignored_while_the_thread_is_running) {
     thread.Start();
     zassert_true(worker.WaitForEntry(SYNC_TIMEOUT_MS));
 
-    thread.Start();
+    zassert_false(thread.Start());
 
     zassert_false(worker.WaitForEntry(IDLE_TIMEOUT_MS));
     zassert_equal(worker.Entries(), 1);
@@ -193,12 +211,63 @@ ZTEST(thread, test_Join_waits_for_the_entry_point_to_return) {
     thread.Initialize();
     thread.Start();
 
-    zassert_false(worker.Finished());
+    zassert_equal(worker.Finished(), 0);
 
     thread.Join();
 
-    zassert_true(worker.Finished());
+    zassert_equal(worker.Finished(), 1);
     zassert_false(thread.IsRunning());
+}
+
+ZTEST(thread, test_IsRunning_clears_itself_when_the_entry_point_returns) {
+    SleepingWorker worker(50);
+    Thread thread("self_terminating", &worker, STACK_SIZE, PRIORITY);
+
+    thread.Initialize();
+    thread.Start();
+
+    zassert_true(thread.IsRunning());
+
+    k_sleep(K_MSEC(200));
+
+    zassert_equal(worker.Finished(), 1);
+    zassert_false(thread.IsRunning());
+
+    thread.Join();
+}
+
+ZTEST(thread, test_Start_can_be_repeated_after_the_entry_point_returned) {
+    SleepingWorker worker(20);
+    Thread thread("self_restarting", &worker, STACK_SIZE, PRIORITY);
+
+    thread.Initialize();
+    thread.Start();
+
+    k_sleep(K_MSEC(150));
+    zassert_equal(worker.Finished(), 1);
+
+    thread.Start();
+
+    k_sleep(K_MSEC(150));
+
+    zassert_equal(worker.Entries(), 2);
+    zassert_equal(worker.Finished(), 2);
+
+    thread.Join();
+}
+
+ZTEST(thread, test_destructor_waits_for_the_entry_point_to_return) {
+    SleepingWorker worker(150);
+
+    {
+        Thread thread("destroyed_while_running", &worker, STACK_SIZE, PRIORITY);
+        thread.Initialize();
+        thread.Start();
+
+        zassert_equal(worker.Finished(), 0);
+    }
+
+    zassert_equal(worker.Finished(), 1);
 }
 
 ZTEST(thread, test_Join_is_ignored_when_the_thread_never_started) {

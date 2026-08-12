@@ -14,12 +14,13 @@ private:
     k_work_sync sync_;
     k_mutex runner_tasks_mutex_;
 
-    bool initialized_ = false;
+    bool is_running_ = false;
 
     std::map<void*, std::unique_ptr<WorkQueueRunnerTask>> runner_tasks_;
     std::vector<std::unique_ptr<WorkQueueRunnerTask>> runner_completed_tasks_;
 
     void IsValid() const;
+    static void PruneCompletedTasks(std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks);
     static void TaskHandler(k_work* work);
     static void RunnerTaskHandler(k_work* work);
 
@@ -30,9 +31,9 @@ public:
         int priority,
         bool is_cooperative = false,
         std::pmr::memory_resource* mr = nullptr);
-    ~WorkQueueThread();
+    ~WorkQueueThread() override;
 
-    void Initialize();
+    bool Initialize();
     void Stop();
     [[nodiscard]] k_work_q* GetWorkQueue();
 

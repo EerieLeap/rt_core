@@ -1,4 +1,5 @@
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include <zephyr/ztest.h>
@@ -50,6 +51,44 @@ public:
 } // namespace
 
 ZTEST_SUITE(work_queue_load_balancer, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(work_queue_load_balancer, test_GetLeastLoadedQueue_returns_nothing_without_queues) {
+    WorkQueueLoadBalancer balancer;
+
+    zassert_true(balancer.GetLeastLoadedQueue() == nullptr);
+}
+
+ZTEST(work_queue_load_balancer, test_AddThread_rejects_a_queue_that_is_not_running) {
+    BalancedQueues queues(2);
+
+    auto unstarted = std::make_shared<WorkQueueThread>("wq_lb_unstarted", STACK_SIZE, PRIORITY);
+    bool threw = false;
+
+    try {
+        queues.balancer.AddThread(unstarted);
+    } catch(const std::runtime_error&) {
+        threw = true;
+    }
+
+    zassert_true(threw);
+
+    // The rejected queue must not have disturbed the registered ones.
+    zassert_equal(queues.balancer.GetLeastLoadedQueue(), queues.At(0));
+    zassert_equal(queues.balancer.GetLeastLoadedQueue(), queues.At(1));
+    zassert_equal(queues.balancer.GetLeastLoadedQueue(), queues.At(0));
+}
+
+ZTEST(work_queue_load_balancer, test_OnWorkComplete_ignores_an_unregistered_queue) {
+    BalancedQueues queues(2);
+    auto outsider = MakeQueueThread("wq_lb_outsider");
+
+    queues.balancer.OnWorkComplete(*outsider, 5000);
+
+    zassert_equal(queues.balancer.GetLeastLoadedQueue(), queues.At(0));
+    zassert_equal(queues.balancer.GetLeastLoadedQueue(), queues.At(1));
+
+    outsider->Stop();
+}
 
 ZTEST(work_queue_load_balancer, test_GetLeastLoadedQueue_always_returns_the_only_queue) {
     BalancedQueues queues(1);

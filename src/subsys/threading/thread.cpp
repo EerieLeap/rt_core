@@ -11,50 +11,60 @@ Thread::Thread(
     std::pmr::memory_resource* resource)
         : ThreadBase(std::move(name), stack_size, priority, is_cooperative, resource),
         instance_(instance),
-        is_running_(ATOMIC_INIT(0)),
-        is_initialized_(false) {}
+        is_initialized_(false),
+        is_created_(false),
+        is_running_(ATOMIC_INIT(0)) {}
 
-void Thread::Initialize() {
-    InitializeStack();
-    is_initialized_ = true;
+Thread::~Thread() {
+    Join();
 }
 
-void Thread::Start() {
+bool Thread::Initialize() {
+    is_initialized_ = InitializeStack();
+
+    return is_initialized_;
+}
+
+bool Thread::Start() {
     if(!is_initialized_)
-        return;
+        return false;
 
-    if(atomic_get(&is_running_) != 0)
-        return;
+    if(!atomic_cas(&is_running_, 0, 1))
+        return false;
 
-    atomic_set(&is_running_, 1);
+    // A previous run has to be reaped before its thread object can be handed out again.
+    if(is_created_)
+        k_thread_join(&thread_, K_FOREVER);
 
     k_thread_create(
         &thread_,
         stack_area_,
         k_stack_size_,
-        [](void* instance, void*, void*) {
-            static_cast<IThread*>(instance)->ThreadEntry(); },
-        instance_, nullptr, nullptr,
+        [](void* instance, void* is_running, void*) {
+            static_cast<IThread*>(instance)->ThreadEntry();
+            atomic_clear(static_cast<atomic_t*>(is_running)); },
+        instance_, &is_running_, nullptr,
         k_priority_, 0, K_NO_WAIT);
 
+    is_created_ = true;
+
     k_thread_name_set(&thread_, name_.c_str());
+
+    return true;
 }
 
 [[nodiscard]] k_thread* Thread::GetThread() {
-    if(atomic_get(&is_running_) == 0)
+    if(!is_created_)
         return nullptr;
 
     return &thread_;
 }
 
 void Thread::Join() {
-    if(!is_initialized_)
+    if(!is_created_)
         return;
 
-    if(atomic_get(&is_running_) == 0)
-        return;
-
-    atomic_set(&is_running_, 0);
+    atomic_clear(&is_running_);
     k_thread_join(&thread_, K_FOREVER);
 }
 

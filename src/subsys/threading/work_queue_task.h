@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <vector>
 #include <functional>
 #include <memory>
 
@@ -37,8 +38,8 @@ public:
         k_work_reschedule_for_queue(work_q_, &work, delay);
     }
 
-    bool IsScheduled() {
-        return k_work_delayable_busy_get(&work) && K_WORK_QUEUED;
+    bool IsScheduled() const {
+        return (k_work_delayable_busy_get(&work) & (K_WORK_QUEUED | K_WORK_DELAYED)) != 0;
     }
 
     bool Cancel() {
@@ -60,12 +61,10 @@ public:
 
 private:
     std::unique_ptr<T> user_data_;
-    T* user_data_ptr_;
+    T* user_data_ptr_ = nullptr;
     Handler user_handler_;
 
 public:
-    WorkQueueTask() = default;
-
     WorkQueueTask(
         k_work_q* work_q,
         k_work_sync* sync,
@@ -119,8 +118,8 @@ public:
         std::map<void*, std::unique_ptr<WorkQueueRunnerTask>>& runner_tasks,
         std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks)
             : WorkQueueTaskBase(work_q, sync, handler),
-            user_handler_(user_handler),
             runner_tasks_mutex_(runner_tasks_mutex),
+            user_handler_(user_handler),
             runner_tasks_(runner_tasks),
             completed_tasks_(completed_tasks) {}
 
