@@ -13,7 +13,6 @@
 
 namespace eerie_leap::domain::logging_domain::services {
 
-using time_point = std::chrono::system_clock::time_point;
 using eerie_leap::subsys::time::ITimeService;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
@@ -24,7 +23,7 @@ struct LogWriterTask {
     std::shared_ptr<ITimeService> time_service;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
     std::shared_ptr<ILogger<SensorReading>> logger;
-    time_point start_time;
+    std::chrono::system_clock::time_point start_time;
 };
 
 } // namespace eerie_leap::domain::logging_domain::services

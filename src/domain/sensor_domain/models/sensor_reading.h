@@ -14,8 +14,6 @@
 
 namespace eerie_leap::domain::sensor_domain::models {
 
-using time_point = std::chrono::system_clock::time_point;
-
 using eerie_leap::utilities::guid::Guid;
 
 // NOTE: SensorReading is a non allocator-aware type due to
@@ -28,7 +26,7 @@ struct SensorReading {
     const Guid id;
     const std::shared_ptr<Sensor> sensor;
     std::optional<float> value;
-    std::optional<time_point> timestamp;
+    std::optional<std::chrono::system_clock::time_point> timestamp;
     ReadingSource source = ReadingSource::NONE;
     ReadingStatus status = ReadingStatus::UNINITIALIZED;
     std::optional<std::string> error_message = std::nullopt;

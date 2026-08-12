@@ -11,7 +11,6 @@
 
 namespace eerie_leap::domain::logging_domain::loggers::simple_logger_sensor_reading::models {
 
-using time_point = std::chrono::system_clock::time_point;
 using eerie_leap::subsys::time::TimeHelpers;
 using eerie_leap::utilities::constants::logging::LOG_DATA_FILE_TYPE;
 
@@ -23,7 +22,7 @@ struct LogDataHeader {
     uint64_t reserved;
     uint32_t crc;
 
-    static LogDataHeader Create(const time_point& tp, uint32_t log_metadata_file_version) {
+    static LogDataHeader Create(const std::chrono::system_clock::time_point& tp, uint32_t log_metadata_file_version) {
         LogDataHeader header {
             .file_type = LOG_DATA_FILE_TYPE,
             .version = CONFIG_EERIE_LEAP_LOG_DATA_FILE_VERSION,

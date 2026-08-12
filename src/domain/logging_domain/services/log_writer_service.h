@@ -50,7 +50,7 @@ private:
     atomic_t logger_running_;
 
     static WorkQueueTaskResult ProcessWorkTask(LogWriterTask* task);
-    static StaticString<FILE_PATH_MAX_LENGTH> GetNewLogDataFilePath(const time_point& tp);
+    static StaticString<FILE_PATH_MAX_LENGTH> GetNewLogDataFilePath(const std::chrono::system_clock::time_point& tp);
 
 public:
     LogWriterService(

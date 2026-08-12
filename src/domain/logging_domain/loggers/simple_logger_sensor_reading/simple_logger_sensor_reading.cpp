@@ -74,7 +74,7 @@ const char* SimpleLoggerSensorReading::GetFileExtension() const {
     return LOG_DATA_FILE_EXTENSION;
 }
 
-bool SimpleLoggerSensorReading::StartLogging(std::streambuf& stream, const time_point& start_time) {
+bool SimpleLoggerSensorReading::StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) {
     stream_ = &stream;
     start_time_ = start_time;
 
@@ -98,7 +98,7 @@ bool SimpleLoggerSensorReading::StopLogging() {
     return true;
 }
 
-bool SimpleLoggerSensorReading::LogReading(const time_point& time, const SensorReading& reading) {
+bool SimpleLoggerSensorReading::LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) {
     if(!stream_)
         return false;
 

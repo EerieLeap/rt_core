@@ -53,7 +53,7 @@ void LogWriterService::Initialize() {
     LOG_INF("Log writer service initialized.");
 }
 
-StaticString<LogWriterService::FILE_PATH_MAX_LENGTH> LogWriterService::GetNewLogDataFilePath(const time_point& tp) {
+StaticString<LogWriterService::FILE_PATH_MAX_LENGTH> LogWriterService::GetNewLogDataFilePath(const std::chrono::system_clock::time_point& tp) {
     StaticString<FILE_PATH_MAX_LENGTH> path;
 
     path += CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR;

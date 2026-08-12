@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <span>
 
@@ -17,7 +18,7 @@ private:
     std::shared_ptr<IFsService> fs_service_;
     std::streambuf* stream_;
     uint32_t log_metadata_file_version_;
-    time_point start_time_;
+    std::chrono::system_clock::time_point start_time_;
 
 public:
     SimpleLoggerSensorReading(std::shared_ptr<IFsService> fs_service);
@@ -26,9 +27,9 @@ public:
     bool CreateMetadataFile(const std::span<uint8_t>& sensors_metadata);
 
     const char* GetFileExtension() const override;
-    bool StartLogging(std::streambuf& stream, const time_point& start_time) override;
+    bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) override;
     bool StopLogging() override;
-    bool LogReading(const time_point& time, const SensorReading& reading) override;
+    bool LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) override;
 };
 
 } // namespace eerie_leap::domain::logging_domain::loggers::simple_logger_sensor_reading

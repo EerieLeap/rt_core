@@ -69,7 +69,7 @@ const char* Mdf4LoggerSensorReading::GetFileExtension() const {
     return Mdf4File::LOG_DATA_FILE_EXTENSION;
 }
 
-bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const time_point& start_time) {
+bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) {
     stream_ = &stream;
     start_time_ = start_time;
     current_file_size_bytes_ = 0;
@@ -131,7 +131,7 @@ bool Mdf4LoggerSensorReading::LogCanbusRawReading(float time_delta_s, const Sens
     return true;
 }
 
-bool Mdf4LoggerSensorReading::LogReading(const time_point& time, const SensorReading& reading) {
+bool Mdf4LoggerSensorReading::LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) {
     if(stream_ == nullptr)
         return false;
 

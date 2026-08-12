@@ -9,16 +9,14 @@
 
 namespace eerie_leap::subsys::time {
 
-using std::chrono::system_clock;
-
 class TimeHelpers {
 public:
-    static std::string GetFormattedString(const system_clock::time_point& tp) {
+    static std::string GetFormattedString(const std::chrono::system_clock::time_point& tp) {
         auto duration = tp.time_since_epoch();
         auto secs = duration_cast<std::chrono::seconds>(duration);
         auto millis = duration_cast<std::chrono::milliseconds>(duration - secs).count();
 
-        std::time_t time_sec = system_clock::to_time_t(tp);
+        std::time_t time_sec = std::chrono::system_clock::to_time_t(tp);
         std::tm* timeinfo = localtime(&time_sec);
 
         char buffer[32];
@@ -28,27 +26,27 @@ public:
         return formatted_time + "." + std::to_string(millis);
     }
 
-    static std::chrono::milliseconds ToMilliseconds(const system_clock::time_point& tp) {
+    static std::chrono::milliseconds ToMilliseconds(const std::chrono::system_clock::time_point& tp) {
         return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch());
     }
 
-    static system_clock::time_point FromMilliseconds(const std::chrono::milliseconds& ms) {
-        return system_clock::time_point(ms);
+    static std::chrono::system_clock::time_point FromMilliseconds(const std::chrono::milliseconds& ms) {
+        return std::chrono::system_clock::time_point(ms);
     }
 
-    static std::chrono::nanoseconds ToNanoseconds(const system_clock::time_point& tp) {
+    static std::chrono::nanoseconds ToNanoseconds(const std::chrono::system_clock::time_point& tp) {
         return std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch());
     }
 
-    static system_clock::time_point FromNanoseconds(const std::chrono::nanoseconds& ns) {
-        return system_clock::time_point(ns);
+    static std::chrono::system_clock::time_point FromNanoseconds(const std::chrono::nanoseconds& ns) {
+        return std::chrono::system_clock::time_point(ns);
     }
 
-    static uint32_t ToUint32(const system_clock::time_point& tp) {
+    static uint32_t ToUint32(const std::chrono::system_clock::time_point& tp) {
         return ToMilliseconds(tp).count();
     }
 
-    static uint64_t ToUint64(const system_clock::time_point& tp) {
+    static uint64_t ToUint64(const std::chrono::system_clock::time_point& tp) {
         return ToNanoseconds(tp).count();
     }
 

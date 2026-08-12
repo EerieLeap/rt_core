@@ -17,8 +17,8 @@ public:
 
     void Initialize();
 
-    time_point GetCurrentTime() override;
-    time_point GetTimeSinceBoot() override;
+    std::chrono::system_clock::time_point GetCurrentTime() override;
+    std::chrono::system_clock::time_point GetTimeSinceBoot() override;
 };
 
 } // namespace eerie_leap::subsys::time
