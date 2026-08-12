@@ -117,9 +117,13 @@ static void PrintCpuInfoCallback(thread_analyzer_info *info) {
     if(cpu_info_thread_name_filter != nullptr && strcmp(cpu_info_thread_name_filter, info->name) != 0)
         return;
 
+#ifdef CONFIG_THREAD_RUNTIME_STATS
     LOG_INF("  %-14s: CPU Load: %u %%",
 		info->name,
 		info->utilization);
+#else
+    LOG_INF("  %-14s: CPU Load: n/a", info->name);
+#endif
 }
 
 void SystemInfo::PrintCpuInfo(int cpu, const char *thread_name) {
