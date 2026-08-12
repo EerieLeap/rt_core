@@ -34,7 +34,7 @@ void WorkQueueThread::Initialize() {
     k_work_queue_init(&work_q_);
     k_work_queue_start(&work_q_, stack_area_, k_stack_size_, k_priority_, nullptr);
 
-    k_thread_name_set(&work_q_.thread, name_.c_str());
+    k_thread_name_set(work_q_.thread_id, name_.c_str());
 
     initialized_ = true;
 }
