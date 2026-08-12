@@ -32,6 +32,9 @@ ZTEST(time, test_GetCurrentTime_returns_valid_elapsed_time) {
     k_msleep(1);
     auto current_time2 = time_provider->GetTime();
 
+    // k_msleep only guarantees a lower bound, and QEMU targets built with
+    // icount sleep let the guest clock follow the (shared) host clock while
+    // idle, so the upper bound only has to catch a mis-scaled clock.
     zassert_true(current_time2 - current_time1 >= 1ms);
-    zassert_true(current_time2 - current_time1 <= 2ms);
+    zassert_true(current_time2 - current_time1 <= 100ms);
 }
