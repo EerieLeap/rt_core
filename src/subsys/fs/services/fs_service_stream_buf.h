@@ -2,6 +2,7 @@
 
 #include <streambuf>
 #include <string>
+#include <vector>
 
 #include "i_fs_service.h"
 

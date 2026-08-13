@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <cerrno>
 #include <cstring>
+#include <stdexcept>
 #include <system_error>
 
 #include "utilities/string/filesystem_path.hpp"
@@ -10,7 +13,7 @@ namespace eerie_leap::subsys::fs::services {
 using namespace eerie_leap::utilities::string;
 
 FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode)
-    : fs_service_(fs_service), file_opened_(false), input_buffer_(BUFFER_SIZE) {
+    : fs_service_(fs_service), file_opened_(false) {
 
     if(!fs_service_)
         throw std::invalid_argument("fs_service cannot be null");
@@ -18,10 +21,16 @@ FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view 
     if(!fs_service_->IsAvailable())
         throw std::runtime_error("Filesystem not available");
 
+    if(relative_path.size() > PATH_BUFFER_SIZE)
+        throw std::invalid_argument("relative_path is too long");
+
     if(mode == OpenMode::Write || mode == OpenMode::Append) {
         auto parent = FilesystemPath<PATH_BUFFER_SIZE>(relative_path).parent_path();
-        if(!fs_service_->Exists(parent.String().ToString()) && !parent.String().Empty())
-            fs_service_->CreateDirectory(parent.String().ToString());
+
+        if(!parent.String().Empty()
+            && !fs_service_->Exists(parent.String().ToString())
+            && !fs_service_->CreateDirectory(parent.String().ToString()))
+            throw std::system_error(EIO, std::generic_category(), "Failed to create parent directory");
     }
 
     fs_mode_t open_mode = 0;
@@ -37,11 +46,11 @@ FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view 
             break;
     }
 
-    FilesystemPath<PATH_BUFFER_SIZE> full_path{fs_service_->GetMountpoint().mnt_point};
-    full_path /= relative_path;
+    // Allocated before the file is opened so that a failure here cannot leak the handle.
+    if(mode == OpenMode::Read)
+        input_buffer_.resize(BUFFER_SIZE);
 
-    fs_file_t_init(&file_);
-    int rc = fs_open(&file_, full_path.String().CStr(), open_mode);
+    int rc = fs_service_->OpenFile(relative_path, open_mode, &file_);
 
     if(rc < 0)
         throw std::system_error(-rc, std::generic_category(), "Failed to open file");
@@ -91,18 +100,28 @@ std::streambuf::int_type FsServiceStreamBuf::overflow(std::streambuf::int_type c
 }
 
 std::streamsize FsServiceStreamBuf::xsgetn(char* s, std::streamsize n) {
-    if(!file_opened_)
+    if(!file_opened_ || n <= 0)
         return 0;
 
-    ssize_t rc = fs_read(&file_, s, static_cast<size_t>(n));
+    // Whatever underflow() already pulled in has to be handed out before reading the file again.
+    std::streamsize copied = std::min<std::streamsize>(egptr() - gptr(), n);
+    if(copied > 0) {
+        std::memcpy(s, gptr(), static_cast<size_t>(copied));
+        gbump(static_cast<int>(copied));
+
+        if(copied == n)
+            return copied;
+    }
+
+    ssize_t rc = fs_read(&file_, s + copied, static_cast<size_t>(n - copied));
     if(rc < 0)
-        return 0;
+        return copied;
 
-    return rc;
+    return copied + rc;
 }
 
 std::streambuf::int_type FsServiceStreamBuf::underflow() {
-    if(!file_opened_)
+    if(!file_opened_ || input_buffer_.empty())
         return traits_type::eof();
 
     if(gptr() < egptr())
@@ -133,13 +152,22 @@ std::streambuf::pos_type FsServiceStreamBuf::seekoff(
     if(!file_opened_)
         return std::streambuf::pos_type(std::streambuf::off_type(-1));
 
-    int whence = FS_SEEK_SET;
-    if(way == std::ios_base::cur)
-        whence = FS_SEEK_CUR;
-    else if(way == std::ios_base::end)
-        whence = FS_SEEK_END;
+    // Reads and writes share the file position, so any of the two areas can be seeked.
+    if((which & (std::ios_base::in | std::ios_base::out)) == 0)
+        return std::streambuf::pos_type(std::streambuf::off_type(-1));
 
-    int rc = fs_seek(&file_, static_cast<off_t>(off), whence);
+    int whence = FS_SEEK_SET;
+    std::streambuf::off_type target = off;
+
+    if(way == std::ios_base::cur) {
+        whence = FS_SEEK_CUR;
+        // fs_tell() already counts the bytes sitting unread in the get area.
+        target = off - static_cast<std::streambuf::off_type>(egptr() - gptr());
+    } else if(way == std::ios_base::end) {
+        whence = FS_SEEK_END;
+    }
+
+    int rc = fs_seek(&file_, static_cast<off_t>(target), whence);
     if(rc != 0)
         return std::streambuf::pos_type(std::streambuf::off_type(-1));
 
@@ -152,9 +180,9 @@ std::streambuf::pos_type FsServiceStreamBuf::seekoff(
     return std::streambuf::pos_type(static_cast<std::streambuf::off_type>(pos));
 }
 
-std::streambuf::pos_type FsServiceStreamBuf::seekpos(std::streambuf::pos_type sp, std::ios_base::openmode /*which*/) {
+std::streambuf::pos_type FsServiceStreamBuf::seekpos(std::streambuf::pos_type sp, std::ios_base::openmode which) {
     auto off = static_cast<std::streambuf::off_type>(sp);
-    return seekoff(off, std::ios_base::beg, std::ios_base::openmode(0));
+    return seekoff(off, std::ios_base::beg, which);
 }
 
 } // namespace eerie_leap::subsys::fs::services

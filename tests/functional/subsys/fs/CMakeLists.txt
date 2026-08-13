@@ -4,7 +4,7 @@ set(RT_CORE_TEST_SIM_FLASH ON)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../../rt_core_test.cmake)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(functional_fs_domain)
+project(functional_subsys_fs)
 
 file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)
 

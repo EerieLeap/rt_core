@@ -24,11 +24,12 @@ private:
     std::unique_ptr<Thread> thread_;
 
     const char* disk_name_;
-    bool sd_card_present_ = false;
+    atomic_t sd_card_present_;
     k_sem sd_monitor_stop_sem_;
     atomic_t monitor_running_;
 
-    std::function<bool()> _is_sd_card_present_handler;
+    mutable k_mutex handler_mutex_;
+    std::function<bool()> is_sd_card_present_handler_;
 
     void ThreadEntry() override;
 
@@ -37,7 +38,7 @@ private:
     int PrintInfo() const;
 
 public:
-    SdmmcService(fs_mount_t mountpoint, const char* disk_name);
+    SdmmcService(fs_mount_t* mountpoint, const char* disk_name);
     ~SdmmcService();
 
     bool Initialize() override;

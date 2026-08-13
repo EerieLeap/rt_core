@@ -101,7 +101,13 @@ private:
             return std::nullopt;
         }
 
-        size_t buffer_size = fs_service_->GetFileSize(configuration_file_path_);
+        auto file_size = fs_service_->GetFileSize(configuration_file_path_);
+        if (!file_size.has_value()) {
+            LOG_ERR("Failed to stat configuration file %s.", configuration_file_path_.c_str());
+            return std::nullopt;
+        }
+
+        size_t buffer_size = *file_size;
         std::pmr::vector<uint8_t> buffer(buffer_size, Mrm::GetExtPmr());
         size_t out_len = 0;
 

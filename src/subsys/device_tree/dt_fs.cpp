@@ -13,8 +13,8 @@ namespace eerie_leap::subsys::device_tree {
 
 LOG_MODULE_DECLARE(dt_logger);
 
-std::optional<fs_mount_t> DtFs::int_fs_mp_ = std::nullopt;
-std::optional<fs_mount_t> DtFs::sd_fs_mp_ = std::nullopt;
+fs_mount_t* DtFs::int_fs_mp_ = nullptr;
+fs_mount_t* DtFs::sd_fs_mp_ = nullptr;
 #ifdef CONFIG_SDMMC_SUBSYS
 sdhc_host_props DtFs::sd_host_props_;
 #endif
@@ -23,21 +23,23 @@ const char* DtFs::sd_disk_name_ = nullptr;
 
 void DtFs::InitInternalFs() {
 #if DT_HAS_ALIAS(intfs0)
-    int_fs_mp_ = std::make_optional<fs_mount_t>(FS_FSTAB_ENTRY(INT_FS_NODE));
+    int_fs_mp_ = &FS_FSTAB_ENTRY(INT_FS_NODE);
     LOG_INF("Internal File System initialized.");
 #endif
 }
 
 void DtFs::InitSdFs() {
 #if DT_HAS_CHOSEN(zephyr_sdhc) && DT_HAS_ALIAS(sdfs0) && CONFIG_SDMMC_SUBSYS
-    sd_fs_mp_ = std::make_optional<fs_mount_t>(FS_FSTAB_ENTRY(SD_FS_NODE));
-    sd_fs_mp_.value().storage_dev = (void *)SD_DEV;
+    fs_mount_t* sd_fs_mp = &FS_FSTAB_ENTRY(SD_FS_NODE);
+    sd_fs_mp->storage_dev = (void *)SD_DEV;
 
     int ret = sdhc_get_host_props(SD_DEV, &sd_host_props_);
     if (ret) {
         LOG_ERR("SDHC get host props failed with error %d", ret);
         return;
     }
+
+    sd_fs_mp_ = sd_fs_mp;
 
     LOG_INF("SD File System initialized.");
 

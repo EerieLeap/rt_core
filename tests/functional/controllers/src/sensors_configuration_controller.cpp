@@ -103,7 +103,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSens
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_successfully_saved) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -154,7 +154,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_and_Load) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -215,7 +215,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_valid_sensor_id) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -277,7 +277,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_invalid_sensor_id) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 

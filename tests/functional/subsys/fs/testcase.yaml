@@ -10,4 +10,4 @@ common:
     - qemu_malta
 
 tests:
-  functional.fs_subsys: {}
+  functional.subsys.fs: {}

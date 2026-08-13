@@ -25,7 +25,7 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_config_successfully_save
     system_config.build_number = 22;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
@@ -42,7 +42,7 @@ ZTEST(configuration_service, test_CborSystemConfig_Load_config_successfully_save
     system_config.build_number = 46;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
@@ -125,7 +125,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     sensors_config.CborSensorConfig_m.push_back(std::move(sensor_config_2));
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto cbor_sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service);
@@ -205,7 +205,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
 
     // Initialize services
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service);

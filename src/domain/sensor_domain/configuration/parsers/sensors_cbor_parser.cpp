@@ -133,7 +133,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
             && !sensor->configuration.script_path.empty()
             && sd_fs_service_->Exists(sensor->configuration.script_path)) {
 
-            size_t script_size = sd_fs_service_->GetFileSize(sensor->configuration.script_path);
+            size_t script_size = sd_fs_service_->GetFileSize(sensor->configuration.script_path).value_or(0);
 
             if(script_size != 0) {
                 std::pmr::vector<uint8_t> buffer(script_size, Mrm::GetExtPmr());

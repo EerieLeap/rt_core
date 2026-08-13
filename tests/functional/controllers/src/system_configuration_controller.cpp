@@ -19,7 +19,7 @@ ZTEST_SUITE(system_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_successfully_saved) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -40,7 +40,7 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_and_Load) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 

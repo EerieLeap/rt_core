@@ -170,7 +170,7 @@ struct sensor_processor_HelperInstances {
 
 sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 

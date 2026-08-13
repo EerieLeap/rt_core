@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <optional>
 
 #include <zephyr/devicetree.h>
 #include <zephyr/device.h>
@@ -30,9 +29,9 @@ namespace eerie_leap::subsys::device_tree {
 
 class DtFs {
 private:
-    static std::optional<fs_mount_t> int_fs_mp_;
+    static fs_mount_t* int_fs_mp_;
 
-    static std::optional<fs_mount_t> sd_fs_mp_;
+    static fs_mount_t* sd_fs_mp_;
 #ifdef CONFIG_SDMMC_SUBSYS
     static sdhc_host_props sd_host_props_;
 #endif
@@ -52,8 +51,8 @@ public:
     static void InitSdFs();
     static bool IsSdCardPresent();
 
-    static std::optional<fs_mount_t>& GetInternalFsMp() { return int_fs_mp_; }
-    static std::optional<fs_mount_t>& GetSdFsMp() { return sd_fs_mp_; }
+    static fs_mount_t* GetInternalFsMp() { return int_fs_mp_; }
+    static fs_mount_t* GetSdFsMp() { return sd_fs_mp_; }
     static const char* GetSdDiskName() { return sd_disk_name_; }
 };
 

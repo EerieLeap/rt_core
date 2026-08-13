@@ -47,7 +47,7 @@ AdcConfiguration adc_configuration_manager_GetTestConfiguration() {
 
 ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_successfully_saved) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -84,7 +84,7 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_succes
 
 ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_and_Load) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 

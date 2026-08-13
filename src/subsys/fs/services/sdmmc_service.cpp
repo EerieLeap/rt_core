@@ -1,4 +1,4 @@
-#include <filesystem>
+#include <errno.h>
 
 #include <zephyr/fs/fs.h>
 #include <zephyr/logging/log.h>
@@ -8,38 +8,52 @@
 #include <zephyr/logging/log_backend_fs.h>
 #endif // CONFIG_LOG_BACKEND_FS
 
+#include "subsys/threading/scoped_mutex.h"
+
 #include "sdmmc_service.h"
 
 namespace eerie_leap::subsys::fs::services {
 
 LOG_MODULE_REGISTER(sdmmc_service_logger);
 
-SdmmcService::SdmmcService(fs_mount_t mountpoint, const char* disk_name)
-    : FsService(mountpoint), disk_name_(disk_name), monitor_running_(ATOMIC_INIT(0)) {
+using eerie_leap::subsys::threading::ScopedMutex;
+
+SdmmcService::SdmmcService(fs_mount_t* mountpoint, const char* disk_name)
+    : FsService(mountpoint), disk_name_(disk_name),
+      sd_card_present_(ATOMIC_INIT(0)), monitor_running_(ATOMIC_INIT(0)) {
+
+    k_sem_init(&sd_monitor_stop_sem_, 0, 1);
+    k_mutex_init(&handler_mutex_);
 
     thread_ = std::make_unique<Thread>(
         "sd_monitor", this, k_stack_size_, k_priority_, true);
 }
 
 SdmmcService::~SdmmcService() {
+    SdMonitorStop();
     thread_->Join();
 }
 
 bool SdmmcService::Initialize() {
-    sd_card_present_ = FsService::Initialize();
-    if(!sd_card_present_)
+    bool mounted = FsService::Initialize();
+    atomic_set(&sd_card_present_, mounted ? 1 : 0);
+
+    if(!mounted)
         return false;
 
     PrintInfo();
+
     return true;
 }
 
 void SdmmcService::RegisterIsSdCardPresentHandler(std::function<bool()> handler) {
-    _is_sd_card_present_handler = handler;
+    ScopedMutex lock(handler_mutex_);
+
+    is_sd_card_present_handler_ = std::move(handler);
 }
 
 bool SdmmcService::IsAvailable() const {
-    return sd_card_present_;
+    return atomic_get(&sd_card_present_) == 1 && FsService::IsAvailable();
 }
 
 bool SdmmcService::IsSdCardAttached(const char* disk_name) {
@@ -50,32 +64,37 @@ bool SdmmcService::IsSdCardAttached(const char* disk_name) {
 }
 
 void SdmmcService::SdMonitorHandler() {
-    if(_is_sd_card_present_handler == nullptr)
-        return;
+    bool card_detected = false;
 
-    bool card_detected = _is_sd_card_present_handler();
+    {
+        ScopedMutex lock(handler_mutex_);
 
-    if(!card_detected) {
-        IsSdCardAttached(disk_name_);
+        if(is_sd_card_present_handler_ == nullptr)
+            return;
+
+        card_detected = is_sd_card_present_handler_();
     }
 
-    if(card_detected != sd_card_present_) {
-        sd_card_present_ = card_detected;
+    // Hosts without a card detect line only answer through the disk driver.
+    if(!card_detected)
+        card_detected = IsSdCardAttached(disk_name_);
+
+    if(card_detected != (atomic_get(&sd_card_present_) == 1)) {
+        atomic_set(&sd_card_present_, card_detected ? 1 : 0);
 
         if(card_detected) {
             LOG_INF("SD card detected.");
 
             Unmount();
-            if(!Mount()) {
-                sd_card_present_ = false;
-            }
+            if(!Mount())
+                atomic_set(&sd_card_present_, 0);
         } else {
             LOG_INF("SD card removed.");
         }
     }
 
 #ifdef CONFIG_LOG_BACKEND_FS
-    if(sd_card_present_ && log_backend_fs_get_state() == BACKEND_FS_CORRUPTED)
+    if(atomic_get(&sd_card_present_) == 1 && log_backend_fs_get_state() == BACKEND_FS_CORRUPTED)
         log_backend_init(log_backend_fs_get());
 #endif // CONFIG_LOG_BACKEND_FS
 }
@@ -90,11 +109,17 @@ void SdmmcService::ThreadEntry() {
 }
 
 int SdmmcService::SdMonitorStart() {
-    k_sem_init(&sd_monitor_stop_sem_, 0, 1);
-    atomic_set(&monitor_running_, 1);
+    if(atomic_set(&monitor_running_, 1) == 1)
+        return 0;
 
-    thread_->Initialize();
-    thread_->Start();
+    k_sem_reset(&sd_monitor_stop_sem_);
+
+    if(!thread_->Initialize() || !thread_->Start()) {
+        atomic_set(&monitor_running_, 0);
+        LOG_ERR("Failed to start SD card monitoring.");
+
+        return -EIO;
+    }
 
     LOG_INF("SD card monitoring started.");
 
@@ -102,10 +127,9 @@ int SdmmcService::SdMonitorStart() {
 }
 
 int SdmmcService::SdMonitorStop() {
-    if(!atomic_get(&monitor_running_))
+    if(atomic_set(&monitor_running_, 0) == 0)
         return 0;
 
-    atomic_set(&monitor_running_, 0);
     k_sem_give(&sd_monitor_stop_sem_);
     thread_->Join();
 
