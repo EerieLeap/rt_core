@@ -12,10 +12,11 @@ class TextBlockBase : public BlockBase {
 protected:
     std::string text_;
 
-    size_t GetAllignedTextSize() const;
+    // Always appends 1..8 zero bytes so the text stays zero terminated and 8 byte aligned.
+    size_t GetPaddedTextSize() const;
 
 public:
-    TextBlockBase(const std::string& id);
+    explicit TextBlockBase(const std::string& id);
     virtual ~TextBlockBase() = default;
 
     uint64_t GetBlockSize() const override;

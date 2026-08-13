@@ -377,8 +377,10 @@ void Canbus::ProcessFramesTask() {
 
     CanFrame can_frame = {
         .id = frame->id,
+        .is_extended = (frame->flags & CAN_FRAME_IDE) != 0,
         .is_transmit = false,
-        .is_can_fd = (frame->flags & CAN_FRAME_FDF) != 0
+        .is_can_fd = (frame->flags & CAN_FRAME_FDF) != 0,
+        .is_bitrate_switch = (frame->flags & CAN_FRAME_BRS) != 0
     };
 
     int frame_size = can_dlc_to_bytes(frame->dlc);

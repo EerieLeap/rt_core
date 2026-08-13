@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "channel_block.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {
@@ -21,8 +23,20 @@ ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, ui
     limit_ext_max_ = 0;
 }
 
+ChannelBlock::Type ChannelBlock::GetType() const {
+    return type_;
+}
+
+ChannelBlock::DataType ChannelBlock::GetDataType() const {
+    return data_type_;
+}
+
+uint32_t ChannelBlock::GetBitCount() const {
+    return bit_count_;
+}
+
 uint32_t ChannelBlock::GetDataSizeBytes() const {
-    return bit_count_ / 8;
+    return (bit_count_ + bit_offset_ + 7) / 8;
 }
 
 uint32_t ChannelBlock::GetDataOffsetBytes() const {

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 #include <utility>
 #include <concepts>
@@ -26,6 +27,14 @@ private:
     static const int LINK_SIZE_BYTES = 8;
     size_t extra_links_count_ = 0;
 
+    static size_t ToIndex(LinkType type) {
+        const auto index = std::to_underlying(type);
+        if(index < 0 || index >= N)
+            throw std::out_of_range("Invalid block link type");
+
+        return static_cast<size_t>(index);
+    }
+
 public:
     BlockLinks() {
         links_.resize(N);
@@ -36,11 +45,11 @@ public:
     }
 
     void SetLink(LinkType type, std::shared_ptr<IBlock> link) {
-        links_[std::to_underlying(type)] = link;
+        links_[ToIndex(type)] = std::move(link);
     }
 
     void AddExtraLink(std::shared_ptr<IBlock> link) {
-        links_.push_back(link);
+        links_.push_back(std::move(link));
         extra_links_count_++;
     }
 
@@ -49,12 +58,12 @@ public:
     }
 
     std::shared_ptr<IBlock> GetLink(LinkType type) const {
-        return links_[std::to_underlying(type)];
+        return links_[ToIndex(type)];
     }
 
     const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
         std::vector<std::shared_ptr<ISerializableBlock>> links;
-        links.reserve(Count());
+        links.reserve(links_.size());
         for(auto& link : links_)
             links.push_back(link);
 

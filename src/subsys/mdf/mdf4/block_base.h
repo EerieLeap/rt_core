@@ -12,13 +12,15 @@ using eerie_leap::subsys::mdf::utilities::IBlockLinks;
 
 class BlockBase : public SerializableBlockBase, public IBlock {
 protected:
+    static constexpr uint64_t BLOCK_ID_SIZE = 4;   // "##" + 2 character id
+
     std::string id_;                        // 4 bytes, File identifier
     // uint8_t reserved_0_[4];              // 4 bytes, Reserved
     // uint64_t length_;                    // 8 bytes, Length of the block
     // uint64_t link_count_;                // 8 bytes, Number of links
 
 public:
-    BlockBase(const std::string& id);
+    explicit BlockBase(const std::string& id);
     virtual ~BlockBase() = default;
 
     std::string GetId() const override;

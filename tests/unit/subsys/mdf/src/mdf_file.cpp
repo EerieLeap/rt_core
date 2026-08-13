@@ -1,169 +1,273 @@
+#include <array>
 #include <cstdint>
-#include <memory>
+#include <cstring>
+#include <span>
 #include <sstream>
+#include <stdexcept>
 #include <streambuf>
+#include <string>
 #include <vector>
+#include <fstream>
 
 #include <zephyr/ztest.h>
-#include "zephyr/kernel.h"
 
 #include "subsys/time/rtc_provider.h"
-#include "subsys/device_tree/dt_fs.h"
-#include "subsys/fs/services/fs_service.h"
-#include "subsys/fs/services/fs_service_stream_buf.h"
 #include "subsys/mdf/mdf4/channel_group_block.h"
 #include "subsys/mdf/mdf4/source_information_block.h"
-#include "subsys/mdf/mdf4/channel_conversion_block.h"
-#include "subsys/mdf/mdf4/vlsd_data_record.h"
 #include "subsys/mdf/mdf_data_type.h"
+#include "subsys/mdf/mdf_value.h"
 #include "subsys/mdf/mdf4_file.h"
 
 using namespace eerie_leap::subsys::time;
-using namespace eerie_leap::subsys::device_tree;
-using namespace eerie_leap::subsys::fs::services;
 using namespace eerie_leap::subsys::mdf;
+using eerie_leap::subsys::canbus::CanFrame;
+
+namespace {
+
+constexpr size_t ID_BLOCK_SIZE = 64;
+constexpr size_t BLOCK_HEADER_LENGTH_OFFSET = 8;
+constexpr uint8_t RECORD_ID_SIZE = 1;
+
+uint64_t ReadUint64(const std::string& data, size_t offset) {
+    uint64_t value = 0;
+    zassert_true(offset + sizeof(value) <= data.size(), "Read past end of file");
+    std::memcpy(&value, data.data() + offset, sizeof(value));
+
+    return value;
+}
+
+uint32_t ReadUint32(const std::string& data, size_t offset) {
+    uint32_t value = 0;
+    zassert_true(offset + sizeof(value) <= data.size(), "Read past end of file");
+    std::memcpy(&value, data.data() + offset, sizeof(value));
+
+    return value;
+}
+
+// Walks the block chain from the end of the ID block and returns the address of the DT block.
+size_t FindDataBlockAddress(const std::string& data) {
+    size_t offset = ID_BLOCK_SIZE;
+    while(offset + 24 <= data.size()) {
+        std::string id(data.data() + offset, 4);
+        auto length = ReadUint64(data, offset + BLOCK_HEADER_LENGTH_OFFSET);
+        zassert_true(length >= 24, "Block %s has an invalid length", id.c_str());
+
+        if(id == "##DT")
+            return offset;
+
+        offset += length;
+    }
+
+    return 0;
+}
+
+} // namespace
 
 ZTEST_SUITE(mdf_file, NULL, NULL, NULL, NULL, NULL);
 
-ZTEST(mdf_file, test_WriteToStream) {
+ZTEST(mdf_file, test_WriteAndFinalize) {
     RtcProvider rtc_time_provider;
 
-    // DtFs::InitInternalFs();
-    // auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp().value());
-    // zassert_true(fs_service->Initialize());
-
-    Mdf4File mdf_file(false);
+    Mdf4File mdf_file(RECORD_ID_SIZE);
     mdf_file.UpdateCurrentTime(rtc_time_provider.GetTime());
-    auto data_group = mdf_file.CreateDataGroup(1);
 
-    auto channel_group_1 = mdf_file.CreateChannelGroup(data_group, 100, "pressure");
-    auto source_information_1 = std::make_shared<mdf4::SourceInformationBlock>(
+    auto channel_group_1 = mdf_file.CreateChannelGroup(1, "pressure");
+    auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
         mdf4::SourceInformationBlock::SourceType::IoDevice,
         mdf4::SourceInformationBlock::BusType::None);
-    source_information_1->SetName(mdf_file.GetOrCreateTextBlock("Eerie Leap Sensor"));
-    channel_group_1->AddSourceInformation(source_information_1);
+    source_information->SetName(mdf_file.GetOrCreateTextBlock("Eerie Leap Sensor"));
+    channel_group_1->AddSourceInformation(source_information);
 
-    // mdf_file.CreateDataChannel(*channel_group, MdfDataType::Float32, "engine_speed", "rpm");
     auto channel_1 = mdf_file.CreateDataChannel(channel_group_1, MdfDataType::Uint64, "value", "bar");
-    channel_1->SetName(mdf_file.GetOrCreateTextBlock("value"));
-    channel_1->SetUnit(mdf_file.GetOrCreateTextBlock("bar"));
-    auto conversion_1 = mdf4::ChannelConversionBlock::CreateAlgebraicConversion("x * 0.1");
-    channel_1->SetConversion(std::make_shared<mdf4::ChannelConversionBlock>(conversion_1));
+    channel_1->SetConversion(mdf_file.CreateAlgebraicConversion("x * 0.1"));
 
-    auto channel_group_2 = mdf_file.CreateChannelGroup(data_group, 101, "pressure");
-    channel_group_2->AddSourceInformation(source_information_1);
+    auto channel_group_2 = mdf_file.CreateChannelGroup(2, "temperature");
+    channel_group_2->AddSourceInformation(source_information);
+    mdf_file.CreateDataChannel(channel_group_2, MdfDataType::Float32, "value", "C");
 
-    // mdf_file.CreateDataChannel(*channel_group, MdfDataType::Float32, "engine_speed", "rpm");
-    auto channel_2 = mdf_file.CreateDataChannel(channel_group_2, MdfDataType::Uint64, "value", "bar");
-    auto conversion_2 = mdf4::ChannelConversionBlock::CreateAlgebraicConversion("x * 0.1");
-    channel_2->SetConversion(std::make_shared<mdf4::ChannelConversionBlock>(conversion_2));
+    auto vlsd_channel_group_3 = mdf_file.CreateVLSDChannelGroup(3);
+    auto channel_group_3 = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group_3, 4, "Raw CAN Frame");
 
-    auto vlsd_channel_group_3 = mdf_file.CreateVLSDChannelGroup(data_group, 110);
-    auto channel_group_3 = mdf_file.CreateCanDataFrameChannelGroup(data_group, vlsd_channel_group_3, 102, "Raw CAN Frame");
-
-    auto vlsd_channel_group_4 = mdf_file.CreateVLSDChannelGroup(data_group, 111);
-    auto channel_group_4 = mdf_file.CreateCanDataFrameChannelGroup(data_group, vlsd_channel_group_4, 103, "Raw CAN Frame");
-
-    // FsServiceStreamBuf fs_buf(fs_service.get(), "output/data.mf4", FsServiceStreamBuf::OpenMode::Write);
-    // auto bytes_written = mdf_file.WriteFileToStream(fs_buf);
-    // fs_buf.close();
-
+    std::stringbuf file(std::ios::in | std::ios::out | std::ios::binary);
     // Will create file in the twister-out directory
-    // std::ofstream file("../../../../../../../../test_file.mf4", std::ios::binary);
-    // mdf_file.WriteFileToStream(*file.rdbuf());
+    // std::ofstream file_stream("../../../../../../../../test_file.mf4", std::ios::binary);
+    // auto& file = *file_stream.rdbuf();
 
-    std::stringbuf file(std::ios::out | std::ios::binary);
-    auto header_bytes_written = mdf_file.WriteFileToStream(file);
+    auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
+    zassert_true(header_bytes_written > ID_BLOCK_SIZE);
 
-    auto record_1 = mdf_file.CreateDataRecord(channel_group_1);
-    for(uint64_t i = 0; i < 10; i++) {
-        float time = i * 0.1;
-        uint64_t pressure = i * i;
-        record_1.WriteToStream(file, {&time, &pressure});
+    constexpr uint64_t value_record_count = 10;
+    for(uint64_t i = 0; i < value_record_count; i++) {
+        std::array<MdfValue, 2> values{static_cast<float>(i) * 0.1F, i * i};
+        mdf_file.WriteDataRecordToStream(channel_group_1, file, values);
     }
 
-    for(uint64_t i = 10; i < 20; i++) {
-        float time = i * 0.1;
+    for(uint64_t i = 0; i < value_record_count; i++) {
+        std::array<MdfValue, 2> values{static_cast<float>(i) * 0.1F, static_cast<float>(i)};
+        mdf_file.WriteDataRecordToStream(channel_group_2, file, values);
+    }
 
+    constexpr uint64_t can_record_count = 10;
+    constexpr size_t can_payload_size = 8;
+    for(uint64_t i = 0; i < can_record_count; i++) {
         CanFrame can_frame {
-            .id = 0x123,
+            .id = 0x18FF1234,
+            .is_extended = true,
+            .is_transmit = false,
+            .is_can_fd = false,
+            .is_bitrate_switch = false,
             .data = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0}
         };
 
-        mdf_file.WriteCanbusDataRecordToStream(channel_group_3, file, can_frame, time);
+        mdf_file.WriteCanbusDataRecordToStream(channel_group_3, file, can_frame, static_cast<float>(i) * 0.1F);
     }
 
-    auto record_1_2 = mdf_file.CreateDataRecord(channel_group_1);
-    for(uint64_t i = 20; i < 30; i++) {
-        float time = i * 0.1;
-        uint64_t pressure = i * i;
-        record_1_2.WriteToStream(file, {&time, &pressure});
+    zassert_equal(channel_group_1->GetCycleCount(), value_record_count);
+    zassert_equal(channel_group_2->GetCycleCount(), value_record_count);
+    zassert_equal(channel_group_3->GetCycleCount(), can_record_count);
+    zassert_equal(vlsd_channel_group_3->GetCycleCount(), can_record_count);
+    zassert_equal(vlsd_channel_group_3->GetVlsdDataSizeBytes(), can_record_count * can_payload_size);
+
+    mdf_file.FinalizeToStream(file);
+
+    // file_stream.close();
+
+    const auto data = file.str();
+
+    // File identifier is switched to finalized and the unfinalized flags are cleared.
+    zassert_mem_equal(data.data(), "MDF     ", 8);
+    zassert_mem_equal(data.data() + 8, "4.10    ", 8);
+    zassert_equal(ReadUint32(data, 60), 0, "Unfinalized flags were not cleared");
+
+    // The DT block length has to cover every record appended after the header.
+    const auto data_block_address = FindDataBlockAddress(data);
+    zassert_not_equal(data_block_address, 0, "DT block not found");
+    zassert_equal(data_block_address + 24, header_bytes_written, "DT block is not the last header block");
+
+    const uint64_t expected_record_bytes =
+        value_record_count * (RECORD_ID_SIZE + channel_group_1->GetDataSizeBytes())
+        + value_record_count * (RECORD_ID_SIZE + channel_group_2->GetDataSizeBytes())
+        + can_record_count * (RECORD_ID_SIZE + channel_group_3->GetDataSizeBytes())
+        + can_record_count * (RECORD_ID_SIZE + 4 + can_payload_size);
+
+    zassert_equal(ReadUint64(data, data_block_address + BLOCK_HEADER_LENGTH_OFFSET), 24 + expected_record_bytes);
+    zassert_equal(data.size(), header_bytes_written + expected_record_bytes);
+}
+
+ZTEST(mdf_file, test_CanFdFrameEncoding) {
+    Mdf4File mdf_file(1);
+
+    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+    auto channel_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+
+    std::stringbuf file(std::ios::in | std::ios::out | std::ios::binary);
+    auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
+
+    CanFrame can_frame {
+        .id = 0x7FF,
+        .is_extended = false,
+        .is_transmit = true,
+        .is_can_fd = true,
+        .is_bitrate_switch = true,
+        .data = std::vector<uint8_t>(12, 0xAA)
+    };
+
+    mdf_file.WriteCanbusDataRecordToStream(channel_group, file, can_frame, 1.5F);
+    mdf_file.FinalizeToStream(file);
+
+    const auto data = file.str();
+    const size_t record = header_bytes_written + 1; // skip the record ID
+
+    float timestamp = 0;
+    std::memcpy(&timestamp, data.data() + record, sizeof(timestamp));
+    zassert_equal(timestamp, 1.5F);
+
+    const auto id_pack = ReadUint32(data, record + 4);
+    zassert_equal(id_pack & 0x3U, 0, "bus channel");
+    zassert_equal((id_pack >> 2) & 0x1FFFFFFFU, 0x7FFU, "frame id");
+    zassert_equal((id_pack >> 31) & 0x1U, 0, "IDE must be clear for a standard id");
+
+    const auto dir_length = static_cast<uint8_t>(data[record + 8]);
+    zassert_equal(dir_length & 0x1U, 1, "direction");
+    zassert_equal((dir_length >> 1) & 0x7FU, 12, "data length");
+
+    const auto edl_brs_dlc = static_cast<uint8_t>(data[record + 9]);
+    zassert_equal(edl_brs_dlc & 0x1U, 1, "EDL");
+    zassert_equal((edl_brs_dlc >> 1) & 0x1U, 1, "BRS");
+    zassert_equal((edl_brs_dlc >> 2) & 0xFU, 9, "DLC code for a 12 byte CAN FD payload");
+
+    zassert_equal(ReadUint32(data, record + 10), 0, "VLSD offset of the first frame");
+    zassert_equal(vlsd_channel_group->GetVlsdDataSizeBytes(), 12);
+}
+
+ZTEST(mdf_file, test_UnfinalizedFileIsMarkedAsSuch) {
+    Mdf4File mdf_file(1);
+
+    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
+
+    std::stringbuf file(std::ios::in | std::ios::out | std::ios::binary);
+    mdf_file.WriteHeaderToStream(file);
+
+    for(uint64_t i = 0; i < 4; i++) {
+        std::array<MdfValue, 2> values{static_cast<float>(i), static_cast<float>(i)};
+        mdf_file.WriteDataRecordToStream(channel_group, file, values);
     }
 
+    // Never finalized, as would happen after a power loss.
+    const auto data = file.str();
+    zassert_mem_equal(data.data(), "UnFinMF ", 8);
 
-    constexpr size_t vlds_data_size_2 = 9;
-    constexpr size_t vlds_block_size_2 = 1 + 4 + vlds_data_size_2;
-    constexpr size_t record_size_2 = 4 + 10 + vlds_block_size_2;
+    constexpr uint32_t expected_flags = 0x01 | 0x04 | 0x20;
+    zassert_equal(ReadUint32(data, 60) & 0xFFFFU, expected_flags, "unfinalized flags must be set");
+}
 
-    uint64_t vlds_offset_2 = 0;
-    auto record_3_2 = mdf_file.CreateDataRecord(channel_group_4);
-    for(uint64_t i = 30; i < 40; i++) {
-        std::array<uint8_t, record_size_2> data;
-        memset(data.data(), 0, data.size());
+ZTEST(mdf_file, test_RejectsRecordIdThatDoesNotFit) {
+    Mdf4File mdf_file(1);
 
-        int offset = 0;
+    mdf_file.CreateChannelGroup(255, "ok");
 
-        float time = i * 0.1;
-        std::memcpy(data.data() + offset, &time, sizeof(float));
-        offset += sizeof(float);
-
-        uint32_t data_4_pack_0 = 0x00001FA1;
-        // uint32_t frame_id = 0xA11F0000;
-        // data_4_pack_0 = frame_id >> 2;
-        std::memcpy(data.data() + offset, &data_4_pack_0, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        uint8_t data_1_pack_1 = 0;
-        uint8_t frame_data_length = vlds_data_size_2;
-        data_1_pack_1 = frame_data_length << 1;
-        std::memcpy(data.data() + offset, &data_1_pack_1, sizeof(uint8_t));
-        offset += sizeof(uint8_t);
-
-        uint8_t data_1_pack_2 = 0;
-        data_1_pack_2 = frame_data_length << 2;
-        std::memcpy(data.data() + offset, &data_1_pack_2, sizeof(uint8_t));
-        offset += sizeof(uint8_t);
-
-        uint32_t data_4_pack_3 = vlds_offset_2;
-        std::memcpy(data.data() + offset, &data_4_pack_3, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        // VLSD
-
-        // Channel Group ID
-        uint8_t data_1_pack_4 = vlsd_channel_group_4->GetRecordId();
-        std::memcpy(data.data() + offset, &data_1_pack_4, sizeof(uint8_t));
-        offset += sizeof(uint8_t);
-
-        // VLSD Data Length
-        uint32_t data_4_pack_5 = vlds_data_size_2;
-        std::memcpy(data.data() + offset, &data_4_pack_5, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        std::array<uint8_t, vlds_data_size_2> data_9_pack_6;
-        memset(data_9_pack_6.data(), 0, data_9_pack_6.size());
-        uint64_t vlds_data = 1234 + i * 10;
-        std::memcpy(data_9_pack_6.data(), &vlds_data, sizeof(uint64_t));
-        std::memcpy(data.data() + offset, data_9_pack_6.data(), vlds_data_size_2);
-        offset += vlds_data_size_2;
-
-        record_3_2.WriteToStream(file, data);
-
-        vlds_offset_2 += 4 + vlds_data_size_2;
+    bool threw = false;
+    try {
+        mdf_file.CreateChannelGroup(256, "too_large");
+    } catch(const std::runtime_error&) {
+        threw = true;
     }
+    zassert_true(threw, "a record ID wider than the record ID size should be rejected");
 
-    // file.close();
+    threw = false;
+    try {
+        mdf_file.CreateChannelGroup(255, "duplicate");
+    } catch(const std::runtime_error&) {
+        threw = true;
+    }
+    zassert_true(threw, "a duplicate record ID should be rejected");
+}
 
-    zassert_not_equal(header_bytes_written, 0);
-    zassert_true(file.str().size() > header_bytes_written);
+ZTEST(mdf_file, test_RejectsMismatchedValueTypes) {
+    Mdf4File mdf_file(1);
+
+    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    mdf_file.CreateDataChannel(channel_group, MdfDataType::Uint64, "value", "bar");
+
+    std::stringbuf file(std::ios::in | std::ios::out | std::ios::binary);
+    mdf_file.WriteHeaderToStream(file);
+
+    bool threw = false;
+    try {
+        std::array<MdfValue, 2> wrong_type{0.0F, 1.0F};
+        mdf_file.WriteDataRecordToStream(channel_group, file, wrong_type);
+    } catch(const std::runtime_error&) {
+        threw = true;
+    }
+    zassert_true(threw, "a value type that does not match the channel should be rejected");
+
+    threw = false;
+    try {
+        std::array<MdfValue, 1> wrong_count{0.0F};
+        mdf_file.WriteDataRecordToStream(channel_group, file, wrong_count);
+    } catch(const std::runtime_error&) {
+        threw = true;
+    }
+    zassert_true(threw, "a wrong number of values should be rejected");
 }

@@ -97,24 +97,25 @@ private:
         ChannelConversionInverse    // Inverse channel conversion
     };
 
-    utilities::BlockLinks<LinkType, 4> links_;
+    static constexpr int FIXED_LINK_COUNT = 4;
+
+    utilities::BlockLinks<LinkType, FIXED_LINK_COUNT> links_;
     // BlockLink references_[reference_count_]; // 8 bytes * reference_count_, reference parameters
 
     ConversionType conversion_type_;    // 1 bytes, conversion type
     uint8_t precision_;                 // 1 bytes, precision
     uint16_t flags_;                    // 2 bytes, flags
-    uint16_t reference_count_;          // 2 bytes, number of reference parameters
-    uint16_t value_count_;              // 2 bytes, number of value parameters
-    uint64_t min_phisical_value_;       // 8 bytes, minimum physical value
-    uint64_t max_phisical_value_;       // 8 bytes, maximum physical value
-    std::vector<uint64_t> values_;      // 8 bytes * value_count_, value parameters
-
-    explicit ChannelConversionBlock(ConversionType conversion_type);
+    // uint16_t reference_count_;       // 2 bytes, derived from the extra links
+    // uint16_t value_count_;           // 2 bytes, derived from values_
+    double min_physical_value_;         // 8 bytes, minimum physical value
+    double max_physical_value_;         // 8 bytes, maximum physical value
+    std::vector<double> values_;        // 8 bytes * value_count_, value parameters
 
 public:
+    explicit ChannelConversionBlock(ConversionType conversion_type);
     virtual ~ChannelConversionBlock() = default;
 
-    static ChannelConversionBlock CreateAlgebraicConversion(const std::string& formula);
+    static std::shared_ptr<ChannelConversionBlock> CreateAlgebraicConversion(std::shared_ptr<TextBlock> formula);
 
     [[nodiscard]] uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;

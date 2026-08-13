@@ -31,6 +31,7 @@ public:
     virtual ~DataGroupBlock() = default;
 
     uint8_t GetRecordIdSizeBytes() const;
+    std::shared_ptr<DataBlock> GetDataBlock() const;
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;

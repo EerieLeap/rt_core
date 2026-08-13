@@ -22,23 +22,26 @@ public:
     };
 
 private:
+    static constexpr uint16_t VERSION_NUMBER = 410;
+
     std::string id_;                        // 8 bytes, File identifier
     std::string version_str_;               // 8 bytes, Format version
     std::string program_id_;                // 8 bytes, Program identifier
-    uint16_t byte_order_;                   // 2 bytes, Byte order, 0 = little-endian, 1 = big-endian
-    uint16_t floating_point_format_;        // 2 bytes, Floating point format, 0 = IEEE 754
+    // uint8_t reserved_0_[4];              // 4 bytes, Reserved (byte order / float format in MDF 3.x)
     uint16_t version_num_;                  // 2 bytes, Version number
-    uint16_t code_page_number_;             // 2 bytes, Code page number
-    // uint8_t reserved_0_[2];              // 2 bytes, Reserved
-    // uint8_t reserved_1_[26];             // 26 bytes, Reserved
+    // uint8_t reserved_1_[30];             // 30 bytes, Reserved
     uint16_t standard_flags_;               // 2 bytes, Flags
     uint16_t custom_flags_;                 // 2 bytes, Flags
 
     bool is_finalized_;
 
 public:
-    IdBlock(bool is_finalized = true);
+    IdBlock();
     virtual ~IdBlock() = default;
+
+    bool IsFinalized() const;
+    /** Switches the file identifier between "MDF" and "UnFinMF"; clears the standard flags when finalizing. */
+    void SetFinalized(bool is_finalized);
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;

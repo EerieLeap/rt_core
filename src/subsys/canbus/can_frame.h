@@ -7,8 +7,10 @@ namespace eerie_leap::subsys::canbus {
 
 struct CanFrame {
     uint32_t id;
+    bool is_extended;
     bool is_transmit;
     bool is_can_fd;
+    bool is_bitrate_switch;
     std::vector<uint8_t> data;
 };
 

@@ -97,17 +97,20 @@ private:
     uint8_t precision_;                 // 1 byte, Precision
     // uint8_t reserved_1_[1];          // 1 bytes, Reserved
     uint16_t attachment_count_;         // 2 bytes, Number of attachments
-    float val_range_min_;               // 8 bytes, Minimum value of raw range
-    float val_range_max_;               // 8 bytes, Maximum value of raw range
-    float limit_min_;                   // 8 bytes, Lower limit
-    float limit_max_;                   // 8 bytes, Upper limit
-    float limit_ext_min_;               // 8 bytes, Lower extended limit
-    float limit_ext_max_;               // 8 bytes, Upper extended limit
+    double val_range_min_;              // 8 bytes, Minimum value of raw range
+    double val_range_max_;              // 8 bytes, Maximum value of raw range
+    double limit_min_;                  // 8 bytes, Lower limit
+    double limit_max_;                  // 8 bytes, Upper limit
+    double limit_ext_min_;              // 8 bytes, Lower extended limit
+    double limit_ext_max_;              // 8 bytes, Upper extended limit
 
 public:
     ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count);
     virtual ~ChannelBlock() = default;
 
+    Type GetType() const;
+    DataType GetDataType() const;
+    uint32_t GetBitCount() const;
     uint32_t GetDataSizeBytes() const;
     uint32_t GetDataOffsetBytes() const;
     std::shared_ptr<ChannelBlock> GetLinkedChannel() const;

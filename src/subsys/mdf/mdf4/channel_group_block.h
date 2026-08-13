@@ -45,6 +45,8 @@ private:
     uint32_t invalidation_bytes_;        // 4 bytes, Number of bytes in record used for invalidation bits
 
     uint8_t record_id_size_bytes_;
+    // For a VLSD group data_bytes_/invalidation_bytes_ instead hold this total as a UINT64.
+    uint64_t vlsd_data_bytes_;
 
 public:
     ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id);
@@ -55,6 +57,11 @@ public:
     uint8_t GetRecordIdSizeBytes() const;
     std::vector<uint8_t> GetRecordIdData() const;
     uint32_t GetDataSizeBytes() const;
+    uint64_t GetCycleCount() const;
+    uint64_t GetVlsdDataSizeBytes() const;
+    void IncrementCycleCount();
+    void AddVlsdDataBytes(uint64_t bytes);
+    void ResetCounters();
     std::vector<std::shared_ptr<ChannelBlock>> GetChannels() const;
 
     uint64_t GetBlockSize() const override;

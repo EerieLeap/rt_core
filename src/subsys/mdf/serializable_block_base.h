@@ -1,14 +1,16 @@
 #pragma once
 
 #include <cstdint>
-#include <sstream>
-#include <fstream>
+#include <streambuf>
 
 #include "i_serializable_block.h"
 
 namespace eerie_leap::subsys::mdf {
 
 class SerializableBlockBase : public virtual ISerializableBlock {
+private:
+    static void WriteBlockData(std::streambuf& stream, const uint8_t* data, uint64_t size);
+
 protected:
     uint64_t address_;
     bool is_serialized_;
@@ -16,7 +18,9 @@ protected:
 public:
     SerializableBlockBase();
 
+    uint64_t GetSerializedSize() const override;
     uint64_t WriteToStream(std::streambuf& stream) override;
+    uint64_t RewriteToStream(std::streambuf& stream) override;
     uint64_t GetAddress() const override;
     bool IsSerialized() const override;
     void Reset() override;

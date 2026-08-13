@@ -1,4 +1,7 @@
+#include <cstring>
 #include <set>
+#include <stdexcept>
+#include <utility>
 
 #include "text_block.h"
 
@@ -7,16 +10,20 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 ChannelGroupBlock::ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id)
-    : BlockBase("CG"), record_id_size_bytes_(record_id_size_bytes), record_id_(record_id) {
+    : BlockBase("CG"), record_id_(record_id), record_id_size_bytes_(record_id_size_bytes) {
 
     if(std::set<uint8_t>{0, 1, 2, 4, 8}.count(record_id_size_bytes_) == 0)
         throw std::runtime_error("Invalid record ID size bytes");
+
+    if(record_id_size_bytes_ < 8 && record_id_ >= (1ULL << (record_id_size_bytes_ * 8)))
+        throw std::runtime_error("Record ID does not fit into the data group record ID size");
 
     cycle_count_ = 0;
     flags_ = 0;
     path_separator_ = 0;
     data_bytes_ = 0;
     invalidation_bytes_ = 0;
+    vlsd_data_bytes_ = 0;
 }
 
 uint16_t ChannelGroupBlock::GetFlags() const {
@@ -35,9 +42,7 @@ std::vector<uint8_t> ChannelGroupBlock::GetRecordIdData() const {
     uint8_t id_size_bytes = GetRecordIdSizeBytes();
     std::vector<uint8_t> buffer(id_size_bytes);
 
-    if(id_size_bytes == 0) {
-
-    } else if(id_size_bytes == 1) {
+    if(id_size_bytes == 1) {
         uint8_t id = static_cast<uint8_t>(GetRecordId());
         std::memcpy(buffer.data(), &id, id_size_bytes);
     } else if(id_size_bytes == 2) {
@@ -47,9 +52,9 @@ std::vector<uint8_t> ChannelGroupBlock::GetRecordIdData() const {
         uint32_t id = static_cast<uint32_t>(GetRecordId());
         std::memcpy(buffer.data(), &id, id_size_bytes);
     } else if(id_size_bytes == 8) {
-        uint64_t id = static_cast<uint64_t>(GetRecordId());
+        uint64_t id = GetRecordId();
         std::memcpy(buffer.data(), &id, id_size_bytes);
-    } else {
+    } else if(id_size_bytes != 0) {
         throw std::runtime_error("Invalid record ID size bytes");
     }
 
@@ -58,6 +63,27 @@ std::vector<uint8_t> ChannelGroupBlock::GetRecordIdData() const {
 
 uint32_t ChannelGroupBlock::GetDataSizeBytes() const {
     return data_bytes_;
+}
+
+uint64_t ChannelGroupBlock::GetCycleCount() const {
+    return cycle_count_;
+}
+
+uint64_t ChannelGroupBlock::GetVlsdDataSizeBytes() const {
+    return vlsd_data_bytes_;
+}
+
+void ChannelGroupBlock::IncrementCycleCount() {
+    cycle_count_++;
+}
+
+void ChannelGroupBlock::AddVlsdDataBytes(uint64_t bytes) {
+    vlsd_data_bytes_ += bytes;
+}
+
+void ChannelGroupBlock::ResetCounters() {
+    cycle_count_ = 0;
+    vlsd_data_bytes_ = 0;
 }
 
 std::vector<std::shared_ptr<ChannelBlock>> ChannelGroupBlock::GetChannels() const {
@@ -73,6 +99,9 @@ std::vector<std::shared_ptr<ChannelBlock>> ChannelGroupBlock::GetChannels() cons
 }
 
 void ChannelGroupBlock::AddChannel(std::shared_ptr<ChannelBlock> channel) {
+    if(channel->GetDataSizeBytes() == 0)
+        throw std::runtime_error("Channel bit count must be set before adding it to a channel group");
+
     channel->SetOffsetBytes(data_bytes_);
     data_bytes_ += channel->GetDataSizeBytes();
 
@@ -131,11 +160,16 @@ std::unique_ptr<uint8_t[]> ChannelGroupBlock::Serialize() const {
 
     offset += 4; // reserved_1_
 
-    std::memcpy(buffer.get() + offset, &data_bytes_, sizeof(data_bytes_));
-    offset += sizeof(data_bytes_);
+    // A VLSD group reports the total size of all its values as a UINT64 split over both fields.
+    const bool is_vlsd = (flags_ & std::to_underlying(Flag::VlsdChannel)) != 0;
+    const auto data_bytes = is_vlsd ? static_cast<uint32_t>(vlsd_data_bytes_ & 0xFFFFFFFFULL) : data_bytes_;
+    const auto invalidation_bytes = is_vlsd ? static_cast<uint32_t>(vlsd_data_bytes_ >> 32) : invalidation_bytes_;
 
-    std::memcpy(buffer.get() + offset, &invalidation_bytes_, sizeof(invalidation_bytes_));
-    offset += sizeof(invalidation_bytes_);
+    std::memcpy(buffer.get() + offset, &data_bytes, sizeof(data_bytes));
+    offset += sizeof(data_bytes);
+
+    std::memcpy(buffer.get() + offset, &invalidation_bytes, sizeof(invalidation_bytes));
+    offset += sizeof(invalidation_bytes);
 
     return buffer;
 }

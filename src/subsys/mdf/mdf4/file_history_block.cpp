@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "file_history_block.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {

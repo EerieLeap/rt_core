@@ -1,14 +1,14 @@
+#include <array>
 #include <cstdint>
+#include <span>
 
-#include "subsys/time/time_helpers.hpp"
+#include "subsys/mdf/mdf_value.h"
 #include "subsys/mdf/mdf4/source_information_block.h"
-#include "subsys/mdf/mdf4/channel_conversion_block.h"
 
 #include "mdf4_logger_sensor_reading.h"
 
 namespace eerie_leap::domain::logging_domain::loggers {
 
-using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::subsys::mdf;
 using namespace eerie_leap::subsys::mdf::mdf4;
@@ -21,8 +21,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
 
     auto logging_configuration = logging_configuration_manager_->Get();
 
-    mdf4_file_ = std::make_unique<Mdf4File>(false);
-    auto data_group = mdf4_file_->CreateDataGroup(RECORD_ID_SIZE);
+    mdf4_file_ = std::make_unique<Mdf4File>(RECORD_ID_SIZE);
 
     auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
         mdf4::SourceInformationBlock::SourceType::IoDevice,
@@ -37,30 +36,29 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
         }
 
         if(sensor->configuration.type == SensorType::CANBUS_RAW) {
-            auto vlsd_channel_group = mdf4_file_->CreateVLSDChannelGroup(data_group, vlsd_channel_group_id_++);
-            auto channel_group = mdf4_file_->CreateCanDataFrameChannelGroup(data_group, vlsd_channel_group, sensor->id_hash, "Raw CAN Frame");
+            auto vlsd_channel_group = mdf4_file_->CreateVLSDChannelGroup(next_record_id_++);
+            auto channel_group = mdf4_file_->CreateCanDataFrameChannelGroup(
+                vlsd_channel_group, next_record_id_++, "Raw CAN Frame");
 
             can_raw_channel_groups_.emplace(sensor->id_hash, channel_group);
         } else {
-            auto channel_group = mdf4_file_->CreateChannelGroup(data_group, sensor->id_hash, std::string(sensor->id));
+            auto channel_group = mdf4_file_->CreateChannelGroup(next_record_id_++, std::string(sensor->id));
             channel_group->AddSourceInformation(source_information);
 
             mdf4_file_->CreateDataChannel(channel_group, MdfDataType::Float32, "value", std::string(sensor->metadata.unit));
 
-            if(sensor->configuration.expression_evaluator != nullptr
+            bool has_raw_value_channel = sensor->configuration.expression_evaluator != nullptr
                 && logging_configuration->sensor_configurations.at(sensor->id_hash).log_raw_value
                 && (sensor->configuration.type == SensorType::PHYSICAL_ANALOG
-                    || sensor->configuration.type == SensorType::PHYSICAL_INDICATOR)) {
+                    || sensor->configuration.type == SensorType::PHYSICAL_INDICATOR);
 
-                auto conversion = mdf4::ChannelConversionBlock::CreateAlgebraicConversion(sensor->configuration.expression_evaluator->GetExpression());
-
+            if(has_raw_value_channel) {
                 auto channel_raw = mdf4_file_->CreateDataChannel(channel_group, MdfDataType::Float32, "raw_value", "");
-                channel_raw->SetConversion(std::make_shared<mdf4::ChannelConversionBlock>(conversion));
+                channel_raw->SetConversion(
+                    mdf4_file_->CreateAlgebraicConversion(sensor->configuration.expression_evaluator->GetExpression()));
             }
 
-            records_.emplace(
-                sensor->id_hash,
-                std::make_unique<DataRecord>(mdf4_file_->CreateDataRecord(channel_group)));
+            value_channel_groups_.emplace(sensor->id_hash, SensorChannelGroup{channel_group, has_raw_value_channel});
         }
     }
 }
@@ -72,31 +70,40 @@ const char* Mdf4LoggerSensorReading::GetFileExtension() const {
 bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) {
     stream_ = &stream;
     start_time_ = start_time;
-    current_file_size_bytes_ = 0;
 
     mdf4_file_->UpdateCurrentTime(start_time);
-    current_file_size_bytes_ = mdf4_file_->WriteFileToStream(*stream_);
+    current_file_size_bytes_ = mdf4_file_->WriteHeaderToStream(*stream_);
 
     return true;
 }
 
 bool Mdf4LoggerSensorReading::StopLogging() {
+    if(stream_ == nullptr)
+        return false;
+
+    bool result = true;
+
+    // Patches the DT length, cycle counts and file identifier; without it the file
+    // stays readable but flagged as unfinalized.
+    try {
+        current_file_size_bytes_ += mdf4_file_->FinalizeToStream(*stream_);
+    } catch(const std::exception&) {
+        result = false;
+    }
+
     stream_ = nullptr;
 
-    return true;
+    return result;
 }
 
 bool Mdf4LoggerSensorReading::LogValueReading(float time_delta_s, const SensorReading& reading) {
-    if(!records_.contains(reading.sensor->id_hash) || !reading.value.has_value())
+    auto channel_group = value_channel_groups_.find(reading.sensor->id_hash);
+    if(channel_group == value_channel_groups_.end() || !reading.value.has_value())
         return false;
 
-    auto record = records_[reading.sensor->id_hash].get();
     float value = reading.value.value();
 
-    if(reading.sensor->configuration.expression_evaluator != nullptr
-        && (reading.sensor->configuration.type == SensorType::PHYSICAL_ANALOG
-            || reading.sensor->configuration.type == SensorType::PHYSICAL_INDICATOR)) {
-
+    if(channel_group->second.has_raw_value_channel) {
         float raw_value = 0;
 
         if(reading.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
@@ -109,24 +116,27 @@ bool Mdf4LoggerSensorReading::LogValueReading(float time_delta_s, const SensorRe
                 raw_value = raw_value_data.value() ? 1.0F : 0.0F;
         }
 
-        current_file_size_bytes_ += record->WriteToStream(*stream_, {&time_delta_s, &value, &raw_value});
+        std::array<MdfValue, 3> values{time_delta_s, value, raw_value};
+        current_file_size_bytes_ += mdf4_file_->WriteDataRecordToStream(channel_group->second.channel_group, *stream_, values);
     } else {
-        current_file_size_bytes_ += record->WriteToStream(*stream_, {&time_delta_s, &value});
+        std::array<MdfValue, 2> values{time_delta_s, value};
+        current_file_size_bytes_ += mdf4_file_->WriteDataRecordToStream(channel_group->second.channel_group, *stream_, values);
     }
 
     return true;
 }
 
 bool Mdf4LoggerSensorReading::LogCanbusRawReading(float time_delta_s, const SensorReading& reading) {
-    if(!can_raw_channel_groups_.contains(reading.sensor->id_hash))
+    auto channel_group = can_raw_channel_groups_.find(reading.sensor->id_hash);
+    if(channel_group == can_raw_channel_groups_.end())
         return false;
 
     auto can_frame = reading.metadata.GetTag<CanFrame>(ReadingMetadataTag::CANBUS_DATA);
     if(!can_frame.has_value())
         return false;
 
-    auto channel_group = can_raw_channel_groups_[reading.sensor->id_hash];
-    current_file_size_bytes_ += mdf4_file_->WriteCanbusDataRecordToStream(channel_group, *stream_, can_frame.value(), time_delta_s);
+    current_file_size_bytes_ += mdf4_file_->WriteCanbusDataRecordToStream(
+        channel_group->second, *stream_, can_frame.value(), time_delta_s);
 
     return true;
 }
@@ -148,7 +158,9 @@ bool Mdf4LoggerSensorReading::LogReading(const std::chrono::system_clock::time_p
         return false;
     }
 
-    float time_delta_s = (TimeHelpers::ToUint32(time) - TimeHelpers::ToUint32(start_time_)) / 1000.0F;
+    // Readings that predate the file start would wrap an unsigned delta.
+    auto elapsed = time > start_time_ ? time - start_time_ : std::chrono::system_clock::duration::zero();
+    float time_delta_s = std::chrono::duration<float>(elapsed).count();
 
     bool result = false;
     if(reading.sensor->configuration.type == SensorType::CANBUS_RAW)

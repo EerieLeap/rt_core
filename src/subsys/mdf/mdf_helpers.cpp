@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "mdf_helpers.h"
 
 namespace eerie_leap::subsys::mdf {

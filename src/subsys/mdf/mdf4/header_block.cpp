@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "header_block.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {

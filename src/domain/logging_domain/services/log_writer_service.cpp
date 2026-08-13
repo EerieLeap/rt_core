@@ -113,10 +113,11 @@ int LogWriterService::LogWriterStart() {
         return -1;
     }
 
+    // Write mode keeps the stream seekable, which the MDF4 logger needs to finalize the file.
     fs_stream_buf_ = std::make_unique<FsServiceStreamBuf>(
         fs_service_.get(),
         file_path.ToString(),
-        FsServiceStreamBuf::OpenMode::Append);
+        FsServiceStreamBuf::OpenMode::Write);
     logger_->StartLogging(*fs_stream_buf_, start_time);
 
     LOG_INF("Logging started. Log file created: %s", file_path.CStr());

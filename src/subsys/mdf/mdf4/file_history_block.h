@@ -21,8 +21,8 @@ private:
     utilities::BlockLinks<LinkType, 2> links_;
 
     uint64_t time_ns_;                  // 8 bytes, Absolute time in ns since midnight Jan 1st, 1970
-    uint16_t tz_offset_min_;            // 2 bytes, Timezone offset in minutes
-    uint16_t dst_offset_min_;           // 2 bytes, Daylight saving time (DST) offset in minutes
+    int16_t tz_offset_min_;             // 2 bytes, Timezone offset in minutes
+    int16_t dst_offset_min_;            // 2 bytes, Daylight saving time (DST) offset in minutes
     uint8_t time_flags_;                // 1 bytes, Time flags
     // uint8_t reserved_1_[3];          // 3 bytes, Reserved
 

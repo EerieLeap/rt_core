@@ -26,14 +26,14 @@ private:
     utilities::BlockLinks<LinkType, 6> links_;
 
     uint64_t start_time_ns_;                // 8 bytes, Start time in ns
-    uint16_t tz_offset_min_;                // 2 bytes, Timezone offset in minutes
-    uint16_t dst_offset_min_;               // 2 bytes, Daylight saving time (DST) offset in minutes
+    int16_t tz_offset_min_;                 // 2 bytes, Timezone offset in minutes
+    int16_t dst_offset_min_;                // 2 bytes, Daylight saving time (DST) offset in minutes
     uint8_t time_flags_;                    // 1 bytes, Time flags
     uint8_t time_class_;                    // 1 bytes, Time quality class
     uint8_t flags_;                         // 1 bytes, Flags
     // std::vector<uint8_t> reserved_1_;    // 1 bytes, Reserved
     double hd_start_angle_rad_;             // 8 bytes, Start angle in radians at start of measurement
-    double hd_distance_m_;                  // 8 bytes, Start angle in radians at start of measurement
+    double hd_distance_m_;                  // 8 bytes, Start distance in meters at start of measurement
 
 public:
     HeaderBlock();

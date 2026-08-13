@@ -3,7 +3,8 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 void MetadataBlock::SetText(const std::string& block_id, const std::string& text) {
-    std::string xml_string = "<" + block_id + "comment>";
+    std::string xml_string = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    xml_string += "<" + block_id + "comment>";
     xml_string += text;
     xml_string += "</" + block_id + "comment>";
 

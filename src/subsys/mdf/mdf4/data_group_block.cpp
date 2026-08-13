@@ -1,3 +1,7 @@
+#include <cstring>
+#include <set>
+#include <stdexcept>
+
 #include "data_group_block.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {
@@ -5,11 +9,18 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 DataGroupBlock::DataGroupBlock(uint8_t record_id_size_bytes)
     : BlockBase("DG"), record_id_size_bytes_(record_id_size_bytes) {
 
+    if(std::set<uint8_t>{0, 1, 2, 4, 8}.count(record_id_size_bytes_) == 0)
+        throw std::runtime_error("Invalid record ID size bytes");
+
     links_.SetLink(LinkType::Data, std::make_shared<DataBlock>());
 }
 
 uint8_t DataGroupBlock::GetRecordIdSizeBytes() const {
     return record_id_size_bytes_;
+}
+
+std::shared_ptr<DataBlock> DataGroupBlock::GetDataBlock() const {
+    return std::dynamic_pointer_cast<DataBlock>(links_.GetLink(LinkType::Data));
 }
 
 void DataGroupBlock::AddChannelGroup(std::shared_ptr<ChannelGroupBlock> channel_group) {
