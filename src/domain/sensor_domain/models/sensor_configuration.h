@@ -65,6 +65,8 @@ struct SensorConfiguration {
             return SensorReadingUpdateMethod::SCHEDULER;
         else if(type == SensorType::CANBUS_RAW || type == SensorType::CANBUS_ANALOG || type == SensorType::CANBUS_INDICATOR)
             return SensorReadingUpdateMethod::ISR;
+        else if(type == SensorType::PHYSICAL_INDICATOR)
+            return SensorReadingUpdateMethod::ISR;
 
         return SensorReadingUpdateMethod::NONE;
     }

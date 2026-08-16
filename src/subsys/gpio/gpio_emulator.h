@@ -13,16 +13,12 @@ namespace eerie_leap::subsys::gpio {
 #define GPIOC0_NODE DT_ALIAS(gpioc)
 
 class GpioEmulator : public Gpio {
-private:
-    std::vector<gpio_dt_spec> gpio_specs_;
-
 public:
-    GpioEmulator(std::vector<gpio_dt_spec> gpio_specs) : Gpio(gpio_specs), gpio_specs_(gpio_specs) {}
-    virtual ~GpioEmulator() = default;
+    explicit GpioEmulator(std::vector<gpio_dt_spec> gpio_specs) : Gpio(std::move(gpio_specs)) {}
+    ~GpioEmulator() override = default;
 
     int Initialize() override;
     bool ReadChannel(int channel) override;
-    int GetChannelCount() override;
 };
 
 }  // namespace eerie_leap::subsys::gpio

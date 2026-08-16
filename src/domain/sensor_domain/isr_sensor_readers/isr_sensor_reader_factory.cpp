@@ -3,6 +3,7 @@
 #include "domain/sensor_domain/models/sensor_type.h"
 #include "domain/sensor_domain/isr_sensor_readers/canbus_sensor_reader_raw.h"
 #include "domain/sensor_domain/isr_sensor_readers/canbus_sensor_reader.h"
+#include "domain/sensor_domain/isr_sensor_readers/gpio_sensor_reader.h"
 
 #include "isr_sensor_reader_factory.h"
 
@@ -16,11 +17,13 @@ IsrSensorReaderFactory::IsrSensorReaderFactory(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<GuidGenerator> guid_generator,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::shared_ptr<CanbusService> canbus_service)
+    std::shared_ptr<CanbusService> canbus_service,
+    std::shared_ptr<IGpio> gpio)
         : time_service_(std::move(time_service)),
         guid_generator_(std::move(guid_generator)),
         sensor_readings_frame_(std::move(sensor_readings_frame)),
-        canbus_service_(std::move(canbus_service)) {}
+        canbus_service_(std::move(canbus_service)),
+        gpio_(std::move(gpio)) {}
 
 std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
     std::shared_ptr<Sensor> sensor,
@@ -70,6 +73,18 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
                 std::move(work_queue_thread),
                 canbus,
                 std::shared_ptr<const CanSignalConfiguration>(std::move(message_configuration), signal_configuration));
+        } else if(sensor->configuration.type == SensorType::PHYSICAL_INDICATOR) {
+            if(gpio_ == nullptr)
+                return nullptr;
+
+            sensor_reader = std::make_unique<GpioSensorReader>(
+                time_service_,
+                guid_generator_,
+                sensor_readings_frame_,
+                sensor,
+                std::move(process_sensor_callback),
+                std::move(work_queue_thread),
+                gpio_);
         } else {
             return nullptr;
         }

@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/random/random.h>
 
@@ -28,6 +29,23 @@ bool GpioSimulator::ReadChannel(int channel) {
 
 int GpioSimulator::GetChannelCount() {
     return 32;
+}
+
+int GpioSimulator::RegisterChannelChangedHandler(int channel, GpioEdge edge, GpioChannelHandler handler) {
+    ARG_UNUSED(channel);
+    ARG_UNUSED(edge);
+    ARG_UNUSED(handler);
+
+    LOG_WRN("Gpio Simulator does not generate channel interrupts.");
+
+    return ERR_NOT_SUPPORTED;
+}
+
+bool GpioSimulator::RemoveChannelChangedHandler(int channel, int handler_id) {
+    ARG_UNUSED(channel);
+    ARG_UNUSED(handler_id);
+
+    return false;
 }
 
 }  // namespace eerie_leap::subsys::gpio

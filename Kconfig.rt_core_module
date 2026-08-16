@@ -22,11 +22,6 @@ config EERIE_LEAP_EVENT_BUS
     help
       Add EerieLeap Event Bus.
 
-config EERIE_LEAP_GPIO
-    bool "EerieLeap GPIO"
-    help
-      Add EerieLeap GPIO.
-
 config EERIE_LEAP_LUA_SCRIPT
     bool "EerieLeap Lua Script"
     select LUA
@@ -87,6 +82,7 @@ rsource "src/subsys/canbus/Kconfig.canbus"
 rsource "src/subsys/cdmp/Kconfig.cdmp"
 rsource "src/subsys/device_tree/Kconfig.device_tree"
 rsource "src/subsys/fs/Kconfig.fs"
+rsource "src/subsys/gpio/Kconfig.gpio"
 
 rsource "src/domain/system_domain/Kconfig.system_domain"
 rsource "src/domain/canbus_com_domain/Kconfig.canbus_com_domain"

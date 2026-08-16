@@ -19,7 +19,7 @@ int GpioEmulator::Initialize() {
 }
 
 bool GpioEmulator::ReadChannel(int channel) {
-    if(channel < 0 || channel > GetChannelCount())
+    if(channel < 0 || channel >= GetChannelCount())
         throw std::invalid_argument("Gpio channel is not available.");
 
 #ifdef CONFIG_GPIO_EMUL
@@ -38,10 +38,6 @@ bool GpioEmulator::ReadChannel(int channel) {
 #endif
 
     return Gpio::ReadChannel(channel);
-}
-
-int GpioEmulator::GetChannelCount() {
-    return 16;
 }
 
 }  // namespace eerie_leap::subsys::gpio

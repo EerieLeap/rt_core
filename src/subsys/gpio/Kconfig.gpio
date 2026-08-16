@@ -1,0 +1,15 @@
+config EERIE_LEAP_GPIO
+    bool "EerieLeap GPIO"
+    help
+      Add EerieLeap GPIO.
+
+if EERIE_LEAP_GPIO
+
+config EERIE_LEAP_GPIO_DEBOUNCE_MS
+    int "EerieLeap GPIO input debounce time"
+    default 50
+    help
+      Minimum time in milliseconds between two accepted edges on the same
+      GPIO channel.
+
+endif # EERIE_LEAP_GPIO
