@@ -5,6 +5,12 @@ config EERIE_LEAP_RT_CORE
     help
       Add EerieLeap common code.
 
+config EERIE_LEAP_BLUETOOTH
+    bool "EerieLeap Bluetooth"
+    depends on BT
+    help
+      Add EerieLeap Bluetooth.
+
 config EERIE_LEAP_CFB
     bool "EerieLeap CFB"
     help
@@ -51,6 +57,12 @@ config EERIE_LEAP_TIME
     bool "EerieLeap Time"
     help
       Add EerieLeap Time.
+
+config EERIE_LEAP_DOMAIN_BLE
+    depends on EERIE_LEAP_BLUETOOTH && EERIE_LEAP_DOMAIN_SENSOR && EERIE_LEAP_DOMAIN_SYSTEM
+    bool "EerieLeap BLE Domain"
+    help
+      Add EerieLeap BLE Domain.
 
 config EERIE_LEAP_DOMAIN_CANBUS
     depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_CANBUS

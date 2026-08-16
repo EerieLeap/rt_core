@@ -74,6 +74,13 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_BLUETOOTH)
+        list(APPEND SRC
+            "${SRC_DIR}/subsys/bluetooth/*.c"
+            "${SRC_DIR}/subsys/bluetooth/*.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_CANBUS)
         list(APPEND SRC
             "${SRC_DIR}/subsys/canbus/*.c"
@@ -176,6 +183,13 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     endif()
 
     # ======== Domain ========
+
+    if(CONFIG_EERIE_LEAP_DOMAIN_BLE)
+        list(APPEND SRC
+            "${SRC_DIR}/domain/ble_domain/*.c"
+            "${SRC_DIR}/domain/ble_domain/*.cpp"
+        )
+    endif()
 
     if(CONFIG_EERIE_LEAP_DOMAIN_CANBUS)
         list(APPEND SRC
