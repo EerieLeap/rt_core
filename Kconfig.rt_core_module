@@ -82,6 +82,7 @@ source "subsys/logging/Kconfig.template.log_config"
 
 rsource "src/configuration/Kconfig.configuration"
 rsource "src/subsys/adc/Kconfig.adc"
+rsource "src/subsys/assets/Kconfig.assets"
 rsource "src/subsys/canbus/Kconfig.canbus"
 rsource "src/subsys/cdmp/Kconfig.cdmp"
 rsource "src/subsys/device_tree/Kconfig.device_tree"

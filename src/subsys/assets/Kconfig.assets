@@ -1,0 +1,5 @@
+config EERIE_LEAP_ASSETS
+    bool "EerieLeap Assets"
+    select EERIE_LEAP_FS
+    help
+      Add EerieLeap Assets.

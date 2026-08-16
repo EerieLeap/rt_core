@@ -74,6 +74,13 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_ASSETS)
+        list(APPEND SRC
+            "${SRC_DIR}/subsys/assets/*.c"
+            "${SRC_DIR}/subsys/assets/*.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_BLUETOOTH)
         list(APPEND SRC
             "${SRC_DIR}/subsys/bluetooth/*.c"
