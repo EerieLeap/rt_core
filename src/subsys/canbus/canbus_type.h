@@ -22,14 +22,22 @@ constexpr const std::array CanbusTypeNames = {
     "CANFD"sv
 };
 
+constexpr bool IsCanbusTypeValid(CanbusType type) {
+    return std::to_underlying(type) < CanbusTypeNames.size();
+}
+
 inline const char* GetCanbusTypeName(CanbusType type) {
+    if(!IsCanbusTypeValid(type))
+        return "UNKNOWN";
+
     return CanbusTypeNames[std::to_underlying(type)].data();
 }
 
-inline CanbusType GetCanbusType(const std::string& name) {
-    for(size_t i = 0; i < size(CanbusTypeNames); ++i)
+inline CanbusType GetCanbusType(std::string_view name) {
+    for(size_t i = 0; i < size(CanbusTypeNames); ++i) {
         if(CanbusTypeNames[i] == name)
             return static_cast<CanbusType>(i);
+    }
 
     throw std::runtime_error("Invalid canbus type.");
 }

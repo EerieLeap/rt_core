@@ -27,7 +27,7 @@ CanbusSensorReader::CanbusSensorReader(
         ),
         dbc_(std::move(dbc)) {}
 
-void CanbusSensorReader::AddOrUpdateReading(const CanFrame can_frame) {
+void CanbusSensorReader::AddOrUpdateReading(const CanFrame& can_frame) {
     auto reading = CreateRawReading(can_frame);
     if(!reading)
         return;

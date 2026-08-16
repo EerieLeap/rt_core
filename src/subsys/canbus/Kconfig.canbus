@@ -1,5 +1,6 @@
 config EERIE_LEAP_CANBUS
     bool "EerieLeap CANBus"
+    depends on CAN
     help
       Add EerieLeap CANBus.
 
@@ -9,4 +10,17 @@ menu "EerieLeap CANBus config"
     config EERIE_LEAP_CANBUS_AUTO_DETECT_INTERVAL_MS
         int "Canbus auto detect activity check interval ms"
         default 5000
+
+    config EERIE_LEAP_CANBUS_RX_QUEUE_SIZE
+        int "Canbus receive queue depth in frames"
+        default 32
+        range 1 1024
+        help
+          Number of received frames buffered between the RX callback and the
+          bottom half thread. Frames arriving on a full queue are dropped and
+          counted by Canbus::GetRxDroppedCount().
+
+    module = EERIE_LEAP_CANBUS
+    module-str = eerie_leap_canbus
+    source "subsys/logging/Kconfig.template.log_config"
 endmenu

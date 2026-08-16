@@ -57,7 +57,7 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
                 });
         });
 
-    if(handler_id < 0)
+    if(handler_id <= 0)
         throw std::runtime_error("Failed to register CAN frame handler for frame ID: " + std::to_string(frame_id));
 
     frame_id_ = frame_id;
@@ -67,8 +67,8 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
 CanbusSensorReaderRaw::~CanbusSensorReaderRaw() {
     atomic_set(&is_destroying_, 1);
 
-    if(canbus_->IsValid())
-        (*canbus_)->RemoveFrameReceivedHandler(frame_id_, frame_handler_id_);
+    if(auto* canbus = canbus_->Get(); canbus != nullptr)
+        canbus->RemoveFrameReceivedHandler(frame_id_, frame_handler_id_);
 
     k_sem_take(&processing_semaphore_, K_MSEC(100));
     k_sem_give(&processing_semaphore_);
@@ -92,7 +92,7 @@ std::optional<SensorReading> CanbusSensorReaderRaw::CreateRawReading(const CanFr
     return reading;
 }
 
-void CanbusSensorReaderRaw::AddOrUpdateReading(const CanFrame can_frame) {
+void CanbusSensorReaderRaw::AddOrUpdateReading(const CanFrame& can_frame) {
     auto reading = CreateRawReading(can_frame);
     if(!reading)
         return;

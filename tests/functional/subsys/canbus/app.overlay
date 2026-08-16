@@ -1,0 +1,6 @@
+/ {
+	can_loopback0: can_loopback0 {
+		status = "okay";
+		compatible = "zephyr,can-loopback";
+	};
+};

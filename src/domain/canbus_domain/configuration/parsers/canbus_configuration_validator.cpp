@@ -65,9 +65,13 @@ void CanbusConfigurationValidator::ValidateChannelType(const CanbusConfiguration
 }
 
 void CanbusConfigurationValidator::ValidateIsExtendedId(const CanbusConfiguration& configuration) {
-    for(const auto& [_, canbus_configuration] : configuration.channel_configurations) {
-        if(canbus_configuration.is_extended_id && canbus_configuration.type != CanbusType::CANFD)
-            InvalidCanbusConfiguration(canbus_configuration.bus_channel, "Classical CAN does not support extended IDs");
+    for(const auto& [_, channel_configuration] : configuration.channel_configurations) {
+        for(const auto& message_configuration : channel_configuration.message_configurations) {
+            const uint32_t id_mask = channel_configuration.is_extended_id ? CAN_EXT_ID_MASK : CAN_STD_ID_MASK;
+
+            if((message_configuration->frame_id & ~id_mask) != 0)
+                InvalidCanbusConfiguration(channel_configuration.bus_channel, "CAN frame ID exceeds the configured identifier width");
+        }
     }
 }
 

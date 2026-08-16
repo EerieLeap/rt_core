@@ -52,7 +52,7 @@ config EERIE_LEAP_TIME
       Add EerieLeap Time.
 
 config EERIE_LEAP_DOMAIN_CANBUS
-    depends on EERIE_LEAP_CONFIGURATION
+    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_CANBUS
     bool "EerieLeap CANBus Domain"
     help
       Add EerieLeap CANBus Domain.

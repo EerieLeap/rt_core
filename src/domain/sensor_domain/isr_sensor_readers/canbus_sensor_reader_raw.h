@@ -37,7 +37,7 @@ private:
 
 protected:
     std::optional<SensorReading> CreateRawReading(const CanFrame& can_frame);
-    virtual void AddOrUpdateReading(const CanFrame can_frame);
+    virtual void AddOrUpdateReading(const CanFrame& can_frame);
 
 public:
     CanbusSensorReaderRaw(

@@ -416,14 +416,22 @@ ZTEST(mdf_file, test_RejectsAnOversizedCanPayload) {
     auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
     auto file = MakeStream();
-    mdf_file.WriteHeaderToStream(file);
+    auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
 
+    // CanFramePayload caps itself at the CAN FD limit, so a record can never
+    // reach the writer with a length that has no DLC.
     auto can_frame = MakeCanFrame(65);
-    zassert_true(Throws<std::runtime_error>([&] {
-        mdf_file.WriteCanbusDataRecordToStream(can_group, file, can_frame, 0.0F);
-    }), "a payload larger than a CAN FD frame has no DLC");
+    zassert_equal(can_frame.data.size(), 64);
 
-    zassert_equal(can_group->GetCycleCount(), 0);
+    mdf_file.WriteCanbusDataRecordToStream(can_group, file, can_frame, 0.0F);
+
+    const auto file_bytes = file.str();
+    const auto data = AsBytes(file_bytes);
+    const auto record = header_bytes_written + 1;
+
+    zassert_equal((data[record + 8] >> 1) & 0x7FU, 64);
+    zassert_equal((data[record + 9] >> 2) & 0xFU, 15, "64 bytes must encode as DLC 15");
+    zassert_equal(can_group->GetCycleCount(), 1);
 }
 
 ZTEST(mdf_file, test_ExtendedAndStandardIdsAreMaskedToTheirWidth) {

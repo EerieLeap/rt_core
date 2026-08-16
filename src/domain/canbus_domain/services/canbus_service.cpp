@@ -59,6 +59,10 @@ void CanbusService::Configure() {
 
             auto new_canbus = std::make_unique<Canbus>(canbus_config);
 
+            new_canbus->RegisterBitrateDetectedCallback([this, bus_channel](uint32_t bitrate) {
+                BitrateUpdated(bus_channel, bitrate);
+            });
+
             if(!new_canbus->Initialize()) {
                 LOG_ERR("Failed to initialize CAN channel %d.", bus_channel);
                 continue;
@@ -69,10 +73,6 @@ void CanbusService::Configure() {
                 continue;
             }
 
-            new_canbus->RegisterBitrateDetectedCallback([this, bus_channel](uint32_t bitrate) {
-                BitrateUpdated(bus_channel, bitrate);
-            });
-
             canbuses.try_emplace(bus_channel, std::move(new_canbus));
         }
     }
@@ -82,10 +82,16 @@ void CanbusService::Configure() {
         if(!canbuses.contains(bus_channel) || canbuses.at(bus_channel)->GetState() != CanbusState::STOPPED)
             continue;
 
+        const auto* canbus_device = dt_canbus_provider_(bus_channel);
+        if(canbus_device == nullptr) {
+            LOG_ERR("CAN device for channel %d not found.", bus_channel);
+            continue;
+        }
+
         auto canbus_instance = canbuses.at(bus_channel).get();
 
         CanbusConfig canbus_config(
-            dt_canbus_provider_(bus_channel),
+            canbus_device,
             channel_configuration.type,
             channel_configuration.bitrate,
             channel_configuration.data_bitrate,
@@ -109,10 +115,15 @@ void CanbusService::Configure() {
         ConfigureUserSignals(channel_configuration);
     }
 
-    for(const auto& [bus_channel, _] : canbuses) {
+    for(auto& [bus_channel, canbus] : canbuses) {
+        if(!canbus_configuration->channel_configurations.contains(bus_channel)) {
+            LOG_INF("CAN channel %d is no longer configured, discarding it.", bus_channel);
+            continue;
+        }
+
         canbus_proxies_.try_emplace(
             bus_channel,
-            std::make_shared<CanbusProxy>(std::move(canbuses.at(bus_channel))));
+            std::make_shared<CanbusProxy>(std::move(canbus)));
     }
 
     for(const auto& [_, handler] : configuration_updated_handlers_)
@@ -155,10 +166,16 @@ const CanChannelConfiguration* CanbusService::GetChannelConfiguration(uint8_t bu
 
 void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const {
     auto canbus_configuration = canbus_configuration_manager_->Get();
-    bool is_bus_channel_valid = canbus_configuration->channel_configurations.contains(bus_channel);
 
-    if(is_bus_channel_valid && canbus_configuration_manager_->Update(*canbus_configuration))
-        LOG_INF("Bitrate for bus channel %d updated to %d bps.", bus_channel, bitrate);
+    if(!canbus_configuration->channel_configurations.contains(bus_channel)) {
+        LOG_ERR("Failed to update bitrate for unknown bus channel %d.", bus_channel);
+        return;
+    }
+
+    canbus_configuration->channel_configurations.at(bus_channel).bitrate = bitrate;
+
+    if(canbus_configuration_manager_->Update(*canbus_configuration))
+        LOG_INF("Bitrate for bus channel %d updated to %u bps.", bus_channel, bitrate);
     else
         LOG_ERR("Failed to update bitrate for bus channel %d.", bus_channel);
 }

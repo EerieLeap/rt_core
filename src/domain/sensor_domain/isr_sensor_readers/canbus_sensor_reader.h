@@ -21,7 +21,7 @@ class CanbusSensorReader : public CanbusSensorReaderRaw {
 private:
     std::shared_ptr<Dbc> dbc_;
 
-    void AddOrUpdateReading(const CanFrame can_frame) override;
+    void AddOrUpdateReading(const CanFrame& can_frame) override;
 
 public:
     CanbusSensorReader(
