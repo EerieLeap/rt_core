@@ -7,6 +7,7 @@
 
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/fs/services/fs_service_stream_buf.h"
+#include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_task_result.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
@@ -23,6 +24,8 @@ namespace threading = eerie_leap::subsys::threading;
 using eerie_leap::utilities::string::StaticString;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::fs::services::FsServiceStreamBuf;
+using threading::ServiceBase;
+using threading::ServiceState;
 using threading::WorkQueueThread;
 using threading::WorkQueueTask;
 using threading::WorkQueueTaskResult;
@@ -31,7 +34,7 @@ using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::loggers::ILogger;
 
-class LogWriterService {
+class LogWriterService final : public ServiceBase<> {
 private:
     static constexpr size_t FILE_PATH_MAX_LENGTH = 128;
 
@@ -47,10 +50,12 @@ private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::shared_ptr<ILogger<SensorReading>> logger_;
 
-    atomic_t logger_running_;
-
     static WorkQueueTaskResult ProcessWorkTask(LogWriterTask* task);
     static StaticString<FILE_PATH_MAX_LENGTH> GetNewLogDataFilePath(const std::chrono::system_clock::time_point& tp);
+
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
 
 public:
     LogWriterService(
@@ -58,15 +63,9 @@ public:
         std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
         std::shared_ptr<ITimeService> time_service,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
-    ~LogWriterService() = default;
+    ~LogWriterService() override = default;
 
-    void Initialize();
     void SetLogger(std::shared_ptr<ILogger<SensorReading>> logger);
-
-    int LogWriterStart();
-    int LogWriterStop();
-
-    bool IsRunning() const;
 };
 
 } // namespace eerie_leap::domain::logging_domain::services

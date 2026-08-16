@@ -8,6 +8,7 @@
 
 #include "utilities/concepts/concepts.h"
 
+#include "subsys/threading/service_base.h"
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/services/cdmp_service.h"
 
@@ -18,6 +19,8 @@ namespace eerie_leap::domain::canbus_com_domain::services {
 
 namespace concepts = eerie_leap::utilities::concepts;
 
+using eerie_leap::subsys::threading::ServiceBase;
+using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
 using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
 using eerie_leap::subsys::cdmp::services::CdmpService;
@@ -28,10 +31,14 @@ using eerie_leap::domain::canbus_com_domain::commands::ICanbusComCommand;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandResultBase;
 
-class CanbusComService {
+class CanbusComService : public ServiceBase<> {
 private:
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<CdmpService> cdmp_service_;
+
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
 
 public:
     using CommandAckCallback = std::function<void(bool success)>;
@@ -45,11 +52,7 @@ public:
     using CommandDataRequestWithResponseCallback = std::function<std::optional<CanbusComCommandResultBase>(std::optional<TRequest> request)>;
 
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
-    virtual ~CanbusComService() = default;
-
-    void Initialize();
-    bool Start();
-    void Stop();
+    ~CanbusComService() override = default;
 
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {

@@ -30,19 +30,22 @@ LogWriterService::LogWriterService(
         fs_service_(std::move(fs_service)),
         logging_configuration_manager_(std::move(logging_configuration_manager)),
         time_service_(std::move(time_service)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)),
-        logger_running_(ATOMIC_INIT(0)) {}
+        sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
 void LogWriterService::SetLogger(std::shared_ptr<ILogger<SensorReading>> logger) {
     logger_ = std::move(logger);
 }
 
-void LogWriterService::Initialize() {
+bool LogWriterService::DoInitialize() {
     work_queue_thread_ = std::make_unique<WorkQueueThread>(
         "log_writer_service",
         thread_stack_size_,
         thread_priority_);
-    work_queue_thread_->Initialize();
+
+    if(!work_queue_thread_->Initialize()) {
+        LOG_ERR("Failed to initialize the log writer work queue.");
+        return false;
+    }
 
     auto task = std::make_unique<LogWriterTask>();
     task->time_service = time_service_;
@@ -51,6 +54,8 @@ void LogWriterService::Initialize() {
     work_queue_task_ = work_queue_thread_->CreateTask(ProcessWorkTask, std::move(task));
 
     LOG_INF("Log writer service initialized.");
+
+    return true;
 }
 
 StaticString<LogWriterService::FILE_PATH_MAX_LENGTH> LogWriterService::GetNewLogDataFilePath(const std::chrono::system_clock::time_point& tp) {
@@ -68,30 +73,27 @@ StaticString<LogWriterService::FILE_PATH_MAX_LENGTH> LogWriterService::GetNewLog
     return path;
 }
 
-int LogWriterService::LogWriterStart() {
-    if(atomic_get(&logger_running_))
-        return -1;
-
+bool LogWriterService::DoStart() {
     if(!logger_) {
         LOG_ERR("Logger is not available.");
-        return -1;
+        return false;
     }
 
     if(!fs_service_->IsAvailable()) {
         LOG_ERR("SD card is not available.");
-        return -1;
+        return false;
     }
 
     if(!fs_service_->Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR)) {
         if(!fs_service_->CreateDirectory(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR)) {
             LOG_ERR("Failed to create %s directory", CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
-            return -1;
+            return false;
         }
     }
 
     if(logging_configuration_manager_->Get()->logging_interval_ms < 10) {
         LOG_ERR("Logging interval cannot be less than 10 ms.");
-        return -1;
+        return false;
     }
 
     auto start_time = time_service_->GetCurrentTime();
@@ -110,7 +112,7 @@ int LogWriterService::LogWriterStart() {
 
     if(file_path.Empty()) {
         LOG_ERR("Failed to create log file name");
-        return -1;
+        return false;
     }
 
     // Write mode keeps the stream seekable, which the MDF4 logger needs to finalize the file.
@@ -127,25 +129,20 @@ int LogWriterService::LogWriterStart() {
     work_queue_task_.value().GetUserdata()->start_time = start_time;
     work_queue_task_.value().GetUserdata()->logger = logger_;
 
-    atomic_set(&logger_running_, 1);
     work_queue_task_.value().Schedule();
 
-    return 0;
+    return true;
 }
 
-int LogWriterService::LogWriterStop() {
-    if(!atomic_get(&logger_running_))
-        return -1;
-
+bool LogWriterService::DoStop() {
     work_queue_task_.value().Cancel();
-    atomic_set(&logger_running_, 0);
 
     logger_->StopLogging();
     fs_stream_buf_->close();
 
     LOG_INF("Logging stopped.");
 
-    return 0;
+    return true;
 }
 
 WorkQueueTaskResult LogWriterService::ProcessWorkTask(LogWriterTask* task) {
@@ -157,10 +154,6 @@ WorkQueueTaskResult LogWriterService::ProcessWorkTask(LogWriterTask* task) {
         .reschedule = true,
         .delay = task->logging_interval_ms
     };
-}
-
-bool LogWriterService::IsRunning() const {
-    return atomic_get(&logger_running_);
 }
 
 } // namespace eerie_leap::domain::logging_domain::services

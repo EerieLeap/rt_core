@@ -5,6 +5,7 @@
 
 #include <zephyr/kernel.h>
 
+#include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
@@ -13,10 +14,11 @@
 #include "domain/sensor_domain/processors/collect_isr_reading_processor.h"
 
 #include "sensor_task.hpp"
-#include "i_sensors_processing_service.h"
 
 namespace eerie_leap::domain::sensor_domain::services {
 
+using eerie_leap::subsys::threading::ServiceBase;
+using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::IIsrSensorReader;
@@ -24,7 +26,7 @@ using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFact
 using eerie_leap::domain::sensor_domain::processors::CollectIsrReadingProcessor;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 
-class ProcessingIsrService final : public ISensorsProcessingService {
+class ProcessingIsrService final : public ServiceBase<> {
 private:
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
@@ -38,6 +40,11 @@ private:
 
     void ProcessSensor(const Sensor& sensor);
 
+    bool DoStart() override;
+    bool DoStop() override;
+    bool DoPause() override;
+    bool DoResume() override;
+
 public:
     ProcessingIsrService(
         std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
@@ -46,11 +53,7 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors);
 
-    void Initialize() override {}
-    void Start() override;
-    void Stop() override;
-    void Pause() override;
-    void Resume() override;
+    [[nodiscard]] bool IsPausable() const noexcept override { return true; }
 };
 
 } // namespace eerie_leap::domain::sensor_domain::services

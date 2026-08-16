@@ -5,19 +5,16 @@
 #include <memory>
 
 #include "subsys/canbus/canbus_proxy.hpp"
+#include "subsys/threading/i_service.h"
 
 namespace eerie_leap::subsys::cdmp::services {
 
 using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::subsys::threading::IService;
 
-class ICdmpCanbusService {
+class ICdmpCanbusService : public IService {
 public:
-    virtual ~ICdmpCanbusService() = default;
-
-    virtual void Initialize() = 0;
     virtual void Configure(std::shared_ptr<CanbusProxy> canbus) = 0;
-    virtual void Start() = 0;
-    virtual void Stop() = 0;
 };
 
 } // namespace eerie_leap::subsys::cdmp::services

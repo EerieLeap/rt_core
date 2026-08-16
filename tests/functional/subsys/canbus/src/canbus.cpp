@@ -9,7 +9,7 @@
 
 using namespace canbus_test;
 
-using eerie_leap::subsys::canbus::CanbusState;
+using eerie_leap::subsys::threading::ServiceState;
 
 // A failing assertion unwinds past the destructors, so the shared loopback
 // controller has to be forced back to a stopped state for the next test.
@@ -22,16 +22,16 @@ ZTEST_SUITE(canbus, NULL, NULL, ResetLoopbackDevice, NULL, NULL);
 ZTEST(canbus, test_lifecycle_transitions) {
     Canbus canbus(MakeConfig());
 
-    zassert_equal(canbus.GetState(), CanbusState::STOPPED);
+    zassert_equal(canbus.GetState(), ServiceState::STOPPED);
     zassert_true(canbus.Initialize());
-    zassert_equal(canbus.GetState(), CanbusState::STOPPED);
+    zassert_equal(canbus.GetState(), ServiceState::STOPPED);
 
     zassert_true(canbus.Start());
-    zassert_equal(canbus.GetState(), CanbusState::RUNNING);
+    zassert_equal(canbus.GetState(), ServiceState::RUNNING);
     zassert_true(canbus.Start(), "Start() must be idempotent");
 
     zassert_true(canbus.Stop());
-    zassert_equal(canbus.GetState(), CanbusState::STOPPED);
+    zassert_equal(canbus.GetState(), ServiceState::STOPPED);
     zassert_true(canbus.Stop(), "Stop() must be idempotent");
 }
 
@@ -39,7 +39,7 @@ ZTEST(canbus, test_start_requires_initialize) {
     Canbus canbus(MakeConfig());
 
     zassert_false(canbus.Start(), "Start() must fail before Initialize()");
-    zassert_equal(canbus.GetState(), CanbusState::STOPPED);
+    zassert_equal(canbus.GetState(), ServiceState::STOPPED);
 }
 
 ZTEST(canbus, test_unsupported_bitrate_is_rejected) {

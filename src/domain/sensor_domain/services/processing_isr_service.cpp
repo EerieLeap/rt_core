@@ -58,7 +58,7 @@ void ProcessingIsrService::ProcessSensor(const Sensor& sensor) {
     }
 }
 
-void ProcessingIsrService::Start() {
+bool ProcessingIsrService::DoStart() {
     const auto* sensors = sensors_configuration_manager_->Get();
 
     readers_.clear();
@@ -78,18 +78,24 @@ void ProcessingIsrService::Start() {
 
         LOG_INF("Created ISR reader for sensor: %s", sensor->id.c_str());
     }
+
+    return true;
 }
 
-void ProcessingIsrService::Stop() {
-    Pause();
-}
-
-void ProcessingIsrService::Pause() {
+bool ProcessingIsrService::DoStop() {
     readers_.clear();
+
+    return true;
 }
 
-void ProcessingIsrService::Resume() {
-    Start();
+bool ProcessingIsrService::DoPause() {
+    readers_.clear();
+
+    return true;
+}
+
+bool ProcessingIsrService::DoResume() {
+    return DoStart();
 }
 
 } // namespace eerie_leap::domain::sensor_domain::services

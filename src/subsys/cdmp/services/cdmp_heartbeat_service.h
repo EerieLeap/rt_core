@@ -20,7 +20,6 @@ class CdmpHeartbeatService final : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<CdmpNetworkService> network_service_;
-    atomic_t is_running_ = ATOMIC_INIT(0);
 
     std::optional<threading::WorkQueueTask<CdmpHeartbeatService>> heartbeat_task_;
     bool is_heartbeat_task_running_ = false;
@@ -41,6 +40,10 @@ private:
     void SendHeartbeat();
     void ProcessFrame(std::span<const uint8_t> frame_data);
 
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
+
 public:
     CdmpHeartbeatService(
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
@@ -49,10 +52,6 @@ public:
         std::shared_ptr<CdmpNetworkService> network_service);
 
     ~CdmpHeartbeatService();
-
-    void Initialize() override;
-    void Start() override;
-    void Stop() override;
 
     // Heartbeat management
     void SetHeartbeatEnabled(bool enabled);

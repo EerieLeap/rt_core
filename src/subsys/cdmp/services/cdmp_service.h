@@ -8,6 +8,7 @@
 
 #include "subsys/canbus/canbus_proxy.hpp"
 #include <subsys/threading/thread.h>
+#include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
 
 #include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
@@ -23,11 +24,13 @@ namespace eerie_leap::subsys::cdmp::services {
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::threading::IThread;
 using eerie_leap::subsys::threading::Thread;
+using eerie_leap::subsys::threading::ServiceBase;
+using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 
-class CdmpService : public IThread {
+class CdmpService : public IThread, public ServiceBase<> {
 private:
     std::unique_ptr<Thread> thread_;
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
@@ -45,6 +48,10 @@ private:
 
     void ThreadEntry() override;
 
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
+
 public:
     CdmpService(
         CdmpDeviceType device_type,
@@ -53,11 +60,7 @@ public:
     ~CdmpService();
 
     // Service lifecycle
-    bool Initialize();
     void Configure(std::shared_ptr<CanbusProxy> canbus);
-    void Start();
-    void Stop();
-    bool IsRunning() const;
 
     // Configuration
     void SetAutoDiscovery(bool enabled);

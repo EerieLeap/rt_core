@@ -35,7 +35,6 @@ public:
 private:
     int canbus_handler_id_;
     int canbus_response_handler_id_;
-    atomic_t is_running_ = ATOMIC_INIT(0);
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<CdmpTransactionService> transaction_service_;
@@ -56,6 +55,10 @@ private:
     bool IsValidServiceCommandCode(uint8_t command_code) const;
     bool IsValidUserCommandCode(uint8_t command_code) const;
 
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
+
 public:
     CdmpCommandService(
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
@@ -63,10 +66,6 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread);
 
     ~CdmpCommandService();
-
-    void Initialize() override;
-    void Start() override;
-    void Stop() override;
 
     void RegisterCommandHandler(uint8_t command_code, CommandHandler handler);
     void RegisterUserCommandHandler(uint8_t command_code, CommandHandler handler);

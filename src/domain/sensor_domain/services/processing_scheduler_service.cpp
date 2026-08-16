@@ -91,7 +91,16 @@ void ProcessingSchedulerService::StartTasks() {
         work_queue_task.Schedule();
 }
 
-void ProcessingSchedulerService::Start() {
+void ProcessingSchedulerService::CancelTasks() {
+    for(auto& work_queue_task : work_queue_tasks_) {
+        LOG_INF("Canceling task for sensor: %s", work_queue_task.GetUserdata()->sensor->id.c_str());
+
+        while(work_queue_task.Cancel())
+            k_sleep(K_MSEC(1));
+    }
+}
+
+bool ProcessingSchedulerService::DoStart() {
     const auto* sensors = sensors_configuration_manager_->Get();
 
     work_queue_tasks_.clear();
@@ -109,25 +118,27 @@ void ProcessingSchedulerService::Start() {
     }
 
     StartTasks();
+
+    return true;
 }
 
-void ProcessingSchedulerService::Stop() {
-    Pause();
+bool ProcessingSchedulerService::DoStop() {
+    CancelTasks();
     work_queue_tasks_.clear();
+
+    return true;
 }
 
-void ProcessingSchedulerService::Pause() {
-    for(auto& work_queue_task : work_queue_tasks_) {
-        LOG_INF("Canceling task for sensor: %s", work_queue_task.GetUserdata()->sensor->id.c_str());
+bool ProcessingSchedulerService::DoPause() {
+    CancelTasks();
 
-        while(work_queue_task.Cancel())
-            k_sleep(K_MSEC(1));
-    }
+    return true;
 }
 
-void ProcessingSchedulerService::Resume() {
-    for(auto& work_queue_task : work_queue_tasks_)
-        work_queue_task.Schedule();
+bool ProcessingSchedulerService::DoResume() {
+    StartTasks();
+
+    return true;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::services

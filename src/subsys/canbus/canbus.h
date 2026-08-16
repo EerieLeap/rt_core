@@ -15,6 +15,7 @@
 #include <zephyr/sys/atomic.h>
 
 #include <subsys/threading/thread.h>
+#include <subsys/threading/service_base.h>
 
 #include "canbus_type.h"
 #include "can_frame.h"
@@ -23,6 +24,8 @@ namespace eerie_leap::subsys::canbus {
 
 using eerie_leap::subsys::threading::IThread;
 using eerie_leap::subsys::threading::Thread;
+using eerie_leap::subsys::threading::ServiceBase;
+using eerie_leap::subsys::threading::ServiceState;
 
 using CanFrameHandler = std::function<void (const CanFrame&)>;
 
@@ -30,13 +33,6 @@ using CanFrameHandler = std::function<void (const CanFrame&)>;
 #ifndef CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE
 #define CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE 32
 #endif
-
-enum class CanbusState {
-    STOPPED,
-    STARTING,
-    RUNNING,
-    STOPPING
-};
 
 struct CanbusConfig {
     const device *canbus_dev;
@@ -58,7 +54,7 @@ struct CanbusConfig {
           is_extended_id(ext_id), extra_modes(extra) {}
 };
 
-class Canbus : public IThread {
+class Canbus : public IThread, public ServiceBase<> {
 public:
     using BitrateDetectedCallback = std::function<void (uint32_t bitrate)>;
 
@@ -85,7 +81,6 @@ private:
     std::unordered_map<uint32_t, std::unordered_map<int, CanFrameHandler>> handlers_; // <can_id, handlers>
     int next_handler_id_ = 1;
 
-    atomic_t state_ = ATOMIC_INIT(static_cast<atomic_val_t>(CanbusState::STOPPED));
     atomic_t is_initialized_ = ATOMIC_INIT(0);
     atomic_t bitrate_detected_ = ATOMIC_INIT(0);
     atomic_t auto_detect_running_ = ATOMIC_INIT(0);
@@ -121,7 +116,9 @@ private:
     void ProcessFramesTask();
     void DispatchFrame(const CanFrame& frame);
 
-    void SetState(CanbusState state) { atomic_set(&state_, static_cast<atomic_val_t>(state)); }
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
 
     bool ApplyMode(can_mode_t extra_modes);
     bool StartActivityMonitoring();
@@ -149,16 +146,12 @@ public:
     Canbus(Canbus&&) = delete;
     Canbus& operator=(Canbus&&) = delete;
 
-    bool Initialize();
     bool Configure(const CanbusConfig& config);
-    bool Start();
-    bool Stop();
 
     int RegisterFrameReceivedHandler(uint32_t can_id, CanFrameHandler handler);
     bool RemoveFrameReceivedHandler(uint32_t can_id, int handler_id);
 
     CanbusType GetType() const;
-    CanbusState GetState() const { return static_cast<CanbusState>(atomic_get(&state_)); }
     CanbusConfig GetConfig() const;
     bool SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) const;
     uint32_t GetDetectedBitrate() const;

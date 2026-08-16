@@ -19,7 +19,7 @@ using namespace eerie_leap::domain::sensor_domain::processors;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::script_domain::utilities;
 
-LOG_MODULE_DECLARE(processing_service_logger);
+LOG_MODULE_REGISTER(processing_service_logger);
 
 SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
@@ -60,14 +60,21 @@ SensorsProcessingService::SensorsProcessingService(
     }
 };
 
-void SensorsProcessingService::Initialize() {
-    work_queue_thread_->Initialize();
+bool SensorsProcessingService::DoInitialize() {
+    if(!work_queue_thread_->Initialize()) {
+        LOG_ERR("Failed to initialize the processing work queue.");
+        return false;
+    }
 
-    for(const auto& processing_service : processing_services_)
-        processing_service->Initialize();
+    for(const auto& processing_service : processing_services_) {
+        if(!processing_service->Initialize())
+            return false;
+    }
+
+    return true;
 }
 
-void SensorsProcessingService::Start() {
+bool SensorsProcessingService::DoStart() {
     const auto* sensors = sensors_configuration_manager_->Get();
     for(const auto& sensor : *sensors)
         InitializeScript(sensor);
@@ -76,29 +83,37 @@ void SensorsProcessingService::Start() {
         processing_service->Start();
 
     LOG_INF("Processing Service started.");
+
+    return true;
 }
 
-void SensorsProcessingService::Stop() {
+bool SensorsProcessingService::DoStop() {
     for(const auto& processing_service : processing_services_)
         processing_service->Stop();
 
     sensor_readings_frame_->ClearReadings();
 
     LOG_INF("Processing Service stopped.");
+
+    return true;
 }
 
-void SensorsProcessingService::Pause() {
+bool SensorsProcessingService::DoPause() {
     for(const auto& processing_service : processing_services_)
         processing_service->Pause();
 
     LOG_INF("Processing Service paused.");
+
+    return true;
 }
 
-void SensorsProcessingService::Resume() {
+bool SensorsProcessingService::DoResume() {
     for(const auto& processing_service : processing_services_)
         processing_service->Resume();
 
     LOG_INF("Processing Service resumed.");
+
+    return true;
 }
 
 void SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) const {

@@ -68,7 +68,7 @@ Canbus::Canbus(const CanbusConfig& config)
 }
 
 Canbus::~Canbus() {
-    if(GetState() != CanbusState::STOPPED) {
+    if(GetState() != ServiceState::STOPPED) {
         Stop();
         return;
     }
@@ -83,12 +83,7 @@ Canbus::~Canbus() {
     RemoveAllFilters();
 }
 
-bool Canbus::Initialize() {
-    if(GetState() != CanbusState::STOPPED) {
-        LOG_ERR("Cannot initialize CAN bus when not in STOPPED state.");
-        return false;
-    }
-
+bool Canbus::DoInitialize() {
     if(!thread_->Initialize()) {
         LOG_ERR("Failed to allocate CAN bus thread stack.");
         return false;
@@ -153,7 +148,7 @@ bool Canbus::ApplyMode(can_mode_t extra_modes) {
 }
 
 bool Canbus::Configure(const CanbusConfig& config) {
-    if(GetState() != CanbusState::STOPPED) {
+    if(GetState() != ServiceState::STOPPED) {
         LOG_ERR("Cannot configure CAN bus when not in STOPPED state.");
         return false;
     }
@@ -264,7 +259,7 @@ uint32_t Canbus::GetMaxDataLength(CanbusType type) {
 }
 
 bool Canbus::SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) const {
-    if(atomic_get(&is_initialized_) == 0 || !IsBitrateDetected() || GetState() != CanbusState::RUNNING)
+    if(atomic_get(&is_initialized_) == 0 || !IsBitrateDetected() || GetState() != ServiceState::RUNNING)
         return false;
 
     ScopedMutex guard(lock_);
@@ -760,21 +755,7 @@ void Canbus::PrintCanFdLimits() const {
     }
 }
 
-bool Canbus::Stop() {
-    const CanbusState current_state = GetState();
-
-    if(current_state == CanbusState::STOPPED) {
-        LOG_WRN("CAN bus is already stopped.");
-        return true;
-    }
-
-    if(current_state == CanbusState::STOPPING) {
-        LOG_WRN("CAN bus is already stopping.");
-        return false;
-    }
-
-    SetState(CanbusState::STOPPING);
-
+bool Canbus::DoStop() {
     StopActivityMonitoring();
 
    if(thread_ && thread_->IsRunning())
@@ -784,7 +765,6 @@ bool Canbus::Stop() {
         int ret = can_stop(config_.canbus_dev);
         if(ret != 0 && ret != -EALREADY) {
             LOG_ERR("Failed to stop CAN device [%d].", ret);
-            SetState(current_state);
             return false;
         }
     }
@@ -800,39 +780,22 @@ bool Canbus::Stop() {
 
     atomic_clear(&is_initialized_);
     atomic_clear(&bitrate_detected_);
-    SetState(CanbusState::STOPPED);
 
     LOG_INF("CAN bus stopped successfully.");
     return true;
 }
 
-bool Canbus::Start() {
-    const CanbusState current_state = GetState();
-
-    if(current_state == CanbusState::RUNNING) {
-        LOG_WRN("CAN bus is already running.");
-        return true;
-    }
-
-    if(current_state == CanbusState::STARTING) {
-        LOG_WRN("CAN bus is already starting.");
-        return false;
-    }
-
+bool Canbus::DoStart() {
     if(atomic_get(&is_initialized_) == 0) {
         LOG_ERR("CAN bus must be initialized before starting. Call Initialize() first.");
         return false;
     }
 
-    SetState(CanbusState::STARTING);
-
     if(!thread_->Start()) {
         LOG_ERR("Failed to start CAN bus thread.");
-        SetState(current_state);
         return false;
     }
 
-    SetState(CanbusState::RUNNING);
     LOG_INF("CAN bus started successfully.");
     return true;
 }

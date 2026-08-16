@@ -12,6 +12,8 @@ namespace eerie_leap::domain::canbus_domain::services {
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::dbc;
 
+using eerie_leap::subsys::threading::ServiceState;
+
 LOG_MODULE_REGISTER(canbus_service_logger);
 
 CanbusService::CanbusService(
@@ -37,7 +39,7 @@ void CanbusService::Configure() {
     canbus_proxies_.clear();
 
     for(const auto& [_, canbus]: canbuses) {
-        if(canbus->GetState() != CanbusState::STOPPED)
+        if(canbus->GetState() != ServiceState::STOPPED)
             canbus->Stop();
     }
 
@@ -79,7 +81,7 @@ void CanbusService::Configure() {
 
     // Configure previously stopped Canbuses
     for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
-        if(!canbuses.contains(bus_channel) || canbuses.at(bus_channel)->GetState() != CanbusState::STOPPED)
+        if(!canbuses.contains(bus_channel) || canbuses.at(bus_channel)->GetState() != ServiceState::STOPPED)
             continue;
 
         const auto* canbus_device = dt_canbus_provider_(bus_channel);

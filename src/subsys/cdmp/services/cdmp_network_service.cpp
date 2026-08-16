@@ -24,27 +24,23 @@ CdmpNetworkService::~CdmpNetworkService() {
     Stop();
 }
 
-void CdmpNetworkService::Initialize() {
+bool CdmpNetworkService::DoInitialize() {
     validation_task_ = work_queue_thread_->CreateTask(
         ProcessPeriodicValidation, this);
+
+    return true;
 }
 
-void CdmpNetworkService::Start() {
-    if(atomic_get(&is_running_) != 0)
-        return;
-
-    atomic_set(&is_running_, 1);
+bool CdmpNetworkService::DoStart() {
     RegisterCanHandlers();
     StartValidationTask();
 
     LOG_INF("CDMP Network Service started");
+
+    return true;
 }
 
-void CdmpNetworkService::Stop() {
-    if(atomic_get(&is_running_) == 0)
-        return;
-
-    atomic_set(&is_running_, 0);
+bool CdmpNetworkService::DoStop() {
     is_validation_task_running_ = false;
     if(validation_task_.has_value())
         validation_task_.value().Cancel();
@@ -53,6 +49,8 @@ void CdmpNetworkService::Stop() {
     UnregisterCanHandlers();
 
     LOG_INF("CDMP Network Service stopped");
+
+    return true;
 }
 
 void CdmpNetworkService::StartValidationTask() {

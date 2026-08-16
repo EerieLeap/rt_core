@@ -22,32 +22,30 @@ CdmpCommandService::CdmpCommandService(
     transaction_service_ = std::make_unique<CdmpTransactionService>(work_queue_thread_, device_);
 }
 
-void CdmpCommandService::Initialize() {
+bool CdmpCommandService::DoInitialize() {
     transaction_service_->Initialize();
+
+    return true;
 }
 
 CdmpCommandService::~CdmpCommandService() {
     Stop();
 }
 
-void CdmpCommandService::Start() {
-    if(atomic_get(&is_running_) != 0)
-        return;
-
-    atomic_set(&is_running_, 1);
+bool CdmpCommandService::DoStart() {
     RegisterCanHandlers();
 
     LOG_INF("CDMP Command Service started");
+
+    return true;
 }
 
-void CdmpCommandService::Stop() {
-    if(atomic_get(&is_running_) == 0)
-        return;
-
-    atomic_set(&is_running_, 0);
+bool CdmpCommandService::DoStop() {
     UnregisterCanHandlers();
 
     LOG_INF("CDMP Command Service stopped");
+
+    return true;
 }
 
 void CdmpCommandService::RegisterCanHandlers() {

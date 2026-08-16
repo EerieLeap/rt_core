@@ -26,7 +26,6 @@ using eerie_leap::subsys::cdmp::models::CdmpDiscoveryRequestMessage;
 class CdmpNetworkService final : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
-    atomic_t is_running_ = ATOMIC_INIT(0);
 
     std::optional<threading::WorkQueueTask<CdmpNetworkService>> validation_task_;
     bool is_validation_task_running_ = false;
@@ -72,6 +71,10 @@ private:
     void UpdateStaggeredMessageDelay();
     uint8_t GetLowestAvailableId(uint8_t after = 0) const;
 
+    bool DoInitialize() override;
+    bool DoStart() override;
+    bool DoStop() override;
+
 public:
     CdmpNetworkService(
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
@@ -79,10 +82,6 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread);
 
     ~CdmpNetworkService();
-
-    void Initialize() override;
-    void Start() override;
-    void Stop() override;
 
     void ProcessFrame(std::span<const uint8_t> frame_data);
     void StartInitialization();

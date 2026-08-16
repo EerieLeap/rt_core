@@ -72,7 +72,7 @@ void CdmpService::ThreadEntry() {
     }
 }
 
-bool CdmpService::Initialize() {
+bool CdmpService::DoInitialize() {
     work_queue_thread_->Initialize();
     thread_->Initialize();
 
@@ -100,11 +100,16 @@ void CdmpService::Configure(std::shared_ptr<CanbusProxy> canbus) {
         service->Configure(canbus_);
 }
 
-void CdmpService::Start() {
-    thread_->Start();
+bool CdmpService::DoStart() {
+    if(!thread_->Start()) {
+        LOG_ERR("Failed to start CDMP service thread.");
+        return false;
+    }
+
+    return true;
 }
 
-void CdmpService::Stop() {
+bool CdmpService::DoStop() {
     thread_->Join();
 
     for(const auto& service : canbus_services_)
@@ -113,13 +118,9 @@ void CdmpService::Stop() {
     if(device_)
         device_->Reset();
 
-    thread_->Join();
-
     LOG_INF("CDMP service stopped");
-}
 
-bool CdmpService::IsRunning() const {
-    return thread_->IsRunning();
+    return true;
 }
 
 void CdmpService::SetAutoDiscovery(bool enabled) {

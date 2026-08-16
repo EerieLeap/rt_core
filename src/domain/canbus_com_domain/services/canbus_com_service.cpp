@@ -31,26 +31,25 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
         [this]() { Start(); });
 }
 
-void CanbusComService::Initialize() {
-    cdmp_service_->Initialize();
+bool CanbusComService::DoInitialize() {
+    return cdmp_service_->Initialize();
 }
 
-bool CanbusComService::Start() {
+bool CanbusComService::DoStart() {
     auto com_canbus = canbus_service_->GetComCanbus();
     if(!com_canbus)
         return false;
 
     cdmp_service_->Configure(com_canbus);
-    cdmp_service_->Start();
 
-    return true;
+    return cdmp_service_->Start();
 }
 
-void CanbusComService::Stop() {
+bool CanbusComService::DoStop() {
     if(!cdmp_service_)
-        return;
+        return false;
 
-    cdmp_service_->Stop();
+    return cdmp_service_->Stop();
 }
 
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {

@@ -23,26 +23,21 @@ CdmpHeartbeatService::~CdmpHeartbeatService() {
     Stop();
 }
 
-void CdmpHeartbeatService::Initialize() {
+bool CdmpHeartbeatService::DoInitialize() {
     heartbeat_task_ = work_queue_thread_->CreateTask(
         ProcessPeriodicHeartbeat, this);
+
+    return true;
 }
 
-void CdmpHeartbeatService::Start() {
-    if(atomic_get(&is_running_) != 0)
-        return;
-
-    atomic_set(&is_running_, 1);
+bool CdmpHeartbeatService::DoStart() {
     RegisterCanHandlers();
     StartHeartbeatTask();
+
+    return true;
 }
 
-void CdmpHeartbeatService::Stop() {
-    if(atomic_get(&is_running_) == 0)
-        return;
-
-    atomic_set(&is_running_, 0);
-
+bool CdmpHeartbeatService::DoStop() {
     is_heartbeat_task_running_ = false;
     if(heartbeat_task_.has_value())
         heartbeat_task_.value().Cancel();
@@ -50,6 +45,8 @@ void CdmpHeartbeatService::Stop() {
     UnregisterCanHandlers();
 
     LOG_INF("CDMP Heartbeat Service stopped");
+
+    return true;
 }
 
 void CdmpHeartbeatService::StartHeartbeatTask() {
