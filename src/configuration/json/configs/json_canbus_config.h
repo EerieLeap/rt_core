@@ -17,11 +17,13 @@ struct JsonCanSignalConfig {
     uint32_t size_bits;
     float factor;
     float offset;
+    json::string byte_order;
+    bool is_signed;
     json::string name;
     json::string unit;
 
     JsonCanSignalConfig(json::storage_ptr sp = Mrm::GetBoostExtPmr())
-        : name(sp), unit(sp) {}
+        : byte_order(sp), name(sp), unit(sp) {}
 };
 
 struct JsonCanMessageConfig {
@@ -43,11 +45,10 @@ struct JsonCanChannelConfig {
     uint32_t bus_channel;
     uint32_t bitrate;
     uint32_t data_bitrate;
-    json::string dbc_file_path;
     boost::container::pmr::vector<JsonCanMessageConfig> message_configs;
 
     JsonCanChannelConfig(json::storage_ptr sp = Mrm::GetBoostExtPmr())
-        : type(sp), dbc_file_path(sp), message_configs(sp.get()) {}
+        : type(sp), message_configs(sp.get()) {}
 };
 
 struct JsonCanbusConfig {
@@ -67,6 +68,8 @@ static void tag_invoke(json::value_from_tag, json::value& jv, JsonCanSignalConfi
     obj[NAMEOF_MEMBER(&JsonCanSignalConfig::size_bits).c_str()] = config.size_bits;
     obj[NAMEOF_MEMBER(&JsonCanSignalConfig::factor).c_str()] = config.factor;
     obj[NAMEOF_MEMBER(&JsonCanSignalConfig::offset).c_str()] = config.offset;
+    obj[NAMEOF_MEMBER(&JsonCanSignalConfig::byte_order).c_str()] = config.byte_order;
+    obj[NAMEOF_MEMBER(&JsonCanSignalConfig::is_signed).c_str()] = config.is_signed;
     obj[NAMEOF_MEMBER(&JsonCanSignalConfig::name).c_str()] = config.name;
     obj[NAMEOF_MEMBER(&JsonCanSignalConfig::unit).c_str()] = config.unit;
 
@@ -81,6 +84,8 @@ static JsonCanSignalConfig tag_invoke(json::value_to_tag<JsonCanSignalConfig>, j
     result.size_bits = static_cast<uint32_t>(obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::size_bits).c_str()).as_int64());
     result.factor = static_cast<float>(obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::factor).c_str()).to_number<double>());
     result.offset = static_cast<float>(obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::offset).c_str()).to_number<double>());
+    result.byte_order = obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::byte_order).c_str()).as_string();
+    result.is_signed = obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::is_signed).c_str()).as_bool();
     result.name = obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::name).c_str()).as_string();
     result.unit = obj.at(NAMEOF_MEMBER(&JsonCanSignalConfig::unit).c_str()).as_string();
 
@@ -134,7 +139,6 @@ static void tag_invoke(json::value_from_tag, json::value& jv, JsonCanChannelConf
     obj[NAMEOF_MEMBER(&JsonCanChannelConfig::bus_channel).c_str()] = config.bus_channel;
     obj[NAMEOF_MEMBER(&JsonCanChannelConfig::bitrate).c_str()] = config.bitrate;
     obj[NAMEOF_MEMBER(&JsonCanChannelConfig::data_bitrate).c_str()] = config.data_bitrate;
-    obj[NAMEOF_MEMBER(&JsonCanChannelConfig::dbc_file_path).c_str()] = config.dbc_file_path;
 
     json::array message_configs_array(Mrm::GetBoostExtPmr());
     for(const auto& message_config : config.message_configs)
@@ -153,7 +157,6 @@ static JsonCanChannelConfig tag_invoke(json::value_to_tag<JsonCanChannelConfig>,
     result.bus_channel = static_cast<uint32_t>(obj.at(NAMEOF_MEMBER(&JsonCanChannelConfig::bus_channel).c_str()).as_int64());
     result.bitrate = static_cast<uint32_t>(obj.at(NAMEOF_MEMBER(&JsonCanChannelConfig::bitrate).c_str()).as_int64());
     result.data_bitrate = static_cast<uint32_t>(obj.at(NAMEOF_MEMBER(&JsonCanChannelConfig::data_bitrate).c_str()).as_int64());
-    result.dbc_file_path = obj.at(NAMEOF_MEMBER(&JsonCanChannelConfig::dbc_file_path).c_str()).as_string();
 
     const json::array& message_configs_array = obj.at(NAMEOF_MEMBER(&JsonCanChannelConfig::message_configs).c_str()).as_array();
     result.message_configs.reserve(message_configs_array.size());

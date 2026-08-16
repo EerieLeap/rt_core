@@ -7,7 +7,7 @@
 #include <zephyr/sys/atomic.h>
 
 #include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/dbc/dbc.h"
+#include "domain/canbus_domain/models/can_signal_configuration.h"
 
 #include "canbus_sensor_reader_raw.h"
 
@@ -15,11 +15,12 @@ namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
 using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::subsys::canbus::CanbusProxy;
-using eerie_leap::subsys::dbc::Dbc;
+using eerie_leap::domain::canbus_domain::models::CanSignalConfiguration;
 
 class CanbusSensorReader : public CanbusSensorReaderRaw {
 private:
-    std::shared_ptr<Dbc> dbc_;
+    // Aliases the owning message configuration, so that stays alive too.
+    std::shared_ptr<const CanSignalConfiguration> signal_configuration_;
 
     void AddOrUpdateReading(const CanFrame& can_frame) override;
 
@@ -32,7 +33,7 @@ public:
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<CanbusProxy> canbus,
-        std::shared_ptr<Dbc> dbc);
+        std::shared_ptr<const CanSignalConfiguration> signal_configuration);
     virtual ~CanbusSensorReader() = default;
 };
 

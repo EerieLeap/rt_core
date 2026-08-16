@@ -48,16 +48,17 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
             if(canbus == nullptr)
                 return nullptr;
 
-            const auto* channel_configuration = canbus_service_->GetChannelConfiguration(sensor->configuration.canbus_source->bus_channel);
-            if(channel_configuration == nullptr)
-                return nullptr;
-
-            if(!channel_configuration->dbc->HasMessage(sensor->configuration.canbus_source->frame_id))
-                return nullptr;
-            auto* dbc_message = channel_configuration->dbc->GetMessage(
+            auto message_configuration = canbus_service_->GetMessageConfiguration(
+                sensor->configuration.canbus_source->bus_channel,
                 sensor->configuration.canbus_source->frame_id);
 
-            if(!dbc_message->HasSignal(sensor->configuration.canbus_source->signal_name))
+            if(message_configuration == nullptr)
+                return nullptr;
+
+            const auto* signal_configuration = message_configuration->TryGetSignal(
+                sensor->configuration.canbus_source->signal_name_hash);
+
+            if(signal_configuration == nullptr)
                 return nullptr;
 
             sensor_reader = std::make_unique<CanbusSensorReader>(
@@ -68,7 +69,7 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
                 std::move(process_sensor_callback),
                 std::move(work_queue_thread),
                 canbus,
-                channel_configuration->dbc);
+                std::shared_ptr<const CanSignalConfiguration>(std::move(message_configuration), signal_configuration));
         } else {
             return nullptr;
         }

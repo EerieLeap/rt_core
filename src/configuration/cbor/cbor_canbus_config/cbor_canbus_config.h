@@ -13,6 +13,8 @@ struct CborCanSignalConfig {
 	uint32_t size_bits{};
 	float factor{};
 	float offset{};
+	uint32_t byte_order{};
+	bool is_signed{};
 	struct zcbor_string name{};
 	struct zcbor_string unit{};
 };
@@ -54,7 +56,6 @@ struct CborCanChannelConfig {
 	uint32_t bus_channel{};
 	uint32_t bitrate{};
 	uint32_t data_bitrate{};
-	struct zcbor_string dbc_file_path{};
 	std::pmr::vector<CborCanMessageConfig> CborCanMessageConfig_m;
 
 	CborCanChannelConfig(std::allocator_arg_t, allocator_type alloc)
@@ -72,7 +73,6 @@ struct CborCanChannelConfig {
 		bus_channel(other.bus_channel),
 		bitrate(other.bitrate),
 		data_bitrate(other.data_bitrate),
-		dbc_file_path(other.dbc_file_path),
 		CborCanMessageConfig_m(std::move(other.CborCanMessageConfig_m), alloc) {}
 };
 

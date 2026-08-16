@@ -1,11 +1,13 @@
+#include "domain/canbus_domain/utilities/can_signal_codec.h"
+
 #include "canbus_sensor_reader.h"
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
 using namespace eerie_leap::subsys::canbus;
-
-using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::domain::sensor_domain::models;
+
+using eerie_leap::domain::canbus_domain::utilities::CanSignalCodec;
 
 CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<ITimeService> time_service,
@@ -15,7 +17,7 @@ CanbusSensorReader::CanbusSensorReader(
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CanbusProxy> canbus,
-    std::shared_ptr<Dbc> dbc)
+    std::shared_ptr<const CanSignalConfiguration> signal_configuration)
         : CanbusSensorReaderRaw(
             std::move(time_service),
             std::move(guid_generator),
@@ -25,16 +27,18 @@ CanbusSensorReader::CanbusSensorReader(
             std::move(work_queue_thread),
             std::move(canbus)
         ),
-        dbc_(std::move(dbc)) {}
+        signal_configuration_(std::move(signal_configuration)) {}
 
 void CanbusSensorReader::AddOrUpdateReading(const CanFrame& can_frame) {
     auto reading = CreateRawReading(can_frame);
     if(!reading)
         return;
 
-    reading.value().value = dbc_->GetMessage(sensor_->configuration.canbus_source->frame_id)->GetSignalValue(
-        sensor_->configuration.canbus_source->signal_name_hash,
-        can_frame.data.data());
+    auto value = CanSignalCodec::Decode(*signal_configuration_, can_frame.data);
+    if(!value)
+        return;
+
+    reading.value().value = value.value();
 
     if(reading.value().sensor->configuration.type == SensorType::CANBUS_ANALOG)
         reading.value().metadata.AddTag<float>(ReadingMetadataTag::RAW_VALUE, reading.value().value.value());

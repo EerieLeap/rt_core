@@ -2,7 +2,6 @@
 
 #include <memory>
 #include <unordered_map>
-#include <streambuf>
 #include <functional>
 
 #include "domain/canbus_domain/models/can_channel_configuration.h"
@@ -15,6 +14,7 @@ namespace eerie_leap::domain::canbus_domain::services {
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 
 class CanbusService {
@@ -34,7 +34,6 @@ private:
     std::unordered_map<int, CanbusServiceUpdatedHandler> configuration_updated_handlers_;
 
     void BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const;
-    void ConfigureUserSignals(const CanChannelConfiguration& channel_configuration) const;
 
 public:
     CanbusService(
@@ -46,6 +45,7 @@ public:
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetComCanbus() const;
 
     [[nodiscard]] const CanChannelConfiguration* GetChannelConfiguration(uint8_t bus_channel) const;
+    [[nodiscard]] std::shared_ptr<CanMessageConfiguration> GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const;
 
     int RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler);
     bool UnregisterConfigurationResetHandler(int handler_id);

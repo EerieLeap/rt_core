@@ -24,6 +24,29 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_0_0->name = "EL_FRAME_0";
     message_configuration_0_0->message_size = 8;
     message_configuration_0_0->send_interval_ms = 100;
+
+    CanSignalConfiguration signal_configuration_0_0_0(std::allocator_arg, Mrm::GetDefaultPmr());
+    signal_configuration_0_0_0.start_bit = 0;
+    signal_configuration_0_0_0.size_bits = 16;
+    signal_configuration_0_0_0.factor = 0.5F;
+    signal_configuration_0_0_0.offset = -40.0F;
+    signal_configuration_0_0_0.byte_order = CanSignalByteOrder::LITTLE_ENDIAN_INTEL;
+    signal_configuration_0_0_0.is_signed = true;
+    signal_configuration_0_0_0.SetName("sensor_0");
+    signal_configuration_0_0_0.unit = "C";
+    message_configuration_0_0->signal_configurations.emplace_back(std::move(signal_configuration_0_0_0));
+
+    CanSignalConfiguration signal_configuration_0_0_1(std::allocator_arg, Mrm::GetDefaultPmr());
+    signal_configuration_0_0_1.start_bit = 23;
+    signal_configuration_0_0_1.size_bits = 12;
+    signal_configuration_0_0_1.factor = 1.0F;
+    signal_configuration_0_0_1.offset = 0.0F;
+    signal_configuration_0_0_1.byte_order = CanSignalByteOrder::BIG_ENDIAN_MOTOROLA;
+    signal_configuration_0_0_1.is_signed = false;
+    signal_configuration_0_0_1.SetName("sensor_1");
+    signal_configuration_0_0_1.unit = "kmh";
+    message_configuration_0_0->signal_configurations.emplace_back(std::move(signal_configuration_0_0_1));
+
     channel_configuration_0.message_configurations.emplace_back(std::move(message_configuration_0_0));
 
     auto message_configuration_0_1 = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -84,8 +107,29 @@ void canbus_configuration_parser_CompareCanbusConfigurations(
         zassert_equal(deserialized_configuration.channel_configurations[bus_channel].message_configurations.size(), channel_configuration.message_configurations.size());
 
         for(int j = 0; j < channel_configuration.message_configurations.size(); j++) {
-            zassert_equal(deserialized_configuration.channel_configurations[bus_channel].message_configurations[j]->frame_id, channel_configuration.message_configurations[j]->frame_id);
-            zassert_equal(deserialized_configuration.channel_configurations[bus_channel].message_configurations[j]->send_interval_ms, channel_configuration.message_configurations[j]->send_interval_ms);
+            const auto& message_configuration = channel_configuration.message_configurations[j];
+            const auto& deserialized_message_configuration = deserialized_configuration.channel_configurations[bus_channel].message_configurations[j];
+
+            zassert_equal(deserialized_message_configuration->frame_id, message_configuration->frame_id);
+            zassert_equal(deserialized_message_configuration->send_interval_ms, message_configuration->send_interval_ms);
+            zassert_equal(deserialized_message_configuration->message_size, message_configuration->message_size);
+
+            zassert_equal(deserialized_message_configuration->signal_configurations.size(), message_configuration->signal_configurations.size());
+
+            for(int k = 0; k < message_configuration->signal_configurations.size(); k++) {
+                const auto& signal_configuration = message_configuration->signal_configurations[k];
+                const auto& deserialized_signal_configuration = deserialized_message_configuration->signal_configurations[k];
+
+                zassert_equal(deserialized_signal_configuration.start_bit, signal_configuration.start_bit);
+                zassert_equal(deserialized_signal_configuration.size_bits, signal_configuration.size_bits);
+                zassert_equal(deserialized_signal_configuration.factor, signal_configuration.factor);
+                zassert_equal(deserialized_signal_configuration.offset, signal_configuration.offset);
+                zassert_equal(deserialized_signal_configuration.byte_order, signal_configuration.byte_order);
+                zassert_equal(deserialized_signal_configuration.is_signed, signal_configuration.is_signed);
+                zassert_equal(deserialized_signal_configuration.name_hash, signal_configuration.name_hash);
+                zassert_true(deserialized_signal_configuration.name == signal_configuration.name);
+                zassert_true(deserialized_signal_configuration.unit == signal_configuration.unit);
+            }
         }
     }
 }

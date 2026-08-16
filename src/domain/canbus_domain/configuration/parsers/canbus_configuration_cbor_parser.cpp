@@ -5,7 +5,6 @@
 #include "utilities/memory/memory_resource_manager.h"
 
 #include "canbus_configuration_validator.h"
-#include "canbus_configuration_parser_helpers.hpp"
 #include "canbus_configuration_cbor_parser.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
@@ -32,7 +31,6 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
         channel_config.bus_channel = bus_channel;
         channel_config.bitrate = channel_configuration.bitrate;
         channel_config.data_bitrate = channel_configuration.data_bitrate;
-        channel_config.dbc_file_path = CborHelpers::ToZcborString(channel_configuration.dbc_file_path);
 
         for(const auto& message_configuration : channel_configuration.message_configurations) {
             CborCanMessageConfig message_config(std::allocator_arg, Mrm::GetExtPmr());
@@ -51,6 +49,8 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
                     .size_bits = signal_configuration.size_bits,
                     .factor = signal_configuration.factor,
                     .offset = signal_configuration.offset,
+                    .byte_order = std::to_underlying(signal_configuration.byte_order),
+                    .is_signed = signal_configuration.is_signed,
                     .name = CborHelpers::ToZcborString(signal_configuration.name),
                     .unit = CborHelpers::ToZcborString(signal_configuration.unit)
                 });
@@ -80,10 +80,6 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
         channel_configuration.bus_channel = static_cast<uint8_t>(canbus_config.bus_channel);
         channel_configuration.bitrate = canbus_config.bitrate;
         channel_configuration.data_bitrate = canbus_config.data_bitrate;
-        channel_configuration.dbc_file_path = CborHelpers::ToPmrString(mr, canbus_config.dbc_file_path);
-
-        if(sd_fs_service_ != nullptr && !channel_configuration.dbc_file_path.empty())
-            CanbusConfigurationParserHelpers::LoadDbcConfiguration(sd_fs_service_.get(), channel_configuration);
 
         for(const auto& message_config : canbus_config.CborCanMessageConfig_m) {
             auto message_configuration = make_shared_pmr<CanMessageConfiguration>(mr);
@@ -103,7 +99,9 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
                 signal_configuration.size_bits = signal_config.size_bits;
                 signal_configuration.factor = signal_config.factor;
                 signal_configuration.offset = signal_config.offset;
-                signal_configuration.name = CborHelpers::ToPmrString(mr, signal_config.name);
+                signal_configuration.byte_order = static_cast<CanSignalByteOrder>(signal_config.byte_order);
+                signal_configuration.is_signed = signal_config.is_signed;
+                signal_configuration.SetName(CborHelpers::ToStringView(signal_config.name));
                 signal_configuration.unit = CborHelpers::ToPmrString(mr, signal_config.unit);
 
                 message_configuration->signal_configurations.push_back(std::move(signal_configuration));

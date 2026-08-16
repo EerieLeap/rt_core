@@ -3,6 +3,8 @@ CborCanSignalConfig = [
   size_bits: uint,
   factor: float32,
   offset: float32,
+  byte_order: uint,
+  is_signed: bool,
   name: tstr,
   unit: tstr
 ]
@@ -23,7 +25,6 @@ CborCanChannelConfig = [
   bus_channel: uint,
   bitrate: uint,
   data_bitrate: uint,
-  dbc_file_path: tstr,
   message_configs: [*CborCanMessageConfig]
 ]
 

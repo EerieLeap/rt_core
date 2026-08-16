@@ -4,17 +4,14 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <eerie_memory.hpp>
 
 #include "subsys/canbus/canbus_type.h"
-#include "subsys/dbc/dbc.h"
 
 #include "can_message_configuration.h"
 
 namespace eerie_leap::domain::canbus_domain::models {
 
 using eerie_leap::subsys::canbus::CanbusType;
-using eerie_leap::subsys::dbc::Dbc;
 
 struct CanChannelConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;
@@ -24,15 +21,10 @@ struct CanChannelConfiguration {
     uint8_t bus_channel = 0;
     uint32_t bitrate = 0;
     uint32_t data_bitrate = 0;
-    std::pmr::string dbc_file_path;
     std::pmr::vector<std::shared_ptr<CanMessageConfiguration>> message_configurations;
 
-    std::shared_ptr<Dbc> dbc;
-
     CanChannelConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : dbc_file_path(alloc),
-        message_configurations(alloc),
-        dbc(eerie_memory::make_shared_pmr<Dbc>(alloc)) {}
+        : message_configurations(alloc) {}
 
     CanChannelConfiguration(const CanChannelConfiguration&) = delete;
 	CanChannelConfiguration& operator=(const CanChannelConfiguration&) noexcept = default;
@@ -46,9 +38,7 @@ struct CanChannelConfiguration {
         bus_channel(other.bus_channel),
         bitrate(other.bitrate),
         data_bitrate(other.data_bitrate),
-        dbc_file_path(std::move(other.dbc_file_path), alloc),
-        message_configurations(std::move(other.message_configurations), alloc),
-        dbc(std::move(other.dbc)) {}
+        message_configurations(std::move(other.message_configurations), alloc) {}
 };
 
 } // namespace eerie_leap::domain::canbus_domain::models

@@ -1,16 +1,14 @@
 #include <exception>
+#include <algorithm>
 #include <vector>
 
 #include <zephyr/logging/log.h>
-
-#include "subsys/fs/services/fs_service_stream_buf.h"
 
 #include "canbus_service.h"
 
 namespace eerie_leap::domain::canbus_domain::services {
 
 using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::subsys::dbc;
 
 using eerie_leap::subsys::threading::ServiceState;
 
@@ -110,13 +108,6 @@ void CanbusService::Configure() {
         }
     }
 
-    for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
-        if(!canbuses.contains(bus_channel))
-            continue;
-
-        ConfigureUserSignals(channel_configuration);
-    }
-
     for(auto& [bus_channel, canbus] : canbuses) {
         if(!canbus_configuration->channel_configurations.contains(bus_channel)) {
             LOG_INF("CAN channel %d is no longer configured, discarding it.", bus_channel);
@@ -166,6 +157,23 @@ const CanChannelConfiguration* CanbusService::GetChannelConfiguration(uint8_t bu
     return &canbus_configuration->channel_configurations.at(bus_channel);
 }
 
+std::shared_ptr<CanMessageConfiguration> CanbusService::GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const {
+    const auto* channel_configuration = GetChannelConfiguration(bus_channel);
+    if(channel_configuration == nullptr)
+        return nullptr;
+
+    auto message_configuration = std::ranges::find_if(
+        channel_configuration->message_configurations,
+        [frame_id](const std::shared_ptr<CanMessageConfiguration>& message_configuration) {
+            return message_configuration->frame_id == frame_id;
+        });
+
+    if(message_configuration == channel_configuration->message_configurations.end())
+        return nullptr;
+
+    return *message_configuration;
+}
+
 void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const {
     auto canbus_configuration = canbus_configuration_manager_->Get();
 
@@ -180,30 +188,6 @@ void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const 
         LOG_INF("Bitrate for bus channel %d updated to %u bps.", bus_channel, bitrate);
     else
         LOG_ERR("Failed to update bitrate for bus channel %d.", bus_channel);
-}
-
-void CanbusService::ConfigureUserSignals(const CanChannelConfiguration& channel_configuration) const {
-    for(const auto& message_configuration : channel_configuration.message_configurations) {
-        DbcMessage* message = nullptr;
-
-        if(channel_configuration.dbc->HasMessage(message_configuration->frame_id))
-            message = channel_configuration.dbc->GetMessage(message_configuration->frame_id);
-        else
-            message = channel_configuration.dbc->AddMessage(
-                message_configuration->frame_id,
-                message_configuration->name,
-                message_configuration->message_size);
-
-        for(const auto& signal_configuration : message_configuration->signal_configurations) {
-            message->AddSignal(
-                signal_configuration.name,
-                signal_configuration.start_bit,
-                signal_configuration.size_bits,
-                signal_configuration.factor,
-                signal_configuration.offset,
-                signal_configuration.unit);
-        }
-    }
 }
 
 int CanbusService::RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler) {

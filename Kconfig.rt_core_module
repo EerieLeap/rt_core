@@ -10,11 +10,6 @@ config EERIE_LEAP_CFB
     help
       Add EerieLeap CFB.
 
-config EERIE_LEAP_DBC
-    bool "EerieLeap DBC"
-    help
-      Add EerieLeap DBC.
-
 config EERIE_LEAP_GPIO
     bool "EerieLeap GPIO"
     help

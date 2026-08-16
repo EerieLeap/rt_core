@@ -26,14 +26,14 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
 
         file(MAKE_DIRECTORY ${EL_COMMON_DIR}/libs/boost)
 
-        message(STATUS "Extracting Boost.Spirit.X3, Boost.Fusion and Boost.JSON headers...")
+        message(STATUS "Extracting Boost.JSON headers...")
         execute_process(
-            COMMAND ${EL_COMMON_DIR}/repos/boost/dist/bin/bcp boost/spirit boost/fusion boost/json ${EL_COMMON_DIR}/libs/boost
+            COMMAND ${EL_COMMON_DIR}/repos/boost/dist/bin/bcp boost/json ${EL_COMMON_DIR}/libs/boost
             WORKING_DIRECTORY ${EL_COMMON_DIR}/repos/boost
             RESULT_VARIABLE BCP_RESULT
         )
         if(NOT BCP_RESULT EQUAL 0)
-            message(FATAL_ERROR "Failed to extract Boost.Spirit.X3, Boost.Fusion and Boost.JSON headers")
+            message(FATAL_ERROR "Failed to extract Boost.JSON headers")
         endif()
     endif()
 
@@ -92,23 +92,6 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         list(APPEND SRC
             "${SRC_DIR}/subsys/cfb/*.c"
             "${SRC_DIR}/subsys/cfb/*.cpp"
-        )
-    endif()
-
-    if(CONFIG_EERIE_LEAP_DBC)
-        list(APPEND SRC
-            "${SRC_DIR}/subsys/dbc/*.c"
-            "${SRC_DIR}/subsys/dbc/*.cpp"
-        )
-
-        add_subdirectory(libs/dbcppp)
-
-        zephyr_library_link_libraries(
-            dbcppp
-        )
-
-        target_link_libraries(app PRIVATE
-            dbcppp
         )
     endif()
 

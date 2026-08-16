@@ -94,7 +94,7 @@ end
 
 `string process_can_frame(int frame_id, string data)`
 
-This function will be called after a CAN frame is created and values are assigned. The frame must be defined in the DBC file. If the defined frame has no signals/values, data will be an empty string. The size of the string is equal to the size of the frame in bytes as defined in the DBC file. The type of data is string, but the underlying type is a byte array—each character in the string represents a byte.
+This function will be called after a CAN frame is created and values are assigned. The frame must be defined in the CAN bus configuration. If the defined frame has no signals/values, data will be an empty string. The size of the string is equal to the size of the frame in bytes as defined in the CAN bus configuration. The type of data is string, but the underlying type is a byte array—each character in the string represents a byte.
 
 This function must return a string of the same size as the frame in bytes.
 

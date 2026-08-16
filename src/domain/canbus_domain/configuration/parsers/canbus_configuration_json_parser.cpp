@@ -3,7 +3,6 @@
 #include "utilities/memory/memory_resource_manager.h"
 
 #include "canbus_configuration_validator.h"
-#include "canbus_configuration_parser_helpers.hpp"
 #include "canbus_configuration_json_parser.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
@@ -31,7 +30,6 @@ pmr_unique_ptr<JsonCanbusConfig> CanbusConfigurationJsonParser::Serialize(const 
         channel_config.bus_channel = bus_channel;
         channel_config.bitrate = channel_configuration.bitrate;
         channel_config.data_bitrate = channel_configuration.data_bitrate;
-        channel_config.dbc_file_path = json::string(channel_configuration.dbc_file_path);
 
         for(const auto& message_configuration : channel_configuration.message_configurations) {
             JsonCanMessageConfig message_config;
@@ -49,6 +47,8 @@ pmr_unique_ptr<JsonCanbusConfig> CanbusConfigurationJsonParser::Serialize(const 
                 signal_config.size_bits = signal_configuration.size_bits;
                 signal_config.factor = signal_configuration.factor;
                 signal_config.offset = signal_configuration.offset;
+                signal_config.byte_order = json::string(GetCanSignalByteOrderName(signal_configuration.byte_order));
+                signal_config.is_signed = signal_configuration.is_signed;
                 signal_config.name = json::string(signal_configuration.name);
                 signal_config.unit = json::string(signal_configuration.unit);
 
@@ -80,10 +80,6 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationJsonParser::Deserialize(s
         channel_configuration.bus_channel = static_cast<uint8_t>(canbus_config.bus_channel);
         channel_configuration.bitrate = canbus_config.bitrate;
         channel_configuration.data_bitrate = canbus_config.data_bitrate;
-        channel_configuration.dbc_file_path = std::string(canbus_config.dbc_file_path);
-
-        if(sd_fs_service_ != nullptr && !channel_configuration.dbc_file_path.empty())
-            CanbusConfigurationParserHelpers::LoadDbcConfiguration(sd_fs_service_.get(), channel_configuration);
 
         for(const auto& message_config : canbus_config.message_configs) {
             auto message_configuration = make_shared_pmr<CanMessageConfiguration>(mr);
@@ -103,7 +99,9 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationJsonParser::Deserialize(s
                 signal_configuration.size_bits = signal_config.size_bits;
                 signal_configuration.factor = signal_config.factor;
                 signal_configuration.offset = signal_config.offset;
-                signal_configuration.name = signal_config.name;
+                signal_configuration.byte_order = GetCanSignalByteOrder(signal_config.byte_order);
+                signal_configuration.is_signed = signal_config.is_signed;
+                signal_configuration.SetName(signal_config.name);
                 signal_configuration.unit = signal_config.unit;
 
                 message_configuration->signal_configurations.emplace_back(std::move(signal_configuration));

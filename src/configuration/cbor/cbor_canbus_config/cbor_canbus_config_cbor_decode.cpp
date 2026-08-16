@@ -30,6 +30,8 @@ static bool decode_CborCanSignalConfig(
 	&& ((zcbor_uint32_decode(state, (&(*result).size_bits))))
 	&& ((zcbor_float32_decode(state, (&(*result).factor))))
 	&& ((zcbor_float32_decode(state, (&(*result).offset))))
+	&& ((zcbor_uint32_decode(state, (&(*result).byte_order))))
+	&& ((zcbor_bool_decode(state, (&(*result).is_signed))))
 	&& ((zcbor_tstr_decode(state, (&(*result).name))))
 	&& ((zcbor_tstr_decode(state, (&(*result).unit))))) || (zcbor_list_map_end_force_decode(state), false)) && zcbor_list_end_decode(state))));
 
@@ -130,11 +132,6 @@ static bool decode_CborCanChannelConfig(
     }
 
     if (!zcbor_uint32_decode(state, &result->data_bitrate)) {
-        zcbor_list_end_decode(state);
-        return false;
-    }
-
-    if (!zcbor_tstr_decode(state, &result->dbc_file_path)) {
         zcbor_list_end_decode(state);
         return false;
     }

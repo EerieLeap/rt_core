@@ -17,7 +17,6 @@ private:
     static void ValidateIsExtendedId(const CanbusConfiguration& configuration);
     static void ValidateBitrate(const CanbusConfiguration& configuration);
     static void ValidateDataBitrate(const CanbusConfiguration& configuration);
-    static void ValidateDbcFilePath(const CanbusConfiguration& configuration, IFsService* sd_fs_service);
 
     static void ValidateMessages(const CanbusConfiguration& configuration, IFsService* sd_fs_service);
     static void ValidateMessageFrameId(const CanChannelConfiguration& channel_configuration);
@@ -29,6 +28,7 @@ private:
     static void ValidateSignals(const CanChannelConfiguration& channel_configuration);
     static void ValidateSignalStartBit(const CanMessageConfiguration& message_configuration, uint8_t bus_channel);
     static void ValidateSignalSizeBits(const CanMessageConfiguration& message_configuration, uint8_t bus_channel);
+    static void ValidateSignalLayout(const CanMessageConfiguration& message_configuration, uint8_t bus_channel);
     static void ValidateSignalFactor(const CanMessageConfiguration& message_configuration, uint8_t bus_channel);
     static void ValidateSignalOffset(const CanMessageConfiguration& message_configuration, uint8_t bus_channel);
     static void ValidateSignalName(const CanMessageConfiguration& message_configuration, uint8_t bus_channel);

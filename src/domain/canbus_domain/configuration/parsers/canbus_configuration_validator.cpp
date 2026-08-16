@@ -6,11 +6,15 @@
 #include "canbus_configuration_validator.h"
 #include "domain/canbus_domain/models/can_channel_configuration.h"
 #include "domain/canbus_domain/models/can_message_configuration.h"
+#include "domain/canbus_domain/utilities/can_signal_codec.h"
 #include "subsys/canbus/canbus.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
 
 using namespace eerie_leap::subsys::canbus;
+using namespace eerie_leap::domain::canbus_domain::models;
+
+using eerie_leap::domain::canbus_domain::utilities::CanSignalCodec;
 
 static void InvalidCanbusConfiguration(const uint8_t bus_channel, std::string_view message) {
     throw std::invalid_argument(
@@ -52,7 +56,6 @@ void CanbusConfigurationValidator::Validate(const CanbusConfiguration& configura
     ValidateIsExtendedId(configuration);
     ValidateBitrate(configuration);
     ValidateDataBitrate(configuration);
-    ValidateDbcFilePath(configuration, sd_fs_service);
 
     ValidateMessages(configuration, sd_fs_service);
 }
@@ -92,18 +95,6 @@ void CanbusConfigurationValidator::ValidateDataBitrate(const CanbusConfiguration
 
         if(canbus_configuration.data_bitrate > 0 && !Canbus::IsBitrateSupported(canbus_configuration.type, canbus_configuration.data_bitrate))
             InvalidCanbusConfiguration(canbus_configuration.bus_channel, "CAN bus data bitrate is not supported");
-    }
-}
-
-void CanbusConfigurationValidator::ValidateDbcFilePath(const CanbusConfiguration& configuration, IFsService* sd_fs_service) {
-    if(sd_fs_service == nullptr)
-        return;
-
-    for(const auto& [_, canbus_configuration] : configuration.channel_configurations) {
-        if(!canbus_configuration.dbc_file_path.empty()) {
-            if(!sd_fs_service->Exists(canbus_configuration.dbc_file_path))
-                InvalidCanbusConfiguration(canbus_configuration.bus_channel, "Invalid DBC file path.");
-        }
     }
 }
 
@@ -227,6 +218,7 @@ void CanbusConfigurationValidator::ValidateSignals(const CanChannelConfiguration
     for(const auto& message_configuration : channel_configuration.message_configurations) {
         ValidateSignalStartBit(*message_configuration, channel_configuration.bus_channel);
         ValidateSignalSizeBits(*message_configuration, channel_configuration.bus_channel);
+        ValidateSignalLayout(*message_configuration, channel_configuration.bus_channel);
         ValidateSignalFactor(*message_configuration, channel_configuration.bus_channel);
         ValidateSignalOffset(*message_configuration, channel_configuration.bus_channel);
         ValidateSignalName(*message_configuration, channel_configuration.bus_channel);
@@ -266,8 +258,36 @@ void CanbusConfigurationValidator::ValidateSignalSizeBits(const CanMessageConfig
     }
 }
 
+void CanbusConfigurationValidator::ValidateSignalLayout(const CanMessageConfiguration& message_configuration, uint8_t bus_channel) {
+    for(const auto& signal : message_configuration.signal_configurations) {
+        if(!IsCanSignalByteOrderValid(signal.byte_order))
+            InvalidCanSignalConfiguration(
+                bus_channel,
+                message_configuration.frame_id,
+                signal.name,
+                "Invalid byte order."
+            );
+
+        if(!CanSignalCodec::IsLayoutValid(signal, message_configuration.message_size))
+            InvalidCanSignalConfiguration(
+                bus_channel,
+                message_configuration.frame_id,
+                signal.name,
+                "Signal does not fit into the message."
+            );
+    }
+}
+
 void CanbusConfigurationValidator::ValidateSignalFactor(const CanMessageConfiguration& message_configuration, uint8_t bus_channel) {
-    // Nothing to validate
+    for(const auto& signal : message_configuration.signal_configurations) {
+        if(signal.factor == 0.0F)
+            InvalidCanSignalConfiguration(
+                bus_channel,
+                message_configuration.frame_id,
+                signal.name,
+                "Factor cannot be zero."
+            );
+    }
 }
 
 void CanbusConfigurationValidator::ValidateSignalOffset(const CanMessageConfiguration& message_configuration, uint8_t bus_channel) {

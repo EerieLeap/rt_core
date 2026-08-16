@@ -18,8 +18,7 @@ static size_t cbor_get_size_CborCanbusConfig(const CborCanbusConfig& config) {
             .AddBool(channel_configuration.is_extended_id)
             .AddUint(channel_configuration.bus_channel)
             .AddUint(channel_configuration.bitrate)
-            .AddUint(channel_configuration.data_bitrate)
-            .AddTstr(channel_configuration.dbc_file_path);
+            .AddUint(channel_configuration.data_bitrate);
 
         builder.AddIndefiniteArrayStart();
         for(const auto& message_configuration : channel_configuration.CborCanMessageConfig_m) {
@@ -39,6 +38,8 @@ static size_t cbor_get_size_CborCanbusConfig(const CborCanbusConfig& config) {
                     .AddUint(signal_configuration.size_bits)
                     .AddFloat(signal_configuration.factor)
                     .AddFloat(signal_configuration.offset)
+                    .AddUint(signal_configuration.byte_order)
+                    .AddBool(signal_configuration.is_signed)
                     .AddTstr(signal_configuration.name)
                     .AddTstr(signal_configuration.unit);
             }
