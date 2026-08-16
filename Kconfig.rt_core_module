@@ -10,6 +10,12 @@ config EERIE_LEAP_CFB
     help
       Add EerieLeap CFB.
 
+config EERIE_LEAP_EVENT_BUS
+    bool "EerieLeap Event Bus"
+    select EERIE_LEAP_THREADING
+    help
+      Add EerieLeap Event Bus.
+
 config EERIE_LEAP_GPIO
     bool "EerieLeap GPIO"
     help

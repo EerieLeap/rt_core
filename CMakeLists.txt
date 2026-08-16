@@ -102,6 +102,13 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_EVENT_BUS)
+        list(APPEND SRC
+            "${SRC_DIR}/subsys/event_bus/*.c"
+            "${SRC_DIR}/subsys/event_bus/*.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_FS)
         list(APPEND SRC
             "${SRC_DIR}/subsys/fs/*.c"
