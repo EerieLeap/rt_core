@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
 
@@ -339,7 +341,9 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_equal(proc_reading_3.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_3.value.has_value());
     float proc_reading_3_value = proc_reading_1_value + 8.34;
-    zassert_equal(proc_reading_3.value.value(), proc_reading_3_value);
+    // Expression evaluator parses "8.34" at runtime independently of the compiler's constant
+    // folding, so the result can differ by a ULP or two across platforms/libc - compare with tolerance.
+    zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001f);
     auto proc_reading_3_metadata_raw_value = proc_reading_3.metadata.GetTag<bool>(ReadingMetadataTag::RAW_VALUE);
     zassert_false(proc_reading_3_metadata_raw_value.has_value());
 
