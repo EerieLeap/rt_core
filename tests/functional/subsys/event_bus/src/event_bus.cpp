@@ -30,7 +30,9 @@ enum class TestPayloadType : uint32_t {
 using TestEvent = Event<TestEventType, TestPayloadType>;
 using TestEventBusBase = EventBus<TestEventType, TestPayloadType>;
 
-constexpr int STACK_SIZE = 4096;
+// Subscribers are allowed to throw, and unwinding on 64 bit targets needs far
+// more stack than dispatching does.
+constexpr int STACK_SIZE = 8192;
 constexpr int DISPATCH_TIMEOUT_MS = 1000;
 
 // EventBus is only constructible through a derived bus, mirroring how applications specialize it.

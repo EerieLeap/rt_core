@@ -26,7 +26,7 @@ ThreadBase::~ThreadBase() {
     if(mr_ == nullptr)
         k_thread_stack_free(stack_area_);
     else
-        mr_->deallocate(stack_area_, k_stack_size_, Z_KERNEL_STACK_OBJ_ALIGN);
+        mr_->deallocate(stack_area_, K_KERNEL_STACK_LEN(k_stack_size_), Z_KERNEL_STACK_OBJ_ALIGN);
 }
 
 bool ThreadBase::InitializeStack() {
@@ -36,7 +36,8 @@ bool ThreadBase::InitializeStack() {
     if(mr_ == nullptr)
         stack_area_ = k_thread_stack_alloc(k_stack_size_, 0);
     else
-        stack_area_ = static_cast<k_thread_stack_t*>(mr_->allocate(k_stack_size_, Z_KERNEL_STACK_OBJ_ALIGN));
+        stack_area_ = static_cast<k_thread_stack_t*>(
+            mr_->allocate(K_KERNEL_STACK_LEN(k_stack_size_), Z_KERNEL_STACK_OBJ_ALIGN));
 
     return stack_area_ != nullptr;
 }

@@ -42,7 +42,9 @@ public:
     #ifdef CONFIG_SHARED_MULTI_HEAP
         pointer = shared_multi_heap_aligned_alloc(SMH_REG_ATTR_EXTERNAL, align, n * sizeof(T));
     #else
-        pointer = k_malloc(n * sizeof(T));
+        pointer = align > alignof(std::max_align_t)
+            ? k_aligned_alloc(align, n * sizeof(T))
+            : k_malloc(n * sizeof(T));
     #endif
 
         if(pointer == nullptr) {

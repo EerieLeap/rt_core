@@ -129,7 +129,7 @@ ZTEST(thread_base, test_InitializeStack_uses_the_supplied_memory_resource) {
         thread.InitializeStack();
 
         zassert_equal(resource.allocations, 1);
-        zassert_equal(resource.allocated_bytes, static_cast<std::size_t>(STACK_SIZE));
+        zassert_equal(resource.allocated_bytes, K_KERNEL_STACK_LEN(STACK_SIZE));
         zassert_equal(resource.allocated_alignment, static_cast<std::size_t>(Z_KERNEL_STACK_OBJ_ALIGN));
         zassert_equal(thread.GetStack(), resource.allocated_pointer);
         zassert_equal(resource.deallocations, 0);
@@ -137,7 +137,7 @@ ZTEST(thread_base, test_InitializeStack_uses_the_supplied_memory_resource) {
 
     zassert_equal(resource.deallocations, 1);
     zassert_equal(resource.deallocated_pointer, resource.allocated_pointer);
-    zassert_equal(resource.deallocated_bytes, static_cast<std::size_t>(STACK_SIZE));
+    zassert_equal(resource.deallocated_bytes, K_KERNEL_STACK_LEN(STACK_SIZE));
     zassert_equal(resource.deallocated_alignment, static_cast<std::size_t>(Z_KERNEL_STACK_OBJ_ALIGN));
 }
 
