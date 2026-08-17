@@ -160,7 +160,7 @@ bool AdcConfigurationManager::CreateDefaultConfiguration() {
 
     std::vector<std::shared_ptr<AdcChannelConfiguration>> channel_configurations;
     channel_configurations.reserve(adc_manager_->GetChannelCount());
-    for(size_t i = 0; i < adc_manager_->GetChannelCount(); ++i)
+    for(int i = 0; i < adc_manager_->GetChannelCount(); ++i)
         channel_configurations.push_back(std::make_shared<AdcChannelConfiguration>(adc_calibrator));
 
     auto configuration = std::make_shared<AdcConfiguration>();

@@ -142,7 +142,7 @@ void CdmpNetworkService::StartInitialization() {
     discovery_response_received_ = false;
     int discovery_backoff_resets = 0;
 
-    int backoff_index = 0;
+    size_t backoff_index = 0;
     for(backoff_index = 0; backoff_index < CdmpTimeouts::RETRY_BACKOFFS_MS.size(); ++backoff_index) {
         if(device_->GetStatus() != CdmpDeviceStatus::INIT)
             return;

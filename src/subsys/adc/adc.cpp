@@ -76,7 +76,7 @@ float Adc::ReadChannel(int channel) {
         throw std::runtime_error("ADC config is not set.");
 
     if(channel < 0 || channel >= GetChannelCount())
-        throw std::invalid_argument("ADC channel out of range.");
+		throw std::invalid_argument("ADC channel out of range.");
 
 	sequences_[channel].channels = BIT(channel_configs_[channel].channel_id);
 

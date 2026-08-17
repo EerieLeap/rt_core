@@ -177,7 +177,7 @@ void CanbusConfigurationValidator::ValidateMessageName(const CanChannelConfigura
                 "Name must start with a letter or an underscore."
             );
 
-        if(!std::ranges::all_of(message_configuration->name, [&valid_symbols](char c) {
+        if(!std::ranges::all_of(message_configuration->name, [](char c) {
             return std::isalnum(c) || valid_symbols.find(c) != std::string_view::npos;})) {
 
             InvalidCanMessageConfiguration(

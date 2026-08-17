@@ -38,46 +38,6 @@ struct ThreadSearchData {
     const  k_thread* found_thread;
 };
 
-static void thread_search_cb(const k_thread *thread, void *user_data) {
-    auto* data = static_cast<ThreadSearchData*>(user_data);
-    const char* name = thread->name;
-
-    if(name && strcmp(name, data->target_name) == 0) {
-        data->found_thread = thread;
-    }
-};
-
-static void PrintStackInfoWithIdCallback(thread_analyzer_info* info) {
-    if(stack_info_thread_name_filter != nullptr && strcmp(stack_info_thread_name_filter, info->name) != 0)
-        return;
-
-    extern void k_thread_foreach(k_thread_user_cb_t, void *);
-
-    ThreadSearchData search_data = { info->name, nullptr };
-
-    k_thread_foreach(thread_search_cb, &search_data);
-
-    constexpr size_t PERCENT_MULTIPLIER = 100U;
-    size_t used_percent = (info->stack_used * PERCENT_MULTIPLIER) / info->stack_size;
-
-    if(search_data.found_thread) {
-        LOG_INF("  %-14s: TID 0x%08x Unused %zu Usage %zu / %zu (%zu %%)",
-            info->name,
-            reinterpret_cast<uintptr_t>(search_data.found_thread),
-            info->stack_size - info->stack_used,
-            info->stack_used,
-            info->stack_size,
-            used_percent);
-    } else {
-        LOG_INF("  %-14s: TID unknown   Unused %zu Usage %zu / %zu (%zu %%)",
-            info->name,
-            info->stack_size - info->stack_used,
-            info->stack_used,
-            info->stack_size,
-            used_percent);
-    }
-}
-
 struct ThreadIdData {
     int count;
 };

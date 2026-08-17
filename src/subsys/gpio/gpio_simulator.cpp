@@ -22,9 +22,9 @@ bool GpioSimulator::ReadChannel(int channel) {
         throw std::invalid_argument("Gpio channel out of range.");
 
     uint32_t raw = sys_rand32_get();
-    float random_value = (raw / static_cast<float>(UINT32_MAX)) * 3.3;
+    float random_value = (raw / static_cast<float>(UINT32_MAX)) * 3.3F;
 
-    return random_value > 1.65;
+    return random_value > 1.65F;
 }
 
 int GpioSimulator::GetChannelCount() {

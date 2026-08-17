@@ -17,7 +17,7 @@ void AdcConfigurationValidator::ValidateSamples(const AdcConfiguration& configur
 }
 
 void AdcConfigurationValidator::ValidateChannels(const AdcConfiguration& configuration) {
-    for(int i = 0; i < configuration.channel_configurations->size(); i++) {
+    for(size_t i = 0; i < configuration.channel_configurations->size(); i++) {
         auto& channel_configuration = configuration.channel_configurations->at(i);
 
         if(channel_configuration->calibrator == nullptr)
