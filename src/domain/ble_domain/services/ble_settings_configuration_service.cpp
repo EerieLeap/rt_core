@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(ble_scs_logger);
 
 std::unique_ptr<BleSettingsConfigurationService> BleSettingsConfigurationService::instance_;
 bool BleSettingsConfigurationService::is_initialized_ = false;
-std::pmr::string BleSettingsConfigurationService::json_str_buffer_ = "";
+std::pmr::vector<uint8_t> BleSettingsConfigurationService::cbor_buffer_{Mrm::GetExtPmr()};
 
 BleSettingsConfigurationService::BleSettingsConfigurationService(std::shared_ptr<ConfigurationService> configuration_service)
     : configuration_service_(std::move(configuration_service)) {}
@@ -60,12 +60,11 @@ bool BleSettingsConfigurationService::Initialize() {
 
 bool BleSettingsConfigurationService::HandleConfigWrite(uint8_t settings_id, std::span<const uint8_t> data) const {
     auto type = static_cast<ConfigurationService::Type>(settings_id);
-    std::string_view json_str(reinterpret_cast<const char*>(data.data()), data.size());
 
     try {
-        return configuration_service_->ApplyJsonConfiguration(type, json_str);
+        return configuration_service_->ApplyCborConfiguration(type, data);
     } catch (...) {
-        LOG_ERR("Failed to apply JSON configuration for settings_id=%d", settings_id);
+        LOG_ERR("Failed to apply CBOR configuration for settings_id=%d", settings_id);
         return false;
     }
 }
@@ -74,16 +73,16 @@ std::span<const uint8_t> BleSettingsConfigurationService::HandleConfigRead(uint8
     auto type = static_cast<ConfigurationService::Type>(settings_id);
 
     try {
-        json_str_buffer_ = configuration_service_->GetJsonConfiguration(type);
+        cbor_buffer_ = configuration_service_->GetCborConfiguration(type);
     } catch (const std::exception& e) {
-        LOG_ERR("Failed to get JSON configuration for settings_id=%d: %s", settings_id, e.what());
-        json_str_buffer_.clear();
+        LOG_ERR("Failed to get CBOR configuration for settings_id=%d: %s", settings_id, e.what());
+        cbor_buffer_.clear();
     } catch (...) {
-        LOG_ERR("Failed to get JSON configuration for settings_id=%d", settings_id);
-        json_str_buffer_.clear();
+        LOG_ERR("Failed to get CBOR configuration for settings_id=%d", settings_id);
+        cbor_buffer_.clear();
     }
 
-    return { reinterpret_cast<const uint8_t*>(json_str_buffer_.c_str()), json_str_buffer_.size() };
+    return { cbor_buffer_.data(), cbor_buffer_.size() };
 }
 
 } // namespace eerie_leap::domain::ble_domain::services

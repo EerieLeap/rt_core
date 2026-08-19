@@ -40,6 +40,8 @@ public:
             return {};
         }
 
+        buffer.resize(obj_size);
+
         if (payload_len_out != nullptr)
             *payload_len_out = obj_size;
 

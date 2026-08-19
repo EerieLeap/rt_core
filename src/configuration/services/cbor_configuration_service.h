@@ -90,15 +90,15 @@ private:
             return std::nullopt;
         }
 
-        auto config_bytes = std::span<const uint8_t>(buffer.data(), out_len);
-        auto configuration = serializer_->Deserialize(config_bytes);
+        buffer.resize(out_len);
+        auto configuration = serializer_->Deserialize(buffer);
 
         if(configuration == nullptr) {
             LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());
             return std::nullopt;
         }
 
-        uint32_t crc = crc32_ieee(buffer.data(), buffer_size);
+        uint32_t crc = crc32_ieee(buffer.data(), buffer.size());
 
         LoadedConfig<T> loaded_config {
             .config_raw = std::move(buffer),
@@ -153,6 +153,14 @@ public:
         k_work_flush(&task_load_.work, &work_sync_);
 
         return std::move(task_load_.result);
+    }
+
+    eerie_memory::pmr_unique_ptr<T> Deserialize(std::span<const uint8_t> config_bytes) {
+        return serializer_->Deserialize(config_bytes);
+    }
+
+    std::pmr::vector<uint8_t> Serialize(const T& configuration) {
+        return serializer_->Serialize(configuration);
     }
 };
 

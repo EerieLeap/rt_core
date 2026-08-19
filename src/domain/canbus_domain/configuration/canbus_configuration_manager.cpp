@@ -90,6 +90,35 @@ std::pmr::string CanbusConfigurationManager::GetJsonConfiguration() {
     return JsonSerializer<JsonCanbusConfig>::Serialize(*json_config);
 }
 
+bool CanbusConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {
+    auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
+    if(cbor_config == nullptr)
+        return false;
+
+    try {
+        auto configuration = cbor_parser_->Deserialize(Mrm::GetExtPmr(), *cbor_config);
+
+        if(!Update(*configuration))
+            return false;
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to deserialize CBOR configuration. %s", e.what());
+        return false;
+    }
+
+    LOG_INF("CBOR configuration loaded successfully.");
+
+    return true;
+}
+
+std::pmr::vector<uint8_t> CanbusConfigurationManager::GetCborConfiguration() {
+    auto configuration = Get();
+
+    auto cbor_config = cbor_parser_->Serialize(*configuration);
+    cbor_config->json_config_checksum = json_config_checksum_;
+
+    return cbor_configuration_service_->Serialize(*cbor_config);
+}
+
 bool CanbusConfigurationManager::Update(const CanbusConfiguration& configuration) {
     try {
         if(json_configuration_service_->IsAvailable()) {

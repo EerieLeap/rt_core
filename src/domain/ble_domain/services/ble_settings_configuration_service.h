@@ -1,6 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <memory_resource>
+#include <span>
+#include <vector>
 
 #include <zephyr/kernel.h>
 
@@ -14,7 +18,7 @@ class BleSettingsConfigurationService {
 private:
     static std::unique_ptr<BleSettingsConfigurationService> instance_;
     static bool is_initialized_;
-    static std::pmr::string json_str_buffer_;
+    static std::pmr::vector<uint8_t> cbor_buffer_;
 
     std::shared_ptr<ConfigurationService> configuration_service_;
 

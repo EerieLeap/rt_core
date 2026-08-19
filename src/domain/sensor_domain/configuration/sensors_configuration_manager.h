@@ -11,6 +11,7 @@
 #include "configuration/json/configs/json_sensors_config.h"
 #include "configuration/services/json_configuration_service.h"
 
+#include "domain/configuration_domain/utilities/i_cbor_configuration_manager.h"
 #include "domain/configuration_domain/utilities/i_json_configuration_manager.h"
 #include "domain/sensor_domain/configuration/parsers/sensors_cbor_parser.h"
 #include "domain/sensor_domain/configuration/parsers/sensors_json_parser.h"
@@ -21,13 +22,14 @@ namespace eerie_leap::domain::sensor_domain::configuration {
 namespace config_service = eerie_leap::configuration::services;
 
 using eerie_leap::configuration::json::configs::JsonSensorsConfig;
+using eerie_leap::domain::configuration_domain::utilities::ICborConfigurationManager;
 using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
 using eerie_leap::domain::sensor_domain::configuration::parsers::SensorsCborParser;
 using eerie_leap::domain::sensor_domain::configuration::parsers::SensorsJsonParser;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::subsys::fs::services::IFsService;
 
-class SensorsConfigurationManager : public IJsonConfigurationManager {
+class SensorsConfigurationManager : public ICborConfigurationManager, public IJsonConfigurationManager {
 private:
     std::unique_ptr<config_service::CborConfigurationService<CborSensorsConfig>> cbor_configuration_service_;
     std::unique_ptr<config_service::JsonConfigurationService<JsonSensorsConfig>> json_configuration_service_;
@@ -56,6 +58,9 @@ public:
 
     bool Update(const std::vector<std::shared_ptr<Sensor>>& sensors, bool internal_only = false);
     const std::vector<std::shared_ptr<Sensor>>* Get(bool force_load = false);
+
+    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data) override;
+    std::pmr::vector<uint8_t> GetCborConfiguration() override;
 
     bool ApplyJsonConfiguration(std::string_view json_str) override;
     std::pmr::string GetJsonConfiguration() override;

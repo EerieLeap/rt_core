@@ -98,6 +98,40 @@ std::pmr::string SensorsConfigurationManager::GetJsonConfiguration() {
     return JsonSerializer<JsonSensorsConfig>::Serialize(*json_config);
 }
 
+bool SensorsConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {
+    auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
+    if(cbor_config == nullptr)
+        return false;
+
+    try {
+        auto sensors = cbor_parser_->Deserialize(
+            Mrm::GetExtPmr(),
+            *cbor_config,
+            gpio_channel_count_,
+            adc_channel_count_);
+
+        if(!Update(sensors))
+            return false;
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to deserialize CBOR configuration. %s", e.what());
+        return false;
+    }
+
+    LOG_INF("CBOR configuration loaded successfully.");
+
+    return true;
+}
+
+std::pmr::vector<uint8_t> SensorsConfigurationManager::GetCborConfiguration() {
+    auto cbor_config = cbor_parser_->Serialize(
+        sensors_,
+        gpio_channel_count_,
+        adc_channel_count_);
+    cbor_config->json_config_checksum = json_config_checksum_;
+
+    return cbor_configuration_service_->Serialize(*cbor_config);
+}
+
 bool SensorsConfigurationManager::Update(const std::vector<std::shared_ptr<Sensor>>& sensors, bool internal_only) {
     try {
         if(!internal_only && json_configuration_service_->IsAvailable()) {

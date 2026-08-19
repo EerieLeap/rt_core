@@ -94,6 +94,33 @@ std::pmr::string AdcConfigurationManager::GetJsonConfiguration() {
     return JsonSerializer<JsonAdcConfig>::Serialize(*json_config);
 }
 
+bool AdcConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {
+    auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
+    if(cbor_config == nullptr)
+        return false;
+
+    try {
+        auto configuration = cbor_parser_->Deserialize(Mrm::GetDefaultPmr(), *cbor_config);
+
+        if(!Update(*configuration))
+            return false;
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to deserialize CBOR configuration. %s", e.what());
+        return false;
+    }
+
+    LOG_INF("CBOR configuration loaded successfully.");
+
+    return true;
+}
+
+std::pmr::vector<uint8_t> AdcConfigurationManager::GetCborConfiguration() {
+    auto cbor_config = cbor_parser_->Serialize(*configuration_);
+    cbor_config->json_config_checksum = json_config_checksum_;
+
+    return cbor_configuration_service_->Serialize(*cbor_config);
+}
+
 bool AdcConfigurationManager::Update(const AdcConfiguration& configuration, bool internal_only) {
     try {
         if(!internal_only && json_configuration_service_->IsAvailable()) {
