@@ -14,6 +14,7 @@
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/canbus/canbus_proxy.hpp"
 
+#include "isr_dispatch_guard.hpp"
 #include "isr_sensor_reader_base.h"
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
@@ -27,17 +28,22 @@ class CanbusSensorReaderRaw : public IsrSensorReaderBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<CanbusProxy> canbus_;
+    std::shared_ptr<IsrDispatchGuard<CanbusSensorReaderRaw>> dispatch_guard_;
 
-    atomic_t is_destroying_{ATOMIC_INIT(0)};
-    k_sem processing_semaphore_;
-    uint32_t frame_id_;
-    int frame_handler_id_;
+    uint32_t frame_id_ = 0;
+    int frame_handler_id_ = 0;
 
     static constexpr int FRAME_PROCESSING_DELAY_MS = 4;
+
+    void ProcessFrame(const CanFrame& can_frame) noexcept;
 
 protected:
     std::optional<SensorReading> CreateRawReading(const CanFrame& can_frame);
     virtual void AddOrUpdateReading(const CanFrame& can_frame);
+
+    // Derived readers must call this from their destructor so no frame is
+    // dispatched onto their already destroyed members.
+    void Detach();
 
 public:
     CanbusSensorReaderRaw(

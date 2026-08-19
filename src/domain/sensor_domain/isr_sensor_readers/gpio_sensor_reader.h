@@ -3,11 +3,11 @@
 #include <memory>
 
 #include <zephyr/kernel.h>
-#include <zephyr/sys/atomic.h>
 
 #include "subsys/gpio/i_gpio.h"
 #include "subsys/threading/work_queue_thread.h"
 
+#include "isr_dispatch_guard.hpp"
 #include "isr_sensor_reader_base.h"
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
@@ -20,15 +20,15 @@ class GpioSensorReader : public IsrSensorReaderBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<IGpio> gpio_;
+    std::shared_ptr<IsrDispatchGuard<GpioSensorReader>> dispatch_guard_;
 
-    atomic_t is_destroying_{ATOMIC_INIT(0)};
-    k_sem processing_semaphore_;
-    int channel_;
-    int handler_id_;
+    int channel_ = 0;
+    int handler_id_ = 0;
 
     static constexpr int STATE_PROCESSING_DELAY_MS = 4;
 
     void QueueReading(bool state);
+    void ProcessState(bool state) noexcept;
     void AddOrUpdateReading(bool state);
 
 public:

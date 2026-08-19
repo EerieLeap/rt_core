@@ -34,7 +34,7 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<CanbusProxy> canbus,
         std::shared_ptr<const CanSignalConfiguration> signal_configuration);
-    virtual ~CanbusSensorReader() = default;
+    ~CanbusSensorReader() override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

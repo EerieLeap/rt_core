@@ -29,6 +29,10 @@ CanbusSensorReader::CanbusSensorReader(
         ),
         signal_configuration_(std::move(signal_configuration)) {}
 
+CanbusSensorReader::~CanbusSensorReader() {
+    Detach();
+}
+
 void CanbusSensorReader::AddOrUpdateReading(const CanFrame& can_frame) {
     auto reading = CreateRawReading(can_frame);
     if(!reading)
