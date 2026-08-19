@@ -81,7 +81,6 @@ struct CborCanbusConfig {
 
 	std::pmr::vector<CborCanChannelConfig> CborCanChannelConfig_m;
 	int com_bus_channel{};
-	uint32_t json_config_checksum{};
 
 	CborCanbusConfig(std::allocator_arg_t, allocator_type alloc)
         : CborCanChannelConfig_m(alloc) {}
@@ -94,6 +93,5 @@ struct CborCanbusConfig {
 
 	CborCanbusConfig(CborCanbusConfig&& other, allocator_type alloc)
         : CborCanChannelConfig_m(std::move(other.CborCanChannelConfig_m), alloc),
-		com_bus_channel(other.com_bus_channel),
-		json_config_checksum(other.json_config_checksum) {}
+		com_bus_channel(other.com_bus_channel) {}
 };

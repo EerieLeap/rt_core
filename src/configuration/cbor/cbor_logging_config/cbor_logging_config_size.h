@@ -22,7 +22,5 @@ static size_t cbor_get_size_CborLoggingConfig(const CborLoggingConfig& config) {
             .AddBool(sensor_logging_config.log_only_new_data);
     }
 
-    builder.AddUint(config.json_config_checksum);
-
     return builder.Build();
 }

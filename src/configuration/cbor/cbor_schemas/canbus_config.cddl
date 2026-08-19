@@ -30,7 +30,5 @@ CborCanChannelConfig = [
 
 CborCanbusConfig = [
   channel_configs: [0*8 CborCanChannelConfig],
-  com_bus_channel: int,
-
-  json_config_checksum: uint
+  com_bus_channel: int
 ]

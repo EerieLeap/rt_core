@@ -48,7 +48,6 @@ static size_t cbor_get_size_CborCanbusConfig(const CborCanbusConfig& config) {
     }
 
     builder.AddInt(config.com_bus_channel);
-    builder.AddUint(config.json_config_checksum);
 
     return builder.Build();
 }

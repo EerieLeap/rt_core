@@ -19,7 +19,6 @@ struct CborLoggingConfig {
 	uint32_t logging_interval_ms{};
 	uint32_t max_log_size_mb{};
 	std::pmr::vector<CborSensorLoggingConfig> CborSensorLoggingConfig_m;
-	uint32_t json_config_checksum{};
 
 	CborLoggingConfig(std::allocator_arg_t, allocator_type alloc)
         : CborSensorLoggingConfig_m(alloc) {}
@@ -33,6 +32,5 @@ struct CborLoggingConfig {
 	CborLoggingConfig(CborLoggingConfig&& other, allocator_type alloc)
         : logging_interval_ms(other.logging_interval_ms),
 		max_log_size_mb(other.max_log_size_mb),
-		CborSensorLoggingConfig_m(std::move(other.CborSensorLoggingConfig_m), alloc),
-		json_config_checksum(other.json_config_checksum) {}
+		CborSensorLoggingConfig_m(std::move(other.CborSensorLoggingConfig_m), alloc) {}
 };

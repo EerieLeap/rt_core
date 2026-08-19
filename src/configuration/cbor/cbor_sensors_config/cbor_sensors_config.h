@@ -101,7 +101,6 @@ struct CborSensorsConfig {
 	using allocator_type = std::pmr::polymorphic_allocator<>;
 
 	std::pmr::vector<CborSensorConfig> CborSensorConfig_m;
-	uint32_t json_config_checksum{};
 
 	CborSensorsConfig(std::allocator_arg_t, allocator_type alloc)
         : CborSensorConfig_m(alloc) {}
@@ -113,6 +112,5 @@ struct CborSensorsConfig {
 	~CborSensorsConfig() = default;
 
 	CborSensorsConfig(CborSensorsConfig&& other, allocator_type alloc)
-        : CborSensorConfig_m(std::move(other.CborSensorConfig_m), alloc),
-		json_config_checksum(other.json_config_checksum) {}
+        : CborSensorConfig_m(std::move(other.CborSensorConfig_m), alloc) {}
 };

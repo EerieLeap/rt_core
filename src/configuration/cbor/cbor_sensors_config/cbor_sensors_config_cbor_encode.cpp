@@ -99,8 +99,7 @@ static bool encode_CborSensorsConfig(
 
 	size_t CborSensorConfig_m_count = input->CborSensorConfig_m.size();
 
-	bool res = (((zcbor_list_start_encode(state, 2) && ((((zcbor_list_start_encode(state, CborSensorConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborSensorConfig_m_count, &CborSensorConfig_m_count, (zcbor_encoder_t *)encode_CborSensorConfig, state, input->CborSensorConfig_m.data(), sizeof(struct CborSensorConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborSensorConfig_m_count)))
-	&& ((zcbor_uint32_encode(state, (&(*input).json_config_checksum))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 2))));
+	bool res = (((zcbor_list_start_encode(state, 1) && ((((zcbor_list_start_encode(state, CborSensorConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborSensorConfig_m_count, &CborSensorConfig_m_count, (zcbor_encoder_t *)encode_CborSensorConfig, state, input->CborSensorConfig_m.data(), sizeof(struct CborSensorConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborSensorConfig_m_count)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 1))));
 
 	log_result(state, res, __func__);
 	return res;

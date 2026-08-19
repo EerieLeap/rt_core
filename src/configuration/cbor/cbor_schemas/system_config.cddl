@@ -1,6 +1,4 @@
 CborSystemConfig = [
   device_id: uint .size 8,
-  build_number: uint,
-
-  json_config_checksum: uint
+  build_number: uint
 ]

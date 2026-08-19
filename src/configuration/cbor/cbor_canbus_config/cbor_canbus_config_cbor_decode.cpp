@@ -198,10 +198,6 @@ static bool decode_CborCanbusConfig(
         return false;
     }
 
-    if (!zcbor_uint32_decode(state, &result->json_config_checksum)) {
-        return false;
-    }
-
     if (!zcbor_list_end_decode(state)) {
         return false;
     }

@@ -28,7 +28,6 @@ extern "C" {
 struct CborSystemConfig {
 	uint64_t device_id;
 	uint32_t build_number;
-	uint32_t json_config_checksum;
 };
 
 #ifdef __cplusplus

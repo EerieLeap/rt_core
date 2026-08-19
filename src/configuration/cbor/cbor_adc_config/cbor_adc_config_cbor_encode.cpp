@@ -65,9 +65,8 @@ static bool encode_CborAdcConfig(
 
 	size_t CborAdcChannelConfig_m_count = input->CborAdcChannelConfig_m.size();
 
-	bool res = (((zcbor_list_start_encode(state, 3) && ((((zcbor_uint32_encode(state, (&(*input).samples))))
-	&& ((zcbor_list_start_encode(state, CborAdcChannelConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborAdcChannelConfig_m_count, &CborAdcChannelConfig_m_count, (zcbor_encoder_t *)encode_CborAdcChannelConfig, state, input->CborAdcChannelConfig_m.data(), sizeof(struct CborAdcChannelConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborAdcChannelConfig_m_count)))
-	&& ((zcbor_uint32_encode(state, (&(*input).json_config_checksum))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 3))));
+	bool res = (((zcbor_list_start_encode(state, 2) && ((((zcbor_uint32_encode(state, (&(*input).samples))))
+	&& ((zcbor_list_start_encode(state, CborAdcChannelConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborAdcChannelConfig_m_count, &CborAdcChannelConfig_m_count, (zcbor_encoder_t *)encode_CborAdcChannelConfig, state, input->CborAdcChannelConfig_m.data(), sizeof(struct CborAdcChannelConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborAdcChannelConfig_m_count)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 2))));
 
 	log_result(state, res, __func__);
 	return res;

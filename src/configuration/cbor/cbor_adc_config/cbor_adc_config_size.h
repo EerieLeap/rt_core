@@ -34,7 +34,5 @@ static size_t cbor_get_size_CborAdcConfig(const CborAdcConfig& config) {
         });
     }
 
-    builder.AddUint(config.json_config_checksum);
-
     return builder.Build();
 }

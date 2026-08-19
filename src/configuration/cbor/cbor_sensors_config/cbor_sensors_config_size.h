@@ -64,7 +64,5 @@ static size_t cbor_get_size_CborSensorsConfig(const CborSensorsConfig& config) {
         });
     }
 
-    builder.AddUint(config.json_config_checksum);
-
     return builder.Build();
 }

@@ -56,7 +56,6 @@ struct CborAdcConfig {
 
 	uint32_t samples{};
 	std::pmr::vector<CborAdcChannelConfig> CborAdcChannelConfig_m;
-	uint32_t json_config_checksum{};
 
 	CborAdcConfig(std::allocator_arg_t, allocator_type alloc)
         : CborAdcChannelConfig_m(alloc) {}
@@ -69,6 +68,5 @@ struct CborAdcConfig {
 
 	CborAdcConfig(CborAdcConfig&& other, allocator_type alloc)
         : samples(other.samples),
-		CborAdcChannelConfig_m(std::move(other.CborAdcChannelConfig_m), alloc),
-		json_config_checksum(other.json_config_checksum) {}
+		CborAdcChannelConfig_m(std::move(other.CborAdcChannelConfig_m), alloc) {}
 };

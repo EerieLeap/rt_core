@@ -73,11 +73,6 @@ static bool decode_CborLoggingConfig(
 		return false;
 	}
 
-	if (!zcbor_uint32_decode(state, &result->json_config_checksum)) {
-		zcbor_list_end_decode(state);
-		return false;
-	}
-
 	if (!zcbor_list_end_decode(state)) {
 		return false;
 	}
