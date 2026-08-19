@@ -178,14 +178,13 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
     const auto adc_configuration = sensors_reader_GetTestConfiguration();
 
     auto cbor_adc_config_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
-    auto json_adc_config_service = std::make_unique<JsonConfigurationService<JsonAdcConfig>>("adc_config", fs_service);
 
     AdcFactory adc_factory(nullptr);
     auto adc_manager = adc_factory.Create();
     adc_manager->Initialize();
 
     auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
-        std::move(cbor_adc_config_service), std::move(json_adc_config_service), adc_manager);
+        std::move(cbor_adc_config_service), adc_manager);
 
     auto gpio = std::make_shared<GpioSimulator>();
     gpio->Initialize();

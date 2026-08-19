@@ -4,7 +4,6 @@
 
 #include "configuration/cbor/cbor_system_config/cbor_system_config.h"
 #include "configuration/services/cbor_configuration_service.h"
-#include "configuration/services/json_configuration_service.h"
 #include "domain/system_domain/configuration/parsers/system_configuration_cbor_parser.h"
 #include "domain/system_domain/models/system_configuration.h"
 

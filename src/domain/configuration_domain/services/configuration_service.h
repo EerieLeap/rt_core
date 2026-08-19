@@ -6,12 +6,10 @@
 #include <functional>
 
 #include "../utilities/i_cbor_configuration_manager.h"
-#include "../utilities/i_json_configuration_manager.h"
 
 namespace eerie_leap::domain::configuration_domain::services {
 
 using eerie_leap::domain::configuration_domain::utilities::ICborConfigurationManager;
-using eerie_leap::domain::configuration_domain::utilities::IJsonConfigurationManager;
 
 class ConfigurationService {
 public:
@@ -26,7 +24,6 @@ public:
 
 private:
     std::unordered_map<Type, std::shared_ptr<ICborConfigurationManager>> cbor_configuration_managers_;
-    std::unordered_map<Type, std::shared_ptr<IJsonConfigurationManager>> json_configuration_managers_;
 
 public:
     ConfigurationService() = default;
@@ -37,12 +34,6 @@ public:
     void RegisterCborConfigurationManager(
         Type type,
         std::shared_ptr<ICborConfigurationManager> cbor_configuration_manager);
-
-    bool ApplyJsonConfiguration(Type type, std::string_view json_str);
-    std::pmr::string GetJsonConfiguration(Type type);
-    void RegisterJsonConfigurationManager(
-        Type type,
-        std::shared_ptr<IJsonConfigurationManager> json_configuration_manager);
 };
 
 } // namespace eerie_leap::domain::configuration_domain::services

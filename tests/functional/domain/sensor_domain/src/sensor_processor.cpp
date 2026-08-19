@@ -40,7 +40,6 @@ using namespace eerie_leap::utilities::string;
 using namespace eerie_leap::utilities::voltage_interpolator;
 
 using namespace eerie_leap::configuration::services;
-using namespace eerie_leap::configuration::json::configs;
 
 using namespace eerie_leap::subsys::device_tree;
 using namespace eerie_leap::subsys::adc;
@@ -183,14 +182,13 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     std::shared_ptr<GuidGenerator> guid_generator = std::make_shared<GuidGenerator>();
 
     auto cbor_adc_config_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
-    auto json_adc_config_service = std::make_unique<JsonConfigurationService<JsonAdcConfig>>("adc_config", fs_service);
 
     AdcFactory adc_factory(nullptr);
     auto adc_manager = adc_factory.Create();
     adc_manager->Initialize();
 
     auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
-        std::move(cbor_adc_config_service), std::move(json_adc_config_service), adc_manager);
+        std::move(cbor_adc_config_service), adc_manager);
 
     const auto adc_configuration = sensor_processor_GetTestConfiguration();
     adc_configuration_manager->Update(adc_configuration);

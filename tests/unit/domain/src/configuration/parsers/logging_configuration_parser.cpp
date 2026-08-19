@@ -3,7 +3,6 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "domain/logging_domain/configuration/parsers/logging_configuration_cbor_parser.h"
-#include "domain/logging_domain/configuration/parsers/logging_configuration_json_parser.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -56,17 +55,6 @@ ZTEST(logging_configuration_parser, test_CborSerializeDeserialize) {
 
     auto serialized_logging_configuration = logging_configuration_cbor_parser.Serialize(logging_configuration);
     auto deserialized_logging_configuration = logging_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_logging_configuration.get());
-
-    logging_configuration_parser_CompareLoggingConfigurations(logging_configuration, *deserialized_logging_configuration);
-}
-
-ZTEST(logging_configuration_parser, test_JsonSerializeDeserialize) {
-    LoggingConfigurationJsonParser logging_configuration_json_parser;
-
-    auto logging_configuration = logging_configuration_parser_GetTestConfiguration();
-
-    auto serialized_logging_configuration = logging_configuration_json_parser.Serialize(logging_configuration);
-    auto deserialized_logging_configuration = logging_configuration_json_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_logging_configuration);
 
     logging_configuration_parser_CompareLoggingConfigurations(logging_configuration, *deserialized_logging_configuration);
 }

@@ -7,7 +7,6 @@
 #include "subsys/math_parser/expression_evaluator.h"
 
 #include "domain/sensor_domain/configuration/parsers/sensors_cbor_parser.h"
-#include "domain/sensor_domain/configuration/parsers/sensors_json_parser.h"
 #include "domain/sensor_domain/models/sensor.h"
 
 using namespace eerie_memory;
@@ -130,17 +129,6 @@ ZTEST(sensors_parser, test_CborSerializeDeserialize) {
 
     auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
     auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
-
-    sensors_parser_CompareSensors(sensors, deserialized_sensors);
-}
-
-ZTEST(sensors_parser, test_JsonSerializeDeserialize) {
-    auto sensors_json_parser = std::make_shared<SensorsJsonParser>(nullptr);
-
-    auto sensors = sensors_parser_GetTestSensors();
-
-    auto serialized_sensors = sensors_json_parser->Serialize(sensors, 16, 16);
-    auto deserialized_sensors = sensors_json_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
 
     sensors_parser_CompareSensors(sensors, deserialized_sensors);
 }

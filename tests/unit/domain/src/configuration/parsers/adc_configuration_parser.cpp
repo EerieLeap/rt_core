@@ -3,7 +3,6 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "domain/sensor_domain/configuration/parsers/adc_configuration_cbor_parser.h"
-#include "domain/sensor_domain/configuration/parsers/adc_configuration_json_parser.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -82,17 +81,6 @@ ZTEST(adc_configuration_parser, test_CborSerializeDeserialize) {
 
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
     auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration.get());
-
-    adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
-}
-
-ZTEST(adc_configuration_parser, test_JsonSerializeDeserialize) {
-    AdcConfigurationJsonParser adc_configuration_json_parser;
-
-    auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
-
-    auto serialized_adc_configuration = adc_configuration_json_parser.Serialize(adc_configuration);
-    auto deserialized_adc_configuration = adc_configuration_json_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration.get());
 
     adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
 }

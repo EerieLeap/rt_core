@@ -3,7 +3,6 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "domain/canbus_domain/configuration/parsers/canbus_configuration_cbor_parser.h"
-#include "domain/canbus_domain/configuration/parsers/canbus_configuration_json_parser.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -141,17 +140,6 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize) {
 
     auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
     auto deserialized_canbus_configuration = canbus_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_canbus_configuration);
-
-    canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
-}
-
-ZTEST(canbus_configuration_parser, test_JsonSerializeDeserialize) {
-    CanbusConfigurationJsonParser canbus_configuration_json_parser(nullptr);
-
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
-
-    auto json_canbus_configuration = canbus_configuration_json_parser.Serialize(canbus_configuration);
-    auto deserialized_canbus_configuration = canbus_configuration_json_parser.Deserialize(Mrm::GetDefaultPmr(), *json_canbus_configuration.get());
 
     canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
 }

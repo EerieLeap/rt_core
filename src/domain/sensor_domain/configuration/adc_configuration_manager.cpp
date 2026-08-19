@@ -3,7 +3,6 @@
 
 #include "utilities/voltage_interpolator/calibration_data.h"
 #include "utilities/voltage_interpolator/interpolation_method.h"
-#include "configuration/json/json_serializer.h"
 
 #include "adc_configuration_manager.h"
 
@@ -11,7 +10,6 @@ namespace eerie_leap::domain::sensor_domain::configuration {
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::voltage_interpolator;
-using namespace eerie_leap::configuration::json;
 using namespace eerie_leap::configuration::services;
 using namespace eerie_leap::subsys::adc;
 using namespace eerie_leap::subsys::adc::utilities;
@@ -20,16 +18,12 @@ LOG_MODULE_REGISTER(adc_config_ctrl_logger);
 
 AdcConfigurationManager::AdcConfigurationManager(
     std::unique_ptr<CborConfigurationService<CborAdcConfig>> cbor_configuration_service,
-    std::unique_ptr<JsonConfigurationService<JsonAdcConfig>> json_configuration_service,
     std::shared_ptr<IAdcManager> adc_manager)
         : cbor_configuration_service_(std::move(cbor_configuration_service)),
-        json_configuration_service_(std::move(json_configuration_service)),
         adc_manager_(adc_manager),
-        configuration_(nullptr),
-        json_config_checksum_(0) {
+        configuration_(nullptr) {
 
     cbor_parser_ = std::make_unique<AdcConfigurationCborParser>();
-    json_parser_ = std::make_unique<AdcConfigurationJsonParser>();
 
     std::shared_ptr<IAdcManager> adc_manager_instance = nullptr;
 
@@ -51,47 +45,6 @@ AdcConfigurationManager::AdcConfigurationManager(
     } else {
         LOG_INF("ADC Configuration Manager initialized successfully.");
     }
-
-    ApplyJsonConfiguration(true);
-}
-
-bool AdcConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::string_view json_str) {
-    if(fs_load && !json_configuration_service_->IsAvailable())
-        return false;
-
-    auto json_config_loaded = fs_load
-        ? json_configuration_service_->Load()
-        : json_configuration_service_->Load(json_str);
-    if(!json_config_loaded.has_value())
-        return false;
-
-    if(json_config_loaded->checksum == json_config_checksum_)
-        return true;
-
-    try {
-        auto configuration = json_parser_->Deserialize(Mrm::GetDefaultPmr(), *json_config_loaded->config);
-
-        json_config_checksum_ = json_config_loaded->checksum;
-
-        if(!Update(*configuration, true))
-            return false;
-    } catch(const std::exception& e) {
-        LOG_ERR("Failed to deserialize JSON configuration. %s", e.what());
-        return false;
-    }
-
-    LOG_INF("JSON configuration loaded successfully.");
-
-    return true;
-}
-
-bool AdcConfigurationManager::ApplyJsonConfiguration(std::string_view json_str) {
-    return ApplyJsonConfiguration(false, json_str);
-}
-
-std::pmr::string AdcConfigurationManager::GetJsonConfiguration() {
-    auto json_config = json_parser_->Serialize(*configuration_);
-    return JsonSerializer<JsonAdcConfig>::Serialize(*json_config);
 }
 
 bool AdcConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {
@@ -116,30 +69,13 @@ bool AdcConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cb
 
 std::pmr::vector<uint8_t> AdcConfigurationManager::GetCborConfiguration() {
     auto cbor_config = cbor_parser_->Serialize(*configuration_);
-    cbor_config->json_config_checksum = json_config_checksum_;
 
     return cbor_configuration_service_->Serialize(*cbor_config);
 }
 
-bool AdcConfigurationManager::Update(const AdcConfiguration& configuration, bool internal_only) {
+bool AdcConfigurationManager::Update(const AdcConfiguration& configuration) {
     try {
-        if(!internal_only && json_configuration_service_->IsAvailable()) {
-            auto json_config = json_parser_->Serialize(configuration);
-            json_configuration_service_->Save(json_config.get());
-
-            auto json_config_loaded = json_configuration_service_->Load();
-            if(!json_config_loaded.has_value()) {
-                LOG_ERR("Failed to load newly updated JSON configuration.");
-                return false;
-            }
-
-            LOG_INF("JSON configuration updated successfully.");
-
-            json_config_checksum_ = json_config_loaded->checksum;
-        }
-
         auto cbor_config = cbor_parser_->Serialize(configuration);
-        cbor_config->json_config_checksum = json_config_checksum_;
 
         if(!cbor_configuration_service_->Save(cbor_config.get()))
             return false;
@@ -165,8 +101,6 @@ std::shared_ptr<IAdcManager> AdcConfigurationManager::Get(bool force_load) {
     auto configuration = cbor_parser_->Deserialize(Mrm::GetDefaultPmr(), *cbor_config);
     configuration_ = make_shared_pmr<AdcConfiguration>(Mrm::GetDefaultPmr(), std::move(*configuration));
     adc_manager_->UpdateConfiguration(configuration_);
-
-    json_config_checksum_ = cbor_config->json_config_checksum;
 
     return adc_manager_;
 }

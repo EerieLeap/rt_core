@@ -17,7 +17,6 @@ ZTEST(memory_resource_manager, test_GetDefaultPmr_is_the_std_default) {
 ZTEST(memory_resource_manager, test_accessors_are_stable) {
     zassert_equal_ptr(Mrm::GetDefaultPmr(), Mrm::GetDefaultPmr());
     zassert_equal_ptr(Mrm::GetExtPmr(), Mrm::GetExtPmr());
-    zassert_equal_ptr(Mrm::GetBoostExtPmr(), Mrm::GetBoostExtPmr());
 }
 
 ZTEST(memory_resource_manager, test_GetExtPmr_is_distinct_from_default) {
@@ -35,20 +34,6 @@ ZTEST(memory_resource_manager, test_GetExtPmr_allocates) {
     zassert_not_null(block);
     memset(block, 0x3C, 256);
     zassert_equal(block[255], 0x3C);
-
-    resource->deallocate(block, 256, 8);
-}
-
-ZTEST(memory_resource_manager, test_GetBoostExtPmr_allocates) {
-    auto* resource = Mrm::GetBoostExtPmr();
-
-    zassert_not_null(resource);
-
-    auto* block = static_cast<uint8_t*>(resource->allocate(256, 8));
-
-    zassert_not_null(block);
-    memset(block, 0xC3, 256);
-    zassert_equal(block[255], 0xC3);
 
     resource->deallocate(block, 256, 8);
 }

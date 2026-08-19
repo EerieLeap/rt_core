@@ -23,10 +23,3 @@ __pycache__/
 
 # tools
 /tools
-
-#libs
-/libs/boost
-
-# boost
-project-config.jam
-b2

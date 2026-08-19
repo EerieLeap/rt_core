@@ -56,9 +56,8 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_succes
     adc_manager->Initialize();
 
     auto adc_configuration_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
-    auto json_configuration_service = std::make_unique<JsonConfigurationService<JsonAdcConfig>>("adc_config", fs_service);
     auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
-        std::move(adc_configuration_service), std::move(json_configuration_service), adc_manager);
+        std::move(adc_configuration_service), adc_manager);
 
     auto adc_configuration = adc_configuration_manager_GetTestConfiguration();
 
@@ -93,9 +92,8 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_and_Lo
     adc_manager->Initialize();
 
     auto adc_configuration_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
-    auto json_configuration_service = std::make_unique<JsonConfigurationService<JsonAdcConfig>>("adc_config", fs_service);
     auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
-        std::move(adc_configuration_service), std::move(json_configuration_service), adc_manager);
+        std::move(adc_configuration_service), adc_manager);
 
     auto adc_configuration = adc_configuration_manager_GetTestConfiguration();
 
@@ -103,10 +101,9 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_and_Lo
     zassert_true(result);
 
     adc_configuration_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
-    json_configuration_service = std::make_unique<JsonConfigurationService<JsonAdcConfig>>("adc_config", fs_service);
     adc_configuration_manager = nullptr;
     adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
-        std::move(adc_configuration_service), std::move(json_configuration_service), adc_manager);
+        std::move(adc_configuration_service), adc_manager);
 
     adc_manager = adc_configuration_manager->Get();
 

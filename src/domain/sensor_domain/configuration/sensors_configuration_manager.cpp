@@ -2,31 +2,25 @@
 
 #include <zephyr/logging/log.h>
 
-#include "configuration/json/json_serializer.h"
-
 #include "sensors_configuration_manager.h"
 
 namespace eerie_leap::domain::sensor_domain::configuration {
 
-using namespace eerie_leap::configuration::json;
 using namespace eerie_leap::configuration::services;
 
 LOG_MODULE_REGISTER(sensors_config_ctrl_logger);
 
 SensorsConfigurationManager::SensorsConfigurationManager(
     std::unique_ptr<CborConfigurationService<CborSensorsConfig>> cbor_configuration_service,
-    std::unique_ptr<JsonConfigurationService<JsonSensorsConfig>> json_configuration_service,
     std::shared_ptr<IFsService> sd_fs_service,
     int gpio_channel_count,
     int adc_channel_count)
         : cbor_configuration_service_(std::move(cbor_configuration_service)),
-        json_configuration_service_(std::move(json_configuration_service)),
         sd_fs_service_(std::move(sd_fs_service)),
         gpio_channel_count_(gpio_channel_count),
         adc_channel_count_(adc_channel_count) {
 
     cbor_parser_ = std::make_unique<SensorsCborParser>(sd_fs_service_);
-    json_parser_ = std::make_unique<SensorsJsonParser>(sd_fs_service_);
 
     const std::vector<std::shared_ptr<Sensor>>* sensors = nullptr;
 
@@ -48,54 +42,6 @@ SensorsConfigurationManager::SensorsConfigurationManager(
     } else {
         LOG_INF("Sensors Configuration Manager initialized successfully.");
     }
-
-    ApplyJsonConfiguration(true);
-}
-
-bool SensorsConfigurationManager::ApplyJsonConfiguration(bool fs_load, std::string_view json_str) {
-    if(fs_load && !json_configuration_service_->IsAvailable())
-        return false;
-
-    auto json_config_loaded = fs_load
-        ? json_configuration_service_->Load()
-        : json_configuration_service_->Load(json_str);
-    if(!json_config_loaded.has_value())
-        return false;
-
-    if(json_config_loaded->checksum == json_config_checksum_)
-        return true;
-
-    try {
-        auto sensors = json_parser_->Deserialize(
-            Mrm::GetExtPmr(),
-            *json_config_loaded->config,
-            gpio_channel_count_,
-            adc_channel_count_);
-
-        json_config_checksum_ = json_config_loaded->checksum;
-
-        if(!Update(sensors, true))
-            return false;
-    } catch(const std::exception& e) {
-        LOG_ERR("Failed to deserialize JSON configuration. %s", e.what());
-        return false;
-    }
-
-    LOG_INF("JSON configuration loaded successfully.");
-
-    return true;
-}
-
-bool SensorsConfigurationManager::ApplyJsonConfiguration(std::string_view json_str) {
-    return ApplyJsonConfiguration(false, json_str);
-}
-
-std::pmr::string SensorsConfigurationManager::GetJsonConfiguration() {
-    auto json_config = json_parser_->Serialize(
-        sensors_,
-        gpio_channel_count_,
-        adc_channel_count_);
-    return JsonSerializer<JsonSensorsConfig>::Serialize(*json_config);
 }
 
 bool SensorsConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {
@@ -127,36 +73,16 @@ std::pmr::vector<uint8_t> SensorsConfigurationManager::GetCborConfiguration() {
         sensors_,
         gpio_channel_count_,
         adc_channel_count_);
-    cbor_config->json_config_checksum = json_config_checksum_;
 
     return cbor_configuration_service_->Serialize(*cbor_config);
 }
 
-bool SensorsConfigurationManager::Update(const std::vector<std::shared_ptr<Sensor>>& sensors, bool internal_only) {
+bool SensorsConfigurationManager::Update(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     try {
-        if(!internal_only && json_configuration_service_->IsAvailable()) {
-            auto json_config = json_parser_->Serialize(
-                sensors,
-                gpio_channel_count_,
-                adc_channel_count_);
-            json_configuration_service_->Save(json_config.get());
-
-            auto json_config_loaded = json_configuration_service_->Load();
-            if(!json_config_loaded.has_value()) {
-                LOG_ERR("Failed to load newly updated JSON configuration.");
-                return false;
-            }
-
-            LOG_INF("JSON configuration updated successfully.");
-
-            json_config_checksum_ = json_config_loaded->checksum;
-        }
-
         auto cbor_config = cbor_parser_->Serialize(
             sensors,
             gpio_channel_count_,
             adc_channel_count_);
-        cbor_config->json_config_checksum = json_config_checksum_;
 
         if(!cbor_configuration_service_->Save(cbor_config.get()))
             return false;
@@ -181,8 +107,6 @@ const std::vector<std::shared_ptr<Sensor>>* SensorsConfigurationManager::Get(boo
     sensors_.clear();
     sensors_ = cbor_parser_->Deserialize(
         Mrm::GetExtPmr(), *cbor_config, gpio_channel_count_, adc_channel_count_);
-
-    json_config_checksum_ = cbor_config->json_config_checksum;
 
     return &sensors_;
 }

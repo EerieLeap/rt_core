@@ -2,44 +2,8 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     set(EL_COMMON_DIR "${ZEPHYR_CURRENT_MODULE_DIR}")
     set(SRC_DIR "${EL_COMMON_DIR}/src")
 
-    # Bootstrap and build Boost
-    if(NOT EXISTS "${EL_COMMON_DIR}/repos/boost/b2")
-        message(STATUS "Bootstrapping Boost...")
-        execute_process(
-            COMMAND ${EL_COMMON_DIR}/repos/boost/bootstrap.sh
-            WORKING_DIRECTORY ${EL_COMMON_DIR}/repos/boost
-            RESULT_VARIABLE BOOTSTRAP_RESULT
-        )
-        if(NOT BOOTSTRAP_RESULT EQUAL 0)
-            message(FATAL_ERROR "Failed to bootstrap Boost")
-        endif()
-
-        message(STATUS "Building Boost headers and tools...")
-        execute_process(
-            COMMAND ${EL_COMMON_DIR}/repos/boost/b2 headers tools/bcp
-            WORKING_DIRECTORY ${EL_COMMON_DIR}/repos/boost
-            RESULT_VARIABLE B2_HEADERS_RESULT
-        )
-        if(NOT B2_HEADERS_RESULT EQUAL 0)
-            message(FATAL_ERROR "Failed to build Boost headers and tools")
-        endif()
-
-        file(MAKE_DIRECTORY ${EL_COMMON_DIR}/libs/boost)
-
-        message(STATUS "Extracting Boost.JSON headers...")
-        execute_process(
-            COMMAND ${EL_COMMON_DIR}/repos/boost/dist/bin/bcp boost/json ${EL_COMMON_DIR}/libs/boost
-            WORKING_DIRECTORY ${EL_COMMON_DIR}/repos/boost
-            RESULT_VARIABLE BCP_RESULT
-        )
-        if(NOT BCP_RESULT EQUAL 0)
-            message(FATAL_ERROR "Failed to extract Boost.JSON headers")
-        endif()
-    endif()
-
     zephyr_include_directories(
         "${SRC_DIR}"
-        libs/boost
     )
 
     zephyr_library()
@@ -58,8 +22,6 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
             "${SRC_DIR}/configuration/services/*.c"
             "${SRC_DIR}/configuration/services/*.cpp"
             "${SRC_DIR}/configuration/cbor/cbor_serializer.cpp"
-            "${SRC_DIR}/configuration/json/boost_json_config.cpp"
-            "${SRC_DIR}/configuration/json/json_serializer.cpp"
             "${SRC_DIR}/domain/configuration_domain/*.c"
             "${SRC_DIR}/domain/configuration_domain/*.cpp"
         )

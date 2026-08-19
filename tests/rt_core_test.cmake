@@ -18,12 +18,6 @@ foreach(candidate
     endif()
 endforeach()
 
-# Boost is linked through the rt_core module but has to be configured by the
-# application, so the suites must mirror what app/CMakeLists.txt sets.
-add_definitions(-DBOOST_SYSTEM_DISABLE_THREADS)
-add_definitions(-DBOOST_JSON_STACK_BUFFER_SIZE=1024)
-add_definitions(-DBOOST_HAS_STDINT_H)
-
 if(BOARD MATCHES "^qemu_cortex_a")
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_mmu.conf")
 endif()
