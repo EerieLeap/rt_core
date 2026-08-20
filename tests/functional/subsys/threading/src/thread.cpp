@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <string>
 
 #include <zephyr/ztest.h>
@@ -62,6 +63,27 @@ public:
 
     [[nodiscard]] int Entries() const { return static_cast<int>(atomic_get(&entries_)); }
     [[nodiscard]] int Finished() const { return static_cast<int>(atomic_get(&finished_)); }
+};
+
+// Throws instead of returning, so the entry-point trampoline must catch it.
+class ThrowingWorker : public IThread {
+private:
+    bool throw_std_exception_;
+    atomic_t entries_;
+
+public:
+    explicit ThrowingWorker(bool throw_std_exception) : throw_std_exception_(throw_std_exception), entries_(ATOMIC_INIT(0)) {}
+
+    void ThreadEntry() override {
+        atomic_inc(&entries_);
+
+        if(throw_std_exception_)
+            throw std::runtime_error("boom");
+
+        throw 42;
+    }
+
+    [[nodiscard]] int Entries() const { return static_cast<int>(atomic_get(&entries_)); }
 };
 
 } // namespace
@@ -314,4 +336,43 @@ ZTEST(thread, test_threads_run_independently_of_each_other) {
 
     for(auto& worker : workers)
         zassert_equal(worker.Exits(), 1);
+}
+
+ZTEST(thread, test_Start_survives_a_std_exception_thrown_from_the_entry_point) {
+    ThrowingWorker worker(true);
+    Thread thread("throws_std_exception", &worker, STACK_SIZE, PRIORITY);
+
+    thread.Initialize();
+    thread.Start();
+    thread.Join();
+
+    zassert_equal(worker.Entries(), 1);
+    zassert_false(thread.IsRunning());
+}
+
+ZTEST(thread, test_Start_survives_a_non_std_exception_thrown_from_the_entry_point) {
+    ThrowingWorker worker(false);
+    Thread thread("throws_non_std_exception", &worker, STACK_SIZE, PRIORITY);
+
+    thread.Initialize();
+    thread.Start();
+    thread.Join();
+
+    zassert_equal(worker.Entries(), 1);
+    zassert_false(thread.IsRunning());
+}
+
+ZTEST(thread, test_Start_can_be_repeated_after_the_entry_point_threw) {
+    ThrowingWorker worker(true);
+    Thread thread("restarted_after_throw", &worker, STACK_SIZE, PRIORITY);
+
+    thread.Initialize();
+
+    for(int i = 1; i <= 2; ++i) {
+        thread.Start();
+        thread.Join();
+
+        zassert_equal(worker.Entries(), i);
+        zassert_false(thread.IsRunning());
+    }
 }

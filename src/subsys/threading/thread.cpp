@@ -1,5 +1,9 @@
 #include "thread.h"
 
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(thread);
+
 namespace eerie_leap::subsys::threading {
 
 Thread::Thread(
@@ -40,10 +44,17 @@ bool Thread::Start() {
         &thread_,
         stack_area_,
         k_stack_size_,
-        [](void* instance, void* is_running, void*) {
-            static_cast<IThread*>(instance)->ThreadEntry();
-            atomic_clear(static_cast<atomic_t*>(is_running)); },
-        instance_, &is_running_, nullptr,
+        [](void* instance, void* is_running, void* name) {
+            try {
+                static_cast<IThread*>(instance)->ThreadEntry();
+            } catch(const std::exception& e) {
+                LOG_ERR("Thread %s threw: %s", static_cast<const char*>(name), e.what());
+            } catch(...) {
+                LOG_ERR("Thread %s threw an unknown exception", static_cast<const char*>(name));
+            }
+            atomic_clear(static_cast<atomic_t*>(is_running));
+        },
+        instance_, &is_running_, const_cast<char*>(name_.c_str()),
         k_priority_, 0, K_NO_WAIT);
 
     is_created_ = true;
