@@ -10,7 +10,7 @@ using eerie_leap::subsys::threading::Thread;
 
 namespace {
 
-constexpr int STACK_SIZE = 2048;
+constexpr int STACK_SIZE = 8192;
 constexpr int OVERSIZED_STACK_SIZE = 4 * 1024 * 1024;
 constexpr int PRIORITY = 5;
 constexpr int SYNC_TIMEOUT_MS = 500;
