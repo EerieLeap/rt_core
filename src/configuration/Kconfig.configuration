@@ -1,5 +1,6 @@
 config EERIE_LEAP_CONFIGURATION
     bool "EerieLeap Configuration"
+    select EERIE_LEAP_THREADING
     help
       Add EerieLeap Configuration.
 

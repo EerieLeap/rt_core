@@ -5,12 +5,15 @@
 #include <string>
 #include <optional>
 #include <span>
+#include <exception>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/crc.h>
 
 #include "subsys/fs/services/i_fs_service.h"
+#include "subsys/threading/scoped_mutex.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "configuration/cbor/cbor_serializer.h"
 
@@ -22,6 +25,8 @@ namespace cbor = eerie_leap::configuration::cbor;
 
 using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::subsys::fs::services::IFsService;
+using eerie_leap::subsys::threading::ScopedMutex;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 template <typename T>
 class CborConfigurationService {
@@ -30,26 +35,28 @@ private:
 
     std::string configuration_name_;
     std::shared_ptr<IFsService> fs_service_;
+    std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<cbor::CborSerializer<T>> serializer_;
 
     const std::string configuration_file_path_ = configuration_dir_ + "/" + configuration_name_ + ".cbor";
 
     struct SaveTask {
         k_work work;
-        CborConfigurationService<T>* instance;
-        T* configuration;
-        bool result;
+        CborConfigurationService<T>* instance{nullptr};
+        T* configuration{nullptr};
+        bool result{false};
     };
 
     struct LoadTask {
         k_work work;
-        CborConfigurationService<T>* instance;
-        std::optional<LoadedConfig<T>> result;
+        CborConfigurationService<T>* instance{nullptr};
+        std::optional<LoadedConfig<T>> result{std::nullopt};
     };
 
-    // NOTE: Save and Load perfomed on the System WorkQueue thread
-    // to eliminates cases when configuration updated from some thread
-    // wich will require that thread to have enough stack size for the operation.
+    // NOTE: When a work queue is supplied, Save and Load run on it
+    // to eliminate cases when configuration is updated from some thread
+    // which will require that thread to have enough stack size for the operation.
+    k_mutex mutex_;
     k_work_sync work_sync_;
     SaveTask task_save_;
     LoadTask task_load_;
@@ -112,20 +119,48 @@ private:
     }
 
     static void WorkTaskSave(k_work* work) {
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
         SaveTask* task = CONTAINER_OF(work, SaveTask, work);
 
-        task->result = task->instance->SaveProcessor(task->configuration);
+        // An exception unwinding into the work queue loop would abort the system.
+        try {
+            task->result = task->instance->SaveProcessor(task->configuration);
+        } catch(const std::exception& e) {
+            LOG_ERR("Exception while saving configuration: %s", e.what());
+            task->result = false;
+        } catch(...) {
+            LOG_ERR("Unknown exception while saving configuration.");
+            task->result = false;
+        }
     }
 
     static void WorkTaskLoad(k_work* work) {
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
         LoadTask* task = CONTAINER_OF(work, LoadTask, work);
 
-        task->result = task->instance->LoadProcessor();
+        try {
+            task->result = task->instance->LoadProcessor();
+        } catch(const std::exception& e) {
+            LOG_ERR("Exception while loading configuration: %s", e.what());
+            task->result = std::nullopt;
+        } catch(...) {
+            LOG_ERR("Unknown exception while loading configuration.");
+            task->result = std::nullopt;
+        }
     }
 
 public:
-    CborConfigurationService(std::string configuration_name, std::shared_ptr<IFsService> fs_service)
-        : configuration_name_(std::move(configuration_name)), fs_service_(std::move(fs_service)) {
+    CborConfigurationService(
+        std::string configuration_name,
+        std::shared_ptr<IFsService> fs_service,
+        std::shared_ptr<WorkQueueThread> work_queue_thread = nullptr)
+        : configuration_name_(std::move(configuration_name)),
+          fs_service_(std::move(fs_service)),
+          work_queue_thread_(std::move(work_queue_thread)) {
+
+        k_mutex_init(&mutex_);
 
         task_save_.instance = this;
         k_work_init(&task_save_.work, WorkTaskSave);
@@ -141,15 +176,38 @@ public:
     }
 
     bool Save(T* configuration) {
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
+        ScopedMutex lock(mutex_);
+
+        if(work_queue_thread_ == nullptr)
+            return SaveProcessor(configuration);
+
         task_save_.configuration = configuration;
-        k_work_submit(&task_save_.work);
+
+        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_save_.work) < 0) {
+            LOG_ERR("Failed to submit save of configuration %s.", configuration_file_path_.c_str());
+            return false;
+        }
+
         k_work_flush(&task_save_.work, &work_sync_);
 
         return task_save_.result;
     }
 
     std::optional<LoadedConfig<T>> Load() {
-        k_work_submit(&task_load_.work);
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
+        ScopedMutex lock(mutex_);
+
+        if(work_queue_thread_ == nullptr)
+            return LoadProcessor();
+
+        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_load_.work) < 0) {
+            LOG_ERR("Failed to submit load of configuration %s.", configuration_file_path_.c_str());
+            return std::nullopt;
+        }
+
         k_work_flush(&task_load_.work, &work_sync_);
 
         return std::move(task_load_.result);
