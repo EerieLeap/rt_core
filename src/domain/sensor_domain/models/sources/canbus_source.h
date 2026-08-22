@@ -18,7 +18,7 @@ struct CanbusSource {
     uint8_t bus_channel;
     uint32_t frame_id;
     std::pmr::string signal_name;
-    size_t signal_name_hash = 0;
+    uint32_t signal_name_hash = 0;
 
     CanbusSource(std::allocator_arg_t, allocator_type alloc, uint8_t bus_channel, uint32_t frame_id, std::string_view signal_name)
         : bus_channel(bus_channel), frame_id(frame_id), signal_name(signal_name, alloc) {

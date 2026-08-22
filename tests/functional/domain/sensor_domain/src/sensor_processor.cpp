@@ -251,7 +251,7 @@ public:
     explicit ReadingProcessedProcessor(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
         : sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
-    void ProcessReading(const size_t sensor_id_hash) override {
+    void ProcessReading(const uint32_t sensor_id_hash) override {
         if(!sensor_readings_frame_->HasReading(sensor_id_hash))
             return;
 

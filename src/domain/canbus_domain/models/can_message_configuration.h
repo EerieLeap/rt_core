@@ -45,7 +45,7 @@ struct CanMessageConfiguration {
         signal_configurations(std::move(other.signal_configurations), alloc),
         lua_script(std::move(other.lua_script)) {}
 
-    const CanSignalConfiguration* TryGetSignal(size_t signal_name_hash) const {
+    const CanSignalConfiguration* TryGetSignal(uint32_t signal_name_hash) const {
         for(const auto& signal_configuration : signal_configurations) {
             if(signal_configuration.name_hash == signal_name_hash)
                 return &signal_configuration;

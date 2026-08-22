@@ -56,7 +56,7 @@ ZTEST(string_helpers, test_GetHash_is_deterministic) {
 ZTEST(string_helpers, test_GetHash_matches_std_hash) {
     std::hash<std::string_view> hasher;
 
-    zassert_equal(StringHelpers::GetHash("sensor_1"), hasher("sensor_1"));
+    zassert_equal(StringHelpers::GetHash("sensor_1"), static_cast<uint32_t>(hasher("sensor_1")));
 }
 
 ZTEST(string_helpers, test_GetHash_distinguishes_inputs) {

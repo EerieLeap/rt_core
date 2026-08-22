@@ -25,7 +25,7 @@ struct CanSignalConfiguration {
     std::pmr::string name;
     std::pmr::string unit;
 
-    size_t name_hash = 0;
+    uint32_t name_hash = 0;
 
     CanSignalConfiguration(std::allocator_arg_t, allocator_type alloc)
         : name(alloc), unit(alloc) {}

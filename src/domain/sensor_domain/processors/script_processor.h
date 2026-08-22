@@ -26,7 +26,7 @@ private:
 public:
     explicit ScriptProcessor(const std::string& function_name, std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
 
-    void ProcessReading(const size_t sensor_id_hash) override;
+    void ProcessReading(const uint32_t sensor_id_hash) override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::processors

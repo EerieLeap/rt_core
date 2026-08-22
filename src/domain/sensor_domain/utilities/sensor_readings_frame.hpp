@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <unordered_map>
 #include <stdexcept>
@@ -19,21 +20,21 @@ using eerie_leap::domain::sensor_domain::models::ReadingSource;
 
 class SensorReadingsFrame {
 private:
-    std::unordered_map<size_t, SensorReading> isr_readings_;
-    std::unordered_map<size_t, SensorReading> readings_;
-    std::unordered_map<size_t, SensorReading> processed_readings_;
-    std::unordered_map<size_t, float> reading_values_;
-    mutable std::unordered_map<std::string, size_t> sensor_id_hash_map_;
+    std::unordered_map<uint32_t, SensorReading> isr_readings_;
+    std::unordered_map<uint32_t, SensorReading> readings_;
+    std::unordered_map<uint32_t, SensorReading> processed_readings_;
+    std::unordered_map<uint32_t, float> reading_values_;
+    mutable std::unordered_map<std::string, uint32_t> sensor_id_hash_map_;
 
     mutable k_sem processing_semaphore_;
 
-    size_t GetSensorIdHash(const std::string& sensor_id) const {
+    uint32_t GetSensorIdHash(const std::string& sensor_id) const {
         k_sem_take(&processing_semaphore_, K_FOREVER);
 
         if(!sensor_id_hash_map_.contains(sensor_id))
             sensor_id_hash_map_.emplace(sensor_id, StringHelpers::GetHash(sensor_id));
 
-        size_t sensor_id_hash = sensor_id_hash_map_.at(sensor_id);
+        uint32_t sensor_id_hash = sensor_id_hash_map_.at(sensor_id);
 
         k_sem_give(&processing_semaphore_);
 
@@ -41,7 +42,7 @@ private:
     }
 
     void AddOrUpdateReadingIsr(SensorReading& reading) {
-        size_t sensor_id_hash = reading.sensor->id_hash;
+        uint32_t sensor_id_hash = reading.sensor->id_hash;
 
         if(isr_readings_.contains(sensor_id_hash))
             isr_readings_.erase(sensor_id_hash);
@@ -57,7 +58,7 @@ private:
     }
 
     void AddOrUpdateReadingProcessing(SensorReading& reading) {
-        size_t sensor_id_hash = reading.sensor->id_hash;
+        uint32_t sensor_id_hash = reading.sensor->id_hash;
 
         if(isr_readings_.contains(sensor_id_hash))
             isr_readings_.erase(sensor_id_hash);
@@ -96,7 +97,7 @@ public:
         k_sem_give(&processing_semaphore_);
     }
 
-    std::optional<SensorReading> TryGetIsrReading(const size_t sensor_id_hash) const {
+    std::optional<SensorReading> TryGetIsrReading(const uint32_t sensor_id_hash) const {
         k_sem_take(&processing_semaphore_, K_FOREVER);
 
         std::optional<SensorReading> reading = std::nullopt;
@@ -109,12 +110,12 @@ public:
     }
 
     std::optional<SensorReading> TryGetIsrReading(const std::string& sensor_id) const {
-        const size_t sensor_id_hash = GetSensorIdHash(sensor_id);
+        const uint32_t sensor_id_hash = GetSensorIdHash(sensor_id);
 
         return TryGetIsrReading(sensor_id_hash);
     }
 
-    std::optional<SensorReading> TryGetReading(const size_t sensor_id_hash) const {
+    std::optional<SensorReading> TryGetReading(const uint32_t sensor_id_hash) const {
         k_sem_take(&processing_semaphore_, K_FOREVER);
 
         std::optional<SensorReading> reading = std::nullopt;
@@ -127,12 +128,12 @@ public:
     }
 
     std::optional<SensorReading> TryGetReading(const std::string& sensor_id) const {
-        const size_t sensor_id_hash = GetSensorIdHash(sensor_id);
+        const uint32_t sensor_id_hash = GetSensorIdHash(sensor_id);
 
         return TryGetReading(sensor_id_hash);
     }
 
-    std::optional<float> TryGetReadingValue(const size_t sensor_id_hash) const {
+    std::optional<float> TryGetReadingValue(const uint32_t sensor_id_hash) const {
         k_sem_take(&processing_semaphore_, K_FOREVER);
 
         std::optional<float> reading = std::nullopt;
@@ -145,13 +146,13 @@ public:
     }
 
     std::optional<float> TryGetReadingValue(const std::string& sensor_id) const {
-        const size_t sensor_id_hash = GetSensorIdHash(sensor_id);
+        const uint32_t sensor_id_hash = GetSensorIdHash(sensor_id);
 
         return TryGetReadingValue(sensor_id_hash);
     }
 
     float* GetReadingValuePtr(const std::string& sensor_id) {
-        const size_t sensor_id_hash = GetSensorIdHash(sensor_id);
+        const uint32_t sensor_id_hash = GetSensorIdHash(sensor_id);
 
         k_sem_take(&processing_semaphore_, K_FOREVER);
 
@@ -164,16 +165,16 @@ public:
         return value_ptr;
     }
 
-    std::unordered_map<size_t, SensorReading> GetProcessedReadings() const {
+    std::unordered_map<uint32_t, SensorReading> GetProcessedReadings() const {
         k_sem_take(&processing_semaphore_, K_FOREVER);
-        std::unordered_map<size_t, SensorReading> readings(
+        std::unordered_map<uint32_t, SensorReading> readings(
             processed_readings_.begin(), processed_readings_.end());
         k_sem_give(&processing_semaphore_);
 
         return readings;
     }
 
-    bool HasIsrReading(const size_t sensor_id_hash) {
+    bool HasIsrReading(const uint32_t sensor_id_hash) {
         k_sem_take(&processing_semaphore_, K_FOREVER);
         bool result = isr_readings_.contains(sensor_id_hash);
         k_sem_give(&processing_semaphore_);
@@ -181,7 +182,7 @@ public:
         return result;
     }
 
-    bool HasReading(const size_t sensor_id_hash) {
+    bool HasReading(const uint32_t sensor_id_hash) {
         k_sem_take(&processing_semaphore_, K_FOREVER);
         bool result = readings_.contains(sensor_id_hash);
         k_sem_give(&processing_semaphore_);

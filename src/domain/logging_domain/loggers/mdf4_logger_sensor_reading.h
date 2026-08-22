@@ -34,14 +34,14 @@ private:
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager_;
 
     std::unique_ptr<Mdf4File> mdf4_file_;
-    std::unordered_map<size_t, SensorChannelGroup> value_channel_groups_;
-    std::unordered_map<size_t, std::shared_ptr<mdf4::ChannelGroupBlock>> can_raw_channel_groups_;
+    std::unordered_map<uint32_t, SensorChannelGroup> value_channel_groups_;
+    std::unordered_map<uint32_t, std::shared_ptr<mdf4::ChannelGroupBlock>> can_raw_channel_groups_;
     std::streambuf* stream_;
     std::chrono::system_clock::time_point start_time_;
 
     uint64_t next_record_id_ = 1;
     uint64_t current_file_size_bytes_ = 0;
-    std::unordered_map<size_t, std::chrono::system_clock::time_point> last_reading_time_;
+    std::unordered_map<uint32_t, std::chrono::system_clock::time_point> last_reading_time_;
 
     bool LogValueReading(float time_delta_s, const SensorReading& reading);
     bool LogCanbusRawReading(float time_delta_s, const SensorReading& reading);

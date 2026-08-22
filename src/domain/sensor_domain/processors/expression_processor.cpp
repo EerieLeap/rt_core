@@ -10,7 +10,7 @@ using namespace eerie_leap::domain::sensor_domain::models;
 ExpressionProcessor::ExpressionProcessor(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame) :
     sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
-void ExpressionProcessor::ProcessReading(const size_t sensor_id_hash) {
+void ExpressionProcessor::ProcessReading(const uint32_t sensor_id_hash) {
     auto reading_optioanl = sensor_readings_frame_->TryGetReading(sensor_id_hash);
     if(!reading_optioanl)
         return;

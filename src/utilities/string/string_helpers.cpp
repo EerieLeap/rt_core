@@ -14,8 +14,8 @@ std::unique_ptr<char[]> StringHelpers::ToPaddedCharArray(const std::string& str,
     return char_array;
 }
 
-size_t StringHelpers::GetHash(std::string_view str) {
-    return string_hasher(str);
+uint32_t StringHelpers::GetHash(std::string_view str) {
+    return static_cast<uint32_t>(string_hasher(str));
 }
 
 template<size_t N, typename T>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -15,7 +16,7 @@ private:
 
 public:
     static std::unique_ptr<char[]> ToPaddedCharArray(const std::string& str, size_t size, char padding_char = ' ');
-    static size_t GetHash(std::string_view str);
+    static uint32_t GetHash(std::string_view str);
 
     static StaticString<5> UInt16ToStaticString(uint16_t value);
     static StaticString<10> UInt32ToStaticString(uint32_t value);
