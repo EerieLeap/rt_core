@@ -20,6 +20,7 @@ public:
         Sensors = 0x04,
         Logging = 0x05,
         Ui = 0x06,
+        Display = 0x07,
     };
 
 private:
