@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -260,6 +261,93 @@ ZTEST(event_bus, test_Unsubscribe_reports_false_for_an_unknown_subscription) {
 
     zassert_false(bus.Unsubscribe(unknown_event_type));
     zassert_false(bus.Unsubscribe(unknown_id));
+}
+
+ZTEST(event_bus, test_a_subscriber_may_unsubscribe_itself_during_dispatch) {
+    TestEventBus bus("eb_unsubscribe_self_in_dispatch");
+    DispatchProbe self_probe;
+    DispatchProbe peer_probe;
+
+    std::optional<SubscriptionHandle<TestEventType>> self_handle;
+
+    auto subscription = bus.Subscribe(TestEventType::Alpha, [&](const TestEvent& event) {
+        self_probe.Record(event);
+
+        if(self_handle.has_value())
+            bus.Unsubscribe(self_handle.value());
+    });
+    zassert_true(subscription.has_value());
+    self_handle.emplace(std::move(*subscription));
+
+    auto peer_handle = bus.Subscribe(TestEventType::Alpha, [&peer_probe](const TestEvent& event) { peer_probe.Record(event); });
+    zassert_true(peer_handle.has_value());
+
+    bus.Publish(MakeEvent(TestEventType::Alpha, 1));
+
+    // Dispatch runs off a snapshot, so removing a subscription cannot invalidate it.
+    zassert_equal(self_probe.Count(), 1U);
+    zassert_equal(peer_probe.Count(), 1U);
+
+    bus.Publish(MakeEvent(TestEventType::Alpha, 2));
+
+    zassert_equal(self_probe.Count(), 1U);
+    zassert_equal(peer_probe.Count(), 2U);
+}
+
+ZTEST(event_bus, test_a_subscriber_removed_during_dispatch_still_receives_the_in_flight_event) {
+    TestEventBus bus("eb_unsubscribe_peer_in_dispatch");
+    DispatchProbe first_probe;
+    DispatchProbe removed_probe;
+
+    std::optional<SubscriptionHandle<TestEventType>> removed_handle;
+
+    auto first_handle = bus.Subscribe(TestEventType::Alpha, [&](const TestEvent& event) {
+        first_probe.Record(event);
+
+        if(removed_handle.has_value())
+            bus.Unsubscribe(removed_handle.value());
+    });
+    zassert_true(first_handle.has_value());
+
+    auto subscription = bus.Subscribe(TestEventType::Alpha, [&removed_probe](const TestEvent& event) { removed_probe.Record(event); });
+    zassert_true(subscription.has_value());
+    removed_handle.emplace(std::move(*subscription));
+
+    bus.Publish(MakeEvent(TestEventType::Alpha, 1));
+
+    zassert_equal(first_probe.Count(), 1U);
+    zassert_equal(removed_probe.Count(), 1U);
+
+    bus.Publish(MakeEvent(TestEventType::Alpha, 2));
+
+    zassert_equal(first_probe.Count(), 2U);
+    zassert_equal(removed_probe.Count(), 1U);
+}
+
+ZTEST(event_bus, test_a_subscriber_added_during_dispatch_starts_at_the_next_event) {
+    TestEventBus bus("eb_subscribe_in_dispatch");
+    DispatchProbe late_probe;
+    std::vector<SubscriptionHandle<TestEventType>> late_handles;
+
+    auto handle = bus.Subscribe(TestEventType::Alpha, [&](const TestEvent&) {
+        if(!late_handles.empty())
+            return;
+
+        auto late = bus.Subscribe(TestEventType::Alpha, [&late_probe](const TestEvent& event) { late_probe.Record(event); });
+        if(late)
+            late_handles.push_back(std::move(*late));
+    });
+    zassert_true(handle.has_value());
+
+    bus.Publish(MakeEvent(TestEventType::Alpha, 1));
+
+    zassert_equal(late_handles.size(), 1U);
+    zassert_equal(late_probe.Count(), 0U);
+
+    bus.Publish(MakeEvent(TestEventType::Alpha, 2));
+
+    zassert_equal(late_probe.Count(), 1U);
+    zassert_equal(late_probe.values.front(), 2);
 }
 
 ZTEST(event_bus, test_a_throwing_subscriber_does_not_escape_Publish) {
