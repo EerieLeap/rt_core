@@ -13,6 +13,7 @@ template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 Payl
 struct EventBusTask {
     k_sem* processing_semaphore;
     std::shared_ptr<std::unordered_map<EventTypeEnum, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>>> subscribers;
+    k_mutex* subscribers_mutex;
 
     std::queue<Event<EventTypeEnum, PayloadTypeEnum>> event_queue;
     k_mutex queue_mutex;

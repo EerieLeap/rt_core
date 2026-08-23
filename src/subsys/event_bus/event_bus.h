@@ -44,6 +44,8 @@ private:
     k_sem processing_semaphore_;
     static constexpr k_timeout_t PROCESSING_TIMEOUT = K_MSEC(200);
 
+    k_mutex subscribers_mutex_;
+
     // Optional hooks invoked around subscriber dispatch for custom behavior before and after event handling
     DispatchGuardFn dispatch_guard_before_ = nullptr;
     DispatchGuardFn dispatch_guard_after_ = nullptr;
@@ -53,6 +55,7 @@ private:
     static threading::WorkQueueTaskResult ProcessEventWork(EventBusTaskType* task);
     static void ProcessEvent(
         std::shared_ptr<std::unordered_map<EventTypeEnum, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>>>& subscribers,
+        k_mutex* subscribers_mutex,
         const Event<EventTypeEnum, PayloadTypeEnum>& event,
         DispatchGuardFn dispatch_guard_before,
         DispatchGuardFn dispatch_guard_after);
