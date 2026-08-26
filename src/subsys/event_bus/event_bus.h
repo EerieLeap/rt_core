@@ -33,7 +33,7 @@ public:
 
 private:
     std::string bus_name_;
-    std::shared_ptr<std::unordered_map<EventTypeEnum, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>>> subscribers_;
+    std::shared_ptr<SubscriberMap<EventTypeEnum, PayloadTypeEnum>> subscribers_;
     size_t next_id_ = 1;
 
     using EventBusTaskType = EventBusTask<EventTypeEnum, PayloadTypeEnum>;
@@ -54,7 +54,7 @@ private:
 
     static threading::WorkQueueTaskResult ProcessEventWork(EventBusTaskType* task);
     static void ProcessEvent(
-        std::shared_ptr<std::unordered_map<EventTypeEnum, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>>>& subscribers,
+        std::shared_ptr<SubscriberMap<EventTypeEnum, PayloadTypeEnum>>& subscribers,
         k_mutex* subscribers_mutex,
         const Event<EventTypeEnum, PayloadTypeEnum>& event,
         DispatchGuardFn dispatch_guard_before,

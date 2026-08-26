@@ -1,8 +1,10 @@
 #include <ranges>
 #include <algorithm>
+#include <exception>
 #include <stdexcept>
 #include <zephyr/logging/log.h>
 
+#include "scoped_mutex.h"
 #include "work_queue_thread.h"
 
 LOG_MODULE_REGISTER(work_queue_thread);
@@ -62,10 +64,9 @@ void WorkQueueThread::Stop() {
         LOG_ERR("Failed to stop work queue: %d", ret);
     }
 
-    k_mutex_lock(&runner_tasks_mutex_, K_FOREVER);
+    ScopedMutex guard(runner_tasks_mutex_);
     runner_tasks_.clear();
     runner_completed_tasks_.clear();
-    k_mutex_unlock(&runner_tasks_mutex_);
 }
 
 [[nodiscard]] k_work_q* WorkQueueThread::GetWorkQueue() {
@@ -81,7 +82,19 @@ void WorkQueueThread::PruneCompletedTasks(std::vector<std::unique_ptr<WorkQueueR
 
 void WorkQueueThread::TaskHandler(k_work* work) {
     WorkQueueTaskBase* task = CONTAINER_OF(work, WorkQueueTaskBase, work);
-    auto result = task->Execute();
+
+    // Unwinding into the C work queue loop terminates the queue thread and strands
+    // every other task it owns, so a throwing task must not take the queue with it.
+    WorkQueueTaskResult result = task->GetLastResult();
+
+    try {
+        result = task->Execute();
+        task->SetLastResult(result);
+    } catch(const std::exception& e) {
+        LOG_ERR("Work queue task threw: %s", e.what());
+    } catch(...) {
+        LOG_ERR("Work queue task threw a non-standard exception.");
+    }
 
     if(result.reschedule)
         task->Reschedule(result.delay);
@@ -89,10 +102,16 @@ void WorkQueueThread::TaskHandler(k_work* work) {
 
 void WorkQueueThread::RunnerTaskHandler(k_work* work) {
     WorkQueueRunnerTask* task = CONTAINER_OF(work, WorkQueueRunnerTask, work);
-    auto result = task->Execute();
 
-    auto mutex = task->GetMutex();
-    k_mutex_lock(mutex, K_FOREVER);
+    try {
+        task->Execute();
+    } catch(const std::exception& e) {
+        LOG_ERR("Work queue runner task threw: %s", e.what());
+    } catch(...) {
+        LOG_ERR("Work queue runner task threw a non-standard exception.");
+    }
+
+    ScopedMutex guard(*task->GetMutex());
 
     auto& tasks = task->GetRunnerTasks();
     auto& completed_tasks = task->GetCompletedTasks();
@@ -101,14 +120,12 @@ void WorkQueueThread::RunnerTaskHandler(k_work* work) {
 
     completed_tasks.push_back(
         std::move(tasks.extract(work).mapped()));
-
-    k_mutex_unlock(mutex);
 }
 
 void WorkQueueThread::Run(const WorkQueueRunnerTask::Handler& handler) {
     IsValid();
 
-    k_mutex_lock(&runner_tasks_mutex_, K_FOREVER);
+    ScopedMutex guard(runner_tasks_mutex_);
 
     PruneCompletedTasks(runner_completed_tasks_);
 
@@ -124,8 +141,6 @@ void WorkQueueThread::Run(const WorkQueueRunnerTask::Handler& handler) {
 
     if(runner_tasks_.insert({work_ptr, std::move(task)}).second)
         runner_tasks_.at(work_ptr)->Schedule();
-
-    k_mutex_unlock(&runner_tasks_mutex_);
 }
 
 } // namespace eerie_leap::subsys::threading

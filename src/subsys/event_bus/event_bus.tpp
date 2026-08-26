@@ -1,11 +1,15 @@
+#include <utility>
+
 #include <zephyr/sys/printk.h>
 
+#include "subsys/threading/scoped_mutex.h"
 #include "utilities/memory/memory_resource_manager.h"
 
 #include "event_bus.h"
 
 namespace eerie_leap::subsys::event_bus {
 
+using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::utilities::memory::Mrm;
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
@@ -19,7 +23,7 @@ EventBus<EventTypeEnum, PayloadTypeEnum>::EventBus(
             dispatch_guard_before_(dispatch_guard_before),
             dispatch_guard_after_(dispatch_guard_after) {
 
-    subscribers_ = std::make_shared<std::unordered_map<EventTypeEnum, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>>>();
+    subscribers_ = std::make_shared<SubscriberMap<EventTypeEnum, PayloadTypeEnum>>();
     k_sem_init(&processing_semaphore_, 1, 1);
     k_mutex_init(&subscribers_mutex_);
 
@@ -50,20 +54,13 @@ template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 Payl
 template<EventFilter<EventTypeEnum, PayloadTypeEnum> FilterType>
 std::expected<SubscriptionHandle<EventTypeEnum>, std::string>
 EventBus<EventTypeEnum, PayloadTypeEnum>::Subscribe(EventTypeEnum type, FilterType filter, EventHandler<EventTypeEnum, PayloadTypeEnum> handler) {
-    k_mutex_lock(&subscribers_mutex_, K_FOREVER);
-
-    struct MutexRelease {
-        k_mutex* mutex;
-        ~MutexRelease() { k_mutex_unlock(mutex); }
-    } release{&subscribers_mutex_};
+    ScopedMutex guard(subscribers_mutex_);
 
     try {
         size_t id = next_id_++;
-        auto subscription = std::make_unique<Subscription<EventTypeEnum, PayloadTypeEnum>>(id, type, filter, std::move(handler));
+        auto subscription = std::make_shared<Subscription<EventTypeEnum, PayloadTypeEnum>>(id, type, filter, std::move(handler));
 
-        if(subscribers_->find(type) == subscribers_->end())
-            subscribers_->emplace(type, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>{});
-        subscribers_->at(type).push_back(std::move(subscription));
+        (*subscribers_)[type].push_back(std::move(subscription));
 
         return SubscriptionHandle<EventTypeEnum>{id, type};
     } catch (const std::exception& e) {
@@ -76,12 +73,7 @@ bool EventBus<EventTypeEnum, PayloadTypeEnum>::Unsubscribe(SubscriptionHandle<Ev
     if(!handle.IsValid())
         return false;
 
-    k_mutex_lock(&subscribers_mutex_, K_FOREVER);
-
-    struct MutexRelease {
-        k_mutex* mutex;
-        ~MutexRelease() { k_mutex_unlock(mutex); }
-    } release{&subscribers_mutex_};
+    ScopedMutex guard(subscribers_mutex_);
 
     auto it = subscribers_->find(handle.GetEventType());
     if(it == subscribers_->end())
@@ -110,18 +102,29 @@ void EventBus<EventTypeEnum, PayloadTypeEnum>::Publish(const Event<EventTypeEnum
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
 void EventBus<EventTypeEnum, PayloadTypeEnum>::PublishAsync(const Event<EventTypeEnum, PayloadTypeEnum>& event) {
-    if(work_queue_task_ && k_mutex_lock(&work_queue_task_.value().GetUserdata()->queue_mutex, K_FOREVER) == 0) {
-        work_queue_task_.value().GetUserdata()->event_queue.push(event);
-        k_mutex_unlock(&work_queue_task_.value().GetUserdata()->queue_mutex);
+    if(!work_queue_task_)
+        return;
 
-        if(!work_queue_task_.value().IsScheduled())
-            work_queue_task_.value().Schedule();
+    auto* task = work_queue_task_.value().GetUserdata();
+
+    {
+        ScopedMutex guard(task->queue_mutex);
+
+        // Shed the oldest rather than the newest
+        while(task->event_queue.size() >= EventBusTaskType::k_max_queued_events) {
+            task->event_queue.pop();
+            ++task->dropped_events;
+        }
+
+        task->event_queue.push(event);
     }
+
+    work_queue_task_.value().Reschedule();
 }
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
 void EventBus<EventTypeEnum, PayloadTypeEnum>::ProcessEvent(
-    std::shared_ptr<std::unordered_map<EventTypeEnum, std::vector<std::unique_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>>>>& subscribers,
+    std::shared_ptr<SubscriberMap<EventTypeEnum, PayloadTypeEnum>>& subscribers,
     k_mutex* subscribers_mutex,
     const Event<EventTypeEnum, PayloadTypeEnum>& event,
     DispatchGuardFn dispatch_guard_before,
@@ -129,16 +132,20 @@ void EventBus<EventTypeEnum, PayloadTypeEnum>::ProcessEvent(
 
     // Snapshot under the lock: a handler may subscribe or unsubscribe, which would
     // otherwise mutate the very vector being iterated.
-    std::vector<EventHandler<EventTypeEnum, PayloadTypeEnum>> handlers;
+    std::vector<SubscriptionPtr<EventTypeEnum, PayloadTypeEnum>> matched;
 
-    k_mutex_lock(subscribers_mutex, K_FOREVER);
-    if(auto it = subscribers->find(event.type); it != subscribers->end()) {
-        for(const auto& subscription : it->second) {
-            if(subscription->filter(event))
-                handlers.push_back(subscription->handler);
+    {
+        ScopedMutex guard(*subscribers_mutex);
+
+        if(auto it = subscribers->find(event.type); it != subscribers->end()) {
+            matched.reserve(it->second.size());
+
+            for(const auto& subscription : it->second) {
+                if(subscription->filter(event))
+                    matched.push_back(subscription);
+            }
         }
     }
-    k_mutex_unlock(subscribers_mutex);
 
     // The guards run for every publication, matching subscribers or not.
     if(dispatch_guard_before)
@@ -149,9 +156,9 @@ void EventBus<EventTypeEnum, PayloadTypeEnum>::ProcessEvent(
         ~GuardRelease() { if(fn) fn(); }
     } release_guard{dispatch_guard_after};
 
-    for(const auto& handler : handlers) {
+    for(const auto& subscription : matched) {
         try {
-            handler(event);
+            subscription->handler(event);
         } catch (const std::exception& e) {
             printk("[event_bus] subscriber handler threw for event type %u: %s\n",
                 static_cast<unsigned>(event.type), e.what());
@@ -169,25 +176,37 @@ threading::WorkQueueTaskResult EventBus<EventTypeEnum, PayloadTypeEnum>::Process
             .reschedule = false
         };
 
+    // A throw from a dispatch would otherwise keep the semaphore forever and wedge
+    // the bus for the rest of the run.
+    struct SemaphoreRelease {
+        k_sem* sem;
+        ~SemaphoreRelease() { k_sem_give(sem); }
+    } release{task->processing_semaphore};
+
     while(true) {
         std::optional<Event<EventTypeEnum, PayloadTypeEnum>> event;
+        size_t dropped = 0;
 
-        if(k_mutex_lock(&task->queue_mutex, K_FOREVER) == 0) {
+        {
+            ScopedMutex guard(task->queue_mutex);
+
             if(!task->event_queue.empty()) {
                 event = std::move(task->event_queue.front());
                 task->event_queue.pop();
             }
 
-            k_mutex_unlock(&task->queue_mutex);
+            dropped = std::exchange(task->dropped_events, 0);
         }
+
+        if(dropped != 0)
+            printk("[event_bus] dropped %u queued events, subscribers cannot keep up\n",
+                static_cast<unsigned>(dropped));
 
         if(!event)
             break;
 
         ProcessEvent(task->subscribers, task->subscribers_mutex, event.value(), task->dispatch_guard_before, task->dispatch_guard_after);
     }
-
-    k_sem_give(task->processing_semaphore);
 
     return {
         .reschedule = false

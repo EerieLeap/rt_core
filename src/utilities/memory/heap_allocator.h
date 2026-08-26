@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <memory>
+#include <new>
 #include <utility>
 #include <vector>
 #include <algorithm>
@@ -9,19 +11,12 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#ifdef CONFIG_SHARED_MULTI_HEAP
-#include <soc/soc_memory_layout.h>
-#include <zephyr/multi_heap/shared_multi_heap.h>
-#endif
-
-// #ifdef CONFIG_SHARED_MULTI_HEAP
-
-// void* operator new(std::size_t sz);
-// void operator delete(void* ptr) noexcept;
-
-// #endif // CONFIG_SHARED_MULTI_HEAP
-
 namespace eerie_leap::utilities::memory {
+
+// Zephyr's shared_multi_heap, and the sys_heap underneath it, carry no locking of
+// their own, so every access to the external heap has to be serialized here.
+void* ExtHeapAllocate(size_t align, size_t bytes) noexcept;
+void ExtHeapFree(void* pointer) noexcept;
 
 template <typename T>
 class HeapAllocator {
@@ -37,15 +32,7 @@ public:
     constexpr HeapAllocator(const HeapAllocator<U>& obj) noexcept {}
 
     T* allocate(size_t n, size_t align = kAlignment) {
-        void* pointer = nullptr;
-
-    #ifdef CONFIG_SHARED_MULTI_HEAP
-        pointer = shared_multi_heap_aligned_alloc(SMH_REG_ATTR_EXTERNAL, align, n * sizeof(T));
-    #else
-        pointer = align > alignof(std::max_align_t)
-            ? k_aligned_alloc(align, n * sizeof(T))
-            : k_malloc(n * sizeof(T));
-    #endif
+        void* pointer = ExtHeapAllocate(align, n * sizeof(T));
 
         if(pointer == nullptr) {
             LOG_MODULE_DECLARE(heap_allocator_logger);
@@ -57,18 +44,13 @@ public:
     }
 
     void deallocate(void* p, size_t n, size_t align = 0) noexcept {
-    #ifdef CONFIG_SHARED_MULTI_HEAP
-        shared_multi_heap_free(p);
-    #else
-        k_free(p);
-    #endif
+        ExtHeapFree(p);
     }
 
     T* reallocate(T* p, size_t old_n, size_t new_n) {
         if(p == nullptr)
             return allocate(new_n);
 
-    #ifdef CONFIG_SHARED_MULTI_HEAP
         T* new_p = allocate(new_n);
 
         size_t copy_count = (old_n < new_n) ? old_n : new_n;
@@ -88,17 +70,6 @@ public:
         deallocate(p, old_n);
 
         return new_p;
-    #else
-        void* new_p = k_realloc(p, new_n * sizeof(T));
-        if(new_p == nullptr) {
-            LOG_MODULE_DECLARE(heap_allocator_logger);
-            LOG_ERR("Failed to reallocate %zu bytes for %zu elements of type %s\n",
-                    new_n * sizeof(T), new_n, typeid(T).name());
-            throw std::bad_alloc();
-        }
-
-        return static_cast<T*>(new_p);
-    #endif
     }
 };
 

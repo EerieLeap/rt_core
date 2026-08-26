@@ -16,6 +16,7 @@ class WorkQueueTaskBase {
 private:
     k_work_q* work_q_;
     k_work_sync* sync_;
+    WorkQueueTaskResult last_result_{};
 
 public:
     // NOTE: Has to be public, in order to be able to retrieve
@@ -49,6 +50,10 @@ public:
     bool Flush() {
         return k_work_flush_delayable(&work, sync_);
     }
+
+    // Lets the dispatcher keep a periodic task running when one iteration throws.
+    const WorkQueueTaskResult& GetLastResult() const { return last_result_; }
+    void SetLastResult(const WorkQueueTaskResult& result) { last_result_ = result; }
 
     virtual WorkQueueTaskResult Execute() = 0;
 };
