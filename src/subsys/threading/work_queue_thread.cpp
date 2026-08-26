@@ -75,6 +75,10 @@ void WorkQueueThread::Stop() {
     return &work_q_;
 }
 
+[[nodiscard]] bool WorkQueueThread::IsCurrentThread() {
+    return is_running_ && k_current_get() == k_work_queue_thread_get(&work_q_);
+}
+
 void WorkQueueThread::PruneCompletedTasks(std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks) {
     std::erase_if(completed_tasks, [](auto& completed_task) {
         return !k_work_delayable_is_pending(&completed_task->work); });

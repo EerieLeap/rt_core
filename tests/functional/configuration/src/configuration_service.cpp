@@ -1,4 +1,5 @@
 #include <memory>
+#include <optional>
 #include <zephyr/ztest.h>
 
 #include "utilities/cbor/cbor_helpers.hpp"
@@ -9,11 +10,22 @@
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/fs/services/fs_service.h"
+#include "subsys/threading/work_queue_thread.h"
 
 using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::configuration::services;
 using namespace eerie_leap::subsys::fs::services;
 using namespace eerie_leap::subsys::device_tree;
+
+using eerie_leap::subsys::threading::WorkQueueThread;
+
+namespace {
+
+constexpr int CONFIG_QUEUE_STACK_SIZE = 8192;
+constexpr int CONFIG_QUEUE_PRIORITY = 5;
+constexpr int SYNC_TIMEOUT_MS = 2000;
+
+} // namespace
 
 ZTEST_SUITE(configuration_service, NULL, NULL, NULL, NULL, NULL);
 
@@ -54,6 +66,78 @@ ZTEST(configuration_service, test_CborSystemConfig_Load_config_successfully_save
     zassert_true(loaded_config.has_value());
     zassert_equal(loaded_config.value().config->device_id, 14);
     zassert_equal(loaded_config.value().config->build_number, 46);
+}
+
+ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_are_delegated_to_the_supplied_work_queue) {
+    CborSystemConfig system_config;
+    memset(&system_config, 0, sizeof(system_config));
+
+    system_config.device_id = 21;
+    system_config.build_number = 55;
+
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+        "config_wq_delegated", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY);
+    zassert_true(work_queue_thread->Initialize());
+
+    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service, work_queue_thread);
+
+    zassert_true(system_config_service->Save(&system_config));
+
+    auto loaded_config = system_config_service->Load();
+    zassert_true(loaded_config.has_value());
+    zassert_equal(loaded_config.value().config->device_id, 21);
+    zassert_equal(loaded_config.value().config->build_number, 55);
+
+    work_queue_thread->Stop();
+}
+
+ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock_on_their_own_work_queue) {
+    CborSystemConfig system_config;
+    memset(&system_config, 0, sizeof(system_config));
+
+    system_config.device_id = 33;
+    system_config.build_number = 77;
+
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+        "config_wq_reentrant", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY);
+    zassert_true(work_queue_thread->Initialize());
+
+    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service, work_queue_thread);
+
+    bool saved = false;
+    std::optional<LoadedConfig<CborSystemConfig>> loaded_config;
+    k_sem done;
+    k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
+
+    // Save and Load hand their work to this very queue, so waiting for it from a
+    // task already running on it used to park the queue thread on itself.
+    work_queue_thread->Run([&] {
+        saved = system_config_service->Save(&system_config);
+        loaded_config = system_config_service->Load();
+
+        k_sem_give(&done);
+    });
+
+    zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0,
+        "Save/Load deadlocked when called from their own work queue thread");
+    zassert_true(saved);
+    zassert_true(loaded_config.has_value());
+    zassert_equal(loaded_config.value().config->device_id, 33);
+    zassert_equal(loaded_config.value().config->build_number, 77);
+
+    work_queue_thread->Stop();
 }
 
 ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_saved) {

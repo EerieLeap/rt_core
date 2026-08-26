@@ -180,7 +180,9 @@ public:
 
         ScopedMutex lock(mutex_);
 
-        if(work_queue_thread_ == nullptr)
+        // Delegating to a queue we are already running on would park that thread in
+        // k_work_flush() waiting for work that only it can run.
+        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
             return SaveProcessor(configuration);
 
         task_save_.configuration = configuration;
@@ -200,7 +202,7 @@ public:
 
         ScopedMutex lock(mutex_);
 
-        if(work_queue_thread_ == nullptr)
+        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
             return LoadProcessor();
 
         if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_load_.work) < 0) {

@@ -338,6 +338,72 @@ ZTEST(work_queue_thread, test_a_stopped_queue_rejects_new_work) {
     zassert_false(ThreadExists("wq_stopped"));
 }
 
+ZTEST(work_queue_thread, test_IsCurrentThread_is_false_before_the_queue_starts) {
+    WorkQueueThread queue_thread("wq_current_unstarted", STACK_SIZE, PRIORITY);
+
+    zassert_false(queue_thread.IsCurrentThread());
+}
+
+ZTEST(work_queue_thread, test_IsCurrentThread_tells_the_queue_thread_apart_from_its_callers) {
+    auto queue_thread = MakeQueueThread("wq_current");
+    auto other_thread = MakeQueueThread("wq_current_other");
+
+    bool observed_own = false;
+    bool observed_other = false;
+    k_sem done;
+    k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
+
+    queue_thread->Run([&] {
+        observed_own = queue_thread->IsCurrentThread();
+        observed_other = other_thread->IsCurrentThread();
+        k_sem_give(&done);
+    });
+
+    zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0);
+    zassert_true(observed_own, "the queue thread did not recognise itself");
+    zassert_false(observed_other, "a second queue was mistaken for the running one");
+    zassert_false(queue_thread->IsCurrentThread(), "the calling thread was mistaken for the queue thread");
+
+    other_thread->Stop();
+    queue_thread->Stop();
+}
+
+ZTEST(work_queue_thread, test_IsCurrentThread_holds_inside_a_created_task) {
+    auto queue_thread = MakeQueueThread("wq_current_task");
+
+    struct Observation {
+        WorkQueueThread* queue_thread;
+        bool is_queue_thread;
+        k_sem done;
+    } observation {queue_thread.get(), false, {}};
+
+    k_sem_init(&observation.done, 0, K_SEM_MAX_LIMIT);
+
+    auto task = queue_thread->CreateTask(
+        +[](Observation* state) {
+            state->is_queue_thread = state->queue_thread->IsCurrentThread();
+            k_sem_give(&state->done);
+
+            return WorkQueueTaskResult { .reschedule = false };
+        },
+        &observation);
+
+    task.Schedule();
+
+    zassert_equal(k_sem_take(&observation.done, K_MSEC(SYNC_TIMEOUT_MS)), 0);
+    zassert_true(observation.is_queue_thread);
+
+    queue_thread->Stop();
+}
+
+ZTEST(work_queue_thread, test_IsCurrentThread_is_false_once_the_queue_stops) {
+    auto queue_thread = MakeQueueThread("wq_current_stopped");
+
+    queue_thread->Stop();
+
+    zassert_false(queue_thread->IsCurrentThread());
+}
+
 ZTEST(work_queue_thread, test_IsScheduled_only_reports_work_that_still_has_to_run) {
     auto queue_thread = MakeQueueThread("wq_scheduled");
 

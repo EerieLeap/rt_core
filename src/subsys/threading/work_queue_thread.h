@@ -37,6 +37,8 @@ public:
     void Stop();
     [[nodiscard]] k_work_q* GetWorkQueue();
 
+    [[nodiscard]] bool IsCurrentThread();
+
     template<typename T>
     WorkQueueTask<T> CreateTask(const WorkQueueTask<T>::Handler& handler, std::unique_ptr<T> user_data) {
         IsValid();
