@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstddef>
-#include <string_view>
 
 #include "i_event_bus.h"
 
@@ -14,7 +13,8 @@ class IEventChannel {
 public:
     virtual ~IEventChannel() = default;
 
-    virtual std::string_view GetName() const = 0;
+    // Diagnostics only, so a plain C string keeps it usable straight from LOG_*.
+    virtual const char* GetName() const = 0;
 
     virtual const IEventBus* GetBus() const = 0;
     virtual void OnRegistered(IEventBus* bus) = 0;

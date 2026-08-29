@@ -9,6 +9,7 @@
 #include <utility>
 
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
 #include "subsys/threading/scoped_mutex.h"
 #include "subsys/threading/work_queue_thread.h"
@@ -99,18 +100,30 @@ inline void EventBus::Initialize() {
 }
 
 inline int EventBus::RegisterChannel(IEventChannel& channel) {
+    LOG_MODULE_DECLARE(event_bus_logger);
+
     ScopedMutex guard(channels_mutex_);
 
     const auto* bound = channel.GetBus();
     if(bound == this)
         return 0;
 
-    if(bound != nullptr)
+    // Reported here as well as returned: registration happens in a bus constructor,
+    // where the return value has nowhere to go and a miss would be silent.
+    if(bound != nullptr) {
+        LOG_ERR("'%s' cannot register channel '%s', it already belongs to another bus",
+            bus_name_.c_str(), channel.GetName());
+
         return -EEXIST;
+    }
 
     size_t count = channel_count_.load(std::memory_order_relaxed);
-    if(count == k_max_bus_channels)
+    if(count == k_max_bus_channels) {
+        LOG_ERR("'%s' cannot register channel '%s', all %u slots are taken",
+            bus_name_.c_str(), channel.GetName(), static_cast<unsigned>(k_max_bus_channels));
+
         return -ENOSPC;
+    }
 
     channels_[count] = &channel;
     channel.OnRegistered(this);

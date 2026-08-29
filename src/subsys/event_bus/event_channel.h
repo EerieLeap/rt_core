@@ -5,7 +5,6 @@
 #include <expected>
 #include <queue>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include <zephyr/kernel.h>
@@ -62,8 +61,7 @@ public:
     EventChannel(const EventChannel&) = delete;
     EventChannel& operator=(const EventChannel&) = delete;
 
-    std::string_view GetName() const override { return name_; }
-
+    const char* GetName() const override { return name_.c_str(); }
     const IEventBus* GetBus() const override { return bus_.load(std::memory_order_acquire); }
     void OnRegistered(IEventBus* bus) override { bus_.store(bus, std::memory_order_release); }
     bool IsRegistered() const { return GetBus() != nullptr; }

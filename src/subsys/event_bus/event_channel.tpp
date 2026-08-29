@@ -2,7 +2,7 @@
 #include <optional>
 #include <utility>
 
-#include <zephyr/sys/printk.h>
+#include <zephyr/logging/log.h>
 
 #include "subsys/threading/scoped_mutex.h"
 
@@ -110,9 +110,11 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
         dropped = std::exchange(dropped_events_, 0);
     }
 
-    if(dropped != 0)
-        printk("[event_bus] channel '%s' dropped %u queued events, subscribers cannot keep up\n",
+    if(dropped != 0) {
+        LOG_MODULE_DECLARE(event_bus_logger);
+        LOG_WRN("Channel '%s' dropped %u queued events, subscribers cannot keep up",
             name_.c_str(), static_cast<unsigned>(dropped));
+    }
 
     if(!event)
         return false;
@@ -145,10 +147,12 @@ void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event)
         try {
             subscription->handler(event);
         } catch (const std::exception& e) {
-            printk("[event_bus] channel '%s' subscriber threw for event type %u: %s\n",
+            LOG_MODULE_DECLARE(event_bus_logger);
+            LOG_ERR("Channel '%s' subscriber threw for event type %u. %s",
                 name_.c_str(), static_cast<unsigned>(event.type), e.what());
         } catch (...) {
-            printk("[event_bus] channel '%s' subscriber threw a non-standard exception for event type %u\n",
+            LOG_MODULE_DECLARE(event_bus_logger);
+            LOG_ERR("Channel '%s' subscriber threw a non-standard exception for event type %u",
                 name_.c_str(), static_cast<unsigned>(event.type));
         }
     }
