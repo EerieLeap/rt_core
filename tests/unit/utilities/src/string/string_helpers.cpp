@@ -1,6 +1,5 @@
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <string>
 #include <string_view>
 #include <zephyr/ztest.h>
@@ -53,10 +52,12 @@ ZTEST(string_helpers, test_GetHash_is_deterministic) {
     zassert_equal(StringHelpers::GetHash(""), StringHelpers::GetHash(""));
 }
 
-ZTEST(string_helpers, test_GetHash_matches_std_hash) {
-    std::hash<std::string_view> hasher;
-
-    zassert_equal(StringHelpers::GetHash("sensor_1"), static_cast<uint32_t>(hasher("sensor_1")));
+ZTEST(string_helpers, test_GetHash_matches_known_xxhash64_values) {
+    // Expected values are the lower 32 bits of XXH64(seed=0) for these inputs.
+    zassert_equal(StringHelpers::GetHash("sensor_1"), 0x479b7bc9u);
+    zassert_equal(StringHelpers::GetHash(""), 0x51d8e999u);
+    zassert_equal(StringHelpers::GetHash("sensor_2"), 0xac41a995u);
+    zassert_equal(StringHelpers::GetHash("abc"), 0xad770999u);
 }
 
 ZTEST(string_helpers, test_GetHash_distinguishes_inputs) {
