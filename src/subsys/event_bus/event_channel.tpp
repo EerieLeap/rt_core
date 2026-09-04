@@ -84,6 +84,7 @@ void EventChannel<TEventType, TPayloadType>::PublishAsync(const EventMessage& ev
 
         // Shed the oldest rather than the newest
         while(event_queue_.size() >= max_queued_events_) {
+            last_dropped_source_id_ = event_queue_.front().source_id;
             event_queue_.pop();
             ++dropped_events_;
         }
@@ -98,6 +99,7 @@ template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloa
 bool EventChannel<TEventType, TPayloadType>::DrainOne() {
     std::optional<EventMessage> event;
     size_t dropped = 0;
+    uint32_t dropped_source_id = 0;
 
     {
         ScopedMutex guard(queue_mutex_);
@@ -108,12 +110,13 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
         }
 
         dropped = std::exchange(dropped_events_, 0);
+        dropped_source_id = std::exchange(last_dropped_source_id_, 0);
     }
 
     if(dropped != 0) {
         LOG_MODULE_DECLARE(event_bus_logger);
-        LOG_WRN("Channel '%s' dropped %u queued events, subscribers cannot keep up",
-            name_.c_str(), static_cast<unsigned>(dropped));
+        LOG_WRN("Channel '%s' dropped %u queued events, subscribers cannot keep up. Last dropped publisher: 0x%08x",
+            name_.c_str(), static_cast<unsigned>(dropped), dropped_source_id);
     }
 
     if(!event)

@@ -45,6 +45,7 @@ private:
     std::queue<EventMessage> event_queue_;
     k_mutex queue_mutex_;
     size_t dropped_events_ = 0;
+    uint32_t last_dropped_source_id_ = 0;
 
     // Observes the registering bus; null is the inert state, and ~EventBus() restores
     // it so a destroyed bus can never be woken.

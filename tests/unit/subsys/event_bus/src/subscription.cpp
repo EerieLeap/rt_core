@@ -21,17 +21,21 @@ namespace {
 using TestEvent = Event<TestEventType, TestPayloadType>;
 using TestSubscription = Subscription<TestEventType, TestPayloadType>;
 
+constexpr uint32_t k_source_one = 0xA001;
+constexpr uint32_t k_source_two = 0xA002;
+constexpr uint32_t k_source_three = 0xA003;
+
 struct SourceFilter {
-    std::string source_id;
+    uint32_t source_id;
 
     bool operator()(const TestEvent& event) const { return event.source_id == source_id; }
 };
 
-TestEvent MakeEvent(TestEventType type, std::string source_id) {
+TestEvent MakeEvent(TestEventType type, uint32_t source_id) {
     return TestEvent {
+        .source_id = source_id,
         .type = type,
-        .payload = {},
-        .source_id = std::move(source_id)
+        .payload = {}
     };
 }
 
@@ -54,16 +58,16 @@ ZTEST(event_bus_subscription, test_a_subscription_erases_the_filter_type_but_kee
     TestSubscription subscription(
         1,
         TestEventType::Alpha,
-        SourceFilter{"sensor_1"},
+        SourceFilter{k_source_one},
         [](const TestEvent&) {});
 
-    zassert_true(subscription.filter(MakeEvent(TestEventType::Alpha, "sensor_1")));
-    zassert_false(subscription.filter(MakeEvent(TestEventType::Alpha, "sensor_2")));
+    zassert_true(subscription.filter(MakeEvent(TestEventType::Alpha, k_source_one)));
+    zassert_false(subscription.filter(MakeEvent(TestEventType::Alpha, k_source_two)));
 }
 
 ZTEST(event_bus_subscription, test_a_subscription_invokes_the_handler_with_the_event) {
     int calls = 0;
-    std::string observed_source;
+    uint32_t observed_source = 0;
 
     TestSubscription subscription(
         1,
@@ -74,8 +78,8 @@ ZTEST(event_bus_subscription, test_a_subscription_invokes_the_handler_with_the_e
             observed_source = event.source_id;
         });
 
-    subscription.handler(MakeEvent(TestEventType::Alpha, "sensor_3"));
+    subscription.handler(MakeEvent(TestEventType::Alpha, k_source_three));
 
     zassert_equal(calls, 1);
-    zassert_equal(observed_source, std::string("sensor_3"));
+    zassert_equal(observed_source, k_source_three);
 }

@@ -66,12 +66,12 @@ ZTEST(sensor_event_bus, test_the_sensor_channel_runs_on_its_own_thread) {
     zassert_not_null(subscription.get());
 
     SensorEventsChannel::GetInstance().PublishAsync({
+        .source_id = 0x7E57,
         .type = SensorEventType::DataUpdated,
         .payload = {
             { SensorPayloadType::SensorId, 4242U },
             { SensorPayloadType::Value, 12.5F }
-        },
-        .source_id = "test"
+        }
     });
 
     zassert_true(probe.WaitForDelivery(), "the event was never dispatched");

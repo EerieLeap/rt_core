@@ -18,8 +18,11 @@ namespace {
 
 using TestEvent = Event<TestEventType, TestPayloadType>;
 
+constexpr uint32_t k_source_one = 0xA001;
+constexpr uint32_t k_source_two = 0xA002;
+
 struct SourceFilter {
-    std::string source_id;
+    uint32_t source_id;
 
     bool operator()(const TestEvent& event) const { return event.source_id == source_id; }
 };
@@ -35,11 +38,11 @@ static_assert(EventFilter<SourceFilter, TestEventType, TestPayloadType>);
 static_assert(!EventFilter<MissingCallOperator, TestEventType, TestPayloadType>);
 static_assert(!EventFilter<NonBooleanFilter, TestEventType, TestPayloadType>);
 
-TestEvent MakeEvent(TestEventType type, std::string source_id) {
+TestEvent MakeEvent(TestEventType type, uint32_t source_id) {
     return TestEvent {
+        .source_id = source_id,
         .type = type,
-        .payload = {},
-        .source_id = std::move(source_id)
+        .payload = {}
     };
 }
 
@@ -50,14 +53,14 @@ ZTEST_SUITE(event_bus_event_filter, NULL, NULL, NULL, NULL, NULL);
 ZTEST(event_bus_event_filter, test_AcceptAllFilter_accepts_every_event) {
     AcceptAllFilter<TestEventType, TestPayloadType> filter;
 
-    zassert_true(filter(MakeEvent(TestEventType::Alpha, "sensor_1")));
-    zassert_true(filter(MakeEvent(TestEventType::Beta, "sensor_2")));
-    zassert_true(filter(MakeEvent(TestEventType::Gamma, "")));
+    zassert_true(filter(MakeEvent(TestEventType::Alpha, k_source_one)));
+    zassert_true(filter(MakeEvent(TestEventType::Beta, k_source_two)));
+    zassert_true(filter(MakeEvent(TestEventType::Gamma, 0)));
 }
 
 ZTEST(event_bus_event_filter, test_a_custom_filter_selects_events_by_source) {
-    SourceFilter filter {"sensor_1"};
+    SourceFilter filter {k_source_one};
 
-    zassert_true(filter(MakeEvent(TestEventType::Alpha, "sensor_1")));
-    zassert_false(filter(MakeEvent(TestEventType::Alpha, "sensor_2")));
+    zassert_true(filter(MakeEvent(TestEventType::Alpha, k_source_one)));
+    zassert_false(filter(MakeEvent(TestEventType::Alpha, k_source_two)));
 }

@@ -21,9 +21,9 @@ using EventPayload = std::unordered_map<PayloadTypeEnum, EventData>;
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
 struct Event {
+    uint32_t source_id = 0;
     EventTypeEnum type;
     EventPayload<PayloadTypeEnum> payload;
-    std::string source_id;
 };
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
