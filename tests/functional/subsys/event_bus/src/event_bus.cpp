@@ -12,14 +12,16 @@
 #include "subsys/event_bus/event_bus.h"
 #include "subsys/event_bus/event_channel.h"
 #include "subsys/event_bus/i_event_bus.h"
-#include "subsys/event_bus/scoped_subscription.h"
+#include "subsys/event_bus/i_event_channel.h"
 
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
+using eerie_leap::subsys::event_bus::ErasedPayloadView;
 using eerie_leap::subsys::event_bus::Event;
 using eerie_leap::subsys::event_bus::EventBus;
 using eerie_leap::subsys::event_bus::EventChannel;
 using eerie_leap::subsys::event_bus::IEventBus;
+using eerie_leap::subsys::event_bus::IEventChannel;
 using eerie_leap::subsys::event_bus::SubscriptionHandle;
 
 namespace {
@@ -630,4 +632,98 @@ ZTEST(event_bus, test_a_throwing_subscriber_does_not_stop_the_async_dispatch_loo
 
     zassert_true(probe.WaitForDelivery(), "the queue stalled on the failing subscriber");
     zassert_equal(probe.values.front(), 2);
+}
+
+ZTEST(event_bus, test_SubscribeErased_delivers_the_payload_by_raw_key) {
+    BusWithChannel fixture("eb_erased_delivers");
+    std::optional<int> observed;
+
+    AnySubscription subscription = fixture.channel.SubscribeErased(
+        static_cast<uint32_t>(TestEventType::Alpha),
+        [&observed](const ErasedPayloadView& payload) {
+            if(const auto* value = payload.Find(static_cast<uint32_t>(TestPayloadType::Value)))
+                observed = std::get<int>(*value);
+        });
+    zassert_not_null(subscription.get());
+
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 7));
+
+    zassert_true(observed.has_value());
+    zassert_equal(*observed, 7);
+}
+
+ZTEST(event_bus, test_SubscribeErased_reports_an_absent_key_as_null) {
+    BusWithChannel fixture("eb_erased_absent");
+    int calls = 0;
+    bool found_absent_key = true;
+
+    AnySubscription subscription = fixture.channel.SubscribeErased(
+        static_cast<uint32_t>(TestEventType::Alpha),
+        [&calls, &found_absent_key](const ErasedPayloadView& payload) {
+            ++calls;
+            found_absent_key = payload.Find(static_cast<uint32_t>(TestPayloadType::Label)) != nullptr;
+        });
+    zassert_not_null(subscription.get());
+
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 7));
+
+    zassert_equal(calls, 1);
+    zassert_false(found_absent_key);
+}
+
+ZTEST(event_bus, test_SubscribeErased_honours_the_event_type) {
+    BusWithChannel fixture("eb_erased_typed");
+    int calls = 0;
+
+    AnySubscription subscription = fixture.channel.SubscribeErased(
+        static_cast<uint32_t>(TestEventType::Alpha),
+        [&calls](const ErasedPayloadView&) { ++calls; });
+    zassert_not_null(subscription.get());
+
+    fixture.channel.Publish(MakeEvent(TestEventType::Beta, 1));
+
+    zassert_equal(calls, 0);
+
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1));
+
+    zassert_equal(calls, 1);
+}
+
+ZTEST(event_bus, test_an_erased_subscription_unsubscribes_when_destroyed) {
+    BusWithChannel fixture("eb_erased_scope");
+    int calls = 0;
+
+    {
+        AnySubscription subscription = fixture.channel.SubscribeErased(
+            static_cast<uint32_t>(TestEventType::Alpha),
+            [&calls](const ErasedPayloadView&) { ++calls; });
+        zassert_not_null(subscription.get());
+
+        fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1));
+    }
+
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 2));
+
+    zassert_equal(calls, 1);
+}
+
+// The interface has to be enough on its own: a binding resolved from configuration only ever
+// holds an IEventChannel*.
+ZTEST(event_bus, test_SubscribeErased_works_through_the_channel_interface) {
+    BusWithChannel fixture("eb_erased_interface");
+    IEventChannel& channel = fixture.channel;
+    std::optional<int> observed;
+
+    AnySubscription subscription = channel.SubscribeErased(
+        static_cast<uint32_t>(TestEventType::Alpha),
+        [&observed](const ErasedPayloadView& payload) {
+            if(const auto* value = payload.Find(static_cast<uint32_t>(TestPayloadType::Value)))
+                observed = std::get<int>(*value);
+        });
+    zassert_not_null(subscription.get());
+
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 42));
+
+    zassert_true(observed.has_value());
+    zassert_equal(*observed, 42);
 }

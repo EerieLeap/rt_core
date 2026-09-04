@@ -2,8 +2,11 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
+#include "erased_payload_view.h"
 #include "i_event_bus.h"
+#include "i_scoped_subscription.h"
 
 namespace eerie_leap::subsys::event_bus {
 
@@ -21,6 +24,10 @@ public:
 
     // Dispatches at most one queued event; reports whether one was dispatched.
     virtual bool DrainOne() = 0;
+
+    // Subscribes without naming the channel's enums, so a binding held as configuration can
+    // resolve to a subscription at runtime. Both enums are uint32-backed by concept.
+    virtual AnySubscription SubscribeErased(uint32_t event_type, ErasedEventHandler handler) = 0;
 };
 
 // Channels are singletons that outlive every bus, so the slots observe rather than

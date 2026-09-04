@@ -3,8 +3,10 @@
 #include <atomic>
 #include <cstddef>
 #include <expected>
+#include <memory>
 #include <queue>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <zephyr/kernel.h>
@@ -51,6 +53,22 @@ private:
     // it so a destroyed bus can never be woken.
     std::atomic<IEventBus*> bus_{nullptr};
 
+    // Borrows the dispatched event's payload, so an erased subscriber reads it without a copy
+    // and without an allocation.
+    class PayloadView final : public ErasedPayloadView {
+    private:
+        const PayloadMap& payload_;
+
+    public:
+        explicit PayloadView(const PayloadMap& payload) : payload_(payload) { }
+
+        const EventData* Find(uint32_t key) const override {
+            auto it = payload_.find(static_cast<TPayloadType>(key));
+
+            return it == payload_.end() ? nullptr : &it->second;
+        }
+    };
+
     void Dispatch(const EventMessage& event);
 
 protected:
@@ -80,9 +98,58 @@ public:
 
     bool Unsubscribe(SubscriptionHandle<TEventType>& handle);
 
+    AnySubscription SubscribeErased(uint32_t event_type, ErasedEventHandler handler) override;
+
     void Publish(const EventMessage& event);
     void PublishAsync(const EventMessage& event);
 };
+
+template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
+class ScopedSubscription final : public IScopedSubscription {
+private:
+    EventChannel<TEventType, TPayloadType>& channel_;
+    SubscriptionHandle<TEventType> handle_;
+
+public:
+    ScopedSubscription(EventChannel<TEventType, TPayloadType>& channel, SubscriptionHandle<TEventType>&& handle)
+        : channel_(channel), handle_(std::move(handle)) { }
+
+    ~ScopedSubscription() override {
+        channel_.Unsubscribe(handle_);
+    }
+
+    ScopedSubscription(const ScopedSubscription&) = delete;
+    ScopedSubscription& operator=(const ScopedSubscription&) = delete;
+};
+
+// Returns nullptr when the channel refuses the subscription.
+template<typename ChannelType, EventFilter<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum> FilterType>
+AnySubscription CreateScopedSubscription(
+    ChannelType& channel,
+    typename ChannelType::EventTypeEnum type,
+    FilterType filter,
+    EventHandler<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum> handler) {
+
+    auto subscription = channel.Subscribe(type, std::move(filter), std::move(handler));
+    if(!subscription)
+        return nullptr;
+
+    return std::make_unique<ScopedSubscription<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum>>(
+        channel, std::move(*subscription));
+}
+
+template<typename ChannelType>
+AnySubscription CreateScopedSubscription(
+    ChannelType& channel,
+    typename ChannelType::EventTypeEnum type,
+    EventHandler<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum> handler) {
+
+    return CreateScopedSubscription(
+        channel,
+        type,
+        AcceptAllFilter<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum>{ },
+        std::move(handler));
+}
 
 } // namespace eerie_leap::subsys::event_bus
 

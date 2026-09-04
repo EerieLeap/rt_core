@@ -5,7 +5,7 @@
 #include <zephyr/ztest.h>
 
 #include "domain/sensor_domain/event_bus/sensor_event_bus.h"
-#include "subsys/event_bus/scoped_subscription.h"
+#include "subsys/event_bus/event_channel.h"
 
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventBus;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventsChannel;
