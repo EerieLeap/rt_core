@@ -67,16 +67,40 @@ bool EventChannel<TEventType, TPayloadType>::Unsubscribe(SubscriptionHandle<TEve
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 AnySubscription EventChannel<TEventType, TPayloadType>::SubscribeErased(
-    uint32_t event_type, ErasedEventHandler handler) {
+    uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) {
 
     return CreateScopedSubscription(
         *this,
         static_cast<TEventType>(event_type),
+        [filter = std::move(filter)](const EventMessage& event) {
+            if(!filter)
+                return true;
+
+            PayloadView view(event.payload);
+
+            return filter(view);
+        },
         [handler = std::move(handler)](const EventMessage& event) {
             PayloadView view(event.payload);
 
             handler(view);
         });
+}
+
+template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
+void EventChannel<TEventType, TPayloadType>::PublishErasedAsync(
+    uint32_t event_type, uint32_t source_id, ErasedPayload payload) {
+
+    EventMessage event {
+        .source_id = source_id,
+        .type = static_cast<TEventType>(event_type)
+    };
+
+    event.payload.reserve(payload.size());
+    for(const auto& [key, value] : payload)
+        event.payload.emplace(static_cast<TPayloadType>(key), value);
+
+    PublishAsync(event);
 }
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>

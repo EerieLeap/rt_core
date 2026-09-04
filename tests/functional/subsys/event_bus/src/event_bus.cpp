@@ -639,7 +639,7 @@ ZTEST(event_bus, test_SubscribeErased_delivers_the_payload_by_raw_key) {
     std::optional<int> observed;
 
     AnySubscription subscription = fixture.channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha),
+        static_cast<uint32_t>(TestEventType::Alpha), { },
         [&observed](const ErasedPayloadView& payload) {
             if(const auto* value = payload.Find(static_cast<uint32_t>(TestPayloadType::Value)))
                 observed = std::get<int>(*value);
@@ -658,7 +658,7 @@ ZTEST(event_bus, test_SubscribeErased_reports_an_absent_key_as_null) {
     bool found_absent_key = true;
 
     AnySubscription subscription = fixture.channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha),
+        static_cast<uint32_t>(TestEventType::Alpha), { },
         [&calls, &found_absent_key](const ErasedPayloadView& payload) {
             ++calls;
             found_absent_key = payload.Find(static_cast<uint32_t>(TestPayloadType::Label)) != nullptr;
@@ -676,7 +676,7 @@ ZTEST(event_bus, test_SubscribeErased_honours_the_event_type) {
     int calls = 0;
 
     AnySubscription subscription = fixture.channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha),
+        static_cast<uint32_t>(TestEventType::Alpha), { },
         [&calls](const ErasedPayloadView&) { ++calls; });
     zassert_not_null(subscription.get());
 
@@ -695,7 +695,7 @@ ZTEST(event_bus, test_an_erased_subscription_unsubscribes_when_destroyed) {
 
     {
         AnySubscription subscription = fixture.channel.SubscribeErased(
-            static_cast<uint32_t>(TestEventType::Alpha),
+            static_cast<uint32_t>(TestEventType::Alpha), { },
             [&calls](const ErasedPayloadView&) { ++calls; });
         zassert_not_null(subscription.get());
 
@@ -715,7 +715,7 @@ ZTEST(event_bus, test_SubscribeErased_works_through_the_channel_interface) {
     std::optional<int> observed;
 
     AnySubscription subscription = channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha),
+        static_cast<uint32_t>(TestEventType::Alpha), { },
         [&observed](const ErasedPayloadView& payload) {
             if(const auto* value = payload.Find(static_cast<uint32_t>(TestPayloadType::Value)))
                 observed = std::get<int>(*value);

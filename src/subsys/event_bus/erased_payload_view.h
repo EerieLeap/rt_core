@@ -18,4 +18,8 @@ public:
 
 using ErasedEventHandler = std::function<void(const ErasedPayloadView&)>;
 
+// Evaluated where a typed filter is, under the subscriber lock and before the handler, so an
+// event a subscriber does not want costs it nothing. Empty means accept everything.
+using ErasedEventFilter = std::function<bool(const ErasedPayloadView&)>;
+
 } // namespace eerie_leap::subsys::event_bus

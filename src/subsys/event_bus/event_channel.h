@@ -98,7 +98,10 @@ public:
 
     bool Unsubscribe(SubscriptionHandle<TEventType>& handle);
 
-    AnySubscription SubscribeErased(uint32_t event_type, ErasedEventHandler handler) override;
+    AnySubscription SubscribeErased(
+        uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) override;
+
+    void PublishErasedAsync(uint32_t event_type, uint32_t source_id, ErasedPayload payload) override;
 
     void Publish(const EventMessage& event);
     void PublishAsync(const EventMessage& event);
