@@ -1,6 +1,7 @@
 #include <vector>
 #include <utility>
 
+#include <zephyr/logging/log.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/bluetooth/bluetooth.h>
 
@@ -18,6 +19,8 @@ using namespace eerie_leap::subsys::bluetooth;
 using namespace eerie_leap::subsys::bluetooth::utilities;
 using namespace eerie_leap::subsys::bluetooth::ble_settings;
 using namespace eerie_leap::domain::system_domain::models;
+
+LOG_MODULE_REGISTER(ble_service_logger);
 
 std::unique_ptr<BleService> BleService::instance_;
 bool BleService::is_initialized_ = false;
@@ -46,9 +49,13 @@ bool BleService::Initialize() {
     if(is_initialized_)
         return true;
 
+    if(!Ble::Initialize()) {
+        LOG_ERR("Failed to initialize low-level Bluetooth subsystem.");
+        return false;
+    }
+
     is_initialized_ = true;
 
-    Ble::Initialize();
     ConfigureAdvertisingData();
     ConfigureScanResponseData();
 
@@ -63,6 +70,9 @@ bool BleService::Initialize() {
 }
 
 bool BleService::Start() const {
+    if(!is_initialized_)
+        return false;
+
     return Ble::Start();
 }
 
