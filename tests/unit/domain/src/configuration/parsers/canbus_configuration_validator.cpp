@@ -83,3 +83,10 @@ ZTEST(canbus_configuration_validator, test_frame_id_wider_than_extended_is_rejec
 ZTEST(canbus_configuration_validator, test_unsupported_bitrate_is_rejected) {
     zassert_false(Validates(MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123, 123456)));
 }
+
+ZTEST(canbus_configuration_validator, test_none_sentinel_and_unknown_canbus_types_are_invalid) {
+    for(auto type : { CanbusType::NONE, CanbusType::COUNT,
+                      static_cast<CanbusType>(200), static_cast<CanbusType>(UINT8_MAX) })
+        zassert_false(Validates(MakeConfiguration(type, false, 0x123)),
+            "Accepted invalid CAN bus type %u.", static_cast<unsigned>(type));
+}

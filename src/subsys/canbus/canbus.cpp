@@ -159,8 +159,8 @@ bool Canbus::Configure(const CanbusConfig& config) {
     }
 
     if(!IsBitrateSupported(config.type, config.bitrate)) {
-        LOG_ERR("Bitrate %u is not supported for CAN type %s.",
-            config.bitrate, GetCanbusTypeName(config.type));
+        LOG_ERR("Bitrate %u is not supported for CAN type %u.",
+            config.bitrate, static_cast<unsigned>(config.type));
         return false;
     }
 

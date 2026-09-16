@@ -90,18 +90,8 @@ void SensorValidator::ValidateSensorConfiguration(
 }
 
 void SensorValidator::ValidateType(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
-    if(sensor_configuration.type != SensorType::PHYSICAL_ANALOG
-        && sensor_configuration.type != SensorType::VIRTUAL_ANALOG
-        && sensor_configuration.type != SensorType::PHYSICAL_INDICATOR
-        && sensor_configuration.type != SensorType::VIRTUAL_INDICATOR
-        && sensor_configuration.type != SensorType::CANBUS_RAW
-        && sensor_configuration.type != SensorType::CANBUS_ANALOG
-        && sensor_configuration.type != SensorType::CANBUS_INDICATOR
-        && sensor_configuration.type != SensorType::USER_ANALOG
-        && sensor_configuration.type != SensorType::USER_INDICATOR) {
-
-            InvalidSensorConfiguration(sensor_id, "Invalid sensor type.");
-        }
+    if(sensor_configuration.type == SensorType::NONE || !IsSensorTypeValid(sensor_configuration.type))
+        InvalidSensorConfiguration(sensor_id, "Invalid sensor type.");
 }
 
 void SensorValidator::ValidateChannel(

@@ -62,7 +62,7 @@ void CanbusConfigurationValidator::Validate(const CanbusConfiguration& configura
 
 void CanbusConfigurationValidator::ValidateChannelType(const CanbusConfiguration& configuration) {
     for(const auto& [_, canbus_configuration] : configuration.channel_configurations) {
-        if(canbus_configuration.type != CanbusType::CLASSICAL_CAN && canbus_configuration.type != CanbusType::CANFD)
+        if(canbus_configuration.type == CanbusType::NONE || !IsCanbusTypeValid(canbus_configuration.type))
             InvalidCanbusConfiguration(canbus_configuration.bus_channel, "Invalid CAN bus type");
     }
 }

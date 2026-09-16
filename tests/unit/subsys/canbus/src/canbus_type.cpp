@@ -1,48 +1,26 @@
-#include <string>
-
 #include <zephyr/ztest.h>
 
 #include "subsys/canbus/canbus_type.h"
 
 using eerie_leap::subsys::canbus::CanbusType;
-using eerie_leap::subsys::canbus::GetCanbusType;
-using eerie_leap::subsys::canbus::GetCanbusTypeName;
 using eerie_leap::subsys::canbus::IsCanbusTypeValid;
 
 ZTEST_SUITE(canbus_type, NULL, NULL, NULL, NULL, NULL);
 
-ZTEST(canbus_type, test_names_round_trip) {
-    zassert_equal(GetCanbusType("NONE"), CanbusType::NONE);
-    zassert_equal(GetCanbusType("CLASSICAL_CAN"), CanbusType::CLASSICAL_CAN);
-    zassert_equal(GetCanbusType("CANFD"), CanbusType::CANFD);
-
-    zassert_str_equal(GetCanbusTypeName(CanbusType::NONE), "NONE");
-    zassert_str_equal(GetCanbusTypeName(CanbusType::CLASSICAL_CAN), "CLASSICAL_CAN");
-    zassert_str_equal(GetCanbusTypeName(CanbusType::CANFD), "CANFD");
+ZTEST(canbus_type, test_persisted_type_ids_are_unchanged) {
+    zassert_equal(static_cast<uint8_t>(CanbusType::NONE), 0);
+    zassert_equal(static_cast<uint8_t>(CanbusType::CLASSICAL_CAN), 1);
+    zassert_equal(static_cast<uint8_t>(CanbusType::CANFD), 2);
 }
 
-ZTEST(canbus_type, test_unknown_name_throws) {
-    bool threw = false;
-
-    try {
-        GetCanbusType("NOT_A_CAN_TYPE");
-    } catch(const std::runtime_error&) {
-        threw = true;
-    }
-
-    zassert_true(threw, "Expected an unknown canbus type name to throw");
+ZTEST(canbus_type, test_defined_types_are_valid) {
+    zassert_true(IsCanbusTypeValid(CanbusType::NONE));
+    zassert_true(IsCanbusTypeValid(CanbusType::CLASSICAL_CAN));
+    zassert_true(IsCanbusTypeValid(CanbusType::CANFD));
 }
 
-ZTEST(canbus_type, test_out_of_range_type_is_reported_not_read) {
-    auto invalid = static_cast<CanbusType>(200);
-
-    zassert_false(IsCanbusTypeValid(invalid));
-    zassert_str_equal(GetCanbusTypeName(invalid), "UNKNOWN");
-}
-
-ZTEST(canbus_type, test_accepts_string_and_string_view) {
-    std::string name = "CANFD";
-
-    zassert_equal(GetCanbusType(name), CanbusType::CANFD);
-    zassert_equal(GetCanbusType(std::string_view(name)), CanbusType::CANFD);
+ZTEST(canbus_type, test_sentinel_and_unknown_types_are_invalid) {
+    zassert_false(IsCanbusTypeValid(CanbusType::COUNT));
+    zassert_false(IsCanbusTypeValid(static_cast<CanbusType>(200)));
+    zassert_false(IsCanbusTypeValid(static_cast<CanbusType>(UINT8_MAX)));
 }
