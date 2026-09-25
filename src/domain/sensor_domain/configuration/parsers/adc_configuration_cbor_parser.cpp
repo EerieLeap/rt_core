@@ -73,7 +73,14 @@ pmr_unique_ptr<AdcConfiguration> AdcConfigurationCborParser::Deserialize(std::pm
                     .value = calibration_data.float32float});
             }
 
-            auto calibration_table_ptr = make_shared_pmr<std::pmr::vector<CalibrationData>>(mr, calibration_table);
+            // Interpolators binary search the table, and an imported one may be stored unordered.
+            std::ranges::sort(
+                calibration_table,
+                [](const CalibrationData& a, const CalibrationData& b) {
+                    return a.voltage < b.voltage;
+                });
+
+            auto calibration_table_ptr = make_shared_pmr<std::pmr::vector<CalibrationData>>(mr, std::move(calibration_table));
             adc_channel_configuration->calibrator = make_shared_pmr<AdcCalibrator>(mr, interpolation_method, calibration_table_ptr);
         } else {
             throw std::runtime_error("ADC channel configuration is invalid. Calibration table is missing.");

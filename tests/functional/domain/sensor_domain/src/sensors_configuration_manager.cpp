@@ -326,3 +326,24 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     for(auto sensor : sensors)
         zassert_false(sensors_configuration_manager->Update({sensor}), "Invalid sensor configuration update expected to fail.");
 }
+
+ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_empty_configuration_is_kept_in_memory) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service),
+        nullptr,
+        16,
+        16);
+
+    zassert_true(sensors_configuration_manager->Update({}));
+    zassert_true(fs_service->DeleteFile("config/sensors_config.cbor"));
+
+    // No sensors is a configuration too, not a reason to go back to storage.
+    const auto* sensors = sensors_configuration_manager->Get();
+    zassert_not_null(sensors);
+    zassert_true(sensors->empty());
+}

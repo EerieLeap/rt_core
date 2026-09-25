@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <memory>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
 #include "configuration/cbor/cbor_adc_config/cbor_adc_config.h"
+#include "configuration/cbor/cbor_serializer.h"
 #include "configuration/services/cbor_configuration_service.h"
 
 #include "subsys/device_tree/dt_fs.h"
@@ -120,4 +122,52 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_and_Lo
         zassert_equal(calibration_table->at(1).voltage, 5.0);
         zassert_equal(calibration_table->at(1).value, 5.0);
     }
+}
+
+ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfiguration_accepts_an_unordered_table) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    AdcFactory adc_factory(nullptr);
+    auto adc_manager = adc_factory.Create();
+    adc_manager->Initialize();
+
+    auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service), adc_manager);
+    zassert_true(adc_configuration_manager->Update(adc_configuration_manager_GetTestConfiguration()));
+
+    // The import is stored as received, so the ordering has to come from parsing it.
+    eerie_leap::configuration::cbor::CborSerializer<CborAdcConfig> serializer;
+    auto exported = adc_configuration_manager->GetCborConfiguration();
+    auto cbor_config = serializer.Deserialize(exported);
+    zassert_not_null(cbor_config.get());
+
+    for(auto& adc_channel_config : cbor_config->CborAdcChannelConfig_m) {
+        adc_channel_config.calibration_table.float32float.back().float32float = 4.0F;
+        std::ranges::reverse(adc_channel_config.calibration_table.float32float);
+    }
+
+    zassert_true(adc_configuration_manager->ApplyCborConfiguration(serializer.Serialize(*cbor_config)));
+
+    auto expect_imported_configuration = [](const std::shared_ptr<IAdcManager>& imported_adc_manager) {
+        zassert_not_null(imported_adc_manager.get());
+
+        for(int i = 0; i < imported_adc_manager->GetChannelCount(); i++) {
+            auto calibration_table = imported_adc_manager->GetChannelConfiguration(i)->calibrator->GetCalibrationTable();
+
+            zassert_equal(calibration_table->size(), 2);
+            zassert_equal(calibration_table->at(0).voltage, 0.0F);
+            zassert_equal(calibration_table->at(1).voltage, 5.0F);
+            zassert_equal(calibration_table->at(1).value, 4.0F);
+        }
+    };
+
+    expect_imported_configuration(adc_configuration_manager->Get());
+
+    auto reloaded_adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service), adc_manager);
+
+    expect_imported_configuration(reloaded_adc_configuration_manager->Get());
 }

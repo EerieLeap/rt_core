@@ -160,7 +160,14 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
                     .value = calibration_data.float32float});
             }
 
-            auto calibration_table_ptr = make_shared_pmr<std::pmr::vector<CalibrationData>>(mr, calibration_table);
+            // Interpolators binary search the table, and an imported one may be stored unordered.
+            std::ranges::sort(
+                calibration_table,
+                [](const CalibrationData& a, const CalibrationData& b) {
+                    return a.voltage < b.voltage;
+                });
+
+            auto calibration_table_ptr = make_shared_pmr<std::pmr::vector<CalibrationData>>(mr, std::move(calibration_table));
 
             switch(interpolation_method) {
             case InterpolationMethod::LINEAR:

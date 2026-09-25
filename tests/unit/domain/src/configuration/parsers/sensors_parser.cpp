@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
 
@@ -131,4 +133,24 @@ ZTEST(sensors_parser, test_CborSerializeDeserialize) {
     auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
 
     sensors_parser_CompareSensors(sensors, deserialized_sensors);
+}
+
+ZTEST(sensors_parser, test_Deserialize_orders_an_unordered_calibration_table) {
+    auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
+
+    auto sensors = sensors_parser_GetTestSensors();
+    auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
+
+    for(auto& sensor_config : serialized_sensors->CborSensorConfig_m)
+        std::ranges::reverse(sensor_config.configuration.calibration_table.float32float);
+
+    auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
+
+    for(const auto& sensor : deserialized_sensors) {
+        if(sensor->configuration.voltage_interpolator == nullptr)
+            continue;
+
+        const auto& calibration_table = *sensor->configuration.voltage_interpolator->GetCalibrationTable();
+        zassert_true(std::ranges::is_sorted(calibration_table, {}, &CalibrationData::voltage), "%s", sensor->id.c_str());
+    }
 }

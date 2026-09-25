@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
 
@@ -81,6 +83,20 @@ ZTEST(adc_configuration_parser, test_CborSerializeDeserialize) {
 
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
     auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration.get());
+
+    adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
+}
+
+ZTEST(adc_configuration_parser, test_Deserialize_orders_an_unordered_calibration_table) {
+    AdcConfigurationCborParser adc_configuration_cbor_parser;
+
+    auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
+
+    for(auto& adc_channel_config : serialized_adc_configuration->CborAdcChannelConfig_m)
+        std::ranges::reverse(adc_channel_config.calibration_table.float32float);
+
+    auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
 
     adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
 }

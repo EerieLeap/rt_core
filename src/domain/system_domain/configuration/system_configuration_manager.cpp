@@ -14,34 +14,16 @@ LOG_MODULE_REGISTER(system_config_mngr_logger);
 
 SystemConfigurationManager::SystemConfigurationManager(
     std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service)
-        : cbor_configuration_service_(std::move(cbor_configuration_service)),
-        configuration_(nullptr) {
+        : CborConfigurationManagerBase("System", std::move(cbor_configuration_service)) {
 
-    cbor_parser_ = std::make_unique<SystemConfigurationCborParser>();
-    std::shared_ptr<SystemConfiguration> configuration = nullptr;
+    if(!LoadOrCreateDefault())
+        return;
 
-    try {
-        configuration = Get(true);
-    } catch(...) {
-        LOG_ERR("Failed to load System configuration.");
-    }
-
-    if(configuration == nullptr) {
-        if(!CreateDefaultConfiguration()) {
-            LOG_ERR("Failed to create default System configuration.");
-            return;
-        }
-
-        LOG_INF("Default System configuration loaded successfully.");
-
-        configuration = Get();
-    }
-
-    LOG_INF("System Configuration Manager initialized successfully.");
+    auto configuration = Get();
 
     LOG_INF("HW Version: %s, SW Version: %s",
-        configuration_->GetFormattedHwVersion().c_str(), configuration_->GetFormattedSwVersion().c_str());
-    LOG_INF("Device ID: %llu", configuration_->device_id);
+        configuration->GetFormattedHwVersion().c_str(), configuration->GetFormattedSwVersion().c_str());
+    LOG_INF("Device ID: %llu", configuration->device_id);
 }
 
 bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
@@ -61,34 +43,12 @@ bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
     return true;
 }
 
-bool SystemConfigurationManager::Update(const SystemConfiguration& configuration) {
-    try {
-        auto cbor_config = cbor_parser_->Serialize(configuration);
-
-        if(!cbor_configuration_service_->Save(cbor_config.get()))
-            return false;
-    } catch(const std::exception& e) {
-        LOG_ERR("Failed to update System configuration. %s", e.what());
-        return false;
-    }
-
-    return Get(true) != nullptr;
+pmr_unique_ptr<CborSystemConfig> SystemConfigurationManager::Serialize(const SystemConfiguration& configuration) {
+    return cbor_parser_.Serialize(configuration);
 }
 
-std::shared_ptr<SystemConfiguration> SystemConfigurationManager::Get(bool force_load) {
-    if(configuration_ != nullptr && !force_load)
-        return configuration_;
-
-    auto cbor_config_data = cbor_configuration_service_->Load();
-    if(!cbor_config_data.has_value())
-        return nullptr;
-
-    auto cbor_config = std::move(cbor_config_data.value().config);
-
-    auto configuration = cbor_parser_->Deserialize(Mrm::GetDefaultPmr(), *cbor_config);
-    configuration_ = std::make_shared<SystemConfiguration>(std::move(*configuration));
-
-    return configuration_;
+pmr_unique_ptr<SystemConfiguration> SystemConfigurationManager::Deserialize(const CborSystemConfig& cbor_config) {
+    return cbor_parser_.Deserialize(Mrm::GetDefaultPmr(), cbor_config);
 }
 
 bool SystemConfigurationManager::CreateDefaultConfiguration() {
