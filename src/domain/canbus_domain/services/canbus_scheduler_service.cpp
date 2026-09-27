@@ -56,7 +56,7 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
         }
 
         if(can_frame_data.size() > 0)
-            (*task->canbus)->SendFrame(task->message_configuration->frame_id, can_frame_data);
+            (*task->canbus)->SendFrame(task->frame_id, can_frame_data);
 
         LOG_HEXDUMP_DBG(
             can_frame_data.data(),
@@ -74,7 +74,8 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
 
 std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(uint8_t bus_channel, std::shared_ptr<CanMessageConfiguration> message_configuration) {
     auto canbus = canbus_service_->GetCanbus(bus_channel);
-    if(canbus == nullptr) {
+    const auto* channel_configuration = canbus_service_->GetChannelConfiguration(bus_channel);
+    if(canbus == nullptr || channel_configuration == nullptr) {
         LOG_ERR("Failed to create task for Frame ID: %d", message_configuration->frame_id);
         return nullptr;
     }
@@ -87,6 +88,7 @@ std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(uint8_t bus_chann
     auto task = std::make_unique<CanbusTask>();
     task->send_interval_ms = K_MSEC(message_configuration->send_interval_ms.value());
     task->bus_channel = bus_channel;
+    task->frame_id = CanId{message_configuration->frame_id, channel_configuration->is_extended_id};
     task->message_configuration = std::move(message_configuration);
     task->canbus = canbus;
     task->can_frame_builder = can_frame_builder_;

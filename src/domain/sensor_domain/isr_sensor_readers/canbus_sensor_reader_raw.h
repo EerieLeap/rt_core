@@ -21,6 +21,7 @@ namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::canbus::CanFrame;
+using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
 
@@ -30,7 +31,6 @@ private:
     std::shared_ptr<CanbusProxy> canbus_;
     std::shared_ptr<IsrDispatchGuard<CanbusSensorReaderRaw>> dispatch_guard_;
 
-    uint32_t frame_id_ = 0;
     int frame_handler_id_ = 0;
 
     static constexpr int FRAME_PROCESSING_DELAY_MS = 4;
@@ -53,7 +53,8 @@ public:
         std::shared_ptr<Sensor> sensor,
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<CanbusProxy> canbus);
+        std::shared_ptr<CanbusProxy> canbus,
+        const CanId& frame_id);
     virtual ~CanbusSensorReaderRaw();
 };
 

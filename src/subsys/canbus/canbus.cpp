@@ -95,7 +95,7 @@ bool Canbus::DoInitialize() {
         ScopedMutex guard(lock_);
 
         RemoveAllFilters();
-        handlers_.clear();
+        ClearEntries();
     }
 
     atomic_clear(&bitrate_detected_);
@@ -258,56 +258,58 @@ uint32_t Canbus::GetMaxDataLength(CanbusType type) {
     return type == CanbusType::CANFD ? CAN_FRAME_MAX_DATA_LENGTH : 8U;
 }
 
-bool Canbus::SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) const {
+int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data, k_timeout_t timeout) const {
     if(atomic_get(&is_initialized_) == 0 || !IsBitrateDetected() || GetState() != ServiceState::RUNNING)
-        return false;
+        return -ENETDOWN;
 
-    ScopedMutex guard(lock_);
-
-    const uint32_t max_data_length = std::min<uint32_t>(GetMaxDataLength(config_.type), CAN_MAX_DLEN);
-    if(frame_data.size() > max_data_length) {
-        LOG_ERR("Frame payload of %zu bytes exceeds the %u byte limit.", frame_data.size(), max_data_length);
-        return false;
+    if(!frame_id.IsValid()) {
+        LOG_ERR("Frame ID 0x%08X does not fit a %s identifier.",
+            frame_id.id, frame_id.is_extended ? "29-bit" : "11-bit");
+        return -EINVAL;
     }
 
-    const uint32_t id_mask = config_.is_extended_id ? CAN_EXT_ID_MASK : CAN_STD_ID_MASK;
-    if((frame_id & ~id_mask) != 0) {
-        LOG_ERR("Frame ID 0x%08X does not fit the configured identifier width.", frame_id);
-        return false;
+    // can_send() may wait for a TX slot, so the lock RX dispatch needs is not held across it.
+    const device* canbus_dev = nullptr;
+    CanbusType type = CanbusType::CLASSICAL_CAN;
+    {
+        ScopedMutex guard(lock_);
+
+        canbus_dev = config_.canbus_dev;
+        type = config_.type;
+    }
+
+    const uint32_t max_data_length = std::min<uint32_t>(GetMaxDataLength(type), CAN_MAX_DLEN);
+    if(frame_data.size() > max_data_length) {
+        LOG_ERR("Frame payload of %zu bytes exceeds the %u byte limit.", frame_data.size(), max_data_length);
+        return -EINVAL;
     }
 
     uint8_t flags = 0;
 
-    if(config_.type == CanbusType::CANFD)
+    if(type == CanbusType::CANFD)
         flags |= CAN_FRAME_FDF | CAN_FRAME_BRS;
 
-    if(config_.is_extended_id)
+    if(frame_id.is_extended)
         flags |= CAN_FRAME_IDE;
 
     const uint8_t dlc = can_bytes_to_dlc(static_cast<uint8_t>(frame_data.size()));
 
     struct can_frame can_frame = {
-        .id = frame_id,
+        .id = frame_id.id,
         .dlc = dlc,
         .flags = flags,
     };
     // The DLC table rounds FD lengths up, so the padding bytes stay zeroed.
     std::copy(frame_data.begin(), frame_data.end(), std::begin(can_frame.data));
 
-    int res = can_send(
-        config_.canbus_dev,
-        &can_frame,
-        FRAME_SEND_TIMEOUT,
-        SendFrameCallback,
-        nullptr);
-
+    int res = can_send(canbus_dev, &can_frame, timeout, SendFrameCallback, nullptr);
     if(res != 0) {
         LOG_DBG("Failed to send frame [%d].", res);
-        return false;
+        return res;
     }
 
-    LOG_DBG("Frame sent: ID=0x%08X, DLC=%d", frame_id, dlc);
-    return true;
+    LOG_DBG("Frame sent: ID=0x%08X, DLC=%d", frame_id.id, dlc);
+    return 0;
 }
 
 void Canbus::SendFrameCallback(const device* dev, int error, void* user_data) {
@@ -337,7 +339,7 @@ void Canbus::BusStateChangedCallback(const device *dev, can_state state, can_bus
         static_cast<int>(state), err_cnt.tx_err_cnt, err_cnt.rx_err_cnt);
 }
 
-int Canbus::RegisterFrameReceivedHandler(uint32_t can_id, CanFrameHandler handler) {
+int Canbus::RegisterFrameReceivedHandler(const CanFilter& requested_filter, CanFrameHandler handler) {
     if(atomic_get(&is_initialized_) == 0) {
         LOG_ERR("CANBus is not initialized.");
         return ERR_NOT_INITIALIZED;
@@ -348,53 +350,147 @@ int Canbus::RegisterFrameReceivedHandler(uint32_t can_id, CanFrameHandler handle
         return ERR_INVALID_ARGUMENT;
     }
 
-    ScopedMutex guard(lock_);
-
-    const uint32_t id_mask = config_.is_extended_id ? CAN_EXT_ID_MASK : CAN_STD_ID_MASK;
-    if((can_id & ~id_mask) != 0) {
-        LOG_ERR("CAN ID 0x%08X does not fit the configured identifier width.", can_id);
+    if(!requested_filter.IsValid()) {
+        LOG_ERR("CAN filter 0x%08X/0x%08X does not fit a %s identifier.",
+            requested_filter.id, requested_filter.mask, requested_filter.is_extended ? "29-bit" : "11-bit");
         return ERR_INVALID_ARGUMENT;
     }
 
-    auto& id_handlers = handlers_[can_id];
-    if(id_handlers.size() >= MAX_HANDLERS_PER_FRAME_ID) {
-        LOG_ERR("CAN ID 0x%08X already has the maximum number of handlers.", can_id);
-        if(id_handlers.empty())
-            handlers_.erase(can_id);
+    const CanFilter filter = requested_filter.Normalized();
 
+    ScopedMutex guard(lock_);
+
+    FilterEntry* entry = FindEntry(filter);
+    if(entry == nullptr) {
+        if(HasOverlap(filter)) {
+            LOG_ERR("CAN filter 0x%08X/0x%08X overlaps a registered filter.", filter.id, filter.mask);
+            return ERR_FILTER_OVERLAP;
+        }
+
+        entry = CreateEntry(filter);
+        if(entry == nullptr) {
+            LOG_ERR("All %zu mask filters are in use.", MAX_MASK_FILTERS);
+            return ERR_TOO_MANY_FILTERS;
+        }
+    }
+
+    if(entry->handlers.size() >= MAX_HANDLERS_PER_FILTER) {
+        LOG_ERR("CAN filter 0x%08X/0x%08X already has the maximum number of handlers.", filter.id, filter.mask);
         return ERR_TOO_MANY_HANDLERS;
     }
 
     const int handler_id = next_handler_id_++;
-    id_handlers.emplace(handler_id, std::move(handler));
+    entry->handlers.emplace(handler_id, std::move(handler));
 
     // Hardware filters are installed once the bitrate is known.
     if(atomic_get(&auto_detect_running_) != 0 && !IsBitrateDetected()) {
-        LOG_DBG("Frame received handler deferred for ID=0x%08X pending bitrate detection.", can_id);
+        LOG_DBG("Frame received handler deferred for 0x%08X/0x%08X pending bitrate detection.",
+            filter.id, filter.mask);
         return handler_id;
     }
 
-    if(!RegisterFilter(can_id)) {
-        id_handlers.erase(handler_id);
-        if(id_handlers.empty())
-            handlers_.erase(can_id);
+    if(!InstallFilter(*entry)) {
+        entry->handlers.erase(handler_id);
+        if(entry->handlers.empty())
+            EraseEntry(filter);
 
         return ERR_FILTER_REJECTED;
     }
 
-    LOG_DBG("Frame received handler registered for ID=0x%08X", can_id);
+    LOG_DBG("Frame received handler registered for 0x%08X/0x%08X", filter.id, filter.mask);
 
     return handler_id;
 }
 
-bool Canbus::RegisterFilter(uint32_t can_id) {
-    if(can_filters_.contains(can_id))
+Canbus::FilterEntry* Canbus::FindEntry(const CanFilter& filter) {
+    if(filter.IsExact()) {
+        auto it = exact_entries_.find(CanId{filter.id, filter.is_extended}.Key());
+        return it != exact_entries_.end() ? &it->second : nullptr;
+    }
+
+    for(auto& entry : mask_entries_) {
+        if(entry.has_value() && entry->filter == filter)
+            return &entry.value();
+    }
+
+    return nullptr;
+}
+
+Canbus::FilterEntry* Canbus::FindEntryByHandler(int handler_id) {
+    for(auto& [_, entry] : exact_entries_) {
+        if(entry.handlers.contains(handler_id))
+            return &entry;
+    }
+
+    for(auto& entry : mask_entries_) {
+        if(entry.has_value() && entry->handlers.contains(handler_id))
+            return &entry.value();
+    }
+
+    return nullptr;
+}
+
+Canbus::FilterEntry* Canbus::FindMatchingEntry(const CanId& can_id) {
+    auto it = exact_entries_.find(can_id.Key());
+    if(it != exact_entries_.end())
+        return &it->second;
+
+    for(auto& entry : mask_entries_) {
+        if(entry.has_value() && entry->filter.Matches(can_id))
+            return &entry.value();
+    }
+
+    return nullptr;
+}
+
+Canbus::FilterEntry* Canbus::CreateEntry(const CanFilter& filter) {
+    if(filter.IsExact()) {
+        auto [it, _] = exact_entries_.try_emplace(CanId{filter.id, filter.is_extended}.Key(), FilterEntry{filter});
+        return &it->second;
+    }
+
+    for(auto& entry : mask_entries_) {
+        if(!entry.has_value())
+            return &entry.emplace(FilterEntry{filter});
+    }
+
+    return nullptr;
+}
+
+void Canbus::EraseEntry(const CanFilter& filter) {
+    if(filter.IsExact()) {
+        exact_entries_.erase(CanId{filter.id, filter.is_extended}.Key());
+        return;
+    }
+
+    for(auto& entry : mask_entries_) {
+        if(entry.has_value() && entry->filter == filter)
+            entry.reset();
+    }
+}
+
+bool Canbus::HasOverlap(const CanFilter& filter) const {
+    for(const auto& [_, entry] : exact_entries_) {
+        if(entry.filter.Overlaps(filter))
+            return true;
+    }
+
+    for(const auto& entry : mask_entries_) {
+        if(entry.has_value() && entry->filter.Overlaps(filter))
+            return true;
+    }
+
+    return false;
+}
+
+bool Canbus::InstallFilter(FilterEntry& entry) {
+    if(entry.filter_id >= 0)
         return true;
 
-    can_filter filter = {
-        .id = can_id,
-        .mask = config_.is_extended_id ? CAN_EXT_ID_MASK : CAN_STD_ID_MASK,
-        .flags = static_cast<uint8_t>(config_.is_extended_id ? CAN_FILTER_IDE : 0)
+    const can_filter filter = {
+        .id = entry.filter.id,
+        .mask = entry.filter.mask,
+        .flags = static_cast<uint8_t>(entry.filter.is_extended ? CAN_FILTER_IDE : 0)
     };
 
     int filter_id = can_add_rx_filter(config_.canbus_dev, CanFrameReceivedCallback, this, &filter);
@@ -403,21 +499,47 @@ bool Canbus::RegisterFilter(uint32_t can_id) {
         return false;
     }
 
-    can_filter_ids_.insert({ can_id, filter_id });
-    can_filters_.insert({ can_id, filter });
+    entry.filter_id = filter_id;
 
     return true;
 }
 
-void Canbus::RemoveAllFilters() {
-    for(const auto& [can_id, filter_id] : can_filter_ids_)
-        can_remove_rx_filter(config_.canbus_dev, filter_id);
+void Canbus::UninstallFilter(FilterEntry& entry) {
+    if(entry.filter_id < 0)
+        return;
 
-    can_filter_ids_.clear();
-    can_filters_.clear();
+    can_remove_rx_filter(config_.canbus_dev, entry.filter_id);
+    entry.filter_id = -1;
 }
 
-bool Canbus::RemoveFrameReceivedHandler(uint32_t can_id, int handler_id) {
+void Canbus::InstallDeferredFilters() {
+    for(auto& [_, entry] : exact_entries_)
+        InstallFilter(entry);
+
+    for(auto& entry : mask_entries_) {
+        if(entry.has_value())
+            InstallFilter(entry.value());
+    }
+}
+
+void Canbus::RemoveAllFilters() {
+    for(auto& [_, entry] : exact_entries_)
+        UninstallFilter(entry);
+
+    for(auto& entry : mask_entries_) {
+        if(entry.has_value())
+            UninstallFilter(entry.value());
+    }
+}
+
+void Canbus::ClearEntries() {
+    exact_entries_.clear();
+
+    for(auto& entry : mask_entries_)
+        entry.reset();
+}
+
+bool Canbus::RemoveFrameReceivedHandler(int handler_id) {
     if(atomic_get(&is_initialized_) == 0) {
         LOG_ERR("CANBus is not initialized.");
         return false;
@@ -425,25 +547,18 @@ bool Canbus::RemoveFrameReceivedHandler(uint32_t can_id, int handler_id) {
 
     ScopedMutex guard(lock_);
 
-    auto handlers_it = handlers_.find(can_id);
-    if(handlers_it == handlers_.end())
+    FilterEntry* entry = FindEntryByHandler(handler_id);
+    if(entry == nullptr)
         return false;
 
-    auto& handler_list = handlers_it->second;
-    if(handler_list.erase(handler_id) == 0)
-        return false;
-
-    if(!handler_list.empty())
+    entry->handlers.erase(handler_id);
+    if(!entry->handlers.empty())
         return true;
 
-    auto filter_it = can_filter_ids_.find(can_id);
-    if(filter_it != can_filter_ids_.end()) {
-        can_remove_rx_filter(config_.canbus_dev, filter_it->second);
-        can_filter_ids_.erase(filter_it);
-    }
-
-    can_filters_.erase(can_id);
-    handlers_.erase(handlers_it);
+    // Copied because erasing the entry destroys its filter.
+    const CanFilter filter = entry->filter;
+    UninstallFilter(*entry);
+    EraseEntry(filter);
 
     return true;
 }
@@ -485,9 +600,7 @@ void Canbus::BitrateAutodetectTask() {
                 bitrate = config_.bitrate;
                 callback = bitrate_detected_fn_;
 
-                // Filters deferred while the bitrate was unknown.
-                for(const auto& [can_id, _] : handlers_)
-                    RegisterFilter(can_id);
+                InstallDeferredFilters();
             }
 
             LOG_INF("Bitrate successfully detected: %u bps", bitrate);
@@ -537,17 +650,19 @@ void Canbus::ProcessFramesTask() {
 }
 
 void Canbus::DispatchFrame(const CanFrame& frame) {
+    const CanId can_id{frame.id, frame.is_extended};
+
     // Snapshot the ids so a handler may unregister itself while being invoked.
-    std::array<int, MAX_HANDLERS_PER_FRAME_ID> handler_ids{};
+    std::array<int, MAX_HANDLERS_PER_FILTER> handler_ids{};
     size_t handler_count = 0;
 
     ScopedMutex guard(lock_);
 
-    auto handlers_it = handlers_.find(frame.id);
-    if(handlers_it == handlers_.end())
+    const FilterEntry* entry = FindMatchingEntry(can_id);
+    if(entry == nullptr)
         return;
 
-    for(const auto& [handler_id, _] : handlers_it->second) {
+    for(const auto& [handler_id, _] : entry->handlers) {
         if(handler_count == handler_ids.size())
             break;
 
@@ -555,12 +670,12 @@ void Canbus::DispatchFrame(const CanFrame& frame) {
     }
 
     for(size_t i = 0; i < handler_count; i++) {
-        handlers_it = handlers_.find(frame.id);
-        if(handlers_it == handlers_.end())
+        FilterEntry* current = FindMatchingEntry(can_id);
+        if(current == nullptr)
             return;
 
-        auto handler_it = handlers_it->second.find(handler_ids[i]);
-        if(handler_it == handlers_it->second.end())
+        auto handler_it = current->handlers.find(handler_ids[i]);
+        if(handler_it == current->handlers.end())
             continue;
 
         handler_it->second(frame);
@@ -773,7 +888,7 @@ bool Canbus::DoStop() {
         ScopedMutex guard(lock_);
 
         RemoveAllFilters();
-        handlers_.clear();
+        ClearEntries();
     }
 
     k_msgq_purge(&frame_msgq_);

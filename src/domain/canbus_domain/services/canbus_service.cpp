@@ -54,8 +54,7 @@ void CanbusService::Configure() {
                 canbus_device,
                 channel_configuration.type,
                 channel_configuration.bitrate,
-                channel_configuration.data_bitrate,
-                channel_configuration.is_extended_id);
+                channel_configuration.data_bitrate);
 
             auto new_canbus = std::make_unique<Canbus>(canbus_config);
 
@@ -94,8 +93,7 @@ void CanbusService::Configure() {
             canbus_device,
             channel_configuration.type,
             channel_configuration.bitrate,
-            channel_configuration.data_bitrate,
-            channel_configuration.is_extended_id);
+            channel_configuration.data_bitrate);
 
         if(!canbus_instance->Configure(canbus_config)) {
             LOG_ERR("Failed to configure CAN channel %d.", bus_channel);

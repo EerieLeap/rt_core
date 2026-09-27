@@ -73,7 +73,7 @@ void CdmpNetworkService::RegisterCanHandlers() {
 
     if(canbus_handler_id_ < 0) {
         throw std::runtime_error("Failed to register CAN frame handler for frame ID: "
-            + std::to_string(can_id_manager_->GetManagementCanId()));
+            + std::to_string(can_id_manager_->GetManagementCanId().id));
     }
 }
 
@@ -82,7 +82,7 @@ void CdmpNetworkService::UnregisterCanHandlers() {
         return;
 
     if(canbus_handler_id_ >= 0)
-        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetManagementCanId(), canbus_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(canbus_handler_id_);
     canbus_handler_id_ = -1;
 }
 
@@ -216,7 +216,7 @@ void CdmpNetworkService::SendDiscoveryRequest() {
     CdmpDiscoveryRequestMessage message{};
     message.uid = device_->GetUniqueIdentifier();
     auto frame_data = message.ToCanFrame();
-    uint32_t frame_id = can_id_manager_->GetDiscoveryRequestCanId();
+    CanId frame_id = can_id_manager_->GetDiscoveryRequestCanId();
     (*canbus_)->SendFrame(frame_id, frame_data);
 }
 
@@ -235,7 +235,7 @@ void CdmpNetworkService::SendDiscoveryResponse() {
     k_msleep(device_->GetStaggeredMessageDelay());
 
     auto frame_data = message.ToCanFrame();
-    uint32_t frame_id = can_id_manager_->GetDiscoveryResponseCanId();
+    CanId frame_id = can_id_manager_->GetDiscoveryResponseCanId();
     (*canbus_)->SendFrame(frame_id, frame_data);
 
     LOG_INF("Sent discovery response for device %d", message.device_id);
@@ -263,7 +263,7 @@ void CdmpNetworkService::SendIdClaim() {
         message.protocol_version = device_->GetProtocolVersion();
 
         auto frame_data = message.ToCanFrame();
-        uint32_t frame_id = can_id_manager_->GetIdClaimRequestCanId();
+        CanId frame_id = can_id_manager_->GetIdClaimRequestCanId();
         (*canbus_)->SendFrame(frame_id, frame_data);
         LOG_INF("Sent ID claim for device %d", message.claiming_device_id);
 
@@ -333,7 +333,7 @@ void CdmpNetworkService::ProcessIdClaimRequestFrame(std::span<const uint8_t> fra
 
         if(send_response) {
             auto frame_data = message.ToCanFrame();
-            uint32_t response_id = can_id_manager_->GetIdClaimResponseCanId();
+            CanId response_id = can_id_manager_->GetIdClaimResponseCanId();
             (*canbus_)->SendFrame(response_id, frame_data);
 
             return;

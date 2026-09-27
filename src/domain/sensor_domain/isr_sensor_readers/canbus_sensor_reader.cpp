@@ -17,6 +17,7 @@ CanbusSensorReader::CanbusSensorReader(
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CanbusProxy> canbus,
+    const CanId& frame_id,
     std::shared_ptr<const CanSignalConfiguration> signal_configuration)
         : CanbusSensorReaderRaw(
             std::move(time_service),
@@ -25,7 +26,8 @@ CanbusSensorReader::CanbusSensorReader(
             std::move(sensor),
             std::move(process_sensor_callback),
             std::move(work_queue_thread),
-            std::move(canbus)
+            std::move(canbus),
+            frame_id
         ),
         signal_configuration_(std::move(signal_configuration)) {}
 

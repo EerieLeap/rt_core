@@ -11,6 +11,7 @@
 namespace eerie_leap::domain::canbus_domain::services {
 
 using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::domain::canbus_domain::utilities::CanFrameBuilder;
 using eerie_leap::domain::canbus_domain::processors::ICanFrameProcessor;
@@ -18,6 +19,7 @@ using eerie_leap::domain::canbus_domain::processors::ICanFrameProcessor;
 struct CanbusTask {
     k_timeout_t send_interval_ms;
     uint8_t bus_channel;
+    CanId frame_id;
     std::shared_ptr<CanMessageConfiguration> message_configuration;
     std::shared_ptr<CanbusProxy> canbus;
     std::shared_ptr<CanFrameBuilder> can_frame_builder;

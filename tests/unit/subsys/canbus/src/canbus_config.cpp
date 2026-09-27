@@ -55,5 +55,4 @@ ZTEST(canbus_config, test_canfd_config_defaults_data_bitrate_to_bitrate) {
 
     zassert_equal(config.data_bitrate, 0, "The struct itself must not guess");
     zassert_equal(config.extra_modes, 0);
-    zassert_false(config.is_extended_id);
 }

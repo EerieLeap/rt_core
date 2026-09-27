@@ -4,6 +4,7 @@
 #include <array>
 #include <span>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <functional>
@@ -19,6 +20,8 @@
 
 #include "canbus_type.h"
 #include "can_frame.h"
+#include "can_id.h"
+#include "can_filter.h"
 
 namespace eerie_leap::subsys::canbus {
 
@@ -39,7 +42,6 @@ struct CanbusConfig {
     CanbusType type;
     uint32_t bitrate;
     uint32_t data_bitrate;
-    bool is_extended_id;
     // Additional controller modes OR'ed into the base mode, e.g. CAN_MODE_LOOPBACK.
     can_mode_t extra_modes;
 
@@ -48,37 +50,48 @@ struct CanbusConfig {
         CanbusType t,
         uint32_t br,
         uint32_t data_br = 0,
-        bool ext_id = false,
         can_mode_t extra = 0)
-        : canbus_dev(dev), type(t), bitrate(br), data_bitrate(data_br),
-          is_extended_id(ext_id), extra_modes(extra) {}
+        : canbus_dev(dev), type(t), bitrate(br), data_bitrate(data_br), extra_modes(extra) {}
 };
 
 class Canbus : public IThread, public ServiceBase<> {
 public:
     using BitrateDetectedCallback = std::function<void (uint32_t bitrate)>;
 
+    // Handler registration results.
     static constexpr int ERR_NOT_INITIALIZED = -1;
     static constexpr int ERR_FILTER_REJECTED = -2;
     static constexpr int ERR_TOO_MANY_HANDLERS = -3;
     static constexpr int ERR_INVALID_ARGUMENT = -4;
+    static constexpr int ERR_FILTER_OVERLAP = -5;
+    static constexpr int ERR_TOO_MANY_FILTERS = -6;
+
+    static constexpr size_t MAX_HANDLERS_PER_FILTER = 8;
+    static constexpr size_t MAX_MASK_FILTERS = 4;
+
+    static constexpr k_timeout_t DEFAULT_SEND_TIMEOUT = K_MSEC(2);
 
 private:
     static constexpr int FRAME_MSGQ_SIZE = CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE;
     static constexpr int MSGQ_GET_TIMEOUT_MS = 10;
-    static constexpr size_t MAX_HANDLERS_PER_FRAME_ID = 8;
+
+    // Registrations never overlap, so every driver delivers a frame through at most one filter.
+    struct FilterEntry {
+        CanFilter filter;
+        int filter_id = -1; // -1 while no hardware filter is installed
+        std::unordered_map<int, CanFrameHandler> handlers;
+    };
 
     alignas(4) char frame_msgq_buffer_[FRAME_MSGQ_SIZE * sizeof(can_frame)];
     k_msgq frame_msgq_;
 
-    // Guards config_, the filter/handler maps and bitrate_detected_fn_.
+    // Guards config_, the filter entries and bitrate_detected_fn_.
     // Never taken from the RX callback, which only feeds the message queue.
     mutable k_mutex lock_;
 
     CanbusConfig config_;
-    std::unordered_map<uint32_t, int> can_filter_ids_; // <can_id, filter_id>
-    std::unordered_map<uint32_t, can_filter> can_filters_; // <can_id, can_filter>
-    std::unordered_map<uint32_t, std::unordered_map<int, CanFrameHandler>> handlers_; // <can_id, handlers>
+    std::unordered_map<uint32_t, FilterEntry> exact_entries_; // <CanId::Key(), entry>
+    std::array<std::optional<FilterEntry>, MAX_MASK_FILTERS> mask_entries_;
     int next_handler_id_ = 1;
 
     atomic_t is_initialized_ = ATOMIC_INIT(0);
@@ -88,7 +101,6 @@ private:
     atomic_t rx_dropped_ = ATOMIC_INIT(0);
     BitrateDetectedCallback bitrate_detected_fn_;
 
-    static constexpr k_timeout_t FRAME_SEND_TIMEOUT = K_MSEC(2);
     static constexpr uint32_t AUTO_DETECT_SAMPLE_MS = 500;
     static constexpr uint32_t MIN_FRAMES_FOR_DETECTION = 3;
 
@@ -125,12 +137,23 @@ private:
     void StopActivityMonitoring();
     bool AutoDetectBitrate();
     bool TestBitrate(uint32_t bitrate);
+
+    // The entry helpers below require lock_.
+    FilterEntry* FindEntry(const CanFilter& filter);
+    FilterEntry* FindEntryByHandler(int handler_id);
+    FilterEntry* FindMatchingEntry(const CanId& can_id);
+    FilterEntry* CreateEntry(const CanFilter& filter);
+    void EraseEntry(const CanFilter& filter);
+    bool HasOverlap(const CanFilter& filter) const;
+    bool InstallFilter(FilterEntry& entry);
+    void UninstallFilter(FilterEntry& entry);
+    void InstallDeferredFilters();
     void RemoveAllFilters();
+    void ClearEntries();
 
     static void SendFrameCallback(const device* dev, int error, void* user_data);
     bool SetTiming(uint32_t bitrate) const;
     bool SetDataTiming(uint32_t bitrate) const;
-    bool RegisterFilter(uint32_t can_id);
     static void CanFrameReceivedCallback(const device *dev, can_frame *frame, void *user_data);
     static void AutoDetectFrameCallback(const device *dev, can_frame *frame, void *user_data);
     static void BusStateChangedCallback(const device *dev, can_state state, can_bus_err_cnt err_cnt, void *user_data);
@@ -148,12 +171,20 @@ public:
 
     bool Configure(const CanbusConfig& config);
 
-    int RegisterFrameReceivedHandler(uint32_t can_id, CanFrameHandler handler);
-    bool RemoveFrameReceivedHandler(uint32_t can_id, int handler_id);
+    // Returns a positive handler id or one of the ERR_* codes. A CanId registers an exact-match filter.
+    // Fails with ERR_FILTER_OVERLAP if another registered filter accepts some of the same identifiers.
+    int RegisterFrameReceivedHandler(const CanFilter& filter, CanFrameHandler handler);
+    bool RemoveFrameReceivedHandler(int handler_id);
 
     CanbusType GetType() const;
     CanbusConfig GetConfig() const;
-    bool SendFrame(uint32_t frame_id, std::span<const uint8_t> frame_data) const;
+
+    // Returns 0, -ENETDOWN when the bus is not running, -EINVAL for a malformed frame,
+    // -EAGAIN when the TX queue stayed full for the timeout, or another driver error.
+    int SendFrame(
+        const CanId& frame_id,
+        std::span<const uint8_t> frame_data,
+        k_timeout_t timeout = DEFAULT_SEND_TIMEOUT) const;
     uint32_t GetDetectedBitrate() const;
     bool IsBitrateDetected() const { return atomic_get(&bitrate_detected_) != 0; }
     uint32_t GetRxDroppedCount() const { return static_cast<uint32_t>(atomic_get(&rx_dropped_)); }

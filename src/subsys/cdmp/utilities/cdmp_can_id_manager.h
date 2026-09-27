@@ -3,7 +3,11 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "subsys/canbus/can_id.h"
+
 namespace eerie_leap::subsys::cdmp::utilities {
+
+using eerie_leap::subsys::canbus::CanId;
 
 class CdmpCanIdManager {
 private:
@@ -29,28 +33,29 @@ public:
 
     uint32_t GetBaseCanId() const { return base_can_id_; }
 
-    uint32_t GetManagementCanId() const { return base_can_id_ + MANAGEMENT_OFFSET; }
-    uint32_t GetDiscoveryRequestCanId() const { return GetManagementCanId(); }
-    uint32_t GetDiscoveryResponseCanId() const { return GetManagementCanId(); }
-    uint32_t GetIdClaimRequestCanId() const { return GetManagementCanId(); }
-    uint32_t GetIdClaimResponseCanId() const { return GetManagementCanId(); }
+    // CDMP uses standard 11-bit identifiers only.
+    CanId GetManagementCanId() const { return CanId::Standard(base_can_id_ + MANAGEMENT_OFFSET); }
+    CanId GetDiscoveryRequestCanId() const { return GetManagementCanId(); }
+    CanId GetDiscoveryResponseCanId() const { return GetManagementCanId(); }
+    CanId GetIdClaimRequestCanId() const { return GetManagementCanId(); }
+    CanId GetIdClaimResponseCanId() const { return GetManagementCanId(); }
 
-    uint32_t GetHeartbeatCanId() const { return base_can_id_ + HEARTBEAT_OFFSET; }
+    CanId GetHeartbeatCanId() const { return CanId::Standard(base_can_id_ + HEARTBEAT_OFFSET); }
 
-    uint32_t GetCommandRequestCanId() const { return base_can_id_ + COMMAND_OFFSET; }
-    uint32_t GetCommandResponseCanId() const { return base_can_id_ + COMMAND_RESPONSE_OFFSET; }
+    CanId GetCommandRequestCanId() const { return CanId::Standard(base_can_id_ + COMMAND_OFFSET); }
+    CanId GetCommandResponseCanId() const { return CanId::Standard(base_can_id_ + COMMAND_RESPONSE_OFFSET); }
 
-    uint32_t GetStateChangeRequestCanId() const { return base_can_id_ + STATE_CHANGE_OFFSET; }
-    uint32_t GetStateChangeResponseCanId() const { return base_can_id_ + STATE_CHANGE_RESPONSE_OFFSET; }
+    CanId GetStateChangeRequestCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_OFFSET); }
+    CanId GetStateChangeResponseCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_RESPONSE_OFFSET); }
 
-    uint32_t GetIsoTpRequestCanId() const { return base_can_id_ + ISOTP_REQUEST_OFFSET; }
-    uint32_t GetIsoTpResponseCanId() const { return base_can_id_ + ISOTP_RESPONSE_OFFSET; }
+    CanId GetIsoTpRequestCanId() const { return CanId::Standard(base_can_id_ + ISOTP_REQUEST_OFFSET); }
+    CanId GetIsoTpResponseCanId() const { return CanId::Standard(base_can_id_ + ISOTP_RESPONSE_OFFSET); }
 
-    uint32_t GetCapabilityCanId(uint8_t capability_bit) const {
+    CanId GetCapabilityCanId(uint8_t capability_bit) const {
         if(capability_bit > (CAPABILITY_OFFSET_END - CAPABILITY_OFFSET_START))
             throw std::invalid_argument("capability_bit out of range");
 
-        return base_can_id_ + CAPABILITY_OFFSET_START + capability_bit;
+        return CanId::Standard(base_can_id_ + CAPABILITY_OFFSET_START + capability_bit);
     }
 };
 

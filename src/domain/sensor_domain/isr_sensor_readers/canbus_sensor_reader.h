@@ -33,6 +33,7 @@ public:
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<CanbusProxy> canbus,
+        const CanId& frame_id,
         std::shared_ptr<const CanSignalConfiguration> signal_configuration);
     ~CanbusSensorReader() override;
 };

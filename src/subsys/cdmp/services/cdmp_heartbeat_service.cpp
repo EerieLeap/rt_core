@@ -71,7 +71,7 @@ void CdmpHeartbeatService::RegisterCanHandlers() {
 
     if(canbus_handler_id_ < 0) {
         throw std::runtime_error("Failed to register CAN frame handler for frame ID: "
-            + std::to_string(can_id_manager_->GetHeartbeatCanId()));
+            + std::to_string(can_id_manager_->GetHeartbeatCanId().id));
     }
 }
 
@@ -80,7 +80,7 @@ void CdmpHeartbeatService::UnregisterCanHandlers() {
         return;
 
     if(canbus_handler_id_ >= 0)
-        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetHeartbeatCanId(), canbus_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(canbus_handler_id_);
     canbus_handler_id_ = -1;
 }
 
@@ -125,7 +125,7 @@ void CdmpHeartbeatService::SendHeartbeat() {
         };
 
         auto frame_data = heartbeat.ToCanFrame();
-        uint32_t frame_id = can_id_manager_->GetHeartbeatCanId();
+        CanId frame_id = can_id_manager_->GetHeartbeatCanId();
         (*canbus_)->SendFrame(frame_id, frame_data);
 
         heartbeat_sequence_number_++;

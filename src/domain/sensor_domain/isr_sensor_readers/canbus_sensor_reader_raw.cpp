@@ -19,7 +19,8 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     std::shared_ptr<Sensor> sensor,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<CanbusProxy> canbus)
+    std::shared_ptr<CanbusProxy> canbus,
+    const CanId& frame_id)
         : IsrSensorReaderBase(
             std::move(time_service),
             std::move(guid_generator),
@@ -29,8 +30,6 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
         work_queue_thread_(std::move(work_queue_thread)),
         canbus_(std::move(canbus)),
         dispatch_guard_(std::make_shared<IsrDispatchGuard<CanbusSensorReaderRaw>>(this)) {
-
-    uint32_t frame_id = sensor_->configuration.canbus_source->frame_id;
 
     if(!canbus_->IsValid())
         throw std::runtime_error("CANBus proxy is not valid");
@@ -61,9 +60,8 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
         });
 
     if(handler_id <= 0)
-        throw std::runtime_error("Failed to register CAN frame handler for frame ID: " + std::to_string(frame_id));
+        throw std::runtime_error("Failed to register CAN frame handler for frame ID: " + std::to_string(frame_id.id));
 
-    frame_id_ = frame_id;
     frame_handler_id_ = handler_id;
 }
 
@@ -75,7 +73,7 @@ void CanbusSensorReaderRaw::Detach() {
     if(frame_handler_id_ > 0) {
         // Removal is serialised against dispatch, so no further frame is handed out.
         if(auto* canbus = canbus_->Get(); canbus != nullptr)
-            canbus->RemoveFrameReceivedHandler(frame_id_, frame_handler_id_);
+            canbus->RemoveFrameReceivedHandler(frame_handler_id_);
 
         frame_handler_id_ = 0;
     }

@@ -23,22 +23,26 @@ inline const device* LoopbackDevice() {
     return DEVICE_DT_GET(DT_NODELABEL(can_loopback0));
 }
 
+// A failing assertion unwinds past the destructors, so the shared loopback
+// controller has to be forced back to a stopped state for the next test.
+inline void ResetLoopbackDevice(void*) {
+    can_stop(LoopbackDevice());
+}
+
 // The loopback controller only echoes frames back when it is in loopback mode.
 inline CanbusConfig MakeConfig(
     CanbusType type = CanbusType::CLASSICAL_CAN,
     uint32_t bitrate = 500000,
-    bool is_extended_id = false,
     uint32_t data_bitrate = 0) {
 
-    return CanbusConfig(LoopbackDevice(), type, bitrate, data_bitrate, is_extended_id, CAN_MODE_LOOPBACK);
+    return CanbusConfig(LoopbackDevice(), type, bitrate, data_bitrate, CAN_MODE_LOOPBACK);
 }
 
 inline std::unique_ptr<Canbus> MakeRunningCanbus(
     CanbusType type = CanbusType::CLASSICAL_CAN,
-    uint32_t bitrate = 500000,
-    bool is_extended_id = false) {
+    uint32_t bitrate = 500000) {
 
-    auto canbus = std::make_unique<Canbus>(MakeConfig(type, bitrate, is_extended_id));
+    auto canbus = std::make_unique<Canbus>(MakeConfig(type, bitrate));
 
     zassert_true(canbus->Initialize(), "Canbus::Initialize() failed");
     zassert_true(canbus->Start(), "Canbus::Start() failed");

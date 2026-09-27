@@ -70,12 +70,12 @@ void CdmpCommandService::UnregisterCanHandlers() {
         return;
 
     if (canbus_handler_id_ >= 0) {
-        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetCommandRequestCanId(), canbus_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(canbus_handler_id_);
         canbus_handler_id_ = -1;
     }
 
     if (canbus_response_handler_id_ >= 0) {
-        (*canbus_)->RemoveFrameReceivedHandler(can_id_manager_->GetCommandResponseCanId(), canbus_response_handler_id_);
+        (*canbus_)->RemoveFrameReceivedHandler(canbus_response_handler_id_);
         canbus_response_handler_id_ = -1;
     }
 }
@@ -184,7 +184,7 @@ void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const Cdm
 
     try {
         auto frame = response.ToCanFrame();
-        uint32_t can_id = can_id_manager_->GetCommandResponseCanId();
+        CanId can_id = can_id_manager_->GetCommandResponseCanId();
 
         if(target_device_id != device_->GetDeviceId())
             k_msleep(device_->GetStaggeredMessageDelay());
@@ -257,7 +257,7 @@ uint8_t CdmpCommandService::SendCommand(
         };
 
         auto frame_data = command.ToCanFrame();
-        uint32_t frame_id = can_id_manager_->GetCommandRequestCanId();
+        CanId frame_id = can_id_manager_->GetCommandRequestCanId();
         (*canbus_)->SendFrame(frame_id, frame_data);
 
         LOG_DBG("Sent command %d to device %d, transaction %d",

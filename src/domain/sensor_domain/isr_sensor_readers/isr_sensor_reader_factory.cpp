@@ -25,6 +25,19 @@ IsrSensorReaderFactory::IsrSensorReaderFactory(
         canbus_service_(std::move(canbus_service)),
         gpio_(std::move(gpio)) {}
 
+std::optional<CanId> IsrSensorReaderFactory::GetFrameId(const Sensor& sensor) const {
+    const auto& source = *sensor.configuration.canbus_source;
+
+    const auto* channel_configuration = canbus_service_->GetChannelConfiguration(source.bus_channel);
+    if(channel_configuration == nullptr)
+        return std::nullopt;
+
+    return CanId {
+        source.frame_id,
+        channel_configuration->is_extended_id
+    };
+}
+
 std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
     std::shared_ptr<Sensor> sensor,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
@@ -35,7 +48,8 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
     try {
         if(sensor->configuration.type == SensorType::CANBUS_RAW) {
             auto canbus = canbus_service_->GetCanbus(sensor->configuration.canbus_source->bus_channel);
-            if(canbus == nullptr)
+            const auto frame_id = GetFrameId(*sensor);
+            if(canbus == nullptr || !frame_id.has_value())
                 return nullptr;
 
             sensor_reader = std::make_unique<CanbusSensorReaderRaw>(
@@ -45,10 +59,12 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
                 sensor,
                 std::move(process_sensor_callback),
                 std::move(work_queue_thread),
-                canbus);
+                canbus,
+                frame_id.value());
         } else if(sensor->configuration.type == SensorType::CANBUS_ANALOG || sensor->configuration.type == SensorType::CANBUS_INDICATOR) {
             auto canbus = canbus_service_->GetCanbus(sensor->configuration.canbus_source->bus_channel);
-            if(canbus == nullptr)
+            const auto frame_id = GetFrameId(*sensor);
+            if(canbus == nullptr || !frame_id.has_value())
                 return nullptr;
 
             auto message_configuration = canbus_service_->GetMessageConfiguration(
@@ -72,6 +88,7 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
                 std::move(process_sensor_callback),
                 std::move(work_queue_thread),
                 canbus,
+                frame_id.value(),
                 std::shared_ptr<const CanSignalConfiguration>(std::move(message_configuration), signal_configuration));
         } else if(sensor->configuration.type == SensorType::PHYSICAL_INDICATOR) {
             if(gpio_ == nullptr)
