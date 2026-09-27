@@ -30,9 +30,10 @@ BleService::BleService(std::shared_ptr<SensorsProcessingService> sensors_process
 
 BleService& BleService::Create(
     std::shared_ptr<ConfigurationService> configuration_service,
-    std::shared_ptr<SensorsProcessingService> sensors_processing_service) {
+    std::shared_ptr<SensorsProcessingService> sensors_processing_service,
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread) {
 
-    BleSettingsConfigurationService::Create(std::move(configuration_service));
+    BleSettingsConfigurationService::Create(std::move(configuration_service), std::move(config_work_queue_thread));
     instance_.reset(new BleService(std::move(sensors_processing_service)));
 
     return *instance_;
@@ -81,8 +82,11 @@ void BleService::ConfigureAdvertisingData() const {
     // Flags: general discoverable, no BR/EDR
     const std::vector<uint8_t> flags = { BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR };
     ad_builder.Add(BT_DATA_FLAGS, flags);
-    // Full device name
-    ad_builder.Add(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1);
+
+    // The service UUID shares the advertisement with the manufacturer data, so a scan filtered by the
+    // UUID also sees the product without a scan response. Together they fill all 31 bytes.
+    const std::vector<uint8_t> config_service_uuid = { BT_UUID_SETTINGS_SERVICE_VAL };
+    ad_builder.Add(BT_DATA_UUID128_ALL, config_service_uuid);
 
     // Manufacturer data
     auto manufacturer_data = GetManufacturerData();
@@ -93,9 +97,8 @@ void BleService::ConfigureAdvertisingData() const {
 
 void BleService::ConfigureScanResponseData() const {
     BtDataBuilder sd_builder;
-
-    const std::vector<uint8_t> config_service_uuid = { BT_UUID_SETTINGS_SERVICE_VAL };
-    sd_builder.Add(BT_DATA_UUID128_ALL, config_service_uuid);
+    // Full device name
+    sd_builder.Add(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1);
 
     Ble::UpdateScanResponseData(sd_builder.Build());
 }

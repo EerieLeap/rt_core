@@ -26,7 +26,7 @@ void BleSettingsCommandManager::Initialize(
 
     auto* end_write_cmd = static_cast<BleSettingsCommandEndWrite*>(
         commands_[BleSettingsCommandType::EndWrite].get());
-    end_write_cmd->Initialize(transfer_buffer_, callbacks_.on_config_write);
+    end_write_cmd->Initialize(callbacks_.on_apply_requested);
 
     auto* start_write_cmd = static_cast<BleSettingsCommandStartWrite*>(
         commands_[BleSettingsCommandType::StartWrite].get());
@@ -34,7 +34,7 @@ void BleSettingsCommandManager::Initialize(
 
     auto* request_read_cmd = static_cast<BleSettingsCommandRequestRead*>(
         commands_[BleSettingsCommandType::RequestRead].get());
-    request_read_cmd->Initialize(callbacks_.on_config_read, callbacks_.on_send);
+    request_read_cmd->Initialize(callbacks_.on_read_requested);
 }
 
 void BleSettingsCommandManager::Process(std::span<const uint8_t> data) {
@@ -45,10 +45,23 @@ void BleSettingsCommandManager::Process(std::span<const uint8_t> data) {
 
     auto cmd = static_cast<BleSettingsCommandType>(data[0]);
 
-    if(commands_.contains(cmd))
-        commands_[cmd]->Process(data);
-    else
+    if(!commands_.contains(cmd)) {
         LOG_ERR("Unknown command: %d", static_cast<int>(cmd));
+        return;
+    }
+
+    // StartWrite and RequestRead name their settings id; the others act on the current transfer.
+    const bool names_settings_id =
+        cmd == BleSettingsCommandType::StartWrite || cmd == BleSettingsCommandType::RequestRead;
+    const uint8_t settings_id = names_settings_id && data.size() >= 2
+        ? data[1]
+        : status_->GetSettingsId();
+
+    commands_[cmd]->Process(data);
+
+    // Accepted transfers report their Result once the work queue has finished them.
+    if(status_->GetState() == BleSettingsState::Error && callbacks_.on_result)
+        callbacks_.on_result(settings_id, status_->GetState(), status_->GetErrorCode());
 }
 
 } // namespace eerie_leap::subsys::bluetooth::ble_settings::ble_settings_command

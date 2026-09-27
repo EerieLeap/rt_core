@@ -9,6 +9,9 @@
 
 LOG_MODULE_REGISTER(ble);
 
+// One central at a time: advertising stops when it connects, and only restarts once it's gone.
+BUILD_ASSERT(CONFIG_BT_MAX_CONN == 1, "Ble and the settings service track a single connection");
+
 namespace eerie_leap::subsys::bluetooth {
 
 // Advertising data
@@ -127,25 +130,6 @@ void Ble::UpdateDataLength(bt_conn* conn) {
     int err = bt_conn_le_data_len_update(conn, &my_data_len);
     if(err) {
         LOG_ERR("data_len_update failed (err %d)", err);
-    }
-}
-
-void Ble::UpdateMtu(bt_conn* conn) {
-    bt_gatt_exchange_params exchange_params = {
-        .func = GattExchangeParamsFunc,
-    };
-
-    int err = bt_gatt_exchange_mtu(conn, &exchange_params);
-    if(err)
-        LOG_ERR("bt_gatt_exchange_mtu failed (err %d)", err);
-}
-
-void Ble::GattExchangeParamsFunc(bt_conn* conn, uint8_t att_err, bt_gatt_exchange_params* params) {
-    LOG_INF("MTU exchange %s", att_err == 0 ? "successful" : "failed");
-
-    if(!att_err) {
-        uint16_t payload_mtu = bt_gatt_get_mtu(conn) - 3;   // 3 bytes used for Attribute headers.
-        LOG_INF("New MTU: %d bytes", payload_mtu);
     }
 }
 
@@ -288,9 +272,7 @@ void Ble::DataLengthUpdateWorkHandler(struct k_work* work) {
 
     Ble::UpdateDataLength(conn);
 
-    // TODO: Doesn't seem to work with iOS, investigate.
-    // Ble::UpdateMtu(conn);
-
+    // Centrals start the ATT MTU exchange themselves, so the unit doesn't.
     bt_conn_unref(conn);
 }
 

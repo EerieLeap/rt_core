@@ -20,13 +20,18 @@ std::unique_ptr<BleSettingsConfigurationService> BleSettingsConfigurationService
 bool BleSettingsConfigurationService::is_initialized_ = false;
 std::pmr::vector<uint8_t> BleSettingsConfigurationService::cbor_buffer_{Mrm::GetExtPmr()};
 
-BleSettingsConfigurationService::BleSettingsConfigurationService(std::shared_ptr<ConfigurationService> configuration_service)
-    : configuration_service_(std::move(configuration_service)) {}
+BleSettingsConfigurationService::BleSettingsConfigurationService(
+    std::shared_ptr<ConfigurationService> configuration_service,
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread)
+        : configuration_service_(std::move(configuration_service)),
+        config_work_queue_thread_(std::move(config_work_queue_thread)) {}
 
 BleSettingsConfigurationService& BleSettingsConfigurationService::Create(
-    std::shared_ptr<ConfigurationService> configuration_service) {
+    std::shared_ptr<ConfigurationService> configuration_service,
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread) {
 
-    instance_.reset(new BleSettingsConfigurationService(std::move(configuration_service)));
+    instance_.reset(new BleSettingsConfigurationService(
+        std::move(configuration_service), std::move(config_work_queue_thread)));
 
     return *instance_;
 }
@@ -44,6 +49,7 @@ bool BleSettingsConfigurationService::Initialize() {
     Ble::RegisterConnectedHandler(BleSettingsService::BleConnected);
     Ble::RegisterDisconnectedHandler(BleSettingsService::BleDisconnected);
 
+    // Configuration files are already saved from this queue, so BLE transfers queue up with them.
     BleSettingsService::Initialize({
             .on_config_write = [this](uint8_t settings_id, std::span<const uint8_t> data) {
                 return HandleConfigWrite(settings_id, data);
@@ -52,6 +58,7 @@ bool BleSettingsConfigurationService::Initialize() {
                 return HandleConfigRead(settings_id);
             },
         },
+        config_work_queue_thread_,
         Mrm::GetExtPmr(),
         64 * 1024);
 

@@ -17,10 +17,13 @@ namespace eerie_leap::subsys::bluetooth::ble_settings::ble_settings_command {
 
 class BleSettingsCommandManager {
 public:
+    using ResultHandler = std::function<void(
+        uint8_t settings_id, BleSettingsState state, BleSettingsErrorCode error_code)>;
+
     struct Callbacks {
-        BleSettingsCommandEndWrite::WriteHandler on_config_write;
-        BleSettingsCommandRequestRead::ReadHandler on_config_read;
-        BleSettingsCommandRequestRead::SendHandler on_send;
+        BleSettingsCommandEndWrite::ApplyRequestedHandler on_apply_requested;
+        BleSettingsCommandRequestRead::ReadRequestedHandler on_read_requested;
+        ResultHandler on_result;
     };
 
 private:

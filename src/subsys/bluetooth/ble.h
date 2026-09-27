@@ -71,8 +71,6 @@ private:
     static bt_conn* AcquireActiveConn();
 
     static void UpdateDataLength(bt_conn* conn);
-    static void UpdateMtu(bt_conn* conn);
-    static void GattExchangeParamsFunc(bt_conn* conn, uint8_t att_err, bt_gatt_exchange_params* params);
     static void RestartAdvertisingWorkHandler(struct k_work* work);
     static void ConnectedCbWorkHandler(struct k_work* work);
     static void SecurityUpdateWorkHandler(struct k_work* work);

@@ -8,12 +8,8 @@ BleSettingsCommandEndWrite::BleSettingsCommandEndWrite(
     std::shared_ptr<BleSettingsStatus> status)
         : BleSettingsCommandRequestBase(status) {}
 
-void BleSettingsCommandEndWrite::Initialize(
-    std::shared_ptr<std::pmr::vector<uint8_t>> transfer_buffer,
-    const WriteHandler& write_handler) {
-
-    transfer_buffer_ = std::move(transfer_buffer);
-    write_handler_ = write_handler;
+void BleSettingsCommandEndWrite::Initialize(const ApplyRequestedHandler& apply_requested_handler) {
+    apply_requested_handler_ = apply_requested_handler;
 }
 
 void BleSettingsCommandEndWrite::Process(std::span<const uint8_t> data) {
@@ -34,30 +30,19 @@ void BleSettingsCommandEndWrite::Process(std::span<const uint8_t> data) {
         return;
     }
 
-    if(write_handler_) {
-        auto received_data = std::span(transfer_buffer_->data(), status_->GetTransferredBytes());
-        bool success = write_handler_(status_->GetSettingsId(), received_data);
+    if(!apply_requested_handler_) {
+        LOG_ERR("END_WRITE: no apply handler registered");
+        status_->SetErrorCode(BleSettingsErrorCode::HandlerFailed);
+        status_->SetState(BleSettingsState::Error);
 
-        // A disconnect (or another command) may have fired while the
-        // lock was released and already reset the state machine.  Only
-        // act on the callback result if we are still in Writing.
-        if(status_->GetState() != BleSettingsState::Writing) {
-            LOG_INF("END_WRITE: state changed during callback, ignoring result");
-            return;
-        }
-
-        if(success) {
-            LOG_INF("Config write successful");
-            status_->Reset();
-        } else {
-            LOG_ERR("Config write handler failed");
-            status_->SetErrorCode(BleSettingsErrorCode::HandlerFailed);
-            status_->SetState(BleSettingsState::Error);
-        }
-    } else {
-        LOG_WRN("No write handler registered");
-        status_->Reset();
+        return;
     }
+
+    status_->SetState(BleSettingsState::Applying);
+
+    LOG_INF("END_WRITE: applying settings_id=%u", status_->GetSettingsId());
+
+    apply_requested_handler_(status_->GetSettingsId());
 }
 
 } // namespace eerie_leap::subsys::bluetooth::ble_settings::ble_settings_command

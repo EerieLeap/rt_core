@@ -13,18 +13,17 @@ namespace eerie_leap::subsys::bluetooth::ble_settings::ble_settings_command {
 //       [1] - Settings ID
 class BleSettingsCommandRequestRead : public BleSettingsCommandRequestBase {
 public:
-    using ReadHandler = std::function<std::span<const uint8_t>(uint8_t settings_id)>;
-    using SendHandler = std::function<bool(uint8_t settings_id, std::span<const uint8_t>)>;
+    // Starts the download, which runs outside the GATT callback.
+    using ReadRequestedHandler = std::function<void(uint8_t settings_id)>;
 
 private:
-    ReadHandler read_handler_;
-    SendHandler send_handler_;
+    ReadRequestedHandler read_requested_handler_;
 
 public:
     explicit BleSettingsCommandRequestRead(std::shared_ptr<BleSettingsStatus> status);
     virtual ~BleSettingsCommandRequestRead() = default;
 
-    void Initialize(const ReadHandler& handler, const SendHandler& send_handler);
+    void Initialize(const ReadRequestedHandler& read_requested_handler);
 
     void Process(std::span<const uint8_t> data) override;
 };

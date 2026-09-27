@@ -8,6 +8,7 @@ config EERIE_LEAP_RT_CORE
 config EERIE_LEAP_BLUETOOTH
     bool "EerieLeap Bluetooth"
     depends on BT
+    select EERIE_LEAP_THREADING
     help
       Add EerieLeap Bluetooth.
 

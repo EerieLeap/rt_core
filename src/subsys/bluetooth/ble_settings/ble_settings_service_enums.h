@@ -15,13 +15,15 @@ enum class BleSettingsCommandType : uint8_t {
     // Notification commands
     StartRead = 0x40,
     EndRead = 0x41,
+    Result = 0x42,
 };
 
 enum class BleSettingsState : uint8_t {
     Idle = 0,
     Writing = 1,
     Reading = 2,
-    Error = 3
+    Error = 3,
+    Applying = 4
 };
 
 enum class BleSettingsErrorCode : uint8_t {

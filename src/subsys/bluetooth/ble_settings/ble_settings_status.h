@@ -1,6 +1,5 @@
 #pragma once
 
-#include <span>
 #include <cstdint>
 #include <functional>
 
@@ -16,7 +15,7 @@ public:
         uint32_t transferred_bytes;
         uint32_t total_bytes;
         BleSettingsErrorCode error_code;
-    } __attribute__((packed));
+    };
 
     using StateChangeHandler = std::function<void(BleSettingsState old_state, BleSettingsState new_state)>;
 
@@ -35,10 +34,6 @@ public:
 
     [[nodiscard]] const Status& GetStatus() const noexcept {
         return status_;
-    }
-
-    [[nodiscard]] std::span<const uint8_t> GetStatusRaw() const {
-        return std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(&status_), sizeof(status_));
     }
 
     [[nodiscard]] BleSettingsState GetState() const noexcept {

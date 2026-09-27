@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "subsys/threading/work_queue_thread.h"
 #include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/sensor_domain/services/sensors_processing_service.h"
 
@@ -9,6 +10,7 @@ namespace eerie_leap::domain::ble_domain::services {
 
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 class BleService {
 private:
@@ -32,7 +34,8 @@ public:
 
     static BleService& Create(
         std::shared_ptr<ConfigurationService> configuration_service,
-        std::shared_ptr<SensorsProcessingService> sensors_processing_service);
+        std::shared_ptr<SensorsProcessingService> sensors_processing_service,
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread);
     static BleService& GetInstance();
 
     bool Initialize();
