@@ -18,6 +18,7 @@
 static bool encode_CborCanSignalConfig(zcbor_state_t *state, const struct CborCanSignalConfig *input);
 static bool encode_CborCanMessageConfig(zcbor_state_t *state, const struct CborCanMessageConfig *input);
 static bool encode_CborCanChannelConfig(zcbor_state_t *state, const struct CborCanChannelConfig *input);
+static bool encode_CborCanbusComConfig(zcbor_state_t *state, const struct CborCanbusComConfig *input);
 static bool encode_CborCanbusConfig(zcbor_state_t *state, const struct CborCanbusConfig *input);
 
 
@@ -75,6 +76,20 @@ static bool encode_CborCanChannelConfig(
 	return res;
 }
 
+static bool encode_CborCanbusComConfig(
+		zcbor_state_t *state, const struct CborCanbusComConfig *input)
+{
+	zcbor_log("%s\r\n", __func__);
+
+	bool res = (((zcbor_list_start_encode(state, 4) && ((((zcbor_int32_encode(state, (&(*input).bus_channel))))
+	&& ((zcbor_uint32_encode(state, (&(*input).cdmp_base_can_id))))
+	&& ((zcbor_uint32_encode(state, (&(*input).smp_can_id_base))))
+	&& ((zcbor_uint32_encode(state, (&(*input).smp_bus_share_percent))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 4))));
+
+	log_result(state, res, __func__);
+	return res;
+}
+
 static bool encode_CborCanbusConfig(
 		zcbor_state_t *state, const struct CborCanbusConfig *input)
 {
@@ -83,7 +98,7 @@ static bool encode_CborCanbusConfig(
 	size_t CborCanChannelConfig_m_count = input->CborCanChannelConfig_m.size();
 
 	bool res = (((zcbor_list_start_encode(state, 2) && ((((zcbor_list_start_encode(state, CborCanChannelConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborCanChannelConfig_m_count, &CborCanChannelConfig_m_count, (zcbor_encoder_t *)encode_CborCanChannelConfig, state, input->CborCanChannelConfig_m.data(), sizeof(struct CborCanChannelConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborCanChannelConfig_m_count)))
-	&& (zcbor_int32_encode(state, (&(*input).com_bus_channel)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 2))));
+	&& (encode_CborCanbusComConfig(state, (&(*input).com_config)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 2))));
 
 	log_result(state, res, __func__);
 	return res;

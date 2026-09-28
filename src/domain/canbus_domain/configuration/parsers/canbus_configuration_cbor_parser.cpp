@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <climits>
 #include <utility>
 #include <optional>
 
@@ -62,9 +64,13 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
         config->CborCanChannelConfig_m.push_back(std::move(channel_config));
     }
 
-    config->com_bus_channel = configuration.com_bus_channel.has_value()
-        ? configuration.com_bus_channel.value()
-        : -1;
+    const auto& com_configuration = configuration.com_configuration;
+    config->com_config = {
+        .bus_channel = com_configuration.bus_channel.has_value() ? com_configuration.bus_channel.value() : -1,
+        .cdmp_base_can_id = com_configuration.cdmp_base_can_id,
+        .smp_can_id_base = com_configuration.smp_can_id_base,
+        .smp_bus_share_percent = com_configuration.smp_bus_share_percent
+    };
 
     return config;
 }
@@ -136,9 +142,15 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
             throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(channel_configuration.bus_channel));
     }
 
-    configuration->com_bus_channel = config.com_bus_channel >= 0
-        ? std::optional<uint8_t>(config.com_bus_channel)
-        : std::nullopt;
+    configuration->com_configuration = {
+        .bus_channel = config.com_config.bus_channel >= 0
+            ? std::optional<uint8_t>(config.com_config.bus_channel)
+            : std::nullopt,
+        .cdmp_base_can_id = config.com_config.cdmp_base_can_id,
+        .smp_can_id_base = config.com_config.smp_can_id_base,
+        // Clamped rather than truncated, so an out-of-range share still fails validation.
+        .smp_bus_share_percent = static_cast<uint8_t>(std::min<uint32_t>(config.com_config.smp_bus_share_percent, UINT8_MAX))
+    };
 
     CanbusConfigurationValidator::Validate(*configuration, sd_fs_service_.get());
 

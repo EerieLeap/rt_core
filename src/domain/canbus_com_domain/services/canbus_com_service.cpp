@@ -3,14 +3,14 @@
 
 #include <zephyr/logging/log.h>
 
-#include "subsys/random/rng.h"
+#include "subsys/cdmp/utilities/cdmp_uid.h"
 
 #include "canbus_com_service.h"
 
 namespace eerie_leap::domain::canbus_com_domain::services {
 
-using namespace eerie_leap::subsys::random;
 using namespace eerie_leap::subsys::cdmp::models;
+using eerie_leap::subsys::cdmp::utilities::CdmpUid;
 
 LOG_MODULE_REGISTER(canbus_com_logger);
 
@@ -19,7 +19,7 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
 
     cdmp_service_ = std::make_shared<CdmpService>(
         static_cast<CdmpDeviceType>(CONFIG_EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE),
-        Rng::Get<uint32_t>(true));
+        CdmpUid::Generate());
 
     if(cdmp_service_ == nullptr)
         throw std::runtime_error("Failed to create CDMP service");
@@ -40,7 +40,7 @@ bool CanbusComService::DoStart() {
     if(!com_canbus)
         return false;
 
-    cdmp_service_->Configure(com_canbus);
+    cdmp_service_->Configure(com_canbus, canbus_service_->GetComConfiguration().cdmp_base_can_id);
 
     return cdmp_service_->Start();
 }

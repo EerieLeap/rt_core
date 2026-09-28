@@ -11,7 +11,7 @@ using eerie_leap::subsys::canbus::CanId;
 
 class CdmpCanIdManager {
 private:
-    uint32_t base_can_id_;
+    uint32_t base_can_id_ = DEFAULT_BASE_CAN_ID;
 
 public:
     static constexpr uint32_t DEFAULT_BASE_CAN_ID = 0x700;
@@ -21,15 +21,27 @@ public:
     static constexpr uint32_t COMMAND_RESPONSE_OFFSET = 3;
     static constexpr uint32_t STATE_CHANGE_OFFSET = 4;
     static constexpr uint32_t STATE_CHANGE_RESPONSE_OFFSET = 5;
-    static constexpr uint32_t ISOTP_REQUEST_OFFSET = 6;
-    static constexpr uint32_t ISOTP_RESPONSE_OFFSET = 7;
+    // Offsets 6..19 are reserved.
     static constexpr uint32_t CAPABILITY_OFFSET_START = 20;
     static constexpr uint32_t CAPABILITY_OFFSET_END = 51;
     static constexpr uint32_t APPLICATION_OFFSET_START = 52;
     static constexpr uint32_t APPLICATION_OFFSET_END = 99;
 
-    CdmpCanIdManager(uint32_t base_can_id = DEFAULT_BASE_CAN_ID)
-        : base_can_id_(base_can_id) {}
+    // The whole Base+0..Base+99 range has to fit into 11-bit identifiers.
+    static constexpr bool IsValidBaseCanId(uint32_t base_can_id) {
+        return base_can_id <= CAN_STD_ID_MASK - APPLICATION_OFFSET_END;
+    }
+
+    explicit CdmpCanIdManager(uint32_t base_can_id = DEFAULT_BASE_CAN_ID) {
+        SetBaseCanId(base_can_id);
+    }
+
+    void SetBaseCanId(uint32_t base_can_id) {
+        if(!IsValidBaseCanId(base_can_id))
+            throw std::invalid_argument("CDMP base CAN ID leaves no room for the CDMP ID range");
+
+        base_can_id_ = base_can_id;
+    }
 
     uint32_t GetBaseCanId() const { return base_can_id_; }
 
@@ -47,9 +59,6 @@ public:
 
     CanId GetStateChangeRequestCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_OFFSET); }
     CanId GetStateChangeResponseCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_RESPONSE_OFFSET); }
-
-    CanId GetIsoTpRequestCanId() const { return CanId::Standard(base_can_id_ + ISOTP_REQUEST_OFFSET); }
-    CanId GetIsoTpResponseCanId() const { return CanId::Standard(base_can_id_ + ISOTP_RESPONSE_OFFSET); }
 
     CanId GetCapabilityCanId(uint8_t capability_bit) const {
         if(capability_bit > (CAPABILITY_OFFSET_END - CAPABILITY_OFFSET_START))

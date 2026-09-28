@@ -131,19 +131,22 @@ void CanbusService::Configure() {
 }
 
 [[nodiscard]] std::shared_ptr<CanbusProxy> CanbusService::GetComCanbus() const {
-    if(!canbus_configuration_manager_->Get()->com_bus_channel.has_value()) {
+    const auto bus_channel = GetComConfiguration().bus_channel;
+    if(!bus_channel.has_value()) {
         LOG_WRN("COM CANBus not configured.");
         return nullptr;
     }
 
-    auto com_canbus = GetCanbus(canbus_configuration_manager_->Get()->com_bus_channel.value());
+    auto com_canbus = GetCanbus(bus_channel.value());
 
-    if(!com_canbus) {
-        LOG_WRN("COM CANBus channel %d not found.",
-            canbus_configuration_manager_->Get()->com_bus_channel.value());
-    }
+    if(!com_canbus)
+        LOG_WRN("COM CANBus channel %d not found.", bus_channel.value());
 
     return com_canbus;
+}
+
+[[nodiscard]] CanbusComConfiguration CanbusService::GetComConfiguration() const {
+    return canbus_configuration_manager_->Get()->com_configuration;
 }
 
 const CanChannelConfiguration* CanbusService::GetChannelConfiguration(uint8_t bus_channel) const {

@@ -6,7 +6,10 @@
 #include <span>
 #include <optional>
 
+#include <zephyr/kernel.h>
+
 #include "subsys/threading/work_queue_thread.h"
+#include "subsys/cdmp/models/cdmp_device_info.h"
 
 #include "cdmp_canbus_service_base.h"
 
@@ -19,6 +22,7 @@ using threading::WorkQueueThread;
 using threading::WorkQueueTaskResult;
 using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::cdmp::models::CdmpDiscoveryResponseMessage;
 using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
 using eerie_leap::subsys::cdmp::models::CdmpDiscoveryRequestMessage;
@@ -33,6 +37,8 @@ private:
 
     int canbus_handler_id_ = -1;
 
+    // Written on the CDMP work queue, read from any thread.
+    mutable k_mutex devices_lock_;
     std::unordered_map<uint8_t, std::unique_ptr<CdmpDevice>> network_devices_;
 
     // Discovery and tracking
@@ -94,9 +100,9 @@ public:
     // Device queries
     std::vector<uint8_t> GetOnlineDeviceIds() const;
     std::vector<uint8_t> GetAllDeviceIds() const;
-    size_t GetDeviceCount() const { return network_devices_.size(); }
-    const CdmpDevice* GetDevice(uint8_t device_id) const;
-    CdmpDevice* GetDevice(uint8_t device_id); // Non-const version for modifications
+    size_t GetDeviceCount() const;
+    // Copies up to devices.size() other devices, ordered by device ID, and returns how many were copied.
+    size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const;
 
     // Discovery management
     void SetAutoDiscovery(bool enabled);

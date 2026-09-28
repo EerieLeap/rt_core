@@ -5,7 +5,6 @@
 #include "utilities/memory/memory_resource_manager.h"
 
 #include "subsys/cdmp/models/cdmp_device.h"
-#include "cdmp_network_service.h"
 #include "cdmp_heartbeat_service.h"
 // #include "cdmp_state_service.h"
 
@@ -17,13 +16,8 @@ namespace eerie_leap::subsys::cdmp::services {
 
 using namespace eerie_leap::utilities::memory;
 
-CdmpService::CdmpService(
-    CdmpDeviceType device_type,
-    uint32_t uid,
-    uint32_t base_can_id)
-        : base_can_id_(base_can_id) {
-
-    can_id_manager_ = std::make_shared<CdmpCanIdManager>(base_can_id_);
+CdmpService::CdmpService(CdmpDeviceType device_type, uint32_t uid) {
+    can_id_manager_ = std::make_shared<CdmpCanIdManager>();
     device_ = std::make_shared<CdmpDevice>(uid, device_type);
 
     thread_ = std::make_unique<Thread>(
@@ -38,12 +32,12 @@ CdmpService::CdmpService(
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY);
 
-    auto network_service = std::make_shared<CdmpNetworkService>(
+    network_service_ = std::make_shared<CdmpNetworkService>(
         can_id_manager_, device_, work_queue_thread_);
-    canbus_services_.push_back(network_service);
+    canbus_services_.push_back(network_service_);
 
     canbus_services_.emplace_back(std::make_shared<CdmpHeartbeatService>(
-        can_id_manager_, device_, work_queue_thread_, network_service));
+        can_id_manager_, device_, work_queue_thread_, network_service_));
 
     command_service_ = std::make_shared<CdmpCommandService>(
         can_id_manager_, device_, work_queue_thread_);
@@ -51,7 +45,6 @@ CdmpService::CdmpService(
 
     // canbus_services_.emplace_back(std::make_shared<CdmpStateService>(
     //     canbus_, can_id_manager_, device_));
-    // TODO: Add IsoTp Service
 }
 
 CdmpService::~CdmpService() {
@@ -85,7 +78,7 @@ bool CdmpService::DoInitialize() {
     return true;
 }
 
-void CdmpService::Configure(std::shared_ptr<CanbusProxy> canbus) {
+void CdmpService::Configure(std::shared_ptr<CanbusProxy> canbus, uint32_t base_can_id) {
     if(thread_->IsRunning()) {
         LOG_ERR("Cannot configure while service is running.");
         return;
@@ -95,6 +88,8 @@ void CdmpService::Configure(std::shared_ptr<CanbusProxy> canbus) {
 
     if(canbus_ == nullptr)
         throw std::runtime_error("Canbus interface is undefined");
+
+    can_id_manager_->SetBaseCanId(base_can_id);
 
     for(const auto& service : canbus_services_)
         service->Configure(canbus_);
@@ -125,6 +120,18 @@ bool CdmpService::DoStop() {
 
 void CdmpService::SetAutoDiscovery(bool enabled) {
     auto_discovery_enabled_ = enabled;
+}
+
+size_t CdmpService::GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const {
+    return network_service_->GetNetworkDevices(devices);
+}
+
+int CdmpService::RegisterStatusChangedHandler(StatusChangedHandler handler) {
+    return device_->GetStatusMachine().RegisterStatusChangeHandler(std::move(handler));
+}
+
+void CdmpService::UnregisterStatusChangedHandler(int handler_id) {
+    device_->GetStatusMachine().UnregisterStatusChangeHandler(handler_id);
 }
 
 void CdmpService::PrintDeviceStatus() const {

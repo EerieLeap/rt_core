@@ -47,7 +47,11 @@ static size_t cbor_get_size_CborCanbusConfig(const CborCanbusConfig& config) {
         }
     }
 
-    builder.AddInt(config.com_bus_channel);
+    builder.AddIndefiniteArrayStart();
+    builder.AddInt(config.com_config.bus_channel)
+        .AddUint(config.com_config.cdmp_base_can_id)
+        .AddUint(config.com_config.smp_can_id_base)
+        .AddUint(config.com_config.smp_bus_share_percent);
 
     return builder.Build();
 }

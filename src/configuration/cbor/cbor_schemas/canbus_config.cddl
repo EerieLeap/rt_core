@@ -28,7 +28,14 @@ CborCanChannelConfig = [
   message_configs: [*CborCanMessageConfig]
 ]
 
+CborCanbusComConfig = [
+  bus_channel: int,
+  cdmp_base_can_id: uint,
+  smp_can_id_base: uint,
+  smp_bus_share_percent: uint
+]
+
 CborCanbusConfig = [
   channel_configs: [0*8 CborCanChannelConfig],
-  com_bus_channel: int
+  com_config: CborCanbusComConfig
 ]

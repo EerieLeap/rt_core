@@ -80,31 +80,4 @@ struct CdmpStateChangeResponse {
     }
 };
 
-// struct CdmpIsoTpFrame {
-//     CdmpIsoTpFrameType frame_type;
-//     std::vector<uint8_t> data;
-// };
-
-// struct CdmpIsoTpFlowControl {
-//     CdmpIsoTpFlowStatus flow_status;
-//     uint8_t block_size;
-//     uint8_t separation_time_min;
-//     uint8_t reserved[4];
-// };
-
-// struct CdmpIsoTpTransferHeader {
-//     uint8_t source_device_id;
-//     uint8_t target_device_id;
-//     CdmpIsoTpTransferType transfer_type;
-//     uint8_t transaction_id;
-// };
-
-// struct CdmpBulkTransferAck {
-//     uint8_t target_device_id;
-//     CdmpResultCode response_code; // Should be BULK_TRANSFER_ACK
-//     uint8_t transaction_id;
-//     CdmpResultCode result;
-//     uint8_t reserved[3];
-// };
-
 } // namespace eerie_leap::subsys::cdmp::models

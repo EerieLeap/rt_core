@@ -76,11 +76,18 @@ struct CborCanChannelConfig {
 		CborCanMessageConfig_m(std::move(other.CborCanMessageConfig_m), alloc) {}
 };
 
+struct CborCanbusComConfig {
+	int32_t bus_channel{};
+	uint32_t cdmp_base_can_id{};
+	uint32_t smp_can_id_base{};
+	uint32_t smp_bus_share_percent{};
+};
+
 struct CborCanbusConfig {
 	using allocator_type = std::pmr::polymorphic_allocator<>;
 
 	std::pmr::vector<CborCanChannelConfig> CborCanChannelConfig_m;
-	int com_bus_channel{};
+	struct CborCanbusComConfig com_config{};
 
 	CborCanbusConfig(std::allocator_arg_t, allocator_type alloc)
         : CborCanChannelConfig_m(alloc) {}
@@ -93,5 +100,5 @@ struct CborCanbusConfig {
 
 	CborCanbusConfig(CborCanbusConfig&& other, allocator_type alloc)
         : CborCanChannelConfig_m(std::move(other.CborCanChannelConfig_m), alloc),
-		com_bus_channel(other.com_bus_channel) {}
+		com_config(other.com_config) {}
 };

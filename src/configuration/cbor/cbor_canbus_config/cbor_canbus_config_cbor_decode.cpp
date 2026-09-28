@@ -18,6 +18,7 @@
 static bool decode_CborCanSignalConfig(zcbor_state_t *state, struct CborCanSignalConfig *result);
 static bool decode_CborCanMessageConfig(zcbor_state_t *state, struct CborCanMessageConfig *result);
 static bool decode_CborCanChannelConfig(zcbor_state_t *state, struct CborCanChannelConfig *result);
+static bool decode_CborCanbusComConfig(zcbor_state_t *state, struct CborCanbusComConfig *result);
 static bool decode_CborCanbusConfig(zcbor_state_t *state, struct CborCanbusConfig *result);
 
 
@@ -165,6 +166,20 @@ static bool decode_CborCanChannelConfig(
     return true;
 }
 
+static bool decode_CborCanbusComConfig(
+		zcbor_state_t *state, struct CborCanbusComConfig *result)
+{
+	zcbor_log("%s\r\n", __func__);
+
+	bool res = (((zcbor_list_start_decode(state) && ((((zcbor_int32_decode(state, (&(*result).bus_channel))))
+	&& ((zcbor_uint32_decode(state, (&(*result).cdmp_base_can_id))))
+	&& ((zcbor_uint32_decode(state, (&(*result).smp_can_id_base))))
+	&& ((zcbor_uint32_decode(state, (&(*result).smp_bus_share_percent))))) || (zcbor_list_map_end_force_decode(state), false)) && zcbor_list_end_decode(state))));
+
+	log_result(state, res, __func__);
+	return res;
+}
+
 static bool decode_CborCanbusConfig(
         zcbor_state_t *state, struct CborCanbusConfig *result)
 {
@@ -194,7 +209,7 @@ static bool decode_CborCanbusConfig(
         return false;
     }
 
-    if (!zcbor_int32_decode(state, &result->com_bus_channel)) {
+    if (!decode_CborCanbusComConfig(state, &result->com_config)) {
         return false;
     }
 

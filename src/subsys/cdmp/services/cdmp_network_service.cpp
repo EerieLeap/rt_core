@@ -1,5 +1,8 @@
+#include <algorithm>
+
 #include <zephyr/logging/log.h>
 
+#include "subsys/threading/scoped_mutex.h"
 #include "subsys/cdmp/utilities/cdmp_status_machine.h"
 #include "subsys/cdmp/utilities/cdmp_helpers.h"
 
@@ -13,12 +16,17 @@ using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::utilities;
 using namespace eerie_leap::subsys::cdmp::models;
 
+using eerie_leap::subsys::threading::ScopedMutex;
+
 CdmpNetworkService::CdmpNetworkService(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,
     std::shared_ptr<WorkQueueThread> work_queue_thread)
         : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
-        work_queue_thread_(std::move(work_queue_thread)) {}
+        work_queue_thread_(std::move(work_queue_thread)) {
+
+    k_mutex_init(&devices_lock_);
+}
 
 CdmpNetworkService::~CdmpNetworkService() {
     Stop();
@@ -369,6 +377,8 @@ void CdmpNetworkService::UpdateDeviceFromDiscovery(const CdmpDiscoveryResponseMe
 void CdmpNetworkService::UpdateDeviceFromHeartbeat(const CdmpHeartbeatMessage& heartbeat) {
     uint8_t device_id = heartbeat.device_id;
 
+    ScopedMutex guard(devices_lock_);
+
     if(!network_devices_.contains(device_id)) {
         LOG_DBG("Heartbeat from unknown device %d", device_id);
         return;
@@ -386,6 +396,8 @@ void CdmpNetworkService::AddOrUpdateDevice(
     CdmpDeviceType device_type,
     uint32_t uid,
     uint32_t capability_flags) {
+
+    ScopedMutex guard(devices_lock_);
 
     if(network_devices_.contains(device_id)) {
         auto* device = network_devices_.at(device_id).get();
@@ -410,6 +422,8 @@ void CdmpNetworkService::AddOrUpdateDevice(
 }
 
 void CdmpNetworkService::RemoveDevice(uint8_t device_id) {
+    ScopedMutex guard(devices_lock_);
+
     if(network_devices_.contains(device_id)) {
         network_devices_.erase(device_id);
         LOG_INF("Removed device %d", device_id);
@@ -417,11 +431,15 @@ void CdmpNetworkService::RemoveDevice(uint8_t device_id) {
 }
 
 void CdmpNetworkService::ClearAllDevices() {
+    ScopedMutex guard(devices_lock_);
+
     network_devices_.clear();
     LOG_INF("Cleared all network devices");
 }
 
 std::vector<uint8_t> CdmpNetworkService::GetOnlineDeviceIds() const {
+    ScopedMutex guard(devices_lock_);
+
     std::vector<uint8_t> online_devices;
     for(const auto& [device_id, device] : network_devices_) {
         if(device->GetStatus() == CdmpDeviceStatus::ONLINE)
@@ -431,6 +449,8 @@ std::vector<uint8_t> CdmpNetworkService::GetOnlineDeviceIds() const {
 }
 
 std::vector<uint8_t> CdmpNetworkService::GetAllDeviceIds() const {
+    ScopedMutex guard(devices_lock_);
+
     std::vector<uint8_t> all_devices;
     for(const auto& [device_id, device] : network_devices_)
         all_devices.push_back(device_id);
@@ -438,18 +458,31 @@ std::vector<uint8_t> CdmpNetworkService::GetAllDeviceIds() const {
     return all_devices;
 }
 
-const CdmpDevice* CdmpNetworkService::GetDevice(uint8_t device_id) const {
-    if(!network_devices_.contains(device_id))
-        return nullptr;
+size_t CdmpNetworkService::GetDeviceCount() const {
+    ScopedMutex guard(devices_lock_);
 
-    return network_devices_.at(device_id).get();
+    return network_devices_.size();
 }
 
-CdmpDevice* CdmpNetworkService::GetDevice(uint8_t device_id) {
-    if(!network_devices_.contains(device_id))
-        return nullptr;
+size_t CdmpNetworkService::GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const {
+    ScopedMutex guard(devices_lock_);
 
-    return network_devices_.at(device_id).get();
+    size_t count = 0;
+    for(const auto& [device_id, device] : network_devices_) {
+        if(count == devices.size())
+            break;
+
+        devices[count++] = CdmpDeviceInfo{
+            .device_id = device_id,
+            .uid = device->GetUniqueIdentifier(),
+            .device_type = device->GetDeviceType(),
+            .status = device->GetStatus()
+        };
+    }
+
+    std::ranges::sort(devices.first(count), {}, &CdmpDeviceInfo::device_id);
+
+    return count;
 }
 
 void CdmpNetworkService::SetAutoDiscovery(bool enabled) {
@@ -474,11 +507,15 @@ WorkQueueTaskResult CdmpNetworkService::ProcessPeriodicValidation(CdmpNetworkSer
 }
 
 bool CdmpNetworkService::IsDeviceOnline(uint8_t device_id) const {
-    const auto* device = GetDevice(device_id);
-    return device && device->GetStatus() == CdmpDeviceStatus::ONLINE;
+    ScopedMutex guard(devices_lock_);
+
+    auto it = network_devices_.find(device_id);
+    return it != network_devices_.end() && it->second->GetStatus() == CdmpDeviceStatus::ONLINE;
 }
 
 void CdmpNetworkService::RemoveOfflineDevices() {
+    ScopedMutex guard(devices_lock_);
+
     std::vector<uint8_t> offline_devices;
     for(const auto& [device_id, device] : network_devices_) {
         if(device->GetLastHeartbeatDeltaMs() > CdmpConstants::HEARTBEAT_TIMEOUT_MS)
@@ -490,6 +527,8 @@ void CdmpNetworkService::RemoveOfflineDevices() {
 }
 
 void CdmpNetworkService::UpdateNetworkDevices() {
+    ScopedMutex guard(devices_lock_);
+
     UpdateLowestIdOnNetwork();
     UpdateStaggeredMessageDelay();
 }
@@ -521,6 +560,8 @@ void CdmpNetworkService::UpdateStaggeredMessageDelay() {
 }
 
 uint8_t CdmpNetworkService::GetLowestAvailableId(uint8_t after) const {
+    ScopedMutex guard(devices_lock_);
+
     for(uint8_t i = after + 1; i < 255; ++i) {
         if(!network_devices_.contains(i))
             return i;
@@ -530,6 +571,8 @@ uint8_t CdmpNetworkService::GetLowestAvailableId(uint8_t after) const {
 }
 
 void CdmpNetworkService::PrintNetworkStatus() const {
+    ScopedMutex guard(devices_lock_);
+
     LOG_INF("Network Status: %zu devices total", network_devices_.size());
 
     for(const auto& [device_id, device] : network_devices_) {

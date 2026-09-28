@@ -24,6 +24,10 @@ static void InvalidCanbusConfiguration(const uint8_t bus_channel, std::string_vi
         + std::string(message));
 }
 
+static void InvalidCanbusComConfiguration(std::string_view message) {
+    throw std::invalid_argument("Invalid CAN Bus COM configuration. " + std::string(message));
+}
+
 static void InvalidCanMessageConfiguration(const uint8_t bus_channel, uint32_t frame_id, std::string_view message) {
     throw std::invalid_argument(
         "Invalid CAN Frame configuration. Channel: "
@@ -56,6 +60,7 @@ void CanbusConfigurationValidator::Validate(const CanbusConfiguration& configura
     ValidateIsExtendedId(configuration);
     ValidateBitrate(configuration);
     ValidateDataBitrate(configuration);
+    ValidateComConfiguration(configuration);
 
     ValidateMessages(configuration, sd_fs_service);
 }
@@ -96,6 +101,28 @@ void CanbusConfigurationValidator::ValidateDataBitrate(const CanbusConfiguration
         if(canbus_configuration.data_bitrate > 0 && !Canbus::IsBitrateSupported(canbus_configuration.type, canbus_configuration.data_bitrate))
             InvalidCanbusConfiguration(canbus_configuration.bus_channel, "CAN bus data bitrate is not supported");
     }
+}
+
+void CanbusConfigurationValidator::ValidateComConfiguration(const CanbusConfiguration& configuration) {
+    const auto& com_configuration = configuration.com_configuration;
+
+    if(com_configuration.bus_channel.has_value()
+        && !configuration.channel_configurations.contains(com_configuration.bus_channel.value())) {
+
+        InvalidCanbusComConfiguration("COM bus channel is not configured");
+    }
+
+    if(!CdmpCanIdManager::IsValidBaseCanId(com_configuration.cdmp_base_can_id))
+        InvalidCanbusComConfiguration("CDMP base CAN ID leaves no room for the CDMP ID range");
+
+    if(!CanId::Extended(com_configuration.smp_can_id_base).IsValid()
+        || (com_configuration.smp_can_id_base & CanbusComConfiguration::SMP_ADDRESS_MASK) != 0) {
+
+        InvalidCanbusComConfiguration("SMP CAN ID base must be a 29-bit ID with the address bits clear");
+    }
+
+    if(com_configuration.smp_bus_share_percent == 0 || com_configuration.smp_bus_share_percent > 100)
+        InvalidCanbusComConfiguration("SMP bus share must be between 1 and 100 %");
 }
 
 void CanbusConfigurationValidator::ValidateMessages(const CanbusConfiguration& configuration, IFsService* sd_fs_service) {

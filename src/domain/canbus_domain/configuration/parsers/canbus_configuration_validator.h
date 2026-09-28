@@ -17,6 +17,7 @@ private:
     static void ValidateIsExtendedId(const CanbusConfiguration& configuration);
     static void ValidateBitrate(const CanbusConfiguration& configuration);
     static void ValidateDataBitrate(const CanbusConfiguration& configuration);
+    static void ValidateComConfiguration(const CanbusConfiguration& configuration);
 
     static void ValidateMessages(const CanbusConfiguration& configuration, IFsService* sd_fs_service);
     static void ValidateMessageFrameId(const CanChannelConfiguration& channel_configuration);

@@ -2,9 +2,9 @@
 
 #include <memory_resource>
 #include <unordered_map>
-#include <optional>
 
 #include "can_channel_configuration.h"
+#include "canbus_com_configuration.h"
 
 namespace eerie_leap::domain::canbus_domain::models {
 
@@ -12,7 +12,7 @@ struct CanbusConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;
 
     std::pmr::unordered_map<uint8_t, CanChannelConfiguration> channel_configurations;
-    std::optional<uint8_t> com_bus_channel = std::nullopt;
+    CanbusComConfiguration com_configuration;
 
     CanbusConfiguration(std::allocator_arg_t, allocator_type alloc)
         : channel_configurations(alloc) {}
@@ -25,7 +25,7 @@ struct CanbusConfiguration {
 
     CanbusConfiguration(CanbusConfiguration&& other, allocator_type alloc)
         : channel_configurations(std::move(other.channel_configurations), alloc),
-          com_bus_channel(other.com_bus_channel) {}
+          com_configuration(other.com_configuration) {}
 };
 
 } // namespace eerie_leap::domain::canbus_domain::models

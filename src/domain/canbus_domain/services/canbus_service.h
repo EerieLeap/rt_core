@@ -5,6 +5,7 @@
 #include <functional>
 
 #include "domain/canbus_domain/models/can_channel_configuration.h"
+#include "domain/canbus_domain/models/canbus_com_configuration.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
@@ -14,6 +15,7 @@ namespace eerie_leap::domain::canbus_domain::services {
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanbusComConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 
@@ -43,6 +45,7 @@ public:
 
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetCanbus(uint8_t bus_channel) const;
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetComCanbus() const;
+    [[nodiscard]] CanbusComConfiguration GetComConfiguration() const;
 
     [[nodiscard]] const CanChannelConfiguration* GetChannelConfiguration(uint8_t bus_channel) const;
     [[nodiscard]] std::shared_ptr<CanMessageConfiguration> GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const;

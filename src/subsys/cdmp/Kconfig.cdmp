@@ -1,5 +1,8 @@
 config EERIE_LEAP_CDMP
     bool "EerieLeap CDMP"
+    select CRC
+    select HWINFO
+    select EERIE_LEAP_RANDOM
     help
       Add EerieLeap CDMP.
 

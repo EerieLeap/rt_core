@@ -90,6 +90,11 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     canbus_configuration.channel_configurations.emplace(channel_configuration_1.bus_channel, std::move(channel_configuration_1));
     canbus_configuration.channel_configurations.emplace(channel_configuration_2.bus_channel, std::move(channel_configuration_2));
 
+    canbus_configuration.com_configuration.bus_channel = 1;
+    canbus_configuration.com_configuration.cdmp_base_can_id = 0x600;
+    canbus_configuration.com_configuration.smp_can_id_base = 0x1E000000;
+    canbus_configuration.com_configuration.smp_bus_share_percent = 40;
+
     return canbus_configuration;
 }
 
@@ -98,6 +103,13 @@ void canbus_configuration_parser_CompareCanbusConfigurations(
     CanbusConfiguration& deserialized_configuration) {
 
     zassert_equal(deserialized_configuration.channel_configurations.size(), canbus_configuration.channel_configurations.size());
+
+    const auto& com_configuration = canbus_configuration.com_configuration;
+    const auto& deserialized_com_configuration = deserialized_configuration.com_configuration;
+    zassert_true(deserialized_com_configuration.bus_channel == com_configuration.bus_channel);
+    zassert_equal(deserialized_com_configuration.cdmp_base_can_id, com_configuration.cdmp_base_can_id);
+    zassert_equal(deserialized_com_configuration.smp_can_id_base, com_configuration.smp_can_id_base);
+    zassert_equal(deserialized_com_configuration.smp_bus_share_percent, com_configuration.smp_bus_share_percent);
 
     for(auto& [bus_channel, channel_configuration] : canbus_configuration.channel_configurations) {
         zassert_equal(deserialized_configuration.channel_configurations[bus_channel].bus_channel, channel_configuration.bus_channel);
@@ -141,5 +153,18 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize) {
     auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
     auto deserialized_canbus_configuration = canbus_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_canbus_configuration);
 
+    canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
+}
+
+ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_without_com_channel) {
+    CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
+
+    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    canbus_configuration.com_configuration = {};
+
+    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+    auto deserialized_canbus_configuration = canbus_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_canbus_configuration);
+
+    zassert_false(deserialized_canbus_configuration->com_configuration.bus_channel.has_value());
     canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
 }

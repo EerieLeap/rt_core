@@ -14,6 +14,8 @@ file(GLOB_RECURSE RT_CORE_CBOR_SOURCES
   ${RT_CORE_DIR}/src/configuration/cbor/cbor_adc_config/*.cpp
   ${RT_CORE_DIR}/src/configuration/cbor/traits/sensors_config_trait.cpp
   ${RT_CORE_DIR}/src/configuration/cbor/cbor_sensors_config/*.cpp
+  ${RT_CORE_DIR}/src/configuration/cbor/traits/canbus_config_trait.cpp
+  ${RT_CORE_DIR}/src/configuration/cbor/cbor_canbus_config/*.cpp
 )
 
 file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)

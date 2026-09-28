@@ -5,6 +5,7 @@
 #include "utilities/cbor/cbor_helpers.hpp"
 #include "configuration/cbor/cbor_system_config/cbor_system_config.h"
 #include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
+#include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 
 #include "subsys/device_tree/dt_fs.h"
@@ -344,4 +345,52 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.interpolation_method, 1);
     zassert_true(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression_present);
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression).c_str(), sensor_2_expression.c_str());
+}
+
+ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_saved_and_loaded) {
+    std::string message_name = "EL_FRAME_0";
+    std::string script_path = "";
+    CborCanMessageConfig message_config(std::allocator_arg, Mrm::GetDefaultPmr());
+    message_config.frame_id = 0x123;
+    message_config.send_interval_ms = 100;
+    message_config.script_path = CborHelpers::ToZcborString(script_path);
+    message_config.name = CborHelpers::ToZcborString(message_name);
+    message_config.message_size = 8;
+
+    CborCanChannelConfig channel_config(std::allocator_arg, Mrm::GetDefaultPmr());
+    channel_config.type = 1;
+    channel_config.bus_channel = 0;
+    channel_config.bitrate = 500000;
+    channel_config.CborCanMessageConfig_m.push_back(std::move(message_config));
+
+    CborCanbusConfig canbus_config(std::allocator_arg, Mrm::GetDefaultPmr());
+    canbus_config.CborCanChannelConfig_m.push_back(std::move(channel_config));
+    canbus_config.com_config = {
+        .bus_channel = -1,
+        .cdmp_base_can_id = 0x600,
+        .smp_can_id_base = 0x1E000000,
+        .smp_bus_share_percent = 40
+    };
+
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+    auto canbus_config_service = std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service);
+
+    zassert_true(canbus_config_service->Save(&canbus_config));
+
+    auto loaded_config = canbus_config_service->Load();
+    zassert_true(loaded_config.has_value());
+
+    const auto& loaded_canbus_config = *loaded_config.value().config;
+    zassert_equal(loaded_canbus_config.CborCanChannelConfig_m.size(), 1);
+    zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].bitrate, 500000);
+    zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m.size(), 1);
+    zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].frame_id, 0x123);
+
+    zassert_equal(loaded_canbus_config.com_config.bus_channel, -1, "An unset COM channel is stored as -1");
+    zassert_equal(loaded_canbus_config.com_config.cdmp_base_can_id, 0x600);
+    zassert_equal(loaded_canbus_config.com_config.smp_can_id_base, 0x1E000000);
+    zassert_equal(loaded_canbus_config.com_config.smp_bus_share_percent, 40);
 }

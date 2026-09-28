@@ -90,3 +90,51 @@ ZTEST(canbus_configuration_validator, test_none_sentinel_and_unknown_canbus_type
         zassert_false(Validates(MakeConfiguration(type, false, 0x123)),
             "Accepted invalid CAN bus type %u.", static_cast<unsigned>(type));
 }
+
+ZTEST(canbus_configuration_validator, test_default_com_configuration_is_valid) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+    configuration.com_configuration.bus_channel = 0;
+
+    zassert_true(Validates(configuration));
+}
+
+ZTEST(canbus_configuration_validator, test_com_channel_must_be_configured) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+    configuration.com_configuration.bus_channel = 1;
+
+    zassert_false(Validates(configuration), "The COM bus channel must be one of the configured channels");
+}
+
+ZTEST(canbus_configuration_validator, test_cdmp_base_must_fit_the_cdmp_range) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+
+    configuration.com_configuration.cdmp_base_can_id = 0x79C;
+    zassert_true(Validates(configuration));
+
+    configuration.com_configuration.cdmp_base_can_id = 0x79D;
+    zassert_false(Validates(configuration));
+}
+
+ZTEST(canbus_configuration_validator, test_smp_base_must_be_extended_with_clear_address_bits) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+
+    configuration.com_configuration.smp_can_id_base = 0x1FF00001;
+    zassert_false(Validates(configuration), "Address bits must be clear");
+
+    configuration.com_configuration.smp_can_id_base = 0x20000000;
+    zassert_false(Validates(configuration), "A base beyond 29 bits must be rejected");
+}
+
+ZTEST(canbus_configuration_validator, test_smp_bus_share_must_be_a_percentage) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+
+    for(uint8_t share : {0, 101, UINT8_MAX}) {
+        configuration.com_configuration.smp_bus_share_percent = share;
+        zassert_false(Validates(configuration), "Accepted bus share %u %%.", static_cast<unsigned>(share));
+    }
+
+    for(uint8_t share : {1, 100}) {
+        configuration.com_configuration.smp_bus_share_percent = share;
+        zassert_true(Validates(configuration), "Rejected bus share %u %%.", static_cast<unsigned>(share));
+    }
+}

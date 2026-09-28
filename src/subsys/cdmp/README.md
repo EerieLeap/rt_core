@@ -1,7 +1,9 @@
 # CAN Device Management Protocol (CDMP)
 
-**Version 1.0**  
-**Date: December 27, 2024**
+**Version 1.1**  
+**Date: September 27, 2026**
+
+Version 1.1 replaces the ISO-TP bulk transfer and the Get Config / Get Config CRC commands with SMP over CAN ([§5](#5-smp-over-can)).
 
 -----
 
@@ -11,7 +13,7 @@
 1. [Physical and Data Link Layer](#2-physical-and-data-link-layer)
 1. [Addressing and Device Management](#3-addressing-and-device-management)
 1. [Message Types and Formats](#4-message-types-and-formats)
-1. [Bulk Data Transfer (ISO-TP Layer)](#5-bulk-data-transfer-iso-tp-layer)
+1. [SMP over CAN](#5-smp-over-can)
 1. [Protocol Status Machine](#6-protocol-status-machine)
 1. [Error Handling and Reliability](#7-error-handling-and-reliability)
 1. [Configuration Management](#8-configuration-management)
@@ -54,6 +56,7 @@ A lightweight management protocol operating on CAN bus alongside standard DBC-de
 
 - **Normal CAN traffic** (0x100-0x6FF): Sensor data streams, DBC-defined formats, processed by all devices
 - **Management protocol** (Base + 0 to Base + 99): Device management, processed only by protocol-aware devices
+- **SMP management traffic** (29-bit identifiers, [§5](#5-smp-over-can)): configuration transfer, lowest priority on the bus
 - Simple devices ignore management CAN IDs and operate normally
 
 -----
@@ -68,7 +71,7 @@ A lightweight management protocol operating on CAN bus alongside standard DBC-de
 
 ### 2.2 CAN ID Allocation
 
-**Base CAN ID:** Configurable (default 0x700), set during system configuration
+**Base CAN ID:** Configurable (default 0x700), set during system configuration. Base + 99 must be a valid 11-bit identifier, so the base is at most 0x79C.
 
 **Management Protocol (Fixed Offsets from Base):**
 
@@ -79,9 +82,7 @@ Base + 2:    Command requests (settings, actions)
 Base + 3:    Command responses (ACKs, results)
 Base + 4:    State change notifications
 Base + 5:    State change responses
-Base + 6:    ISO-TP request (bulk data transfer sender)
-Base + 7:    ISO-TP response (bulk data transfer receiver, flow control)
-Base + 8-19: Reserved for protocol expansion
+Base + 6-19: Reserved for protocol expansion
 ```
 
 **Capability-Specific Streams (Dynamic Registration):**
@@ -95,7 +96,7 @@ Capability CAN IDs are assigned through a registration mechanism in the implemen
 **Application specific CAN IDs**
 
 ```
-Base + 51-99: CAN IDs available for application specific uses (48 slots available)
+Base + 52-99: CAN IDs available for application specific uses (48 slots available)
 ```
 
 Application specific CAN IDs are available for aplication specific uses.
@@ -127,7 +128,9 @@ The protocol does not predefine specific capabilities or their CAN ID assignment
 0x100-0x6FF: Sensor data, control messages (DBC-defined)
 ```
 
-**Note:** When base = 0x700 (default), management protocol uses 0x700-0x7FF, leaving 0x100-0x6FF free for application messages.
+**Note:** When base = 0x700 (default), management protocol uses 0x700-0x763, leaving 0x100-0x6FF free for application messages.
+
+**SMP Messages (29-bit identifiers):** `SMP base | target << 8 | source`, see [§5.2](#52-addressing).
 
 -----
 
@@ -138,7 +141,7 @@ The protocol does not predefine specific capabilities or their CAN ID assignment
 - **Logical Device ID**: uint8_t (1-254), dynamically assigned during startup
   - 0: Reserved (invalid/unassigned)
   - 255: Reserved (broadcast address)
-- **Unique Identifier (UID)**: 32-bit (serial number, MAC address, random number, or other source)
+- **Unique Identifier (UID)**: 32-bit, non-zero. Derived from the hardware ID (CRC32 of the device ID reported by the SoC, the eFuse MAC on ESP32), so it stays the same across reboots. Random only when the SoC reports no hardware ID.
 - **Device Type**: uint8_t enumeration (application-specific)
 
 ### 3.2 ID Assignment Protocol
@@ -323,36 +326,9 @@ Byte 3:    Reset Type (0x00=Soft, 0x01=Hard, 0x02=Factory)
 Byte 4-7:  Reserved
 ```
 
-**0x12: Get Config CRC32**
+**0x12-0x1F: Reserved**
 
-```
-Byte 0:    Target Device ID
-Byte 1:    0x12 (GET_CONFIG_CRC)
-Byte 2:    Transaction ID
-Byte 3:    Config Type (see Config Type Enumeration below)
-Byte 4-7:  Reserved
-```
-
-Response contains CRC32 of requested configuration section.
-
-**0x13: Get Config**
-
-```
-Byte 0:    Target Device ID
-Byte 1:    0x13 (GET_CONFIG)
-Byte 2:    Transaction ID
-Byte 3:    Config Type (see Config Type Enumeration below)
-Byte 4-7:  Reserved
-```
-
-Initiates ISO-TP transfer of configuration data from target device.
-
-**Config Type Enumeration:**
-
-```
-0x00: Complete configuration (all sections)
-0x01-0xFF: Application-specific config types (registered dynamically)
-```
+Configuration is read and written over SMP ([§5](#5-smp-over-can)), not with CDMP commands.
 
 **0x20-0xFF: Application-Specific Commands**
 
@@ -366,7 +342,7 @@ Applications define command codes in this range based on their registered capabi
 
 Most broadcast commands (Target ID = 255) SHALL NOT generate responses to avoid bus flooding.
 
-**Exception:** Status Request (0x14) broadcast SHALL generate responses:
+**Exception:** Status Request (0x10) broadcast SHALL generate responses:
 
 - All devices respond with staggered timing (5-10ms offset per Device ID)
 - Stagger calculation: Response_Delay = (Device_ID - 1) × 10ms
@@ -426,23 +402,6 @@ Device Status Enumeration (Byte 3):
 0x05: ERROR (fault detected)
 ```
 
-**Get Config CRC32 Response (0x12):**
-
-```
-Byte 3:    Result Code
-Byte 4-7:  CRC32 value (32-bit, LSB first)
-```
-
-**Get Config Response (0x13):**
-
-```
-Byte 3:    Result Code (0x00 = ISO-TP transfer will begin)
-Byte 4-5:  Config data size (16-bit, bytes)
-Byte 6-7:  Reserved
-```
-
-If successful, ISO-TP transfer of config data begins immediately on Base + 6.
-
 #### 4.2.3 Retry Mechanism
 
 - **Timeout**: 100ms for first attempt
@@ -492,106 +451,52 @@ Byte 4-7:  Response Data or Error Details
 
 -----
 
-## 5. Bulk Data Transfer (ISO-TP Layer)
+## 5. SMP over CAN
 
-### 5.1 Use Cases
+Configuration transfer uses the Simple Management Protocol (SMP) of MCUmgr. This section defines how SMP packets travel between two CDMP devices. The SMP groups and commands are defined by the application, not by CDMP.
 
-- Configuration files (max 4095 bytes per transfer)
-- Log file retrieval
-- Any data >7 bytes requiring segmentation
+### 5.1 Overview
 
-**Transfer Size Limit:** 4095 bytes maximum per ISO-TP transfer (imposed by 12-bit length field in First Frame). For larger data, split into multiple transfers or multiple Config Type sections.
+- Point-to-point between two devices that have claimed a CDMP device ID
+- Available in ONLINE and in VERSION_MISMATCH status
+- Classic CAN frames with up to 8 data bytes
 
-### 5.2 ISO-TP Implementation (ISO 15765-2 Subset)
+### 5.2 Addressing
 
-**CAN IDs:**
-
-- Base + 6: Request (sender → receiver)
-- Base + 7: Response (receiver → sender, for flow control and ACKs)
-
-**Frame Types:**
-
-#### Single Frame (SF) - Data ≤7 bytes
 ```
-Byte 0:    0x0N (N = data length, 1-7)
-Byte 1-7:  Data
+CAN ID (29-bit) = SMP base | target_id << 8 | source_id
 ```
 
-#### First Frame (FF) - Start of multi-frame
-```
-Byte 0-1:  0x1FFF where FFF = total data length (12 bits, max 4095 bytes)
-Byte 2-7:  First 6 bytes of data
-```
+- **SMP base**: Configurable, default 0x1FF00000. Bits 0-15 must be 0. The top 11 bits of the default (0x7FC) rank below CDMP, OBD-II (0x7DF, 0x7E0-0x7EF) and every other 11-bit identifier up to 0x7FB.
+- **target_id, source_id**: CDMP device IDs 1-254. 0 (unassigned) and 255 (broadcast) are not used, SMP has no broadcast.
+- Each device accepts frames whose target_id is its own device ID, from any source.
 
-#### Consecutive Frame (CF)
-```
-Byte 0:    0x2N (N = sequence number, 0-15, rolls over)
-Byte 1-7:  Next 7 bytes of data
-```
+### 5.3 Frame Format
 
-#### Flow Control (FC) - Receiver → Sender
 ```
-Byte 0:    0x30 (Continue), 0x31 (Wait), or 0x32 (Abort)
-Byte 1:    Block Size (0 = unlimited, 1-255 frames before next FC)
-Byte 2:    Separation Time Min (STmin) in ms (0-127ms, or 0xF1-0xF9 for 100-900μs)
-Byte 3-7:  Reserved
+Byte 0:    Bit 7: Start (1 = first frame of a packet), Bits 0-6: Sequence number
+Byte 1-7:  Packet data (the last frame of a packet may be shorter)
 ```
 
-### 5.3 Transfer Protocol
+- A packet is one SMP message: the 8-byte SMP header followed by its CBOR body. The packet ends after 8 + header length bytes.
+- The sequence number is 0 in the start frame and increments by one per frame, wrapping from 127 to 0.
+- A start frame from a source discards an incomplete packet from that source.
 
-**Sender Behavior:**
+### 5.4 Reception
 
-1. Send First Frame
-1. Wait for Flow Control (timeout: 1000ms)
-1. Send Consecutive Frames respecting Block Size and STmin
-1. If Block Size > 0, wait for next Flow Control after each block
-1. On Wait (0x31): Pause, wait for Continue Flow Control
-1. On Abort (0x32) or timeout: Cancel transfer
+- A receiver keeps a few reassembly slots, one per source with a packet in progress. When no slot is free, frames from further sources are dropped.
+- A packet is dropped when a sequence number is skipped, when its length exceeds the receiver's buffer, or when no frame arrives for 100 ms.
+- There is no negative acknowledgement. The SMP client resends the request after its own timeout.
 
-**Receiver Behavior:**
+### 5.5 Flow Control and Pacing
 
-1. Receive First Frame, allocate buffer
-1. Send Flow Control (Continue with block size and timing)
-1. Receive Consecutive Frames, check sequence numbers
-1. Detect missing frames → send Abort Flow Control
-1. After complete reception, validate data (CRC, structure)
-1. Send final acknowledgment via Command Response (CAN ID Base + 3)
+- A sender transmits one packet at a time to a given target, frames of two packets to the same target never interleave.
+- An SMP client keeps no more requests in flight to a target than the target reports as its buffer count (`mcumgr params`), and no packet exceeds the reported buffer size.
+- Each sender limits its SMP frames to a configured share of the bus (default 25 %), counting 160 bit times per frame (29-bit ID, 8 data bytes, worst-case stuffing).
 
-### 5.4 Bulk Transfer Framing
+### 5.6 Timing and Performance
 
-**Transfer Initiation (wraps ISO-TP)**
-
-All ISO-TP data payloads start with:
-```
-Byte 0:    Source Device ID
-Byte 1:    Target Device ID
-Byte 2:    Transfer Type (0x01=Config Write, 0x02=Config Read, etc.)
-Byte 3:    Transaction ID
-Byte 4-N:  Actual data (binary config file, etc.)
-```
-
-**Transfer Completion ACK (CAN ID Base + 3):**
-```
-Byte 0:    Target Device ID
-Byte 1:    0xFE (bulk transfer ACK, not command response)
-Byte 2:    Transaction ID
-Byte 3:    Result (0x00=Success, 0x01=CRC Error, 0x02=Invalid Data, etc.)
-Byte 4-7:  Reserved
-```
-
-### 5.5 Timing and Performance
-
-**Targets** (at 1 Mbps):
-
-- 100-byte transfer: ~0.5-1 seconds
-- 1000-byte transfer: ~2-5 seconds
-- Max single transfer: 4095 bytes (ISO-TP limit)
-
-**Error Handling:**
-
-- CRC-16 or CRC-32 appended to data payload
-- Validation before committing configuration
-- Atomic updates (write to temp buffer, validate, then apply)
+At the default 25 % share: about 5.5 KB/s at 500 kbit/s and 11 KB/s at 1 Mbit/s.
 
 ---
 
@@ -616,7 +521,8 @@ ERROR            → Fault detected, limited functionality
   - No command requests
   - No state change notifications
   - No capability data streams
-- Exception: Device MUST respond to Status Request command (0x14) only
+- Exception: Device MUST respond to Status Request command (0x10) only
+- SMP over CAN ([§5](#5-smp-over-can)) stays available, so devices can still be configured
 - DBC-defined messages (0x100-0x6FF) remain fully operational
 - Recovery: Requires device reboot
 - Application layer should indicate error condition (LED, display, etc.)
@@ -654,7 +560,7 @@ VERSION_MISMATCH → OFFLINE:    Device reboot required (no automatic recovery)
 |Discovery Request  |200ms  |3      |100ms, 200ms, 500ms   |
 |Command Request    |100ms  |3      |100ms, 200ms, 500ms   |
 |State Change       |50ms   |3      |50ms, 100ms, 200ms    |
-|ISO-TP Flow Control|1000ms |1      |N/A (abort on timeout)|
+|SMP Request        |Client |Client |Resent by the SMP client|
 |Heartbeat          |N/A    |N/A    |Not retransmitted     |
 
 ### 7.3 Error Codes
@@ -679,108 +585,13 @@ VERSION_MISMATCH → OFFLINE:    Device reboot required (no automatic recovery)
 ### 8.1 Configuration Storage
 
 - Devices maintain persistent configuration (EEPROM, Flash)
-- Configuration transmitted as binary data via ISO-TP
-- Each configuration has version number and CRC
+- Configuration is transferred over SMP ([§5](#5-smp-over-can))
 
-### 8.2 Configuration Read
+### 8.2 Configuration Transfer
 
-**Using Get Config Command (0x23):**
+The application defines an SMP group for configuration. It reads and writes one configuration type at a time, in chunks, and reports a CRC32 of the stored configuration for change detection.
 
-```
-1. Requester sends Command Request (Base + 2):
-   [Target_ID][0x23][Transaction_ID][Config_Type][0x00][0x00][0x00]
-
-2. Target responds (Base + 3):
-   [Source_ID][0x23][Transaction_ID][0x00][Size_Low][Size_High][0x00][0x00]
-   
-3. Target initiates ISO-TP transfer on Base + 6:
-   Sends configuration data via ISO-TP
-   
-4. Requester validates received data (CRC check)
-
-5. Requester sends Transfer ACK (Base + 3):
-   [Target_ID][0xFE][Transaction_ID][Result][0x00][0x00][0x00][0x00]
-```
-
-**Using Get Config CRC Command (0x22) - For Verification:**
-
-```
-1. Requester sends Command Request (Base + 2):
-   [Target_ID][0x22][Transaction_ID][Config_Type][0x00][0x00][0x00]
-
-2. Target responds (Base + 3):
-   [Source_ID][0x22][Transaction_ID][0x00][CRC32 bytes 0-3]
-   
-3. Requester compares CRC with local copy to detect changes
-```
-
-### 8.3 Configuration Write
-
-```
-1. Requester initiates ISO-TP transfer on Base + 6 with config data:
-   First frame contains: [Source_ID][Target_ID][0x01][Transaction_ID][Data...]
-   (Transfer Type 0x01 = Config Write)
-   
-2. Target receives complete data via ISO-TP
-
-3. Target validates:
-   - Data structure is valid
-   - CRC32 matches (appended to config data)
-   - Config type and parameters are acceptable
-   
-4. Target writes to temporary buffer
-
-5. Target performs full validation of config semantics
-
-6. Target commits to persistent storage (EEPROM/Flash)
-
-7. Target sends Transfer ACK via Base + 3:
-   [Source_ID][0xFE][Transaction_ID][Result][0x00][0x00][0x00][0x00]
-   
-8. If config requires restart, target may:
-   - Send State Change Notification (Base + 4) about impending reboot
-   - Reboot after brief delay
-```
-
-### 8.4 Configuration Sections
-
-To minimize transfer size, configuration may be split into logical sections identified by registered Config Type identifiers.
-
-**Dynamic Config Type System:**
-
-Applications register config types during device initialization:
-```
-register_config_type(type_id, description, handler)
-
-Convention:
-- 0x00: Complete configuration (all sections combined)
-- 0x01-0xFF: Application-defined config sections
-```
-
-**Registration Requirements:**
-
-- Config types must be registered during device initialization before normal operation begins
-- All devices on the network must follow the same application-specific Config Type enumeration
-- This ensures consistent interpretation of Config Type values across the network
-
-Each registered config type has associated handlers for:
-- Serialization (convert config to binary format)
-- Deserialization (parse binary format to config structure)
-- Validation (verify config data integrity and semantics)
-- Storage (read/write to persistent memory)
-
-Each section is independently transferable by specifying Config Type in Get Config (0x23) command.
-
-**Config Type 0x00 Behavior:**
-
-When Config Type 0x00 (Complete configuration) is requested, the device returns all configuration sections concatenated with section headers:
-```
-[Section_1_Type][Section_1_Length_Low][Section_1_Length_High][Section_1_Data...]
-[Section_2_Type][Section_2_Length_Low][Section_2_Length_High][Section_2_Data...]
-...
-```
-
-Length fields are 16-bit values indicating section data size in bytes (excluding header).
+A target validates a written configuration completely before it commits it to persistent storage, and rejects it otherwise. If the configuration requires a restart, the target may announce it with a State Change Notification (Base + 4) and reboot after a brief delay.
 
 ---
 
@@ -798,7 +609,7 @@ Length fields are 16-bit values indicating section data size in bytes (excluding
 
 ### 9.2 Optional Features
 
-- ISO-TP bulk transfer (required only if config >7 bytes)
+- SMP over CAN (required for remote configuration)
 - State change notifications (if device has state to share)
 - Discovery response (helpful but not critical)
 - Advanced error recovery
@@ -824,8 +635,8 @@ Length fields are 16-bit values indicating section data size in bytes (excluding
 1. **Fast Startup**: Measure startup time from power-on to first heartbeat
 1. **Heartbeat Loss**: Disconnect device, verify timeout detection
 1. **Command Retry**: Simulate message loss, verify 3 retries with backoff
-1. **ISO-TP Transfer**: Send 1KB config file, verify integrity
-1. **ISO-TP Flow Control**: Test receiver flow control under load
+1. **SMP Transfer**: Send a 1 KB configuration over SMP, verify integrity
+1. **SMP Pacing**: Verify SMP traffic stays within the configured bus share under load
 1. **State Synchronization**: Verify state version gap detection and recovery
 1. **Bus Coexistence**: Run protocol alongside heavy sensor traffic (80% bus load)
 1. **Capability Discovery**: Verify capability flags in heartbeat
@@ -837,7 +648,7 @@ Length fields are 16-bit values indicating section data size in bytes (excluding
 
 - Verify all v1.0 devices enter VERSION_MISMATCH status
 - Verify new device receives 0x02 response and enters VERSION_MISMATCH
-- Verify Status Request (0x14) broadcast receives responses from all devices
+- Verify Status Request (0x10) broadcast receives responses from all devices
 - Verify all devices report VERSION_MISMATCH status
 - Verify DBC messages continue operating normally
 - Verify no heartbeats, status broadcasts, or other protocol messages transmitted
@@ -1106,15 +917,8 @@ Applications can define capability-specific commands using the standard command 
 |--------------|-------------|
 | 0x10 | Status Request |
 | 0x11 | Reset Device |
-| 0x12 | Get Config CRC32 |
-| 0x13 | Get Config |
+| 0x12-0x1F | Reserved |
 | 0x20-0xFF | Application-Specific Commands |
-
-### Special Response Codes
-
-| Code | Description |
-|------|-------------|
-| 0xFE | Bulk Transfer ACK (ISO-TP completion) |
 
 ### Device Status Enumeration (for Status Request response)
 
@@ -1161,25 +965,16 @@ Target Device:
   (0x00 = Success)
 ```
 
-### B.3 Configuration Transfer
+### B.3 SMP Request over CAN
 ```
-Controller:
-  → Command Request (Base + 2): [Target][0x23][TxID][ConfigType][0x00][0x00][0x00]
+Device 7 sends a 20-byte SMP request (8-byte header, 12-byte body) to device 3.
+Default SMP base 0x1FF00000, CAN ID = base | 3 << 8 | 7 = 0x1FF00307:
+  → [0x80][Header 0-6]                  Start, sequence 0
+  → [0x01][Header 7][Body 0-5]          Sequence 1
+  → [0x02][Body 6-11]                   Sequence 2, last frame
 
-Target:
-  ← Command Response (Base + 3): [Source][0x23][TxID][0x00][Size_L][Size_H][0x00][0x00]
-
-Target → Controller (ISO-TP on Base + 6):
-  First Frame: [0x1FFF][Source][Target][0x02][TxID][Config_Data...]
-                      ↑ Transfer Type 0x02 = Config Read response
-  
-Controller:
-  ← Flow Control (Base + 7): [0x30][BlockSize][STmin][0x00]...
-
-Target continues sending Consecutive Frames...
-
-Controller validates received data (CRC check), then:
-  → Transfer ACK (Base + 3): [Target][0xFE][TxID][0x00][0x00][0x00][0x00][0x00]
+Device 3 answers on CAN ID 0x1FF00703 in the same format:
+  ← [0x80][Header 0-6]...
 ```
 
 ### B.4 Capability Data Streaming

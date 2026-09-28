@@ -283,9 +283,7 @@ bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
     auto service_command_code = static_cast<CdmpServiceCommandCode>(command_code);
 
     return service_command_code == CdmpServiceCommandCode::STATUS_REQUEST
-        || service_command_code == CdmpServiceCommandCode::RESET_DEVICE
-        || service_command_code == CdmpServiceCommandCode::GET_CONFIG_CRC
-        || service_command_code == CdmpServiceCommandCode::GET_CONFIG;
+        || service_command_code == CdmpServiceCommandCode::RESET_DEVICE;
 }
 
 bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) const {
