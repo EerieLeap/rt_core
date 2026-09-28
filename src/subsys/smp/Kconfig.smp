@@ -1,12 +1,34 @@
 config EERIE_LEAP_SMP
     bool "EerieLeap SMP"
+    select CRC
     select NET_BUF
     select ZCBOR
     select MCUMGR
     select MCUMGR_GRP_OS
     select MCUMGR_GRP_OS_MCUMGR_PARAMS
+    select MCUMGR_SMP_CBOR_MIN_DECODING_LEVEL_2
+    select MCUMGR_SMP_CBOR_MIN_ENCODING_LEVEL_3 if ZCBOR_CANONICAL
+    select EERIE_LEAP_RANDOM
+    select EERIE_LEAP_THREADING
     help
-      MCUmgr SMP server with the os group (echo, mcumgr params, reset).
+      MCUmgr SMP server with the os group (echo, mcumgr params, reset) and
+      the config, device and network groups of the enabled domains.
+
+menu "EerieLeap SMP groups config"
+    depends on EERIE_LEAP_SMP
+
+    config EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS
+        int "Idle time after which a config transfer is abandoned"
+        default 5000
+        help
+          Frees the staging buffer of a write, or the snapshot of a read,
+          that the client stopped sending requests for.
+
+    config EERIE_LEAP_SMP_NETWORK_MAX_DEVICES
+        int "Devices the network group can list"
+        default 32
+        range 1 254
+endmenu
 
 config EERIE_LEAP_SMP_CAN
     bool "EerieLeap SMP over CAN"

@@ -19,6 +19,7 @@
 #include "subsys/cdmp/models/cdmp_message.h"
 
 #include "i_cdmp_canbus_service.h"
+#include "i_cdmp_network_info.h"
 #include "cdmp_command_service.h"
 #include "cdmp_network_service.h"
 
@@ -36,7 +37,7 @@ using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 
 /** @brief One CDMP node: discovery, heartbeat and commands on a shared work queue. */
-class CdmpService : public IThread, public ServiceBase<> {
+class CdmpService : public IThread, public ServiceBase<>, public ICdmpNetworkInfo {
 public:
     /** @brief Called with the old and the new status of this unit. */
     using StatusChangedHandler = CdmpStatusMachine::StatusChangeCallback;
@@ -85,7 +86,9 @@ public:
     std::shared_ptr<WorkQueueThread> GetWorkQueueThread() const { return work_queue_thread_; }
 
     /** @brief Other devices on the network; see CdmpNetworkService::GetNetworkDevices(). */
-    size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const;
+    size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const override;
+    [[nodiscard]] size_t GetNetworkDeviceCount() const override;
+    [[nodiscard]] CdmpDeviceInfo GetDeviceInfo() const override;
 
     /**
      * @brief Reports status changes of this unit.

@@ -126,6 +126,19 @@ size_t CdmpService::GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const {
     return network_service_->GetNetworkDevices(devices);
 }
 
+size_t CdmpService::GetNetworkDeviceCount() const {
+    return network_service_->GetDeviceCount();
+}
+
+CdmpDeviceInfo CdmpService::GetDeviceInfo() const {
+    return {
+        .device_id = device_->GetDeviceId(),
+        .uid = device_->GetUniqueIdentifier(),
+        .device_type = device_->GetDeviceType(),
+        .status = device_->GetStatus(),
+    };
+}
+
 int CdmpService::RegisterStatusChangedHandler(StatusChangedHandler handler) {
     return device_->GetStatusMachine().RegisterStatusChangeHandler(std::move(handler));
 }

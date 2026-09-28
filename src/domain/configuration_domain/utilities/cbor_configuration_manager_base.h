@@ -144,8 +144,8 @@ public:
         try {
             configuration = Share(Deserialize(*cbor_config));
 
-            // Parsing validated the import, so the received encoding is stored as is.
-            if(!cbor_configuration_service_->Save(cbor_config.get()))
+            // Stored as received, so its CRC stays the one the sender computed.
+            if(!cbor_configuration_service_->Save(cbor_data))
                 return false;
         } catch(const std::exception& e) {
             LOG_ERR("Failed to apply %s CBOR configuration. %s", name_, e.what());
@@ -160,13 +160,21 @@ public:
     }
 
     std::pmr::vector<uint8_t> GetCborConfiguration() override {
-        auto configuration = Get();
-        if(configuration == nullptr)
+        if(Get() == nullptr)
             return {};
 
-        auto cbor_config = Serialize(*configuration);
+        auto config_bytes = cbor_configuration_service_->LoadRaw();
+        if(!config_bytes.has_value())
+            return {};
 
-        return cbor_configuration_service_->Serialize(*cbor_config);
+        return std::move(*config_bytes);
+    }
+
+    StoredCborInfo GetCborConfigurationInfo() override {
+        if(configuration_ == nullptr)
+            return {};
+
+        return cbor_configuration_service_->GetStoredInfo();
     }
 };
 

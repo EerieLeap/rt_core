@@ -18,6 +18,7 @@
 #include "configuration/cbor/cbor_serializer.h"
 
 #include "loaded_config.hpp"
+#include "stored_cbor_info.h"
 
 namespace eerie_leap::configuration::services {
 
@@ -43,13 +44,15 @@ private:
     struct SaveTask {
         k_work work;
         CborConfigurationService<T>* instance{nullptr};
-        T* configuration{nullptr};
+        T* configuration{nullptr}; // null to write config_bytes as they are
+        std::span<const uint8_t> config_bytes;
         bool result{false};
     };
 
     struct LoadTask {
         k_work work;
         CborConfigurationService<T>* instance{nullptr};
+        bool decode{true};
         std::optional<LoadedConfig<T>> result{std::nullopt};
     };
 
@@ -61,6 +64,16 @@ private:
     SaveTask task_save_;
     LoadTask task_load_;
 
+    // Its own lock, so a query never waits for a save in progress.
+    k_spinlock stored_info_lock_{};
+    StoredCborInfo stored_info_;
+
+    void SetStoredInfo(size_t size, uint32_t crc) {
+        K_SPINLOCK(&stored_info_lock_) {
+            stored_info_ = {.size = size, .crc = crc};
+        }
+    }
+
     bool SaveProcessor(T* configuration) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
@@ -71,10 +84,19 @@ private:
             return false;
         }
 
-        return fs_service_->WriteFile(configuration_file_path_, config_bytes.data(), config_bytes.size());
+        return WriteProcessor(config_bytes);
     }
 
-    std::optional<LoadedConfig<T>> LoadProcessor() {
+    bool WriteProcessor(std::span<const uint8_t> config_bytes) {
+        if(!fs_service_->WriteFile(configuration_file_path_, config_bytes.data(), config_bytes.size()))
+            return false;
+
+        SetStoredInfo(config_bytes.size(), crc32_ieee(config_bytes.data(), config_bytes.size()));
+
+        return true;
+    }
+
+    std::optional<LoadedConfig<T>> LoadProcessor(bool decode) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         if(!fs_service_->Exists(configuration_file_path_)) {
@@ -98,14 +120,21 @@ private:
         }
 
         buffer.resize(out_len);
-        auto configuration = serializer_->Deserialize(buffer);
 
-        if(configuration == nullptr) {
-            LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());
-            return std::nullopt;
+        const uint32_t crc = crc32_ieee(buffer.data(), buffer.size());
+        SetStoredInfo(buffer.size(), crc);
+
+        eerie_memory::pmr_unique_ptr<T> configuration;
+        if(decode) {
+            configuration = serializer_->Deserialize(buffer);
+
+            if(configuration == nullptr) {
+                LOG_ERR("Failed to deserialize configuration %s.", configuration_file_path_.c_str());
+                return std::nullopt;
+            }
+
+            LOG_INF("%s configuration loaded successfully.", configuration_file_path_.c_str());
         }
-
-        uint32_t crc = crc32_ieee(buffer.data(), buffer.size());
 
         LoadedConfig<T> loaded_config {
             .config_raw = std::move(buffer),
@@ -113,9 +142,50 @@ private:
             .checksum = crc
         };
 
-        LOG_INF("%s configuration loaded successfully.", configuration_file_path_.c_str());
-
         return loaded_config;
+    }
+
+    bool SaveOnQueue(T* configuration, std::span<const uint8_t> config_bytes) {
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
+        ScopedMutex lock(mutex_);
+
+        // Delegating to a queue we are already running on would park that thread in
+        // k_work_flush() waiting for work that only it can run.
+        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
+            return configuration != nullptr ? SaveProcessor(configuration) : WriteProcessor(config_bytes);
+
+        task_save_.configuration = configuration;
+        task_save_.config_bytes = config_bytes;
+
+        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_save_.work) < 0) {
+            LOG_ERR("Failed to submit save of configuration %s.", configuration_file_path_.c_str());
+            return false;
+        }
+
+        k_work_flush(&task_save_.work, &work_sync_);
+
+        return task_save_.result;
+    }
+
+    std::optional<LoadedConfig<T>> LoadOnQueue(bool decode) {
+        LOG_MODULE_DECLARE(configuration_service_logger);
+
+        ScopedMutex lock(mutex_);
+
+        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
+            return LoadProcessor(decode);
+
+        task_load_.decode = decode;
+
+        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_load_.work) < 0) {
+            LOG_ERR("Failed to submit load of configuration %s.", configuration_file_path_.c_str());
+            return std::nullopt;
+        }
+
+        k_work_flush(&task_load_.work, &work_sync_);
+
+        return std::move(task_load_.result);
     }
 
     static void WorkTaskSave(k_work* work) {
@@ -125,7 +195,9 @@ private:
 
         // An exception unwinding into the work queue loop would abort the system.
         try {
-            task->result = task->instance->SaveProcessor(task->configuration);
+            task->result = task->configuration != nullptr
+                ? task->instance->SaveProcessor(task->configuration)
+                : task->instance->WriteProcessor(task->config_bytes);
         } catch(const std::exception& e) {
             LOG_ERR("Exception while saving configuration: %s", e.what());
             task->result = false;
@@ -141,7 +213,7 @@ private:
         LoadTask* task = CONTAINER_OF(work, LoadTask, work);
 
         try {
-            task->result = task->instance->LoadProcessor();
+            task->result = task->instance->LoadProcessor(task->decode);
         } catch(const std::exception& e) {
             LOG_ERR("Exception while loading configuration: %s", e.what());
             task->result = std::nullopt;
@@ -176,43 +248,35 @@ public:
     }
 
     bool Save(T* configuration) {
-        LOG_MODULE_DECLARE(configuration_service_logger);
+        return SaveOnQueue(configuration, {});
+    }
 
-        ScopedMutex lock(mutex_);
-
-        // Delegating to a queue we are already running on would park that thread in
-        // k_work_flush() waiting for work that only it can run.
-        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
-            return SaveProcessor(configuration);
-
-        task_save_.configuration = configuration;
-
-        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_save_.work) < 0) {
-            LOG_ERR("Failed to submit save of configuration %s.", configuration_file_path_.c_str());
-            return false;
-        }
-
-        k_work_flush(&task_save_.work, &work_sync_);
-
-        return task_save_.result;
+    /** @brief Stores validated CBOR as it is. */
+    bool Save(std::span<const uint8_t> config_bytes) {
+        return SaveOnQueue(nullptr, config_bytes);
     }
 
     std::optional<LoadedConfig<T>> Load() {
-        LOG_MODULE_DECLARE(configuration_service_logger);
+        return LoadOnQueue(true);
+    }
 
-        ScopedMutex lock(mutex_);
-
-        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
-            return LoadProcessor();
-
-        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &task_load_.work) < 0) {
-            LOG_ERR("Failed to submit load of configuration %s.", configuration_file_path_.c_str());
+    /** @brief Reads the stored CBOR without decoding it. */
+    std::optional<std::pmr::vector<uint8_t>> LoadRaw() {
+        auto loaded_config = LoadOnQueue(false);
+        if(!loaded_config.has_value())
             return std::nullopt;
+
+        return std::move(loaded_config->config_raw);
+    }
+
+    /** @return The size and CRC32 of the file as last saved or loaded; zero before either. */
+    StoredCborInfo GetStoredInfo() {
+        StoredCborInfo info;
+        K_SPINLOCK(&stored_info_lock_) {
+            info = stored_info_;
         }
 
-        k_work_flush(&task_load_.work, &work_sync_);
-
-        return std::move(task_load_.result);
+        return info;
     }
 
     eerie_memory::pmr_unique_ptr<T> Deserialize(std::span<const uint8_t> config_bytes) {

@@ -26,6 +26,7 @@ using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
 using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
 using eerie_leap::subsys::cdmp::services::CdmpService;
 using eerie_leap::subsys::cdmp::services::CdmpCommandResult;
+using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
 using eerie_leap::subsys::smp::can::SmpCanTransport;
 
@@ -66,6 +67,9 @@ public:
 
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
     ~CanbusComService() override;
+
+    /** @brief This unit and the other devices, as CDMP sees them. */
+    [[nodiscard]] std::shared_ptr<const ICdmpNetworkInfo> GetNetworkInfo() const { return cdmp_service_; }
 
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {

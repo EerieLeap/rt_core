@@ -238,6 +238,11 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
 
     file(GLOB_RECURSE SRC ${SRC})
 
+    # The SMP groups live next to their domains, but need MCUmgr.
+    if(NOT CONFIG_EERIE_LEAP_SMP)
+        list(FILTER SRC EXCLUDE REGEX "/smp/")
+    endif()
+
     zephyr_library_sources(${SRC})
 
     add_subdirectory(libs/nameof)

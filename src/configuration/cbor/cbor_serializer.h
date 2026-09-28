@@ -52,7 +52,9 @@ public:
         LOG_MODULE_DECLARE(cbor_serializer_logger);
 
         auto obj = eerie_memory::make_unique_pmr<T>(Mrm::GetExtPmr());
-        if(decodeFn_(input.data(), input.size(), obj.get(), nullptr)) {
+        size_t decoded_size = 0;
+        // Trailing bytes are rejected, since validated input may be stored as it is.
+        if(decodeFn_(input.data(), input.size(), obj.get(), &decoded_size) || decoded_size != input.size()) {
             LOG_ERR("Failed to decode object.");
             return nullptr;
         }
