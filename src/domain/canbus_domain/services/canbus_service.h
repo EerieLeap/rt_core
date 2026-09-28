@@ -44,7 +44,9 @@ public:
     void Configure();
 
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetCanbus(uint8_t bus_channel) const;
+    /** @brief The bus of the COM channel, or nullptr when none is configured. */
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetComCanbus() const;
+    /** @brief A copy of the CDMP and SMP settings. */
     [[nodiscard]] CanbusComConfiguration GetComConfiguration() const;
 
     [[nodiscard]] const CanChannelConfiguration* GetChannelConfiguration(uint8_t bus_channel) const;

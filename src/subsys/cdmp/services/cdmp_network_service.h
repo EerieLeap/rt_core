@@ -27,6 +27,11 @@ using eerie_leap::subsys::cdmp::models::CdmpDiscoveryResponseMessage;
 using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
 using eerie_leap::subsys::cdmp::models::CdmpDiscoveryRequestMessage;
 
+/**
+ * @brief Discovery, ID claim and the table of other devices on the CDMP network.
+ *
+ * The device table is updated on the CDMP work queue; its queries may be called from any thread.
+ */
 class CdmpNetworkService final : public CdmpCanbusServiceBase {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
@@ -101,7 +106,11 @@ public:
     std::vector<uint8_t> GetOnlineDeviceIds() const;
     std::vector<uint8_t> GetAllDeviceIds() const;
     size_t GetDeviceCount() const;
-    // Copies up to devices.size() other devices, ordered by device ID, and returns how many were copied.
+
+    /**
+     * @brief Copies the other devices, ordered by device ID, into a caller-owned buffer.
+     * @return The number of devices copied, at most @p devices.size().
+     */
     size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const;
 
     // Discovery management

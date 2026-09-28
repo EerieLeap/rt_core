@@ -66,8 +66,11 @@ A lightweight management protocol operating on CAN bus alongside standard DBC-de
 ### 2.1 CAN Configuration
 
 - **Bus speed**: 1 Mbps (configurable: 250 kbps, 500 kbps)
-- **Frame format**: Standard CAN 2.0B (11-bit identifiers, 8-byte payload)
-- **Optional**: CAN-FD support for higher throughput
+- **Frame format**: follows the type of the CAN channel CDMP runs on
+  - Classic CAN (CAN 2.0B): the usual case when CDMP shares the vehicle bus
+  - CAN FD, with bitrate switching: for a dedicated network between devices, e.g. a second CAN interface
+- All devices on a bus must use the same type and bitrates; this is a configuration responsibility, CDMP does not negotiate it
+- CDMP messages keep their payload of up to 8 bytes on both types; only SMP ([§5](#5-smp-over-can)) uses the larger CAN FD payload
 
 ### 2.2 CAN ID Allocation
 
@@ -459,7 +462,7 @@ Configuration transfer uses the Simple Management Protocol (SMP) of MCUmgr. This
 
 - Point-to-point between two devices that have claimed a CDMP device ID
 - Available in ONLINE and in VERSION_MISMATCH status
-- Classic CAN frames with up to 8 data bytes
+- Classic CAN frames with up to 8 data bytes, or CAN FD frames with up to 64, following the channel type ([§2.1](#21-can-configuration))
 
 ### 5.2 Addressing
 
@@ -475,28 +478,36 @@ CAN ID (29-bit) = SMP base | target_id << 8 | source_id
 
 ```
 Byte 0:    Bit 7: Start (1 = first frame of a packet), Bits 0-6: Sequence number
-Byte 1-7:  Packet data (the last frame of a packet may be shorter)
+Byte 1-N:  Packet data, N = 7 on classic CAN and 63 on CAN FD
 ```
 
 - A packet is one SMP message: the 8-byte SMP header followed by its CBOR body. The packet ends after 8 + header length bytes.
+- Every frame except the last carries N data bytes. The last frame carries no bytes beyond the packet, except that a CAN FD frame longer than 8 bytes is zero-padded to the next valid CAN FD length (12, 16, 20, 24, 32, 48 or 64). Receivers ignore the padding.
 - The sequence number is 0 in the start frame and increments by one per frame, wrapping from 127 to 0.
 - A start frame from a source discards an incomplete packet from that source.
 
 ### 5.4 Reception
 
 - A receiver keeps a few reassembly slots, one per source with a packet in progress. When no slot is free, frames from further sources are dropped.
-- A packet is dropped when a sequence number is skipped, when its length exceeds the receiver's buffer, or when no frame arrives for 100 ms.
+- A packet is dropped when a sequence number is skipped, when its length exceeds the receiver's buffer, when a frame breaks the format above, or when no frame arrives for 100 ms.
 - There is no negative acknowledgement. The SMP client resends the request after its own timeout.
 
 ### 5.5 Flow Control and Pacing
 
 - A sender transmits one packet at a time to a given target, frames of two packets to the same target never interleave.
 - An SMP client keeps no more requests in flight to a target than the target reports as its buffer count (`mcumgr params`), and no packet exceeds the reported buffer size.
-- Each sender limits its SMP frames to a configured share of the bus (default 25 %), counting 160 bit times per frame (29-bit ID, 8 data bytes, worst-case stuffing).
+- Each sender limits its SMP frames to a configured share of the bus time (default 25 %), assuming worst-case frames with a 29-bit ID and bit stuffing:
+  - classic CAN: 160 bit times per frame;
+  - CAN FD: 60 bit times at the nominal bitrate plus 700 at the data bitrate.
 
 ### 5.6 Timing and Performance
 
-At the default 25 % share: about 5.5 KB/s at 500 kbit/s and 11 KB/s at 1 Mbit/s.
+At the default 25 % share:
+
+- classic CAN: about 5.5 KB/s at 500 kbit/s and 11 KB/s at 1 Mbit/s;
+- CAN FD: about 33 KB/s at 500 kbit/s nominal with a 2 Mbit/s data phase.
+
+On a dedicated CAN FD network the share can be raised.
 
 ---
 

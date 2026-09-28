@@ -9,6 +9,7 @@ namespace eerie_leap::subsys::cdmp::utilities {
 
 using eerie_leap::subsys::canbus::CanId;
 
+/** @brief Maps CDMP message kinds to 11-bit CAN identifiers at fixed offsets from a base. */
 class CdmpCanIdManager {
 private:
     uint32_t base_can_id_ = DEFAULT_BASE_CAN_ID;
@@ -27,15 +28,17 @@ public:
     static constexpr uint32_t APPLICATION_OFFSET_START = 52;
     static constexpr uint32_t APPLICATION_OFFSET_END = 99;
 
-    // The whole Base+0..Base+99 range has to fit into 11-bit identifiers.
+    /** @brief True when Base+0..Base+99 fits into 11-bit identifiers. */
     static constexpr bool IsValidBaseCanId(uint32_t base_can_id) {
         return base_can_id <= CAN_STD_ID_MASK - APPLICATION_OFFSET_END;
     }
 
+    /** @throws std::invalid_argument if the base fails IsValidBaseCanId(). */
     explicit CdmpCanIdManager(uint32_t base_can_id = DEFAULT_BASE_CAN_ID) {
         SetBaseCanId(base_can_id);
     }
 
+    /** @throws std::invalid_argument if the base fails IsValidBaseCanId(); the old base is kept. */
     void SetBaseCanId(uint32_t base_can_id) {
         if(!IsValidBaseCanId(base_can_id))
             throw std::invalid_argument("CDMP base CAN ID leaves no room for the CDMP ID range");
@@ -45,7 +48,8 @@ public:
 
     uint32_t GetBaseCanId() const { return base_can_id_; }
 
-    // CDMP uses standard 11-bit identifiers only.
+    /** @name Identifiers; CDMP uses standard 11-bit identifiers only */
+    ///@{
     CanId GetManagementCanId() const { return CanId::Standard(base_can_id_ + MANAGEMENT_OFFSET); }
     CanId GetDiscoveryRequestCanId() const { return GetManagementCanId(); }
     CanId GetDiscoveryResponseCanId() const { return GetManagementCanId(); }
@@ -60,12 +64,14 @@ public:
     CanId GetStateChangeRequestCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_OFFSET); }
     CanId GetStateChangeResponseCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_RESPONSE_OFFSET); }
 
+    /** @throws std::invalid_argument if @p capability_bit is above 31. */
     CanId GetCapabilityCanId(uint8_t capability_bit) const {
         if(capability_bit > (CAPABILITY_OFFSET_END - CAPABILITY_OFFSET_START))
             throw std::invalid_argument("capability_bit out of range");
 
         return CanId::Standard(base_can_id_ + CAPABILITY_OFFSET_START + capability_bit);
     }
+    ///@}
 };
 
 } // namespace eerie_leap::subsys::cdmp::utilities

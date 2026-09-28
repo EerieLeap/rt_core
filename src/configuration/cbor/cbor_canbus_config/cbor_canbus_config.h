@@ -76,6 +76,7 @@ struct CborCanChannelConfig {
 		CborCanMessageConfig_m(std::move(other.CborCanMessageConfig_m), alloc) {}
 };
 
+/** @brief CBOR form of CanbusComConfiguration; bus_channel is -1 when unset. */
 struct CborCanbusComConfig {
 	int32_t bus_channel{};
 	uint32_t cdmp_base_can_id{};

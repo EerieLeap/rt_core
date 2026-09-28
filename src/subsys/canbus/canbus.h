@@ -37,12 +37,13 @@ using CanFrameHandler = std::function<void (const CanFrame&)>;
 #define CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE 32
 #endif
 
+/** @brief Controller, bus type and bitrates of one CAN channel. */
 struct CanbusConfig {
     const device *canbus_dev;
     CanbusType type;
-    uint32_t bitrate;
-    uint32_t data_bitrate;
-    // Additional controller modes OR'ed into the base mode, e.g. CAN_MODE_LOOPBACK.
+    uint32_t bitrate;      ///< Nominal bitrate; 0 detects it from bus activity.
+    uint32_t data_bitrate; ///< CAN FD data phase bitrate; 0 when unused.
+    /// Additional controller modes OR'ed into the base mode, e.g. CAN_MODE_LOOPBACK.
     can_mode_t extra_modes;
 
     CanbusConfig(
@@ -58,15 +59,19 @@ class Canbus : public IThread, public ServiceBase<> {
 public:
     using BitrateDetectedCallback = std::function<void (uint32_t bitrate)>;
 
-    // Handler registration results.
+    /** @name Handler registration results */
+    ///@{
     static constexpr int ERR_NOT_INITIALIZED = -1;
-    static constexpr int ERR_FILTER_REJECTED = -2;
-    static constexpr int ERR_TOO_MANY_HANDLERS = -3;
+    static constexpr int ERR_FILTER_REJECTED = -2;   ///< The driver has no free hardware filter.
+    static constexpr int ERR_TOO_MANY_HANDLERS = -3; ///< MAX_HANDLERS_PER_FILTER reached.
     static constexpr int ERR_INVALID_ARGUMENT = -4;
-    static constexpr int ERR_FILTER_OVERLAP = -5;
-    static constexpr int ERR_TOO_MANY_FILTERS = -6;
+    static constexpr int ERR_FILTER_OVERLAP = -5;    ///< Another filter accepts some of the same identifiers.
+    static constexpr int ERR_TOO_MANY_FILTERS = -6;  ///< MAX_MASK_FILTERS reached.
+    ///@}
 
+    /// Handlers that may share one filter.
     static constexpr size_t MAX_HANDLERS_PER_FILTER = 8;
+    /// Distinct mask filters; exact filters are limited only by the driver.
     static constexpr size_t MAX_MASK_FILTERS = 4;
 
     static constexpr k_timeout_t DEFAULT_SEND_TIMEOUT = K_MSEC(2);
@@ -171,16 +176,33 @@ public:
 
     bool Configure(const CanbusConfig& config);
 
-    // Returns a positive handler id or one of the ERR_* codes. A CanId registers an exact-match filter.
-    // Fails with ERR_FILTER_OVERLAP if another registered filter accepts some of the same identifiers.
+    /**
+     * @brief Calls @p handler from the RX thread for every frame that passes @p filter.
+     *
+     * A CanId registers an exact-match filter. Identical filters share one hardware filter.
+     *
+     * @return A positive handler ID, or one of the ERR_* codes. ERR_FILTER_OVERLAP means another
+     *         registered filter accepts some of the same identifiers.
+     */
     int RegisterFrameReceivedHandler(const CanFilter& filter, CanFrameHandler handler);
+
+    /**
+     * @brief Removes a handler; the hardware filter goes with its last handler.
+     *
+     * Waits for a dispatch in progress, so the handler is not running once this returns.
+     */
     bool RemoveFrameReceivedHandler(int handler_id);
 
     CanbusType GetType() const;
     CanbusConfig GetConfig() const;
 
-    // Returns 0, -ENETDOWN when the bus is not running, -EINVAL for a malformed frame,
-    // -EAGAIN when the TX queue stayed full for the timeout, or another driver error.
+    /**
+     * @brief Sends one frame without holding the handler lock.
+     *
+     * @param timeout How long to wait for space in the TX queue; K_NO_WAIT never blocks.
+     * @return 0, -ENETDOWN when the bus is not running, -EINVAL for a malformed frame,
+     *         -EAGAIN when the TX queue stayed full for the timeout, or another driver error.
+     */
     int SendFrame(
         const CanId& frame_id,
         std::span<const uint8_t> frame_data,

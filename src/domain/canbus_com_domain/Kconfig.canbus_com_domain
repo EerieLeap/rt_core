@@ -1,5 +1,6 @@
 config EERIE_LEAP_DOMAIN_CANBUS_COM
     bool "EerieLeap CANBus COM Domain"
+    select EERIE_LEAP_SMP_CAN
     help
       Add EerieLeap CANBus COM Domain.
 

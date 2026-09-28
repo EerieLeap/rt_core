@@ -11,6 +11,7 @@
 #include "subsys/threading/service_base.h"
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/services/cdmp_service.h"
+#include "subsys/smp/can/smp_can_transport.h"
 
 #include "domain/canbus_domain/services/canbus_service.h"
 #include "domain/canbus_com_domain/commands/i_canbus_com_command.h"
@@ -25,20 +26,32 @@ using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
 using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
 using eerie_leap::subsys::cdmp::services::CdmpService;
 using eerie_leap::subsys::cdmp::services::CdmpCommandResult;
+using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::smp::can::SmpCanTransport;
 
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::domain::canbus_com_domain::commands::ICanbusComCommand;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandResultBase;
 
+/** @brief Runs CDMP and the SMP-CAN transport on the COM channel, across bus reconfigurations. */
 class CanbusComService : public ServiceBase<> {
 private:
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<CdmpService> cdmp_service_;
+    std::shared_ptr<SmpCanTransport> smp_transport_;
+    int cdmp_status_handler_id_ = -1;
 
     bool DoInitialize() override;
     bool DoStart() override;
     bool DoStop() override;
+
+    /**
+     * @brief Binds SMP to the claimed CDMP ID in ONLINE and VERSION_MISMATCH, unbinds otherwise.
+     *
+     * VERSION_MISMATCH keeps SMP so a unit with another CDMP version can still be managed.
+     */
+    void OnCdmpStatusChanged(CdmpDeviceStatus status);
 
 public:
     using CommandAckCallback = std::function<void(bool success)>;
@@ -52,7 +65,7 @@ public:
     using CommandDataRequestWithResponseCallback = std::function<std::optional<CanbusComCommandResultBase>(std::optional<TRequest> request)>;
 
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
-    ~CanbusComService() override = default;
+    ~CanbusComService() override;
 
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {

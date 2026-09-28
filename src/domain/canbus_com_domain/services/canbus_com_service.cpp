@@ -11,6 +11,7 @@ namespace eerie_leap::domain::canbus_com_domain::services {
 
 using namespace eerie_leap::subsys::cdmp::models;
 using eerie_leap::subsys::cdmp::utilities::CdmpUid;
+using eerie_leap::subsys::smp::can::SmpCanIdLayout;
 
 LOG_MODULE_REGISTER(canbus_com_logger);
 
@@ -24,6 +25,13 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
     if(cdmp_service_ == nullptr)
         throw std::runtime_error("Failed to create CDMP service");
 
+    smp_transport_ = std::make_shared<SmpCanTransport>(cdmp_service_->GetWorkQueueThread());
+
+    cdmp_status_handler_id_ = cdmp_service_->RegisterStatusChangedHandler(
+        [this](CdmpDeviceStatus /*old_status*/, CdmpDeviceStatus new_status) {
+            OnCdmpStatusChanged(new_status);
+        });
+
     canbus_service_->RegisterConfigurationResetHandler(
         [this]() { Stop(); });
 
@@ -31,8 +39,12 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
         [this]() { Start(); });
 }
 
+CanbusComService::~CanbusComService() {
+    cdmp_service_->UnregisterStatusChangedHandler(cdmp_status_handler_id_);
+}
+
 bool CanbusComService::DoInitialize() {
-    return cdmp_service_->Initialize();
+    return cdmp_service_->Initialize() && smp_transport_->Initialize();
 }
 
 bool CanbusComService::DoStart() {
@@ -40,7 +52,11 @@ bool CanbusComService::DoStart() {
     if(!com_canbus)
         return false;
 
-    cdmp_service_->Configure(com_canbus, canbus_service_->GetComConfiguration().cdmp_base_can_id);
+    const auto com_configuration = canbus_service_->GetComConfiguration();
+
+    smp_transport_->Configure(
+        com_canbus, com_configuration.smp_can_id_base, com_configuration.smp_bus_share_percent);
+    cdmp_service_->Configure(com_canbus, com_configuration.cdmp_base_can_id);
 
     return cdmp_service_->Start();
 }
@@ -49,7 +65,22 @@ bool CanbusComService::DoStop() {
     if(!cdmp_service_)
         return false;
 
-    return cdmp_service_->Stop();
+    const bool is_stopped = cdmp_service_->Stop();
+    smp_transport_->Unbind();
+
+    return is_stopped;
+}
+
+void CanbusComService::OnCdmpStatusChanged(CdmpDeviceStatus status) {
+    const uint8_t device_id = cdmp_service_->GetDevice()->GetDeviceId();
+
+    if((status == CdmpDeviceStatus::ONLINE || status == CdmpDeviceStatus::VERSION_MISMATCH)
+        && SmpCanIdLayout::IsValidAddress(device_id)) {
+
+        smp_transport_->Bind(device_id);
+    } else {
+        smp_transport_->Unbind();
+    }
 }
 
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {

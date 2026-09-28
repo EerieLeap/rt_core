@@ -25,6 +25,7 @@ endif()
 # qemu_malta only declares 1 MB of SRAM; the machine actually provides far more.
 if(BOARD MATCHES "^qemu_malta")
     list(APPEND EXTRA_DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_malta_ram.overlay")
+    list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_malta.conf")
 endif()
 
 # Suites that mount the internal filesystem set RT_CORE_TEST_SIM_FLASH before

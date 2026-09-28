@@ -137,6 +137,16 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_SMP_CAN)
+        list(APPEND SRC
+            "${SRC_DIR}/subsys/smp/can/*.c"
+            "${SRC_DIR}/subsys/smp/can/*.cpp"
+        )
+
+        # smp_rx_req() is only declared in MCUmgr's internal transport header.
+        zephyr_library_include_directories(${ZEPHYR_BASE}/subsys/mgmt/mcumgr/transport/include)
+    endif()
+
     if(CONFIG_EERIE_LEAP_THREADING)
         list(APPEND SRC
             "${SRC_DIR}/subsys/threading/*.c"

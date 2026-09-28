@@ -1,0 +1,54 @@
+config EERIE_LEAP_SMP
+    bool "EerieLeap SMP"
+    select NET_BUF
+    select ZCBOR
+    select MCUMGR
+    select MCUMGR_GRP_OS
+    select MCUMGR_GRP_OS_MCUMGR_PARAMS
+    help
+      MCUmgr SMP server with the os group (echo, mcumgr params, reset).
+
+config EERIE_LEAP_SMP_CAN
+    bool "EerieLeap SMP over CAN"
+    depends on EERIE_LEAP_CANBUS
+    select EERIE_LEAP_SMP
+    select EERIE_LEAP_THREADING
+    help
+      SMP transport over CAN, as specified in the CDMP README.
+
+menu "EerieLeap SMP over CAN config"
+    depends on EERIE_LEAP_SMP_CAN
+
+    config EERIE_LEAP_SMP_CAN_RX_SLOTS
+        int "Sources that can send a packet at the same time"
+        default 2
+        range 1 8
+
+    config EERIE_LEAP_SMP_CAN_RX_TIMEOUT_MS
+        int "Inter-frame timeout after which a partial packet is dropped"
+        default 100
+
+    config EERIE_LEAP_SMP_CAN_TX_BURST_FRAMES
+        int "Frames that may be sent back to back after an idle period"
+        default 8
+        range 1 64
+        help
+          The sender sleeps until half of them are available again. The burst
+          should cover a few system ticks of frames at the paced rate,
+          otherwise tick granularity lowers the achieved rate.
+endmenu
+
+# Defaults for the MCUmgr core; boards may override them.
+if EERIE_LEAP_SMP
+
+config MCUMGR_TRANSPORT_NETBUF_COUNT
+    default 6
+
+config MCUMGR_TRANSPORT_NETBUF_SIZE
+    default 1024
+
+# Below the sensor processing service (6).
+config MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO
+    default 7
+
+endif

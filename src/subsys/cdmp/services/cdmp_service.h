@@ -35,8 +35,10 @@ using eerie_leap::subsys::cdmp::utilities::CdmpStatusMachine;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 
+/** @brief One CDMP node: discovery, heartbeat and commands on a shared work queue. */
 class CdmpService : public IThread, public ServiceBase<> {
 public:
+    /** @brief Called with the old and the new status of this unit. */
     using StatusChangedHandler = CdmpStatusMachine::StatusChangeCallback;
 
 private:
@@ -61,10 +63,14 @@ private:
     bool DoStop() override;
 
 public:
+    /** @param uid Unique identifier of this unit, usually CdmpUid::Generate(). */
     CdmpService(CdmpDeviceType device_type, uint32_t uid);
     ~CdmpService();
 
-    // Service lifecycle
+    /**
+     * @brief Binds the services to a bus; only while stopped.
+     * @throws std::invalid_argument if @p base_can_id fails CdmpCanIdManager::IsValidBaseCanId().
+     */
     void Configure(
         std::shared_ptr<CanbusProxy> canbus,
         uint32_t base_can_id = CdmpCanIdManager::DEFAULT_BASE_CAN_ID);
@@ -75,11 +81,19 @@ public:
 
     std::shared_ptr<CdmpDevice> GetDevice() const { return device_; }
     std::shared_ptr<CdmpCommandService> GetCommandService() const { return command_service_; }
+    /** @brief The CDMP work queue, shared with the SMP-CAN transport. */
+    std::shared_ptr<WorkQueueThread> GetWorkQueueThread() const { return work_queue_thread_; }
 
-    // Other devices on the network; see CdmpNetworkService::GetNetworkDevices().
+    /** @brief Other devices on the network; see CdmpNetworkService::GetNetworkDevices(). */
     size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const;
 
-    // Runs on the thread that changes the status; read the new device ID from GetDevice().
+    /**
+     * @brief Reports status changes of this unit.
+     *
+     * The handler runs on the thread that changes the status; read the new device ID from GetDevice().
+     *
+     * @return A handler ID for UnregisterStatusChangedHandler().
+     */
     int RegisterStatusChangedHandler(StatusChangedHandler handler);
     void UnregisterStatusChangedHandler(int handler_id);
 

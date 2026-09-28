@@ -115,11 +115,8 @@ void CanbusConfigurationValidator::ValidateComConfiguration(const CanbusConfigur
     if(!CdmpCanIdManager::IsValidBaseCanId(com_configuration.cdmp_base_can_id))
         InvalidCanbusComConfiguration("CDMP base CAN ID leaves no room for the CDMP ID range");
 
-    if(!CanId::Extended(com_configuration.smp_can_id_base).IsValid()
-        || (com_configuration.smp_can_id_base & CanbusComConfiguration::SMP_ADDRESS_MASK) != 0) {
-
+    if(!SmpCanIdLayout::IsValidBase(com_configuration.smp_can_id_base))
         InvalidCanbusComConfiguration("SMP CAN ID base must be a 29-bit ID with the address bits clear");
-    }
 
     if(com_configuration.smp_bus_share_percent == 0 || com_configuration.smp_bus_share_percent > 100)
         InvalidCanbusComConfiguration("SMP bus share must be between 1 and 100 %");

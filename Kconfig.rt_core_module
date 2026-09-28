@@ -84,6 +84,7 @@ rsource "src/subsys/cdmp/Kconfig.cdmp"
 rsource "src/subsys/device_tree/Kconfig.device_tree"
 rsource "src/subsys/fs/Kconfig.fs"
 rsource "src/subsys/gpio/Kconfig.gpio"
+rsource "src/subsys/smp/Kconfig.smp"
 
 rsource "src/domain/system_domain/Kconfig.system_domain"
 rsource "src/domain/canbus_com_domain/Kconfig.canbus_com_domain"
