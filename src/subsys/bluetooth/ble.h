@@ -67,9 +67,6 @@ private:
 
     friend void PairingFailed(struct bt_conn *conn, enum bt_security_err reason);
 
-    // Returns a new reference to the active connection, or nullptr. Caller must bt_conn_unref().
-    static bt_conn* AcquireActiveConn();
-
     static void UpdateDataLength(bt_conn* conn);
     static void RestartAdvertisingWorkHandler(struct k_work* work);
     static void ConnectedCbWorkHandler(struct k_work* work);
@@ -84,6 +81,9 @@ public:
 
     static void UpdateAdvertisingData(AdBuffer&& ad);
     static void UpdateScanResponseData(AdBuffer&& sd);
+
+    // Returns a new reference to the active connection, or nullptr. Caller must bt_conn_unref().
+    static bt_conn* AcquireActiveConn();
 
     static int RegisterConnectedHandler(ConnectedHandler handler);
     static int RegisterDisconnectedHandler(DisconnectedHandler handler);

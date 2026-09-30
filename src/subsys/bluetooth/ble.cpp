@@ -10,7 +10,7 @@
 LOG_MODULE_REGISTER(ble);
 
 // One central at a time: advertising stops when it connects, and only restarts once it's gone.
-BUILD_ASSERT(CONFIG_BT_MAX_CONN == 1, "Ble and the settings service track a single connection");
+BUILD_ASSERT(CONFIG_BT_MAX_CONN == 1, "Ble and the access point service track a single connection");
 
 namespace eerie_leap::subsys::bluetooth {
 

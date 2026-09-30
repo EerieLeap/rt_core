@@ -130,6 +130,10 @@ size_t CdmpService::GetNetworkDeviceCount() const {
     return network_service_->GetDeviceCount();
 }
 
+bool CdmpService::IsDeviceOnline(uint8_t device_id) const {
+    return network_service_->IsDeviceOnline(device_id);
+}
+
 CdmpDeviceInfo CdmpService::GetDeviceInfo() const {
     return {
         .device_id = device_->GetDeviceId(),

@@ -1,3 +1,6 @@
+#include <exception>
+#include <span>
+#include <stdexcept>
 #include <vector>
 #include <utility>
 
@@ -7,8 +10,6 @@
 
 #include "subsys/bluetooth/ble.h"
 #include "subsys/bluetooth/utilities/bt_data_builder.hpp"
-#include "subsys/bluetooth/ble_settings/ble_settings_service.h"
-#include "domain/ble_domain/services/ble_settings_configuration_service.h"
 #include "domain/system_domain/models/product_info.h"
 
 #include "ble_service.h"
@@ -17,7 +18,6 @@ namespace eerie_leap::domain::ble_domain::services {
 
 using namespace eerie_leap::subsys::bluetooth;
 using namespace eerie_leap::subsys::bluetooth::utilities;
-using namespace eerie_leap::subsys::bluetooth::ble_settings;
 using namespace eerie_leap::domain::system_domain::models;
 
 LOG_MODULE_REGISTER(ble_service_logger);
@@ -25,16 +25,19 @@ LOG_MODULE_REGISTER(ble_service_logger);
 std::unique_ptr<BleService> BleService::instance_;
 bool BleService::is_initialized_ = false;
 
-BleService::BleService(std::shared_ptr<SensorsProcessingService> sensors_processing_service)
-    : sensors_processing_service_(std::move(sensors_processing_service)) {}
+BleService::BleService(
+    std::shared_ptr<SensorsProcessingService> sensors_processing_service,
+    std::shared_ptr<ISmpForwarder> smp_forwarder)
+        : sensors_processing_service_(std::move(sensors_processing_service)),
+        smp_forwarder_(std::move(smp_forwarder)
+) {}
 
 BleService& BleService::Create(
-    std::shared_ptr<ConfigurationService> configuration_service,
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
-    std::shared_ptr<WorkQueueThread> config_work_queue_thread) {
+    std::shared_ptr<ISmpForwarder> smp_forwarder
+) {
 
-    BleSettingsConfigurationService::Create(std::move(configuration_service), std::move(config_work_queue_thread));
-    instance_.reset(new BleService(std::move(sensors_processing_service)));
+    instance_.reset(new BleService(std::move(sensors_processing_service), std::move(smp_forwarder)));
 
     return *instance_;
 }
@@ -67,7 +70,36 @@ bool BleService::Initialize() {
         PairingFinished();
     });
 
-    return BleSettingsConfigurationService::GetInstance().Initialize();
+    return InitializeAccessPoint();
+}
+
+bool BleService::InitializeAccessPoint() {
+    try {
+        access_point_service_ = std::make_shared<AccessPointService>();
+        smp_router_ = std::make_shared<SmpBleRouter>(access_point_service_, smp_forwarder_);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to create the access point: %s", e.what());
+        return false;
+    }
+
+    if(!smp_router_->Initialize())
+        return false;
+
+    const auto info = SmpBleRouter::GetInfo();
+    access_point_service_->Initialize({
+            .on_smp_write = [router = smp_router_](std::span<const uint8_t> data) { router->OnReceive(data); },
+            .on_smp_sent = [router = smp_router_]() { router->OnNotificationSent(); },
+        },
+        info);
+
+    Ble::RegisterDisconnectedHandler([router = smp_router_](bt_conn* /*conn*/) {
+        router->OnDisconnected();
+    });
+
+    if(smp_forwarder_ != nullptr)
+        smp_forwarder_->SetResponseSink(smp_router_);
+
+    return true;
 }
 
 bool BleService::Start() const {
@@ -85,8 +117,8 @@ void BleService::ConfigureAdvertisingData() const {
 
     // The service UUID shares the advertisement with the manufacturer data, so a scan filtered by the
     // UUID also sees the product without a scan response. Together they fill all 31 bytes.
-    const std::vector<uint8_t> config_service_uuid = { BT_UUID_SETTINGS_SERVICE_VAL };
-    ad_builder.Add(BT_DATA_UUID128_ALL, config_service_uuid);
+    const std::vector<uint8_t> service_uuid = { BT_UUID_ACCESS_POINT_SERVICE_VAL };
+    ad_builder.Add(BT_DATA_UUID128_ALL, service_uuid);
 
     // Manufacturer data
     auto manufacturer_data = GetManufacturerData();

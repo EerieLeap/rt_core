@@ -13,7 +13,6 @@
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/threading/work_queue_task.h"
 #include "subsys/smp/smp_packet.h"
-#include "subsys/smp/i_smp_forwarder.h"
 #include "subsys/smp/i_smp_response_sink.h"
 
 #include "smp_can_id_layout.h"
@@ -38,7 +37,7 @@ using eerie_leap::subsys::threading::WorkQueueTaskResult;
  * bus and never blocks. Only one instance may exist, because MCUmgr's output callback carries no
  * context.
  */
-class SmpCanTransport : public ISmpForwarder {
+class SmpCanTransport {
 private:
     struct RxSlot {
         uint8_t source = 0; // 0 while free
@@ -104,7 +103,7 @@ public:
      * @throws std::logic_error if another instance exists.
      */
     explicit SmpCanTransport(std::shared_ptr<WorkQueueThread> work_queue_thread);
-    ~SmpCanTransport() override;
+    ~SmpCanTransport();
 
     SmpCanTransport(const SmpCanTransport&) = delete;
     SmpCanTransport& operator=(const SmpCanTransport&) = delete;
@@ -140,7 +139,7 @@ public:
     void SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink);
 
     /** @brief Queues a packet for @p target; fails while unbound or for an invalid or own address. */
-    bool Forward(uint8_t target, SmpPacket packet) override;
+    bool Forward(uint8_t target, SmpPacket packet);
 
     /** @brief Received packets dropped: gaps, timeouts, malformed frames, no free slot or buffer. */
     [[nodiscard]] uint32_t GetRxDroppedCount() const { return rx_dropped_; }

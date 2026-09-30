@@ -83,6 +83,20 @@ void CanbusComService::OnCdmpStatusChanged(CdmpDeviceStatus status) {
     }
 }
 
+bool CanbusComService::IsReachable(uint8_t target) const {
+    const uint8_t address = smp_transport_->GetAddress();
+
+    return address != 0 && target != address && cdmp_service_->IsDeviceOnline(target);
+}
+
+bool CanbusComService::Forward(uint8_t target, SmpPacket packet) {
+    return smp_transport_->Forward(target, std::move(packet));
+}
+
+void CanbusComService::SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink) {
+    smp_transport_->SetResponseSink(std::move(response_sink));
+}
+
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {
     if(!cdmp_service_)
         return;

@@ -11,6 +11,7 @@
 #include "subsys/threading/service_base.h"
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/services/cdmp_service.h"
+#include "subsys/smp/i_smp_forwarder.h"
 #include "subsys/smp/can/smp_can_transport.h"
 
 #include "domain/canbus_domain/services/canbus_service.h"
@@ -28,6 +29,9 @@ using eerie_leap::subsys::cdmp::services::CdmpService;
 using eerie_leap::subsys::cdmp::services::CdmpCommandResult;
 using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::smp::ISmpForwarder;
+using eerie_leap::subsys::smp::ISmpResponseSink;
+using eerie_leap::subsys::smp::SmpPacket;
 using eerie_leap::subsys::smp::can::SmpCanTransport;
 
 using eerie_leap::domain::canbus_domain::services::CanbusService;
@@ -35,8 +39,12 @@ using eerie_leap::domain::canbus_com_domain::commands::ICanbusComCommand;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandResultBase;
 
-/** @brief Runs CDMP and the SMP-CAN transport on the COM channel, across bus reconfigurations. */
-class CanbusComService : public ServiceBase<> {
+/**
+ * @brief Runs CDMP and the SMP-CAN transport on the COM channel, across bus reconfigurations.
+ *
+ * As an ISmpForwarder it sends SMP packets to the other CDMP devices.
+ */
+class CanbusComService : public ServiceBase<>, public ISmpForwarder {
 private:
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<CdmpService> cdmp_service_;
@@ -70,6 +78,13 @@ public:
 
     /** @brief This unit and the other devices, as CDMP sees them. */
     [[nodiscard]] std::shared_ptr<const ICdmpNetworkInfo> GetNetworkInfo() const { return cdmp_service_; }
+
+    /** @brief The claimed CDMP ID while SMP is bound to it, 0 otherwise. */
+    [[nodiscard]] uint8_t GetAddress() const override { return smp_transport_->GetAddress(); }
+    /** @brief Whether @p target is another device that CDMP sees online, while SMP is bound. */
+    [[nodiscard]] bool IsReachable(uint8_t target) const override;
+    bool Forward(uint8_t target, SmpPacket packet) override;
+    void SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink) override;
 
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {

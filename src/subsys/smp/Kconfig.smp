@@ -60,6 +60,37 @@ menu "EerieLeap SMP over CAN config"
           otherwise tick granularity lowers the achieved rate.
 endmenu
 
+config EERIE_LEAP_SMP_BLE
+    bool "EerieLeap SMP router for a BLE access point"
+    select EERIE_LEAP_SMP
+    help
+      Routes SMP packets between a BLE central and the local SMP server or,
+      through a forwarder such as the CAN transport, other units.
+
+menu "EerieLeap SMP over BLE config"
+    depends on EERIE_LEAP_SMP_BLE
+
+    config EERIE_LEAP_SMP_BLE_RX_TIMEOUT_MS
+        int "Gap between writes after which a partial packet is dropped"
+        default 1000
+
+    config EERIE_LEAP_SMP_BLE_MAX_FIRST_FRAGMENT_SIZE
+        int "Largest first notification of a packet"
+        default 244
+        range 20 512
+        help
+          The first notification of each packet carries the route byte, so it
+          is assembled in a buffer of this size. 244 fills an ATT MTU of 247.
+
+    config EERIE_LEAP_SMP_BLE_REQUESTS_IN_FLIGHT
+        int "Requests a client should keep in flight"
+        default 2
+        range 1 16
+        help
+          Reported by the info characteristic. The SMP buffer pool is shared
+          with the other transports, so this stays below its size.
+endmenu
+
 # Defaults for the MCUmgr core; boards may override them.
 if EERIE_LEAP_SMP
 

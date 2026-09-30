@@ -89,6 +89,8 @@ public:
     size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const override;
     [[nodiscard]] size_t GetNetworkDeviceCount() const override;
     [[nodiscard]] CdmpDeviceInfo GetDeviceInfo() const override;
+    /** @brief Whether another device with that ID is on the network and online. */
+    [[nodiscard]] bool IsDeviceOnline(uint8_t device_id) const;
 
     /**
      * @brief Reports status changes of this unit.
