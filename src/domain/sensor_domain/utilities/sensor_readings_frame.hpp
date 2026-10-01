@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <stdexcept>
 #include <string>
@@ -149,6 +151,23 @@ public:
         const uint32_t sensor_id_hash = GetSensorIdHash(sensor_id);
 
         return TryGetReadingValue(sensor_id_hash);
+    }
+
+    /**
+     * @brief Copies the latest processed values of @p sensor_id_hashes under a single lock.
+     * @param values One entry per hash, empty for a sensor without a processed value yet.
+     */
+    void GetReadingValues(std::span<const uint32_t> sensor_id_hashes, std::span<std::optional<float>> values) const {
+        const size_t count = std::min(sensor_id_hashes.size(), values.size());
+
+        k_sem_take(&processing_semaphore_, K_FOREVER);
+
+        for(size_t i = 0; i < count; i++) {
+            const auto it = reading_values_.find(sensor_id_hashes[i]);
+            values[i] = it != reading_values_.end() ? std::optional<float>(it->second) : std::nullopt;
+        }
+
+        k_sem_give(&processing_semaphore_);
     }
 
     float* GetReadingValuePtr(const std::string& sensor_id) {

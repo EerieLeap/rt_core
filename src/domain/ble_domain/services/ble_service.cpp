@@ -27,17 +27,19 @@ bool BleService::is_initialized_ = false;
 
 BleService::BleService(
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
+    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<ISmpForwarder> smp_forwarder)
         : sensors_processing_service_(std::move(sensors_processing_service)),
-        smp_forwarder_(std::move(smp_forwarder)
-) {}
+        sensor_readings_frame_(std::move(sensor_readings_frame)),
+        smp_forwarder_(std::move(smp_forwarder)) {}
 
 BleService& BleService::Create(
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
-    std::shared_ptr<ISmpForwarder> smp_forwarder
-) {
+    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
+    std::shared_ptr<ISmpForwarder> smp_forwarder) {
 
-    instance_.reset(new BleService(std::move(sensors_processing_service), std::move(smp_forwarder)));
+    instance_.reset(new BleService(
+        std::move(sensors_processing_service), std::move(sensor_readings_frame), std::move(smp_forwarder)));
 
     return *instance_;
 }
@@ -76,7 +78,11 @@ bool BleService::Initialize() {
 bool BleService::InitializeAccessPoint() {
     try {
         access_point_service_ = std::make_shared<AccessPointService>();
-        smp_router_ = std::make_shared<SmpBleRouter>(access_point_service_, smp_forwarder_);
+        smp_router_ = std::make_shared<SmpBleRouter>(access_point_service_->GetSmpNotifier(), smp_forwarder_);
+        live_data_service_ = std::make_shared<LiveDataService>(
+            access_point_service_->GetLiveNotifier(), sensor_readings_frame_);
+        live_mgmt_group_ = std::make_unique<LiveMgmtGroup>(live_data_service_);
+        live_mgmt_group_->Register();
     } catch(const std::exception& e) {
         LOG_ERR("Failed to create the access point: %s", e.what());
         return false;
@@ -89,11 +95,13 @@ bool BleService::InitializeAccessPoint() {
     access_point_service_->Initialize({
             .on_smp_write = [router = smp_router_](std::span<const uint8_t> data) { router->OnReceive(data); },
             .on_smp_sent = [router = smp_router_]() { router->OnNotificationSent(); },
+            .on_live_sent = [live = live_data_service_]() { live->OnNotificationSent(); },
         },
         info);
 
-    Ble::RegisterDisconnectedHandler([router = smp_router_](bt_conn* /*conn*/) {
+    Ble::RegisterDisconnectedHandler([router = smp_router_, live = live_data_service_](bt_conn* /*conn*/) {
         router->OnDisconnected();
+        live->Unsubscribe();
     });
 
     if(smp_forwarder_ != nullptr)

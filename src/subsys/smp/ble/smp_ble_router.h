@@ -10,14 +10,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/mgmt/mcumgr/transport/smp.h>
 
+#include "subsys/bluetooth/i_ble_notifier.h"
 #include "subsys/smp/smp_header.h"
 #include "subsys/smp/smp_packet.h"
 #include "subsys/smp/i_smp_forwarder.h"
 #include "subsys/smp/i_smp_response_sink.h"
 
-#include "i_smp_ble_link.h"
-
 namespace eerie_leap::subsys::smp::ble {
+
+using eerie_leap::subsys::bluetooth::IBleNotifier;
 
 /**
  * @brief Routes SMP between a BLE central and the local SMP server or, through a forwarder, other units.
@@ -42,7 +43,7 @@ public:
 private:
     static std::atomic<SmpBleRouter*> instance_;
 
-    std::shared_ptr<ISmpBleLink> link_;
+    std::shared_ptr<IBleNotifier> notifier_;
     std::shared_ptr<ISmpForwarder> forwarder_;
     smp_transport smp_transport_{};
     bool is_initialized_ = false;
@@ -81,8 +82,11 @@ private:
     void DropTx();
 
 public:
-    /** @param forwarder Reaches the other units; nullptr on a unit that only serves itself. */
-    SmpBleRouter(std::shared_ptr<ISmpBleLink> link, std::shared_ptr<ISmpForwarder> forwarder);
+    /**
+     * @param notifier Notifications on the `smp` characteristic.
+     * @param forwarder Reaches the other units; nullptr on a unit that only serves itself.
+     */
+    SmpBleRouter(std::shared_ptr<IBleNotifier> notifier, std::shared_ptr<ISmpForwarder> forwarder);
     ~SmpBleRouter() override;
 
     SmpBleRouter(const SmpBleRouter&) = delete;

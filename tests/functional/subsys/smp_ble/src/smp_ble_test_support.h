@@ -19,7 +19,7 @@
 #include "subsys/smp/smp_header.h"
 #include "subsys/smp/smp_packet.h"
 #include "subsys/smp/i_smp_forwarder.h"
-#include "subsys/smp/ble/i_smp_ble_link.h"
+#include "subsys/bluetooth/i_ble_notifier.h"
 #include "subsys/smp/ble/smp_ble_router.h"
 
 namespace smp_ble_test {
@@ -178,7 +178,7 @@ inline void ExpectEchoResponse(const RoutedPacket& response, uint8_t route, std:
 }
 
 // The central: records notifications, and runs out of buffers on demand.
-class FakeLink : public ISmpBleLink {
+class FakeLink : public eerie_leap::subsys::bluetooth::IBleNotifier {
 private:
     mutable k_mutex lock_{};
     size_t max_size_ = 20;

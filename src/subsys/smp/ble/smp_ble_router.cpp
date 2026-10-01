@@ -34,8 +34,8 @@ constexpr size_t MAX_PACKET_SIZE = CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE;
 
 std::atomic<SmpBleRouter*> SmpBleRouter::instance_ = nullptr;
 
-SmpBleRouter::SmpBleRouter(std::shared_ptr<ISmpBleLink> link, std::shared_ptr<ISmpForwarder> forwarder)
-    : link_(std::move(link)), forwarder_(std::move(forwarder)) {
+SmpBleRouter::SmpBleRouter(std::shared_ptr<IBleNotifier> notifier, std::shared_ptr<ISmpForwarder> forwarder)
+    : notifier_(std::move(notifier)), forwarder_(std::move(forwarder)) {
 
     SmpBleRouter* expected = nullptr;
     if(!instance_.compare_exchange_strong(expected, this))
@@ -263,7 +263,7 @@ void SmpBleRouter::ProcessTx() {
         }
 
         const SmpBleUserData user_data = UserData(*tx_packet_);
-        const size_t max_size = link_->GetMaxNotificationSize();
+        const size_t max_size = notifier_->GetMaxNotificationSize();
 
         if(user_data.generation != generation_.load() || max_size == 0) {
             tx_packet_.reset();
@@ -284,7 +284,7 @@ void SmpBleRouter::ProcessTx() {
             fragment = std::span(tx_packet_->data + tx_offset_ - 1, std::min(max_size, total - tx_offset_));
         }
 
-        const int result = link_->Notify(fragment);
+        const int result = notifier_->Notify(fragment);
         if(result == -ENOMEM) {
             k_work_schedule(&tx_work_, K_MSEC(TX_RETRY_DELAY_MS));
             return;

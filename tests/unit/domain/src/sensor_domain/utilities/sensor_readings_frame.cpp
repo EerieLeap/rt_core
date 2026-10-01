@@ -1,3 +1,6 @@
+#include <array>
+#include <optional>
+
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
 
@@ -450,4 +453,40 @@ ZTEST(sensor_readings_frame, test_ClearProcessedReadings) {
     // Only the processed snapshot is dropped; the reading and its value survive.
     zassert_true(sensor_readings_frame->HasReading(sensors[1]->id_hash));
     zassert_true(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).has_value());
+}
+
+ZTEST(sensor_readings_frame, test_GetReadingValues_reads_each_hash_in_order) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    SensorReading isr_reading(guid_generator->Generate(), sensors[0]);
+    isr_reading.source = ReadingSource::ISR;
+    isr_reading.status = ReadingStatus::PROCESSED;
+    isr_reading.value = 1.5;
+    sensor_readings_frame->AddOrUpdateReading(isr_reading);
+
+    SensorReading unprocessed(guid_generator->Generate(), sensors[1]);
+    unprocessed.source = ReadingSource::PROCESSING;
+    sensor_readings_frame->AddOrUpdateReading(unprocessed);
+
+    SensorReading processed(guid_generator->Generate(), sensors[2]);
+    processed.source = ReadingSource::PROCESSING;
+    processed.status = ReadingStatus::PROCESSED;
+    processed.value = 3.25;
+    sensor_readings_frame->AddOrUpdateReading(processed);
+
+    const std::array<uint32_t, 4> hashes = {
+        sensors[2]->id_hash, sensors[1]->id_hash, StringHelpers::GetHash("unknown"), sensors[0]->id_hash };
+    std::array<std::optional<float>, 4> values;
+    values.fill(0.0F);
+
+    sensor_readings_frame->GetReadingValues(hashes, values);
+
+    zassert_equal(values[0].value(), 3.25F);
+    zassert_false(values[1].has_value(), "A sensor without a processed value is empty");
+    zassert_false(values[2].has_value());
+    zassert_equal(values[3].value(), 1.5F);
 }

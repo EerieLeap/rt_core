@@ -23,8 +23,9 @@ namespace {
 constexpr bt_le_conn_param FAST_PARAMETERS = BT_LE_CONN_PARAM_INIT(6, 12, 0, 400);
 constexpr bt_le_conn_param IDLE_PARAMETERS = BT_LE_CONN_PARAM_INIT(24, 40, 0, 400);
 
-// The service, then the declaration and the value of `smp`.
+// The service, then declaration, value and CCC of `smp`, then those of `live`.
 constexpr size_t SMP_VALUE_INDEX = 2;
+constexpr size_t LIVE_VALUE_INDEX = 5;
 
 } // namespace
 
@@ -60,7 +61,10 @@ const bt_gatt_attr AccessPointService::attributes_[] = {
 const STRUCT_SECTION_ITERABLE(bt_gatt_service_static, AccessPointService::gatt_service_) =
     BT_GATT_SERVICE(attributes_);
 
-AccessPointService::AccessPointService() {
+AccessPointService::AccessPointService()
+    : smp_notifier_(std::make_shared<Notifier>(&attributes_[SMP_VALUE_INDEX], SmpSentCallback)),
+    live_notifier_(std::make_shared<Notifier>(&attributes_[LIVE_VALUE_INDEX], LiveSentCallback)) {
+
     AccessPointService* expected = nullptr;
     if(!instance_.compare_exchange_strong(expected, this))
         throw std::logic_error("Only one AccessPointService may exist");
@@ -97,38 +101,37 @@ void AccessPointService::Initialize(Callbacks callbacks, std::span<const uint8_t
     });
 }
 
-size_t AccessPointService::GetMaxNotificationSize() const {
+AccessPointService::Notifier::Notifier(const bt_gatt_attr* attribute, bt_gatt_complete_func_t on_sent)
+    : attribute_(attribute), on_sent_(on_sent) {}
+
+size_t AccessPointService::Notifier::GetMaxNotificationSize() const {
     bt_conn* conn = Ble::AcquireActiveConn();
     if(conn == nullptr)
         return 0;
 
     const uint16_t mtu = bt_gatt_get_mtu(conn);
-    const bool is_subscribed = bt_gatt_is_subscribed(conn, GetSmpAttribute(), BT_GATT_CCC_NOTIFY);
+    const bool is_subscribed = bt_gatt_is_subscribed(conn, attribute_, BT_GATT_CCC_NOTIFY);
     bt_conn_unref(conn);
 
     // 3 bytes of ATT header.
     return is_subscribed && mtu > 3 ? mtu - 3 : 0;
 }
 
-int AccessPointService::Notify(std::span<const uint8_t> fragment) {
+int AccessPointService::Notifier::Notify(std::span<const uint8_t> data) {
     bt_conn* conn = Ble::AcquireActiveConn();
     if(conn == nullptr)
         return -ENOTCONN;
 
     bt_gatt_notify_params params{};
-    params.attr = GetSmpAttribute();
-    params.data = fragment.data();
-    params.len = static_cast<uint16_t>(fragment.size());
-    params.func = SmpSentCallback;
+    params.attr = attribute_;
+    params.data = data.data();
+    params.len = static_cast<uint16_t>(data.size());
+    params.func = on_sent_;
 
     const int result = bt_gatt_notify_cb(conn, &params);
     bt_conn_unref(conn);
 
     return result;
-}
-
-const bt_gatt_attr* AccessPointService::GetSmpAttribute() {
-    return &attributes_[SMP_VALUE_INDEX];
 }
 
 ssize_t AccessPointService::SmpWriteCallback(
@@ -165,6 +168,12 @@ void AccessPointService::SmpSentCallback(bt_conn* /*conn*/, void* /*user_data*/)
     AccessPointService* service = instance_.load();
     if(service != nullptr && service->callbacks_.on_smp_sent)
         service->callbacks_.on_smp_sent();
+}
+
+void AccessPointService::LiveSentCallback(bt_conn* /*conn*/, void* /*user_data*/) {
+    AccessPointService* service = instance_.load();
+    if(service != nullptr && service->callbacks_.on_live_sent)
+        service->callbacks_.on_live_sent();
 }
 
 void AccessPointService::OnSmpActivity() {

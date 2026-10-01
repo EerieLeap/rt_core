@@ -14,4 +14,7 @@ target_sources(app PRIVATE
 )
 
 # The test client injects requests with smp_rx_req().
-target_include_directories(app PRIVATE ${ZEPHYR_BASE}/subsys/mgmt/mcumgr/transport/include)
+target_include_directories(app PRIVATE
+  ${RT_CORE_DIR}/tests/common
+  ${ZEPHYR_BASE}/subsys/mgmt/mcumgr/transport/include
+)
