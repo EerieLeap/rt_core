@@ -243,6 +243,14 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    # ======== Controllers ========
+
+    if(CONFIG_EERIE_LEAP_SMP AND CONFIG_EERIE_LEAP_DOMAIN_SYSTEM)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/management_controller.cpp"
+        )
+    endif()
+
     # ========================
 
     file(GLOB_RECURSE SRC ${SRC})
