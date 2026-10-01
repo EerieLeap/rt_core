@@ -59,6 +59,7 @@ private:
     // NOTE: When a work queue is supplied, Save and Load run on it
     // to eliminate cases when configuration is updated from some thread
     // which will require that thread to have enough stack size for the operation.
+    // mutex_ serialises callers off the queue; the queue thread never takes it.
     k_mutex mutex_;
     k_work_sync work_sync_;
     SaveTask task_save_;
@@ -85,6 +86,15 @@ private:
         }
 
         return WriteProcessor(config_bytes);
+    }
+
+    bool SaveNow(T* configuration, std::span<const uint8_t> config_bytes) {
+        return configuration != nullptr ? SaveProcessor(configuration) : WriteProcessor(config_bytes);
+    }
+
+    // The queue runs its processors one at a time, so they need no lock there.
+    bool IsOnWorkQueue() const {
+        return work_queue_thread_ != nullptr && work_queue_thread_->IsCurrentThread();
     }
 
     bool WriteProcessor(std::span<const uint8_t> config_bytes) {
@@ -148,12 +158,14 @@ private:
     bool SaveOnQueue(T* configuration, std::span<const uint8_t> config_bytes) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
+        // Waiting here, in k_work_flush() or for mutex_, could wait for this very thread.
+        if(IsOnWorkQueue())
+            return SaveNow(configuration, config_bytes);
+
         ScopedMutex lock(mutex_);
 
-        // Delegating to a queue we are already running on would park that thread in
-        // k_work_flush() waiting for work that only it can run.
-        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
-            return configuration != nullptr ? SaveProcessor(configuration) : WriteProcessor(config_bytes);
+        if(work_queue_thread_ == nullptr)
+            return SaveNow(configuration, config_bytes);
 
         task_save_.configuration = configuration;
         task_save_.config_bytes = config_bytes;
@@ -171,9 +183,12 @@ private:
     std::optional<LoadedConfig<T>> LoadOnQueue(bool decode) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
+        if(IsOnWorkQueue())
+            return LoadProcessor(decode);
+
         ScopedMutex lock(mutex_);
 
-        if(work_queue_thread_ == nullptr || work_queue_thread_->IsCurrentThread())
+        if(work_queue_thread_ == nullptr)
             return LoadProcessor(decode);
 
         task_load_.decode = decode;
@@ -195,9 +210,7 @@ private:
 
         // An exception unwinding into the work queue loop would abort the system.
         try {
-            task->result = task->configuration != nullptr
-                ? task->instance->SaveProcessor(task->configuration)
-                : task->instance->WriteProcessor(task->config_bytes);
+            task->result = task->instance->SaveNow(task->configuration, task->config_bytes);
         } catch(const std::exception& e) {
             LOG_ERR("Exception while saving configuration: %s", e.what());
             task->result = false;

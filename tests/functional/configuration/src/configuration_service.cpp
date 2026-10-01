@@ -141,6 +141,83 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock
     work_queue_thread->Stop();
 }
 
+namespace {
+
+K_THREAD_STACK_DEFINE(contending_saver_stack, 4096);
+
+struct ContendingSave {
+    CborConfigurationService<CborSystemConfig>* service;
+    CborSystemConfig* config;
+    bool saved;
+};
+
+void SaveFromAnotherThread(void* context, void*, void*) {
+    auto* save = static_cast<ContendingSave*>(context);
+    save->saved = save->service->Save(save->config);
+}
+
+} // namespace
+
+ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_not_wait_for_a_thread_waiting_for_it) {
+    CborSystemConfig queue_config;
+    memset(&queue_config, 0, sizeof(queue_config));
+    queue_config.device_id = 41;
+
+    CborSystemConfig thread_config;
+    memset(&thread_config, 0, sizeof(thread_config));
+    thread_config.device_id = 42;
+
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+        "config_wq_contended", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY);
+    zassert_true(work_queue_thread->Initialize());
+
+    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service, work_queue_thread);
+
+    bool queue_saved = false;
+    k_sem started;
+    k_sem release;
+    k_sem done;
+    k_sem_init(&started, 0, 1);
+    k_sem_init(&release, 0, 1);
+    k_sem_init(&done, 0, 1);
+
+    // Holds the queue until another thread is inside Save(), waiting for the queue.
+    work_queue_thread->Run([&] {
+        k_sem_give(&started);
+        k_sem_take(&release, K_FOREVER);
+        queue_saved = system_config_service->Save(&queue_config);
+        k_sem_give(&done);
+    });
+    zassert_equal(k_sem_take(&started, K_MSEC(SYNC_TIMEOUT_MS)), 0);
+
+    ContendingSave contending{.service = system_config_service.get(), .config = &thread_config, .saved = false};
+    k_thread saver;
+    k_thread_create(&saver, contending_saver_stack, K_THREAD_STACK_SIZEOF(contending_saver_stack),
+        SaveFromAnotherThread, &contending, nullptr, nullptr, CONFIG_QUEUE_PRIORITY, 0, K_NO_WAIT);
+    k_msleep(50);
+
+    k_sem_give(&release);
+
+    zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0,
+        "Save() on the work queue waited for a thread that was waiting for the queue");
+    zassert_equal(k_thread_join(&saver, K_MSEC(SYNC_TIMEOUT_MS)), 0);
+    zassert_true(queue_saved);
+    zassert_true(contending.saved);
+
+    // The queued save ran after the one on the queue.
+    auto loaded_config = system_config_service->Load();
+    zassert_true(loaded_config.has_value());
+    zassert_equal(loaded_config.value().config->device_id, 42);
+
+    work_queue_thread->Stop();
+}
+
 ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_saved) {
     // Create first sensor config
     std::string sensor_1_name = "name 1";
