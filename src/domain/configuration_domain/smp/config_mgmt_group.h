@@ -1,10 +1,12 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <memory_resource>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include <zephyr/kernel.h>
@@ -30,8 +32,9 @@ using eerie_leap::domain::configuration_domain::services::ConfigurationService;
  * on the configuration work queue while the MCUmgr handler waits, so the MCUmgr stack stays small
  * and never unwinds an exception. One write session and one read snapshot exist at a time; both
  * are freed on completion, on error, or after CONFIG_EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS of
- * inactivity. A written configuration is stored as received, so `crc` reports the writer's CRC
- * until the configuration changes locally.
+ * inactivity. A client whose answer to the first write got lost may send that request again: an
+ * exact repeat gets the session's token instead of BUSY. A written configuration is stored as
+ * received, so `crc` reports the writer's CRC until the configuration changes locally.
  */
 class ConfigMgmtGroup : public SmpGroup<ConfigMgmtGroup> {
 public:
@@ -53,9 +56,12 @@ public:
         BAD_TOKEN = 5,    ///< The token or type does not match the open write session.
         BUSY = 6,         ///< Another client has a write session open.
         CRC_MISMATCH = 7,
-        APPLY_FAILED = 8, ///< The configuration was rejected, or could not be stored.
+        APPLY_FAILED = 8, ///< The configuration was rejected, or could not be stored; `msg` gives the reason, if known.
         NO_MEMORY = 9,    ///< The transfer buffer could not be allocated.
     };
+
+    /// Longest `msg` of an APPLY_FAILED; a longer reason is truncated.
+    static constexpr size_t MAX_REASON_LENGTH = 95;
 
 private:
     enum class JobKind : uint8_t {
@@ -103,13 +109,18 @@ private:
     std::optional<WorkQueueTask<ConfigMgmtGroup>> idle_task_;
     Job* job_ = nullptr;
     k_sem job_done_{};
+    // Written by an APPLY job while HandleWrite() waits for it; kept off the small MCUmgr stack.
+    std::array<char, MAX_REASON_LENGTH + 1> apply_reason_{};
 
     int HandleList(smp_streamer* ctxt);
     int HandleCrc(smp_streamer* ctxt);
     int HandleRead(smp_streamer* ctxt);
     int HandleWrite(smp_streamer* ctxt);
 
-    int Fail(smp_streamer* ctxt, Error error);
+    /** @param message Sent as `msg`, unless empty. */
+    int Fail(smp_streamer* ctxt, Error error, std::string_view message = {});
+    /** @param token The session's token, which answers its first chunk; 0 leaves it out. */
+    static int RespondToWrite(smp_streamer* ctxt, size_t received, uint32_t token);
     bool IsKnownType(uint32_t type) const;
     void OnActivity();
 

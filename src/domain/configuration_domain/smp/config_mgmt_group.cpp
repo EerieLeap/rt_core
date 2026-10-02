@@ -238,8 +238,21 @@ int ConfigMgmtGroup::HandleWrite(smp_streamer* ctxt) {
             // The session owner may restart its transfer by presenting its token.
             const bool is_open = session_.token != 0
                 && k_uptime_get() - session_.last_activity_ms < SESSION_TIMEOUT_MS;
-            if(is_open && (!has_token || token != session_.token))
-                return Fail(ctxt, Error::BUSY);
+            if(is_open && (!has_token || token != session_.token)) {
+                // A client whose answer got lost sends its first request again, and gets that answer.
+                const bool is_repeat = session_.type == config_type
+                    && session_.data.size() == length
+                    && session_.crc == crc
+                    && session_.received == data.len
+                    && std::equal(data.value, data.value + data.len, session_.data.begin());
+                if(!is_repeat)
+                    return Fail(ctxt, Error::BUSY);
+
+                session_.last_activity_ms = k_uptime_get();
+                OnActivity();
+
+                return RespondToWrite(ctxt, session_.received, session_.token);
+            }
         }
 
         Job job{.kind = JobKind::STAGE, .type = config_type, .size = length, .crc = crc};
@@ -291,21 +304,32 @@ int ConfigMgmtGroup::HandleWrite(smp_streamer* ctxt) {
         Job job{.kind = JobKind::APPLY, .type = config_type};
         const Error error = RunJob(job);
         if(error != Error::OK)
-            return Fail(ctxt, error);
+            return Fail(ctxt, error, error == Error::APPLY_FAILED ? apply_reason_.data() : "");
     } else {
         OnActivity();
     }
 
+    return RespondToWrite(ctxt, received, offset == 0 ? session_token : 0);
+}
+
+int ConfigMgmtGroup::Fail(smp_streamer* ctxt, Error error, std::string_view message) {
+    if(message.empty())
+        return SmpAddGroupError(ctxt, SmpGroupId::CONFIG, std::to_underlying(error));
+
     zcbor_state_t* zse = ctxt->writer->zs;
-    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, static_cast<uint32_t>(received));
-    if(ok && offset == 0)
-        ok = zcbor_tstr_put_lit(zse, "tok") && zcbor_uint32_put(zse, session_token);
+    const bool ok = smp_add_cmd_err(zse, std::to_underlying(SmpGroupId::CONFIG), std::to_underlying(error))
+        && zcbor_tstr_put_lit(zse, "msg") && zcbor_tstr_encode_ptr(zse, message.data(), message.size());
 
     return MGMT_RETURN_CHECK(ok);
 }
 
-int ConfigMgmtGroup::Fail(smp_streamer* ctxt, Error error) {
-    return SmpAddGroupError(ctxt, SmpGroupId::CONFIG, std::to_underlying(error));
+int ConfigMgmtGroup::RespondToWrite(smp_streamer* ctxt, size_t received, uint32_t token) {
+    zcbor_state_t* zse = ctxt->writer->zs;
+    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, static_cast<uint32_t>(received));
+    if(ok && token != 0)
+        ok = zcbor_tstr_put_lit(zse, "tok") && zcbor_uint32_put(zse, token);
+
+    return MGMT_RETURN_CHECK(ok);
 }
 
 bool ConfigMgmtGroup::IsKnownType(uint32_t type) const {
@@ -372,10 +396,12 @@ ConfigMgmtGroup::Error ConfigMgmtGroup::ExecuteJob(Job& job) {
             if(session_.token == 0 || session_.received != session_.data.size())
                 return Error::BAD_TOKEN;
 
+            apply_reason_.front() = '\0';
+
             Error result = Error::OK;
             if(Crc(session_.data) != session_.crc)
                 result = Error::CRC_MISMATCH;
-            else if(!configuration_service_->ApplyCborConfiguration(session_.type, session_.data))
+            else if(!configuration_service_->ApplyCborConfiguration(session_.type, session_.data, apply_reason_))
                 result = Error::APPLY_FAILED;
 
             CloseSessionLocked();

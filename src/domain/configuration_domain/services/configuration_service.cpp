@@ -4,11 +4,15 @@
 
 namespace eerie_leap::domain::configuration_domain::services {
 
-bool ConfigurationService::ApplyCborConfiguration(Type type, std::span<const uint8_t> cbor_data) {
+bool ConfigurationService::ApplyCborConfiguration(
+    Type type,
+    std::span<const uint8_t> cbor_data,
+    std::span<char> reason) {
+
     if(!cbor_configuration_managers_.contains(type))
         return false;
 
-    return cbor_configuration_managers_.at(type).manager->ApplyCborConfiguration(cbor_data);
+    return cbor_configuration_managers_.at(type).manager->ApplyCborConfiguration(cbor_data, reason);
 }
 
 std::pmr::vector<uint8_t> ConfigurationService::GetCborConfiguration(Type type) {

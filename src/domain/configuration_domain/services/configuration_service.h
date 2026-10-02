@@ -45,8 +45,11 @@ public:
     ConfigurationService() = default;
     virtual ~ConfigurationService() = default;
 
-    /** @return false for an unregistered type, or when the manager rejects or fails to store the data. */
-    bool ApplyCborConfiguration(Type type, std::span<const uint8_t> cbor_data);
+    /**
+     * @param reason Receives the manager's reason when it rejects or fails to store the data.
+     * @return false for an unregistered type, or when the manager rejects or fails to store the data.
+     */
+    bool ApplyCborConfiguration(Type type, std::span<const uint8_t> cbor_data, std::span<char> reason = {});
     /** @return The current configuration, empty for an unregistered type. */
     std::pmr::vector<uint8_t> GetCborConfiguration(Type type);
     /** @return Size and CRC32 of the stored configuration, zero for an unregistered type. */

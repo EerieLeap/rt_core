@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <climits>
+#include <stdexcept>
 #include <utility>
 #include <optional>
 
@@ -79,6 +80,13 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
     auto configuration = make_unique_pmr<CanbusConfiguration>(mr);
 
     for(const auto& canbus_config : config.CborCanChannelConfig_m) {
+        // Narrowing would turn 256 into channel 0.
+        if(canbus_config.bus_channel > UINT8_MAX)
+            throw std::invalid_argument(
+                "Invalid CAN Bus configuration. Channel: "
+                + std::to_string(canbus_config.bus_channel)
+                + ". Bus channel out of range");
+
         CanChannelConfiguration channel_configuration(std::allocator_arg, mr);
 
         channel_configuration.type = static_cast<CanbusType>(canbus_config.type);
@@ -141,6 +149,10 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
         if(!res)
             throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(channel_configuration.bus_channel));
     }
+
+    // Narrowing would turn 256 into channel 0.
+    if(config.com_config.bus_channel > UINT8_MAX)
+        throw std::invalid_argument("Invalid CAN Bus COM configuration. COM bus channel out of range");
 
     configuration->com_configuration = {
         .bus_channel = config.com_config.bus_channel >= 0

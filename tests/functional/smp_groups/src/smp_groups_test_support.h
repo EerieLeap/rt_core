@@ -47,11 +47,16 @@ public:
     Bytes stored;
     int apply_count = 0;
     bool reject = false;
+    std::string rejection_reason;
 
-    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data) override {
+    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
         apply_count++;
-        if(reject)
+        if(reject) {
+            // Without a reason the buffer is left alone, as a real manager may.
+            if(!rejection_reason.empty())
+                SetReason(reason, rejection_reason);
             return false;
+        }
 
         stored.assign(cbor_data.begin(), cbor_data.end());
         return true;

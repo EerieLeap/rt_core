@@ -132,12 +132,16 @@ public:
         return true;
     }
 
-    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data) override {
+    using ICborConfigurationManager::ApplyCborConfiguration;
+
+    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
         LOG_MODULE_DECLARE(configuration_manager_logger);
 
         auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
-        if(cbor_config == nullptr)
+        if(cbor_config == nullptr) {
+            SetReason(reason, "Malformed CBOR");
             return false;
+        }
 
         std::shared_ptr<TConfiguration> configuration;
 
@@ -145,10 +149,13 @@ public:
             configuration = Share(Deserialize(*cbor_config));
 
             // Stored as received, so its CRC stays the one the sender computed.
-            if(!cbor_configuration_service_->Save(cbor_data))
+            if(!cbor_configuration_service_->Save(cbor_data)) {
+                SetReason(reason, "Could not store the configuration");
                 return false;
+            }
         } catch(const std::exception& e) {
             LOG_ERR("Failed to apply %s CBOR configuration. %s", name_, e.what());
+            SetReason(reason, e.what());
             return false;
         }
 

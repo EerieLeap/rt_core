@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
 
@@ -167,4 +169,41 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_without_com_cha
 
     zassert_false(deserialized_canbus_configuration->com_configuration.bus_channel.has_value());
     canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
+}
+
+ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_com_channel_out_of_range) {
+    CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
+
+    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+
+    // Channel 0 is configured, which 256 must not wrap to.
+    serialized_canbus_configuration->com_config.bus_channel = 256;
+
+    try {
+        canbus_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_canbus_configuration);
+        zassert_unreachable("A COM bus channel of 256 was accepted");
+    } catch(const std::invalid_argument& e) {
+        zassert_str_equal(e.what(), "Invalid CAN Bus COM configuration. COM bus channel out of range");
+    }
+}
+
+ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_channel_out_of_range) {
+    CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
+
+    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+
+    // 258 would wrap to channel 2, the one it replaces.
+    for(auto& channel_config : serialized_canbus_configuration->CborCanChannelConfig_m) {
+        if(channel_config.bus_channel == 2)
+            channel_config.bus_channel = 258;
+    }
+
+    try {
+        canbus_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_canbus_configuration);
+        zassert_unreachable("A CAN bus channel of 258 was accepted");
+    } catch(const std::invalid_argument& e) {
+        zassert_str_equal(e.what(), "Invalid CAN Bus configuration. Channel: 258. Bus channel out of range");
+    }
 }

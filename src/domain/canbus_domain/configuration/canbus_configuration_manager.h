@@ -43,8 +43,10 @@ public:
 
     void RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) override;
 
+    using CborConfigurationManagerBase::ApplyCborConfiguration;
+
     bool Update(const CanbusConfiguration& configuration);
-    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data) override;
+    bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 };
 
 } // namespace eerie_leap::domain::canbus_domain::configuration

@@ -267,11 +267,45 @@ ZTEST_F(smp_config_group, test_rejected_configuration_reports_apply_failed) {
     const Bytes data = Pattern(1200, 4);
     harness.canbus->reject = true;
 
-    AssertError(harness.WriteAll(CANBUS, data, Crc(data)), Error::APPLY_FAILED);
+    auto response = harness.WriteAll(CANBUS, data, Crc(data));
+    AssertError(response, Error::APPLY_FAILED);
+    zassert_false(response.Has("msg"), "Without a reason there is no msg");
     zassert_equal(harness.canbus->apply_count, 1);
 
     harness.canbus->reject = false;
     zassert_true(harness.WriteAll(CANBUS, data, Crc(data)).IsOk(), "A failed write closes its session");
+}
+
+ZTEST_F(smp_config_group, test_apply_failed_carries_the_managers_reason) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1200, 4);
+    harness.canbus->reject = true;
+    harness.canbus->rejection_reason = "Invalid CAN Bus COM configuration. COM bus channel is not configured";
+
+    auto response = harness.WriteAll(CANBUS, data, Crc(data));
+
+    AssertError(response, Error::APPLY_FAILED);
+    zassert_equal(response.texts["msg"], harness.canbus->rejection_reason);
+
+    harness.canbus->rejection_reason.clear();
+    zassert_false(harness.WriteAll(CANBUS, data, Crc(data)).Has("msg"), "A reason does not outlive its write");
+}
+
+ZTEST_F(smp_config_group, test_a_long_reason_is_truncated_between_characters) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1200, 4);
+    harness.canbus->reject = true;
+
+    harness.canbus->rejection_reason = std::string(200, 'x');
+    auto response = harness.WriteAll(CANBUS, data, Crc(data));
+    AssertError(response, Error::APPLY_FAILED);
+    zassert_equal(response.texts["msg"], std::string(ConfigMgmtGroup::MAX_REASON_LENGTH, 'x'));
+
+    // A two-byte UTF-8 character that would straddle the limit is left out whole.
+    const std::string prefix(ConfigMgmtGroup::MAX_REASON_LENGTH - 1, 'x');
+    harness.canbus->rejection_reason = prefix + "\xC3\xA9";
+    response = harness.WriteAll(CANBUS, data, Crc(data));
+    zassert_equal(response.texts["msg"], prefix);
 }
 
 ZTEST_F(smp_config_group, test_second_writer_is_busy_until_the_owner_restarts) {
@@ -287,6 +321,51 @@ ZTEST_F(smp_config_group, test_second_writer_is_busy_until_the_owner_restarts) {
     auto restarted = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data), token);
     zassert_true(restarted.IsOk(), "The owner may restart with its token");
     zassert_not_equal(restarted.Value("tok"), token, "A restart opens a new session");
+}
+
+ZTEST_F(smp_config_group, test_a_repeated_first_request_gets_the_sessions_token) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(2000, 13);
+    const auto first_chunk = std::span(data).first(WRITE_CHUNK_SIZE);
+
+    auto first = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
+    zassert_true(first.IsOk());
+
+    // The answer got lost, so the client sends the same request again.
+    auto repeated = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
+    zassert_true(repeated.IsOk(), "A repeat of the first request is not BUSY");
+    zassert_equal(repeated.Value("off"), WRITE_CHUNK_SIZE);
+    zassert_equal(repeated.Value("tok"), first.Value("tok"));
+
+    const uint32_t token = repeated.Value("tok");
+    zassert_true(harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token,
+        std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE)).IsOk());
+    zassert_true(harness.WriteNext(CANBUS, 2 * WRITE_CHUNK_SIZE, token,
+        std::span(data).subspan(2 * WRITE_CHUNK_SIZE)).IsOk());
+    zassert_equal(harness.canbus->apply_count, 1);
+    zassert_true(harness.canbus->stored == data);
+}
+
+ZTEST_F(smp_config_group, test_only_an_exact_repeat_of_the_first_request_gets_the_token) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(2000, 14);
+    const auto first_chunk = std::span(data).first(WRITE_CHUNK_SIZE);
+
+    auto first = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
+    zassert_true(first.IsOk());
+
+    Bytes other_chunk(first_chunk.begin(), first_chunk.end());
+    other_chunk.back() ^= 0xFF;
+    AssertError(harness.WriteFirst(CANBUS, other_chunk, data.size(), Crc(data)), Error::BUSY);
+    AssertError(harness.WriteFirst(CANBUS, first_chunk.first(100), data.size(), Crc(data)), Error::BUSY);
+    AssertError(harness.WriteFirst(CANBUS, first_chunk, data.size() + 1, Crc(data)), Error::BUSY);
+    AssertError(harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data) + 1), Error::BUSY);
+    AssertError(harness.WriteFirst(UI, first_chunk, data.size(), Crc(data)), Error::BUSY);
+
+    const uint32_t token = first.Value("tok");
+    zassert_true(harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token,
+        std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE)).IsOk(), "The session is untouched");
+    AssertError(harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data)), Error::BUSY);
 }
 
 ZTEST_F(smp_config_group, test_wrong_token_is_rejected) {

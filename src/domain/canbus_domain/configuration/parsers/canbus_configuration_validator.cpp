@@ -372,10 +372,7 @@ void CanbusConfigurationValidator::ValidateSignalName(const CanMessageConfigurat
 
 void CanbusConfigurationValidator::ValidateSignalUnit(const CanMessageConfiguration& message_configuration, uint8_t bus_channel) {
     for(const auto& signal : message_configuration.signal_configurations) {
-        if(signal.name.empty())
-            continue;
-
-        if(signal.name.size() > 32)
+        if(signal.unit.size() > 32)
             InvalidCanSignalConfiguration(
                 bus_channel,
                 message_configuration.frame_id,

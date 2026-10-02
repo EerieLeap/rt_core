@@ -1,5 +1,7 @@
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
@@ -53,6 +55,19 @@ bool Validates(const CanbusConfiguration& configuration) {
     }
 
     return true;
+}
+
+CanbusConfiguration MakeConfigurationWithSignalUnit(std::string_view unit) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+
+    CanSignalConfiguration signal(std::allocator_arg, Mrm::GetDefaultPmr());
+    signal.size_bits = 8;
+    signal.SetName("sensor_0");
+    signal.unit = unit;
+    configuration.channel_configurations.at(0).message_configurations.front()->signal_configurations.emplace_back(
+        std::move(signal));
+
+    return configuration;
 }
 
 } // namespace
@@ -137,4 +152,13 @@ ZTEST(canbus_configuration_validator, test_smp_bus_share_must_be_a_percentage) {
         configuration.com_configuration.smp_bus_share_percent = share;
         zassert_true(Validates(configuration), "Rejected bus share %u %%.", static_cast<unsigned>(share));
     }
+}
+
+ZTEST(canbus_configuration_validator, test_signal_unit_cannot_be_longer_than_32_characters) {
+    zassert_true(Validates(MakeConfigurationWithSignalUnit(std::string(32, 'u'))));
+    zassert_false(Validates(MakeConfigurationWithSignalUnit(std::string(33, 'u'))));
+}
+
+ZTEST(canbus_configuration_validator, test_signal_unit_may_be_empty) {
+    zassert_true(Validates(MakeConfigurationWithSignalUnit("")));
 }

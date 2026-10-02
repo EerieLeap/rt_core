@@ -72,11 +72,12 @@ public:
 
 using Entry = std::map<std::string, uint32_t>;
 
-// A decoded response body: unsigned values, byte strings, one list of maps and the group error.
+// A decoded response body: unsigned values, byte and text strings, one list of maps and the group error.
 struct Response {
     SmpHeader header;
     std::map<std::string, uint32_t> values;
     std::map<std::string, Bytes> bytes;
+    std::map<std::string, std::string> texts;
     std::vector<Entry> entries;
     std::optional<uint32_t> error_group;
     std::optional<uint32_t> error;
@@ -87,7 +88,9 @@ struct Response {
         return it->second;
     }
 
-    [[nodiscard]] bool Has(const std::string& key) const { return values.contains(key) || bytes.contains(key); }
+    [[nodiscard]] bool Has(const std::string& key) const {
+        return values.contains(key) || bytes.contains(key) || texts.contains(key);
+    }
     [[nodiscard]] bool IsOk() const { return !error.has_value() && !values.contains("rc"); }
 };
 
@@ -149,6 +152,13 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                 if(!zcbor_bstr_decode(zsd, &value))
                     return false;
                 response.bytes[name] = Bytes(value.value, value.value + value.len);
+                break;
+            }
+            case 3: {
+                zcbor_string value{};
+                if(!zcbor_tstr_decode(zsd, &value))
+                    return false;
+                response.texts[name] = std::string(reinterpret_cast<const char*>(value.value), value.len);
                 break;
             }
             case 4: {

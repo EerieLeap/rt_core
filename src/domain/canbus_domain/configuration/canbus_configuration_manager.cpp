@@ -30,8 +30,8 @@ bool CanbusConfigurationManager::Update(const CanbusConfiguration& configuration
     return true;
 }
 
-bool CanbusConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {
-    if(!CborConfigurationManagerBase::ApplyCborConfiguration(cbor_data))
+bool CanbusConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) {
+    if(!CborConfigurationManagerBase::ApplyCborConfiguration(cbor_data, reason))
         return false;
 
     if(configuration_updated_handler_)

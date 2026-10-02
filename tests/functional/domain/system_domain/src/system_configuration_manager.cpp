@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <span>
 #include <vector>
@@ -89,6 +90,13 @@ uint32_t Crc(std::span<const uint8_t> data) {
     return crc32_ieee(data.data(), data.size());
 }
 
+// Can take the filesystem away from under a manager.
+class UnmountableFsService : public FsService {
+public:
+    using FsService::FsService;
+    using FsService::Unmount;
+};
+
 // The same two-element array with the other length encoding than zcbor's.
 std::vector<uint8_t> OtherArrayEncoding(std::span<const uint8_t> cbor) {
     constexpr uint8_t INDEFINITE_ARRAY = 0x9F;
@@ -138,8 +146,26 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborCon
     auto padded = manager->GetCborConfiguration();
     padded.push_back(0x00);
 
-    zassert_false(manager->ApplyCborConfiguration(padded));
+    std::array<char, 64> reason{};
+    zassert_false(manager->ApplyCborConfiguration(padded, reason));
+    zassert_str_equal(reason.data(), "Malformed CBOR");
     zassert_equal(manager->GetCborConfigurationInfo().crc, before.crc);
+}
+
+ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborConfiguration_reports_a_failed_store) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<UnmountableFsService>(DtFs::GetInternalFsMp());
+    fs_service->Format();
+    auto manager = CreateManager(fs_service);
+    const auto exported = manager->GetCborConfiguration();
+
+    fs_service->Unmount();
+
+    std::array<char, 64> reason{};
+    zassert_false(manager->ApplyCborConfiguration(exported, reason));
+    zassert_str_equal(reason.data(), "Could not store the configuration");
+
+    zassert_true(fs_service->Initialize(), "Mounted again for the other tests");
 }
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Update_reports_the_crc_of_its_own_encoding) {

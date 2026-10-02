@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
@@ -170,4 +171,28 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfigura
         std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service), adc_manager);
 
     expect_imported_configuration(reloaded_adc_configuration_manager->Get());
+}
+
+ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfiguration_reports_why_it_rejects) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    AdcFactory adc_factory(nullptr);
+    auto adc_manager = adc_factory.Create();
+    adc_manager->Initialize();
+
+    auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service), adc_manager);
+
+    eerie_leap::configuration::cbor::CborSerializer<CborAdcConfig> serializer;
+    const auto exported = adc_configuration_manager->GetCborConfiguration();
+    auto cbor_config = serializer.Deserialize(exported);
+    zassert_not_null(cbor_config.get());
+    cbor_config->samples = 0;
+
+    std::array<char, 96> reason{};
+    zassert_false(adc_configuration_manager->ApplyCborConfiguration(serializer.Serialize(*cbor_config), reason));
+    zassert_str_equal(reason.data(), "Invalid ADC configuration. Samples must be greater than 0.");
 }
