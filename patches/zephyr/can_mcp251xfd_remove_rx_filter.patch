@@ -1,0 +1,26 @@
+diff --git a/drivers/can/can_mcp251xfd.c b/drivers/can/can_mcp251xfd.c
+--- a/drivers/can/can_mcp251xfd.c
++++ b/drivers/can/can_mcp251xfd.c
+@@ -626,7 +626,6 @@ static void mcp251xfd_remove_rx_filter(const struct device *dev, int filter_idx)
+ {
+ 	struct mcp251xfd_data *dev_data = dev->data;
+ 	uint8_t *reg_byte;
+-	uint32_t *reg;
+ 	int ret;
+
+ 	if (filter_idx < 0 || filter_idx >= CONFIG_CAN_MCP251XFD_MAX_FILTERS) {
+@@ -647,14 +646,6 @@ static void mcp251xfd_remove_rx_filter(const struct device *dev, int filter_idx)
+
+ 	dev_data->filter_usage &= ~BIT(filter_idx);
+
+-	reg = mcp251xfd_get_spi_buf_ptr(dev);
+-	reg[0] = 0;
+-
+-	ret = mcp251xfd_write(dev, MCP251XFD_REG_FLTCON(filter_idx), MCP251XFD_REG_SIZE);
+-	if (ret < 0) {
+-		LOG_ERR("Failed to write FLTCON register [%d]", ret);
+-	}
+-
+ done:
+ 	k_mutex_unlock(&dev_data->mutex);
+ }
