@@ -60,8 +60,8 @@ public:
         NO_MEMORY = 9,    ///< The transfer buffer could not be allocated.
     };
 
-    /// Longest `msg` of an APPLY_FAILED; a longer reason is truncated.
-    static constexpr size_t MAX_REASON_LENGTH = 95;
+    /// Longest `msg` of an APPLY_FAILED, room for the validators' messages; a longer reason is truncated.
+    static constexpr size_t MAX_REASON_LENGTH = 191;
 
 private:
     enum class JobKind : uint8_t {

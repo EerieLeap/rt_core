@@ -287,6 +287,12 @@ ZTEST_F(smp_config_group, test_apply_failed_carries_the_managers_reason) {
     AssertError(response, Error::APPLY_FAILED);
     zassert_equal(response.texts["msg"], harness.canbus->rejection_reason);
 
+    // About the CAN validator's longest message, with names as long as it allows.
+    const std::string name(32, 'n');
+    harness.canbus->rejection_reason = "Invalid CAN Signal configuration. Channel: 255, Frame ID: 0x1FFFFFFF, Signal: "
+        + name + ". Cannot contain duplicate signal names. " + name;
+    zassert_equal(harness.WriteAll(CANBUS, data, Crc(data)).texts["msg"], harness.canbus->rejection_reason);
+
     harness.canbus->rejection_reason.clear();
     zassert_false(harness.WriteAll(CANBUS, data, Crc(data)).Has("msg"), "A reason does not outlive its write");
 }

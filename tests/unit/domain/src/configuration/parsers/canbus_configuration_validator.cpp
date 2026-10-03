@@ -57,6 +57,16 @@ bool Validates(const CanbusConfiguration& configuration) {
     return true;
 }
 
+std::string RejectionOf(const CanbusConfiguration& configuration) {
+    try {
+        CanbusConfigurationValidator::Validate(configuration, nullptr);
+    } catch(const std::invalid_argument& e) {
+        return e.what();
+    }
+
+    return {};
+}
+
 CanbusConfiguration MakeConfigurationWithSignalUnit(std::string_view unit) {
     auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
 
@@ -161,4 +171,21 @@ ZTEST(canbus_configuration_validator, test_signal_unit_cannot_be_longer_than_32_
 
 ZTEST(canbus_configuration_validator, test_signal_unit_may_be_empty) {
     zassert_true(Validates(MakeConfigurationWithSignalUnit("")));
+}
+
+ZTEST(canbus_configuration_validator, test_messages_give_frame_ids_in_hex) {
+    auto configuration = MakeConfigurationWithSignalUnit("km/h");
+    auto& channel = configuration.channel_configurations.at(0);
+    auto& message = *channel.message_configurations.front();
+    channel.is_extended_id = true;
+    message.frame_id = 0x18FFAB12;
+
+    message.signal_configurations.front().factor = 0.0F;
+    zassert_str_equal(RejectionOf(configuration).c_str(),
+        "Invalid CAN Signal configuration. Channel: 0, Frame ID: 0x18FFAB12, Signal: sensor_0. Factor cannot be zero.");
+
+    message.signal_configurations.front().factor = 1.0F;
+    message.send_interval_ms = 0;
+    zassert_str_equal(RejectionOf(configuration).c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x18FFAB12. Invalid send interval.");
 }

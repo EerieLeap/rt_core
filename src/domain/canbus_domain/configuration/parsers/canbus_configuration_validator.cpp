@@ -2,6 +2,8 @@
 #include <string>
 #include <unordered_set>
 #include <algorithm>
+#include <cinttypes>
+#include <cstdio>
 
 #include "canbus_configuration_validator.h"
 #include "domain/canbus_domain/models/can_channel_configuration.h"
@@ -28,12 +30,20 @@ static void InvalidCanbusComConfiguration(std::string_view message) {
     throw std::invalid_argument("Invalid CAN Bus COM configuration. " + std::string(message));
 }
 
+// In hex, as CAN tools and the app show frame IDs.
+static std::string FrameIdText(uint32_t frame_id) {
+    char text[sizeof("0xFFFFFFFF")];
+    snprintf(text, sizeof(text), "0x%" PRIX32, frame_id);
+
+    return text;
+}
+
 static void InvalidCanMessageConfiguration(const uint8_t bus_channel, uint32_t frame_id, std::string_view message) {
     throw std::invalid_argument(
         "Invalid CAN Frame configuration. Channel: "
         + std::to_string(bus_channel)
         + ", Frame ID: "
-        + std::to_string(frame_id)
+        + FrameIdText(frame_id)
         + ". "
         + std::string(message));
 }
@@ -48,7 +58,7 @@ static void InvalidCanSignalConfiguration(
         "Invalid CAN Signal configuration. Channel: "
         + std::to_string(bus_channel)
         + ", Frame ID: "
-        + std::to_string(frame_id)
+        + FrameIdText(frame_id)
         + ", Signal: "
         + std::string(signal_name)
         + ". "
