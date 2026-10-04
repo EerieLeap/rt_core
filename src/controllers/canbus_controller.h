@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -28,12 +29,16 @@ using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 using eerie_leap::domain::canbus_com_domain::smp::NetworkMgmtGroup;
 
 class CanbusController {
+public:
+    using ConfigurationSetup = std::function<void(std::shared_ptr<CanbusConfigurationManager>)>;
+
 private:
     static constexpr const char* CANBUS_CONFIGURATION_NAME = "canbus_config";
 
     std::shared_ptr<IFsService> fs_service_;
     std::shared_ptr<WorkQueueThread> config_work_queue_thread_;
     std::shared_ptr<ConfigurationService> configuration_service_;
+    std::shared_ptr<IFsService> sd_fs_service_;
 
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager_;
     std::shared_ptr<CanbusService> canbus_service_;
@@ -44,20 +49,19 @@ private:
 
     void Reconfigure();
 
-    // TODO: For test purposes only
-    void SetupTestConfiguration();
-
 public:
     CanbusController(
         std::shared_ptr<IFsService> fs_service,
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
-        std::shared_ptr<ConfigurationService> configuration_service);
+        std::shared_ptr<ConfigurationService> configuration_service,
+        std::shared_ptr<IFsService> sd_fs_service = nullptr);
 
-    int Initialize();
+    int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();
 
     void RegisterDependentService(std::shared_ptr<IService> service);
 
+    std::shared_ptr<CanbusConfigurationManager> GetConfigurationManager() const { return canbus_configuration_manager_; }
     std::shared_ptr<CanbusService> GetService() const { return canbus_service_; }
     std::shared_ptr<CanbusComService> GetComService() const { return canbus_com_service_; }
 };

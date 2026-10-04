@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include "utilities/guid/guid_generator.h"
@@ -13,8 +14,10 @@
 
 #include "domain/canbus_domain/services/canbus_service.h"
 
+#include "domain/sensor_domain/configuration/adc_configuration_manager.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "domain/sensor_domain/isr_sensor_readers/isr_sensor_reader_factory.h"
+#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
 #include "domain/sensor_domain/services/sensors_processing_service.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
@@ -30,12 +33,17 @@ using eerie_leap::subsys::time::ITimeService;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 
+using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
+using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
 using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 
 class SensorsController {
+public:
+    using ConfigurationSetup = std::function<void(std::shared_ptr<SensorsConfigurationManager>)>;
+
 private:
     static constexpr const char* SENSORS_CONFIGURATION_NAME = "sensors_config";
 
@@ -47,13 +55,13 @@ private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<IGpio> gpio_;
+    std::shared_ptr<AdcConfigurationManager> adc_configuration_manager_;
+    std::shared_ptr<IFsService> sd_fs_service_;
 
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory_;
+    std::shared_ptr<SensorReaderFactory> sensor_reader_factory_;
     std::shared_ptr<SensorsProcessingService> sensors_processing_service_;
-
-    // TODO: For test purposes only
-    void SetupTestConfiguration();
 
 public:
     SensorsController(
@@ -64,11 +72,15 @@ public:
         std::shared_ptr<GuidGenerator> guid_generator,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
         std::shared_ptr<CanbusService> canbus_service,
-        std::shared_ptr<IGpio> gpio);
+        std::shared_ptr<IGpio> gpio,
+        // Polled sensors (analog, indicator, virtual, user) are only processed when provided.
+        std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
+        std::shared_ptr<IFsService> sd_fs_service = nullptr);
 
-    int Initialize();
+    int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();
 
+    std::shared_ptr<SensorsConfigurationManager> GetConfigurationManager() const { return sensors_configuration_manager_; }
     std::shared_ptr<SensorsProcessingService> GetProcessingService() const { return sensors_processing_service_; }
 
     // TODO: For test purposes only
