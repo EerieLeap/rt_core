@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "subsys/fs/services/i_fs_service.h"
@@ -19,6 +20,7 @@ namespace eerie_leap::controllers {
 
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::IService;
+using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueThread;
 
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
@@ -47,6 +49,8 @@ private:
 
     std::vector<std::shared_ptr<IService>> dependent_services_;
 
+    std::optional<WorkQueueTask<CanbusController>> reconfigure_task_;
+
     void Reconfigure();
 
 public:
@@ -55,6 +59,7 @@ public:
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
         std::shared_ptr<ConfigurationService> configuration_service,
         std::shared_ptr<IFsService> sd_fs_service = nullptr);
+    ~CanbusController();
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();

@@ -20,6 +20,7 @@ using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::device_tree;
 using namespace eerie_leap::domain::canbus_domain::models;
+using eerie_leap::subsys::threading::WorkQueueTaskResult;
 
 namespace config_services = eerie_leap::configuration::services;
 
@@ -34,6 +35,11 @@ CanbusController::CanbusController(
       config_work_queue_thread_(std::move(config_work_queue_thread)),
       configuration_service_(std::move(configuration_service)),
       sd_fs_service_(std::move(sd_fs_service)) {}
+
+CanbusController::~CanbusController() {
+    if(reconfigure_task_.has_value())
+        reconfigure_task_->Cancel();
+}
 
 int CanbusController::Initialize(const ConfigurationSetup& setup_test_configuration) {
     auto cbor_canbus_config_service = std::make_unique<config_services::CborConfigurationService<CborCanbusConfig>>(
@@ -60,8 +66,18 @@ int CanbusController::Initialize(const ConfigurationSetup& setup_test_configurat
     network_mgmt_group_ = std::make_unique<NetworkMgmtGroup>(canbus_com_service_->GetNetworkInfo());
     network_mgmt_group_->Register();
 
+    reconfigure_task_ = config_work_queue_thread_->CreateTask(
+        [](CanbusController* controller) {
+            controller->Reconfigure();
+            return WorkQueueTaskResult{};
+        }, this);
+
     // Registered last so the test configuration above does not trigger a reconfiguration.
-    canbus_configuration_manager_->RegisterConfigurationUpdatedHandler([this] { Reconfigure(); });
+    canbus_configuration_manager_->RegisterConfigurationUpdatedHandler([this] {
+        // Restarting the CAN bus services drops what the SMP CAN transport has yet to send, so the
+        // request that stored the configuration, which may have come over the bus, is answered first.
+        reconfigure_task_->Reschedule(K_MSEC(CONFIG_EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS));
+    });
 
     return 0;
 }

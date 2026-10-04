@@ -20,6 +20,16 @@ config EERIE_LEAP_CONTROLLER_CANBUS
     help
       Add EerieLeap CANBus Controller.
 
+config EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS
+    int "Delay before a new CAN bus configuration takes effect"
+    depends on EERIE_LEAP_CONTROLLER_CANBUS
+    default 250
+    help
+      Restarting the CAN bus services drops what the SMP CAN transport has
+      yet to send, so the request that stored the configuration, which may
+      have come over the CAN bus, is answered first. Each update restarts
+      the delay.
+
 config EERIE_LEAP_CONTROLLER_SENSORS
     bool "EerieLeap Sensors Controller"
     depends on EERIE_LEAP_DOMAIN_SENSOR && EERIE_LEAP_DOMAIN_CANBUS
