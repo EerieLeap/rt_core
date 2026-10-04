@@ -269,12 +269,6 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
-    if(CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
-        list(APPEND SRC
-            "${SRC_DIR}/controllers/logging_controller.cpp"
-        )
-    endif()
-
     if(CONFIG_EERIE_LEAP_CONTROLLER_BLE)
         list(APPEND SRC
             "${SRC_DIR}/controllers/ble_controller.cpp"

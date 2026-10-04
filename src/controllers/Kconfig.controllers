@@ -28,14 +28,6 @@ config EERIE_LEAP_CONTROLLER_SENSORS
     help
       Add EerieLeap Sensors Controller.
 
-config EERIE_LEAP_CONTROLLER_LOGGING
-    bool "EerieLeap Logging Controller"
-    depends on EERIE_LEAP_DOMAIN_CANBUS_COM && EERIE_LEAP_EVENT_BUS
-    depends on EERIE_LEAP_GPIO && EERIE_LEAP_DEVICE_TREE
-    select EERIE_LEAP_THREADING
-    help
-      Add EerieLeap Logging Controller.
-
 config EERIE_LEAP_CONTROLLER_BLE
     bool "EerieLeap BLE Controller"
     depends on EERIE_LEAP_DOMAIN_BLE
