@@ -91,4 +91,6 @@ rsource "src/domain/system_domain/Kconfig.system_domain"
 rsource "src/domain/canbus_com_domain/Kconfig.canbus_com_domain"
 rsource "src/domain/sensor_domain/Kconfig.sensor_domain"
 rsource "src/domain/logging_domain/Kconfig.logging_domain"
+
+rsource "src/controllers/Kconfig.controllers"
 endmenu

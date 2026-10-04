@@ -245,9 +245,39 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
 
     # ======== Controllers ========
 
-    if(CONFIG_EERIE_LEAP_SMP AND CONFIG_EERIE_LEAP_DOMAIN_SYSTEM)
+    if(CONFIG_EERIE_LEAP_CONTROLLER_SYSTEM)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/system_controller.cpp"
+        )
+    endif()
+
+    if(CONFIG_EERIE_LEAP_CONTROLLER_MANAGEMENT)
         list(APPEND SRC
             "${SRC_DIR}/controllers/management_controller.cpp"
+        )
+    endif()
+
+    if(CONFIG_EERIE_LEAP_CONTROLLER_CANBUS)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/canbus_controller.cpp"
+        )
+    endif()
+
+    if(CONFIG_EERIE_LEAP_CONTROLLER_SENSORS)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/sensors_controller.cpp"
+        )
+    endif()
+
+    if(CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/logging_controller.cpp"
+        )
+    endif()
+
+    if(CONFIG_EERIE_LEAP_CONTROLLER_BLE)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/ble_controller.cpp"
         )
     endif()
 
