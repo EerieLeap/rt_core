@@ -14,8 +14,10 @@ private:
     std::unique_ptr<MathParser> math_parser_;
     std::string expression_;
     float x_;
+    bool uses_x_ = false;
 
 public:
+    // Throws std::invalid_argument for an expression that does not parse.
     explicit ExpressionEvaluator(std::string expression);
     virtual ~ExpressionEvaluator() = default;
 
@@ -23,9 +25,11 @@ public:
     ExpressionEvaluator& operator=(const ExpressionEvaluator&) = delete;
 
     const std::string& GetExpression() const;
-    const std::unordered_set<std::string> GetVariableNames() const;
+    const std::unordered_set<std::string>& GetVariableNames() const;
     void RegisterVariableValueHandler(const MathParser::VariableFactoryHandler& handler);
 
+    // Throws std::invalid_argument when the expression uses x and none is given,
+    // std::runtime_error when the parser fails.
     float Evaluate(std::optional<float> x = std::nullopt);
 };
 

@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <optional>
 
 #include <zephyr/ztest.h>
@@ -290,7 +291,11 @@ ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
     auto sensor_readings_frame = helper.sensor_readings_frame;
     auto sensors = sensor_readings_frame_GetTestSensors();
 
-    zassert_is_null(sensor_readings_frame->GetReadingValuePtr("sensor_2"));
+    // A slot exists before the first reading, so an evaluator never binds a null pointer.
+    float* value_ptr = sensor_readings_frame->GetReadingValuePtr("sensor_2");
+    zassert_not_null(value_ptr);
+    zassert_true(std::isnan(*value_ptr));
+    zassert_false(sensor_readings_frame->TryGetReadingValue("sensor_2").has_value(), "An empty slot is not a value");
 
     SensorReading reading(guid_generator->Generate(), sensors[1]);
     reading.source = ReadingSource::PROCESSING;
@@ -298,10 +303,9 @@ ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
     reading.value = 1.5;
     sensor_readings_frame->AddOrUpdateReading(reading);
 
-    float* value_ptr = sensor_readings_frame->GetReadingValuePtr("sensor_2");
-
-    zassert_not_null(value_ptr);
+    zassert_equal(sensor_readings_frame->GetReadingValuePtr("sensor_2"), value_ptr);
     zassert_equal(*value_ptr, 1.5F);
+    zassert_equal(sensor_readings_frame->TryGetReadingValue("sensor_2").value(), 1.5F);
 
     // The pointer aliases the stored value so evaluators observe later updates.
     SensorReading update(guid_generator->Generate(), sensors[1]);
@@ -312,6 +316,55 @@ ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
 
     zassert_equal(*value_ptr, 9.5F);
     zassert_equal(sensor_readings_frame->GetReadingValuePtr("sensor_2"), value_ptr);
+
+    // Clearing resets the slot instead of freeing it, so bound evaluators stay valid.
+    sensor_readings_frame->ClearReadings();
+
+    zassert_equal(sensor_readings_frame->GetReadingValuePtr("sensor_2"), value_ptr);
+    zassert_true(std::isnan(*value_ptr));
+    zassert_false(sensor_readings_frame->TryGetReadingValue("sensor_2").has_value());
+}
+
+ZTEST(sensor_readings_frame, test_TakeProcessedReadings_returns_each_update_once) {
+    auto helper = sensor_readings_frame_GetHelperInstances();
+
+    auto guid_generator = helper.guid_generator;
+    auto sensor_readings_frame = helper.sensor_readings_frame;
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    zassert_equal(sensor_readings_frame->TakeProcessedReadings().size(), 0);
+
+    SensorReading reading(guid_generator->Generate(), sensors[1]);
+    reading.source = ReadingSource::PROCESSING;
+    reading.status = ReadingStatus::PROCESSED;
+    reading.value = 2.0;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    auto taken = sensor_readings_frame->TakeProcessedReadings();
+    zassert_equal(taken.size(), 1);
+    zassert_equal(taken.at(sensors[1]->id_hash).value.value(), 2.0F);
+
+    // Already taken, and the latest processed reading is still available to other consumers.
+    zassert_equal(sensor_readings_frame->TakeProcessedReadings().size(), 0);
+    zassert_equal(sensor_readings_frame->GetProcessedReadings().size(), 1);
+    zassert_equal(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).value(), 2.0F);
+
+    // A new reading of the same sensor is reported again, with its latest value.
+    SensorReading update(guid_generator->Generate(), sensors[1]);
+    update.source = ReadingSource::PROCESSING;
+    update.status = ReadingStatus::PROCESSED;
+    update.value = 3.0;
+    sensor_readings_frame->AddOrUpdateReading(update);
+
+    SensorReading unprocessed(guid_generator->Generate(), sensors[2]);
+    unprocessed.source = ReadingSource::PROCESSING;
+    unprocessed.status = ReadingStatus::RAW;
+    unprocessed.value = 1.0;
+    sensor_readings_frame->AddOrUpdateReading(unprocessed);
+
+    taken = sensor_readings_frame->TakeProcessedReadings();
+    zassert_equal(taken.size(), 1, "Only processed readings are reported");
+    zassert_equal(taken.at(sensors[1]->id_hash).value.value(), 3.0F);
 }
 
 ZTEST(sensor_readings_frame, test_AddOrUpdateReading_ignores_unset_source) {

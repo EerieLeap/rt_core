@@ -135,7 +135,8 @@ int ConfigMgmtGroup::HandleCrc(smp_streamer* ctxt) {
     zcbor_state_t* zse = ctxt->writer->zs;
     const bool ok = zcbor_tstr_put_lit(zse, "type") && zcbor_uint32_put(zse, type)
         && zcbor_tstr_put_lit(zse, "len") && zcbor_uint32_put(zse, static_cast<uint32_t>(info.size))
-        && zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, info.crc);
+        && zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, info.crc)
+        && zcbor_tstr_put_lit(zse, "applied") && zcbor_bool_put(zse, info.is_applied);
 
     return MGMT_RETURN_CHECK(ok);
 }

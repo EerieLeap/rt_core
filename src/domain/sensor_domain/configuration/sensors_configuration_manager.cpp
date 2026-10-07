@@ -22,8 +22,28 @@ SensorsConfigurationManager::SensorsConfigurationManager(
     LoadOrCreateDefault();
 }
 
-const std::vector<std::shared_ptr<Sensor>>* SensorsConfigurationManager::Get(bool force_load) {
-    return CborConfigurationManagerBase::Get(force_load).get();
+void SensorsConfigurationManager::RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) {
+    configuration_updated_handler_ = std::move(handler);
+}
+
+bool SensorsConfigurationManager::Update(const std::vector<std::shared_ptr<Sensor>>& sensors) {
+    if(!CborConfigurationManagerBase::Update(sensors))
+        return false;
+
+    if(configuration_updated_handler_)
+        configuration_updated_handler_();
+
+    return true;
+}
+
+bool SensorsConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) {
+    if(!CborConfigurationManagerBase::ApplyCborConfiguration(cbor_data, reason))
+        return false;
+
+    if(configuration_updated_handler_)
+        configuration_updated_handler_();
+
+    return true;
 }
 
 pmr_unique_ptr<CborSensorsConfig> SensorsConfigurationManager::Serialize(const std::vector<std::shared_ptr<Sensor>>& sensors) {

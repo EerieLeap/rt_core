@@ -1,4 +1,5 @@
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <string>
 #include <zephyr/ztest.h>
@@ -53,14 +54,35 @@ ZTEST(expression_evaluator, test_Evaluate_not_braced_x_returns_correct_value) {
     zassert_equal(res, 40.0);
 }
 
-ZTEST_EXPECT_FAIL(expression_evaluator, test_Evaluate_empty_expression_throws_exception);
-ZTEST(expression_evaluator, test_Evaluate_empty_expression_throws_exception) {
-    try {
-        ExpressionEvaluator expression_evaluator("");
-        zassert_true(true, "Evaluation expected to fail, but it didn't.");
-    } catch(mu::ParserError const& e) {
-        zassert_true(false, "Evaluation failed as expected due to missing expression.");
+// Parser errors surface as std::exception so configuration validation and the processors can catch them.
+ZTEST(expression_evaluator, test_invalid_expression_throws_invalid_argument) {
+    for(const char* expression : { "", "x +", "2 * (x", "unknown_fn(x)" }) {
+        bool thrown = false;
+
+        try {
+            ExpressionEvaluator expression_evaluator(expression);
+        } catch(const std::invalid_argument&) {
+            thrown = true;
+        }
+
+        zassert_true(thrown, "Expression \"%s\" was accepted.", expression);
     }
+}
+
+ZTEST(expression_evaluator, test_Evaluate_without_x_throws_when_expression_uses_x) {
+    ExpressionEvaluator with_x("x * 2");
+    ExpressionEvaluator without_x("2 * 3");
+
+    bool thrown = false;
+    try {
+        with_x.Evaluate();
+    } catch(const std::invalid_argument&) {
+        thrown = true;
+    }
+
+    zassert_true(thrown);
+    zassert_equal(without_x.Evaluate(), 6.0F, "An expression without x needs no input");
+    zassert_equal(without_x.Evaluate(8.0F), 6.0F, "A given input is ignored without x");
 }
 
 ZTEST(expression_evaluator, test_multiple_ExpressionEvaluator_eval_correctly) {

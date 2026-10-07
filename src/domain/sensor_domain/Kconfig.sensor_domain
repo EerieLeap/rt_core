@@ -14,4 +14,13 @@ menu "EerieLeap Sensor Domain config"
     config EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
         int "Sensor processing service priority"
         default 6
+
+    config EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT
+        int "Maximum number of configured sensors"
+        range 1 65535
+        default 64
+        help
+          A sensors configuration with more sensors is rejected at validation.
+          Every sensor holds its readings and runtime objects in internal RAM,
+          so size this for the unit's memory rather than for the configuration.
 endmenu

@@ -1,3 +1,6 @@
+#include <stdexcept>
+#include <string>
+
 #include "script_processor.h"
 
 namespace eerie_leap::domain::sensor_domain::processors {
@@ -31,12 +34,21 @@ void ScriptProcessor::ProcessReading(const uint32_t sensor_id_hash) {
 
         lua_pushstring(state, reading.sensor->id.c_str());
 
-        if(lua_pcall(state, 1, 0, 0) != LUA_OK)
+        if(lua_pcall(state, 1, 0, 0) != LUA_OK) {
+            const char* message = lua_tostring(state, -1);
+            std::string error_message = message != nullptr ? message : "Lua function failed.";
             lua_pop(state, 1);
+
+            throw std::runtime_error(error_message);
+        }
+
+        return;
     } catch (const std::exception& e) {
         reading.status = ReadingStatus::ERROR;
         reading.error_message = e.what();
     }
+
+    sensor_readings_frame_->AddOrUpdateReading(reading);
 }
 
 } // namespace eerie_leap::domain::sensor_domain::processors

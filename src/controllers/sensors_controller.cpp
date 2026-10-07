@@ -54,6 +54,11 @@ SensorsController::SensorsController(
       adc_configuration_manager_(std::move(adc_configuration_manager)),
       sd_fs_service_(std::move(sd_fs_service)) {}
 
+SensorsController::~SensorsController() {
+    if(restart_task_.has_value())
+        restart_task_->Cancel();
+}
+
 int SensorsController::Initialize(const ConfigurationSetup& setup_test_configuration) {
     auto cbor_sensors_config_service = std::make_unique<config_services::CborConfigurationService<CborSensorsConfig>>(
         SENSORS_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_);
@@ -96,6 +101,18 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
     if(setup_test_configuration)
         setup_test_configuration(sensors_configuration_manager_);
 
+    restart_task_ = config_work_queue_thread_->CreateTask(
+        [](SensorsController* controller) {
+            controller->RestartProcessing();
+            return WorkQueueTaskResult{};
+        }, this);
+
+    // Registered last so the test configuration above does not trigger a restart. The handler runs on
+    // the configuration work queue while the SMP apply job holds its lock, so the restart is queued behind it.
+    sensors_configuration_manager_->RegisterConfigurationUpdatedHandler([this] {
+        restart_task_->Reschedule(K_NO_WAIT);
+    });
+
     return 0;
 }
 
@@ -103,8 +120,27 @@ int SensorsController::Start() {
     return sensors_processing_service_->Start() ? 0 : -1;
 }
 
+// Readers and tasks are built from the configuration in DoStart(), so a stored configuration
+// only takes effect through a restart.
+void SensorsController::RestartProcessing() {
+    if(sensors_processing_service_->IsStopped())
+        return;
+
+    if(!sensors_processing_service_->Stop()) {
+        LOG_ERR("Failed to stop the sensors processing service for the new configuration.");
+        return;
+    }
+
+    if(!sensors_processing_service_->Start())
+        LOG_ERR("Failed to start the sensors processing service with the new configuration.");
+}
+
 void SensorsController::EmulateReadings() {
-    for(auto sensor : *sensors_configuration_manager_->Get()) {
+    const auto sensors = sensors_configuration_manager_->Get();
+    if(sensors == nullptr)
+        return;
+
+    for(auto sensor : *sensors) {
         SensorReading reading(guid_generator_->Generate(), sensor);
         reading.source = ReadingSource::PROCESSING;
         reading.status = ReadingStatus::PROCESSED;

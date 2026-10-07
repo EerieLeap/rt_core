@@ -59,7 +59,9 @@ void ProcessingIsrService::ProcessSensor(const Sensor& sensor) {
 }
 
 bool ProcessingIsrService::DoStart() {
-    const auto* sensors = sensors_configuration_manager_->Get();
+    const auto sensors = sensors_configuration_manager_->Get();
+    if(sensors == nullptr)
+        return false;
 
     readers_.clear();
     for(const auto& sensor : *sensors) {

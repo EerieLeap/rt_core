@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <memory_resource>
 #include <vector>
 #include <algorithm>
 
@@ -18,23 +19,28 @@ private:
 
     static const InterpolationMethod INTERPOLATION_METHOD = InterpolationMethod::CUBIC_SPLINE;
     std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table_;
-    std::vector<CubicCoefficients> coefficients_;
+    // Lives next to the table it was computed from.
+    std::pmr::vector<CubicCoefficients> coefficients_;
 
 public:
     explicit CubicSplineVoltageInterpolator(std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table)
-        : calibration_table_(std::move(calibration_table)) {
+        : calibration_table_(std::move(calibration_table)),
+        coefficients_(calibration_table_ != nullptr
+            ? calibration_table_->get_allocator().resource()
+            : std::pmr::get_default_resource()) {
 
         if(!calibration_table_ || calibration_table_->size() < 2)
             throw std::invalid_argument("Calibration data is missing or invalid.");
 
         const auto& table = *calibration_table_;
+        auto* const resource = table.get_allocator().resource();
 
         const size_t n = table.size();
-        std::vector<float> h(n - 1);
-        std::vector<float> alpha(n - 1);
-        std::vector<float> l(n);
-        std::vector<float> mu(n);
-        std::vector<float> z(n);
+        std::pmr::vector<float> h(n - 1, resource);
+        std::pmr::vector<float> alpha(n - 1, resource);
+        std::pmr::vector<float> l(n, resource);
+        std::pmr::vector<float> mu(n, resource);
+        std::pmr::vector<float> z(n, resource);
         coefficients_.resize(n);
 
         for(size_t i = 0; i < n; ++i)

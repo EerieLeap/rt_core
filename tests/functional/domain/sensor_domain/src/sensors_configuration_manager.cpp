@@ -1,3 +1,4 @@
+#include <array>
 #include <memory>
 #include <vector>
 #include <zephyr/kernel.h>
@@ -343,7 +344,39 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_empty_conf
     zassert_true(fs_service->DeleteFile("config/sensors_config.cbor"));
 
     // No sensors is a configuration too, not a reason to go back to storage.
-    const auto* sensors = sensors_configuration_manager->Get();
-    zassert_not_null(sensors);
+    const auto sensors = sensors_configuration_manager->Get();
+    zassert_true(sensors != nullptr);
     zassert_true(sensors->empty());
+}
+
+ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_rejected_stored_configuration_is_kept) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    // A stored configuration that fails to load must not be replaced by the default: the failure
+    // may be transient, and overwriting would destroy the user's sensors.
+    const std::array<uint8_t, 6> stored = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02 };
+    zassert_true(fs_service->CreateDirectory("config"));
+    zassert_true(fs_service->WriteFile("config/sensors_config.cbor", stored.data(), stored.size()));
+
+    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service),
+        nullptr,
+        16,
+        16);
+
+    const auto sensors = sensors_configuration_manager->Get();
+    zassert_true(sensors != nullptr, "A default stands in for the rejected configuration");
+    zassert_true(sensors->empty());
+
+    zassert_false(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
+    zassert_equal(sensors_configuration_manager->GetCborConfigurationInfo().size, stored.size());
+    zassert_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), stored.size(), "The stored file is untouched");
+
+    // A valid update replaces it as usual.
+    zassert_true(sensors_configuration_manager->Update(sensors_configuration_manager_SetupTestSensors()));
+    zassert_true(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
+    zassert_not_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), stored.size());
 }

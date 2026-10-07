@@ -75,7 +75,12 @@ bool SensorsProcessingService::DoInitialize() {
 }
 
 bool SensorsProcessingService::DoStart() {
-    const auto* sensors = sensors_configuration_manager_->Get();
+    const auto sensors = sensors_configuration_manager_->Get();
+    if(sensors == nullptr) {
+        LOG_ERR("No sensors configuration available.");
+        return false;
+    }
+
     for(const auto& sensor : *sensors)
         InitializeScript(sensor);
 
@@ -116,8 +121,16 @@ bool SensorsProcessingService::DoResume() {
     return true;
 }
 
-void SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) const {
-    reading_processors_->push_back(processor);
+bool SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) {
+    // The work queue iterates the list without a lock, so it only changes while nothing runs.
+    if(!IsStopped()) {
+        LOG_ERR("Reading processors can only be registered while the processing service is stopped.");
+        return false;
+    }
+
+    reading_processors_->push_back(std::move(processor));
+
+    return true;
 }
 
 void SensorsProcessingService::InitializeScript(std::shared_ptr<Sensor> sensor) const {

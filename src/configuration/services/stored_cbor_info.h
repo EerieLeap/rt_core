@@ -9,6 +9,8 @@ namespace eerie_leap::configuration::services {
 struct StoredCborInfo {
     size_t size = 0;
     uint32_t crc = 0;
+    /// False while the stored configuration failed to load and a default stands in for it.
+    bool is_applied = true;
 };
 
 } // namespace eerie_leap::configuration::services

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "utilities/guid/guid_generator.h"
 
@@ -27,6 +28,8 @@ using eerie_leap::utilities::guid::GuidGenerator;
 
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::gpio::IGpio;
+using eerie_leap::subsys::threading::WorkQueueTask;
+using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
@@ -63,6 +66,10 @@ private:
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory_;
     std::shared_ptr<SensorsProcessingService> sensors_processing_service_;
 
+    std::optional<WorkQueueTask<SensorsController>> restart_task_;
+
+    void RestartProcessing();
+
 public:
     SensorsController(
         std::shared_ptr<IFsService> fs_service,
@@ -76,6 +83,7 @@ public:
         // Polled sensors (analog, indicator, virtual, user) are only processed when provided.
         std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
         std::shared_ptr<IFsService> sd_fs_service = nullptr);
+    ~SensorsController();
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();

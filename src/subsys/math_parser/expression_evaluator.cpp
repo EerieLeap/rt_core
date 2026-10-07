@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <string>
 
 #include "expression_evaluator.h"
@@ -9,9 +10,15 @@ using namespace mu;
 ExpressionEvaluator::ExpressionEvaluator(std::string expression)
     : expression_(std::move(expression)), x_(0.0) {
 
-    math_parser_ = std::make_unique<MathParser>(expression_);
+    // mu::ParserError is not a std::exception, so nothing above would catch it.
+    try {
+        math_parser_ = std::make_unique<MathParser>(expression_);
+    } catch(const ParserError& e) {
+        throw std::invalid_argument("Invalid expression: " + e.GetMsg());
+    }
 
-    if(math_parser_->GetVariableNames().contains("x"))
+    uses_x_ = math_parser_->GetVariableNames().contains("x");
+    if(uses_x_)
         math_parser_->DefineVariable("x", &x_);
 }
 
@@ -20,17 +27,25 @@ void ExpressionEvaluator::RegisterVariableValueHandler(const MathParser::Variabl
 }
 
 float ExpressionEvaluator::Evaluate(std::optional<float> x) {
-    if(math_parser_->GetVariableNames().contains("x"))
-        x_ = x.value();
+    if(uses_x_) {
+        if(!x.has_value())
+            throw std::invalid_argument("Expression uses x but no input value was given.");
 
-    return math_parser_->Evaluate();
+        x_ = x.value();
+    }
+
+    try {
+        return math_parser_->Evaluate();
+    } catch(const ParserError& e) {
+        throw std::runtime_error("Expression evaluation failed: " + e.GetMsg());
+    }
 }
 
 const std::string& ExpressionEvaluator::GetExpression() const {
     return expression_;
 }
 
-const std::unordered_set<std::string> ExpressionEvaluator::GetVariableNames() const {
+const std::unordered_set<std::string>& ExpressionEvaluator::GetVariableNames() const {
     return math_parser_->GetVariableNames();
 }
 

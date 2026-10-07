@@ -25,6 +25,11 @@ private:
     std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>> cbor_configuration_service_;
     std::shared_ptr<TConfiguration> configuration_;
 
+    // Set while the stored configuration could not be applied and an unsaved default stands in for it.
+    bool is_stored_configuration_rejected_ = false;
+    // Cleared only while that default is created, so the rejected file is not overwritten.
+    bool is_saving_enabled_ = true;
+
     // Both validate; Deserialize must accept everything Serialize produces.
     virtual eerie_memory::pmr_unique_ptr<TCborConfig> Serialize(const TConfiguration& configuration) = 0;
     virtual eerie_memory::pmr_unique_ptr<TConfiguration> Deserialize(const TCborConfig& cbor_config) = 0;
@@ -51,6 +56,11 @@ protected:
             : name_(name), cbor_configuration_service_(std::move(cbor_configuration_service)) {}
 
     // Returns whether a configuration is available afterwards.
+    //
+    // A stored configuration that fails to load is kept on flash: the failure may be transient
+    // (a missing SD card, a changed driver) or come from a stricter validator, and saving a default
+    // over it would destroy the user's configuration. A default is created in memory instead and
+    // GetCborConfigurationInfo() reports the stored one as not applied.
     bool LoadOrCreateDefault() {
         LOG_MODULE_DECLARE(configuration_manager_logger);
 
@@ -65,12 +75,46 @@ protected:
             LOG_ERR("Failed to load %s configuration.", name_);
         }
 
+        // Load() records the file's size before decoding it, so a non-zero size means a file exists.
+        if(cbor_configuration_service_->GetStoredInfo().size > 0) {
+            LOG_ERR("Stored %s configuration is kept but not applied; running with defaults.", name_);
+
+            is_stored_configuration_rejected_ = true;
+
+            bool created = false;
+            is_saving_enabled_ = false;
+            try {
+                created = CreateDefaultConfiguration();
+            } catch(...) {
+                is_saving_enabled_ = true;
+                throw;
+            }
+            is_saving_enabled_ = true;
+
+            if(!created)
+                LOG_ERR("Failed to create default %s configuration.", name_);
+
+            return created;
+        }
+
         if(!CreateDefaultConfiguration()) {
             LOG_ERR("Failed to create default %s configuration.", name_);
             return false;
         }
 
         LOG_INF("Default %s configuration created successfully.", name_);
+
+        return true;
+    }
+
+    bool Save(TCborConfig& cbor_config) {
+        if(!is_saving_enabled_)
+            return true;
+
+        if(!cbor_configuration_service_->Save(&cbor_config))
+            return false;
+
+        is_stored_configuration_rejected_ = false;
 
         return true;
     }
@@ -82,7 +126,7 @@ protected:
         try {
             auto cbor_config = Serialize(*configuration);
 
-            if(!cbor_configuration_service_->Save(cbor_config.get()))
+            if(!Save(*cbor_config))
                 return false;
         } catch(const std::exception& e) {
             LOG_ERR("Failed to update %s configuration. %s", name_, e.what());
@@ -120,7 +164,7 @@ public:
             // Parsing the encoding back gives what a reload would, and nothing unparsable is saved.
             updated_configuration = Share(Deserialize(*cbor_config));
 
-            if(!cbor_configuration_service_->Save(cbor_config.get()))
+            if(!Save(*cbor_config))
                 return false;
         } catch(const std::exception& e) {
             LOG_ERR("Failed to update %s configuration. %s", name_, e.what());
@@ -159,6 +203,7 @@ public:
             return false;
         }
 
+        is_stored_configuration_rejected_ = false;
         SetConfiguration(std::move(configuration));
 
         LOG_INF("%s CBOR configuration applied successfully.", name_);
@@ -181,7 +226,15 @@ public:
         if(configuration_ == nullptr)
             return {};
 
-        return cbor_configuration_service_->GetStoredInfo();
+        auto info = cbor_configuration_service_->GetStoredInfo();
+        info.is_applied = !is_stored_configuration_rejected_;
+
+        return info;
+    }
+
+    /** @return Whether the stored configuration failed to load and an unsaved default is in use. */
+    [[nodiscard]] bool IsStoredConfigurationRejected() const noexcept {
+        return is_stored_configuration_rejected_;
     }
 };
 

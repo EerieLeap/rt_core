@@ -14,9 +14,9 @@ private:
     static void ValidateId(const std::vector<std::shared_ptr<Sensor>>& sensors);
 
     static void ValidateMetadata(const std::vector<std::shared_ptr<Sensor>>& sensors);
-    static void ValidateName(const std::pmr::string& name);
-    static void ValidateUnit(const std::pmr::string& unit);
-    static void ValidateDescription(const std::pmr::string& description);
+    static void ValidateName(std::string_view sensor_id, const std::pmr::string& name);
+    static void ValidateUnit(std::string_view sensor_id, const std::pmr::string& unit);
+    static void ValidateDescription(std::string_view sensor_id, const std::pmr::string& description);
 
     static void ValidateSensorConfiguration(
         const std::vector<std::shared_ptr<Sensor>>& sensors,

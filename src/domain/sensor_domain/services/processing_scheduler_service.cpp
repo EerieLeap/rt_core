@@ -101,7 +101,9 @@ void ProcessingSchedulerService::CancelTasks() {
 }
 
 bool ProcessingSchedulerService::DoStart() {
-    const auto* sensors = sensors_configuration_manager_->Get();
+    const auto sensors = sensors_configuration_manager_->Get();
+    if(sensors == nullptr)
+        return false;
 
     work_queue_tasks_.clear();
     for(const auto& sensor : *sensors) {

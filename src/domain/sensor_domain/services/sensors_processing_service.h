@@ -54,7 +54,8 @@ public:
 
     [[nodiscard]] bool IsPausable() const noexcept override { return true; }
 
-    void RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) const;
+    // Only while the service is stopped; returns false otherwise.
+    bool RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor);
 };
 
 } // namespace eerie_leap::domain::sensor_domain::services
