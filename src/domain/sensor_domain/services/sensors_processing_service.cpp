@@ -1,8 +1,4 @@
-#include <span>
-
-#include "subsys/time/time_helpers.hpp"
 #include "subsys/lua_script/lua_script.h"
-#include "domain/sensor_domain/processors/collect_isr_reading_processor.h"
 #include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/processors/script_processor.h"
 #include "domain/script_domain/utilities/global_fuctions_registry.h"
@@ -13,7 +9,6 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::subsys::lua_script;
 using namespace eerie_leap::domain::sensor_domain::processors;
 using namespace eerie_leap::domain::sensor_domain::models;
@@ -39,7 +34,7 @@ SensorsProcessingService::SensorsProcessingService(
         CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
 
     reading_processors_->push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame_));
-    reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value", sensor_readings_frame_));
+    reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
 
     if(isr_sensor_reader_factory_) {
         processing_services_.emplace_back(std::make_unique<ProcessingIsrService>(
@@ -80,6 +75,9 @@ bool SensorsProcessingService::DoStart() {
         LOG_ERR("No sensors configuration available.");
         return false;
     }
+
+    // Sized once so a sample never grows the tables.
+    sensor_readings_frame_->Reserve(sensors->size());
 
     for(const auto& sensor : *sensors)
         InitializeScript(sensor);

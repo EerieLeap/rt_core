@@ -11,7 +11,6 @@
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/isr_sensor_readers/isr_sensor_reader_factory.h"
 #include "domain/sensor_domain/processors/i_reading_processor.h"
-#include "domain/sensor_domain/processors/collect_isr_reading_processor.h"
 
 #include "sensor_task.hpp"
 
@@ -20,10 +19,11 @@ namespace eerie_leap::domain::sensor_domain::services {
 using eerie_leap::subsys::threading::ServiceBase;
 using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::IIsrSensorReader;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
-using eerie_leap::domain::sensor_domain::processors::CollectIsrReadingProcessor;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 
 class ProcessingIsrService final : public ServiceBase<> {
@@ -34,11 +34,10 @@ private:
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
 
-    std::unique_ptr<CollectIsrReadingProcessor> collect_isr_reading_processor_;
     std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors_;
     std::vector<std::unique_ptr<IIsrSensorReader>> readers_;
 
-    void ProcessSensor(const Sensor& sensor);
+    void ProcessSensor(const Sensor& sensor, SensorReading& reading);
 
     bool DoStart() override;
     bool DoStop() override;

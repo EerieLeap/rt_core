@@ -4,8 +4,6 @@
 #include <memory>
 #include <optional>
 
-#include "utilities/guid/guid_generator.h"
-
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/gpio/i_gpio.h"
 #include "subsys/threading/work_queue_thread.h"
@@ -23,8 +21,6 @@
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
 namespace eerie_leap::controllers {
-
-using eerie_leap::utilities::guid::GuidGenerator;
 
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::gpio::IGpio;
@@ -54,7 +50,6 @@ private:
     std::shared_ptr<WorkQueueThread> config_work_queue_thread_;
     std::shared_ptr<ConfigurationService> configuration_service_;
     std::shared_ptr<ITimeService> time_service_;
-    std::shared_ptr<GuidGenerator> guid_generator_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<IGpio> gpio_;
@@ -76,11 +71,10 @@ public:
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
         std::shared_ptr<ConfigurationService> configuration_service,
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<GuidGenerator> guid_generator,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
         std::shared_ptr<CanbusService> canbus_service,
         std::shared_ptr<IGpio> gpio,
-        // Polled sensors (analog, indicator, virtual, user) are only processed when provided.
+        // PHYSICAL_ANALOG sensors are only processed when provided.
         std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
         std::shared_ptr<IFsService> sd_fs_service = nullptr);
     ~SensorsController();

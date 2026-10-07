@@ -37,7 +37,6 @@ SensorsController::SensorsController(
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
     std::shared_ptr<ConfigurationService> configuration_service,
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<CanbusService> canbus_service,
     std::shared_ptr<IGpio> gpio,
@@ -47,7 +46,6 @@ SensorsController::SensorsController(
       config_work_queue_thread_(std::move(config_work_queue_thread)),
       configuration_service_(std::move(configuration_service)),
       time_service_(std::move(time_service)),
-      guid_generator_(std::move(guid_generator)),
       sensor_readings_frame_(std::move(sensor_readings_frame)),
       canbus_service_(std::move(canbus_service)),
       gpio_(std::move(gpio)),
@@ -74,18 +72,14 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
 
     isr_sensor_reader_factory_ = std::make_shared<IsrSensorReaderFactory>(
         time_service_,
-        guid_generator_,
-        sensor_readings_frame_,
         canbus_service_,
         gpio_);
 
-    if(adc_configuration_manager_ != nullptr)
-        sensor_reader_factory_ = std::make_shared<SensorReaderFactory>(
-            time_service_,
-            guid_generator_,
-            gpio_,
-            adc_configuration_manager_,
-            sensor_readings_frame_);
+    // Polled sensors need no ADC unless they are PHYSICAL_ANALOG; the factory checks per sensor.
+    sensor_reader_factory_ = std::make_shared<SensorReaderFactory>(
+        time_service_,
+        gpio_,
+        adc_configuration_manager_);
 
     sensors_processing_service_ = std::make_shared<SensorsProcessingService>(
         sensors_configuration_manager_,
@@ -140,8 +134,8 @@ void SensorsController::EmulateReadings() {
     if(sensors == nullptr)
         return;
 
-    for(auto sensor : *sensors) {
-        SensorReading reading(guid_generator_->Generate(), sensor);
+    for(const auto& sensor : *sensors) {
+        SensorReading reading(sensor.get());
         reading.source = ReadingSource::PROCESSING;
         reading.status = ReadingStatus::PROCESSED;
         reading.value = (Rng::Get<uint32_t>() / static_cast<float>(UINT32_MAX)) * 100.0F;

@@ -11,8 +11,6 @@ using eerie_leap::domain::canbus_domain::utilities::CanSignalCodec;
 
 CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<Sensor> sensor,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
@@ -21,8 +19,6 @@ CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<const CanSignalConfiguration> signal_configuration)
         : CanbusSensorReaderRaw(
             std::move(time_service),
-            std::move(guid_generator),
-            std::move(sensor_readings_frame),
             std::move(sensor),
             std::move(process_sensor_callback),
             std::move(work_queue_thread),
@@ -35,23 +31,17 @@ CanbusSensorReader::~CanbusSensorReader() {
     Detach();
 }
 
-void CanbusSensorReader::AddOrUpdateReading(const CanFrame& can_frame) {
-    auto reading = CreateRawReading(can_frame);
-    if(!reading)
-        return;
+void CanbusSensorReader::FillReading(SensorReading& reading, const CanFrame& can_frame) {
+    reading.status = ReadingStatus::RAW;
 
     auto value = CanSignalCodec::Decode(*signal_configuration_, can_frame.data);
-    if(!value)
+    if(!value.has_value()) {
+        reading.SetError(ReadingError::READER_FAILED);
         return;
+    }
 
-    reading.value().value = value.value();
-
-    if(reading.value().sensor->configuration.type == SensorType::CANBUS_ANALOG)
-        reading.value().metadata.AddTag<float>(ReadingMetadataTag::RAW_VALUE, reading.value().value.value());
-    else if(reading.value().sensor->configuration.type == SensorType::CANBUS_INDICATOR)
-        reading.value().metadata.AddTag<bool>(ReadingMetadataTag::RAW_VALUE, reading.value().value.value() > 0);
-
-    sensor_readings_frame_->AddOrUpdateReading(reading.value());
+    reading.value = value.value();
+    reading.raw_value = value.value();
 }
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

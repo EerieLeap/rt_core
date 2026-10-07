@@ -114,7 +114,7 @@ bool SimpleLoggerSensorReading::LogReading(const std::chrono::system_clock::time
 
     auto log_record = LogDataRecord<uint32_t>::Create(
         time - start_time_,
-        reading.sensor->id_hash,
+        reading.sensor_id_hash,
         value);
 
     auto ret = stream_->sputn(

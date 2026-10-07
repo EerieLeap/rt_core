@@ -16,13 +16,13 @@ class ExpressionProcessor : public IReadingProcessor {
 private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
 
-    void EnsureInputsAvailable(const ExpressionEvaluator& expression_evaluator) const;
-    float Evaluate(ExpressionEvaluator& expression_evaluator, std::optional<float> x = std::nullopt) const;
+    bool AreInputsAvailable(const ExpressionEvaluator& expression_evaluator) const;
+    std::optional<float> Evaluate(ExpressionEvaluator& expression_evaluator, std::optional<float> x, SensorReading& reading) const;
 
 public:
     explicit ExpressionProcessor(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
 
-    void ProcessReading(const uint32_t sensor_id_hash) override;
+    void Process(const Sensor& sensor, SensorReading& reading) override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::processors

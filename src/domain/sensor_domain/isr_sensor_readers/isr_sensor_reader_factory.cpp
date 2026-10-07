@@ -15,13 +15,9 @@ LOG_MODULE_REGISTER(isr_sr_factory_logger);
 
 IsrSensorReaderFactory::IsrSensorReaderFactory(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<CanbusService> canbus_service,
     std::shared_ptr<IGpio> gpio)
         : time_service_(std::move(time_service)),
-        guid_generator_(std::move(guid_generator)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)),
         canbus_service_(std::move(canbus_service)),
         gpio_(std::move(gpio)) {}
 
@@ -47,6 +43,9 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
 
     try {
         if(sensor->configuration.type == SensorType::CANBUS_RAW) {
+            if(canbus_service_ == nullptr)
+                return nullptr;
+
             auto canbus = canbus_service_->GetCanbus(sensor->configuration.canbus_source->bus_channel);
             const auto frame_id = GetFrameId(*sensor);
             if(canbus == nullptr || !frame_id.has_value())
@@ -54,14 +53,15 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
 
             sensor_reader = std::make_unique<CanbusSensorReaderRaw>(
                 time_service_,
-                guid_generator_,
-                sensor_readings_frame_,
                 sensor,
                 std::move(process_sensor_callback),
                 std::move(work_queue_thread),
                 canbus,
                 frame_id.value());
         } else if(sensor->configuration.type == SensorType::CANBUS_ANALOG || sensor->configuration.type == SensorType::CANBUS_INDICATOR) {
+            if(canbus_service_ == nullptr)
+                return nullptr;
+
             auto canbus = canbus_service_->GetCanbus(sensor->configuration.canbus_source->bus_channel);
             const auto frame_id = GetFrameId(*sensor);
             if(canbus == nullptr || !frame_id.has_value())
@@ -82,8 +82,6 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
 
             sensor_reader = std::make_unique<CanbusSensorReader>(
                 time_service_,
-                guid_generator_,
-                sensor_readings_frame_,
                 sensor,
                 std::move(process_sensor_callback),
                 std::move(work_queue_thread),
@@ -96,8 +94,6 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
 
             sensor_reader = std::make_unique<GpioSensorReader>(
                 time_service_,
-                guid_generator_,
-                sensor_readings_frame_,
                 sensor,
                 std::move(process_sensor_callback),
                 std::move(work_queue_thread),

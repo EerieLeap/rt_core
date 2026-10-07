@@ -10,32 +10,23 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderPhysicalIndicator::SensorReaderPhysicalIndicator(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<Sensor> sensor,
     std::shared_ptr<IGpio> gpio)
-        : SensorReaderBase(
-            std::move(time_service),
-            std::move(guid_generator),
-            std::move(sensor_readings_frame),
-            std::move(sensor)),
+        : SensorReaderBase(std::move(time_service), std::move(sensor)),
         gpio_(std::move(gpio)) {
 
     if(sensor_->configuration.type != SensorType::PHYSICAL_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");
 }
 
-void SensorReaderPhysicalIndicator::Read() {
-    SensorReading reading(guid_generator_->Generate(), sensor_);
-    reading.source = ReadingSource::PROCESSING;
-    reading.timestamp = time_service_->GetCurrentTime();
+SensorReading SensorReaderPhysicalIndicator::Read() {
+    SensorReading reading = CreateReading();
 
-    reading.value = static_cast<float>(gpio_->ReadChannel(sensor_->configuration.channel.value()));
+    reading.value = gpio_->ReadChannel(sensor_->configuration.channel.value()) ? 1.0F : 0.0F;
+    reading.raw_value = reading.value;
     reading.status = ReadingStatus::RAW;
 
-    reading.metadata.AddTag<bool>(ReadingMetadataTag::RAW_VALUE, reading.value.value() > 0);
-
-    sensor_readings_frame_->AddOrUpdateReading(reading);
+    return reading;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::sensor_readers

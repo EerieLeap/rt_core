@@ -2,36 +2,33 @@
 
 #include <memory>
 
-#include "utilities/guid/guid_generator.h"
 #include "subsys/time/i_time_service.h"
 #include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "domain/sensor_domain/models/reading_source.h"
 #include "i_sensor_reader.h"
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
-using eerie_leap::utilities::guid::GuidGenerator;
 using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::ReadingSource;
 
 class SensorReaderBase : public ISensorReader {
 protected:
     std::shared_ptr<ITimeService> time_service_;
-    std::shared_ptr<GuidGenerator> guid_generator_;
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::shared_ptr<Sensor> sensor_;
 
+    SensorReading CreateReading() const {
+        SensorReading reading(sensor_.get());
+        reading.source = ReadingSource::PROCESSING;
+        reading.timestamp = time_service_->GetCurrentTime();
+
+        return reading;
+    }
+
 public:
-    SensorReaderBase(
-        std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<GuidGenerator> guid_generator,
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-        std::shared_ptr<Sensor> sensor)
-            : time_service_(std::move(time_service)),
-            guid_generator_(std::move(guid_generator)),
-            sensor_readings_frame_(std::move(sensor_readings_frame)),
-            sensor_(std::move(sensor)) {}
+    SensorReaderBase(std::shared_ptr<ITimeService> time_service, std::shared_ptr<Sensor> sensor)
+        : time_service_(std::move(time_service)), sensor_(std::move(sensor)) {}
 
     virtual ~SensorReaderBase() = default;
 };

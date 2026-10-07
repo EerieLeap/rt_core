@@ -4,7 +4,6 @@
 #include <eerie_memory.hpp>
 
 #include "utilities/memory/memory_resource_manager.h"
-#include "utilities/guid/guid_generator.h"
 #include "utilities/string/string_helpers.h"
 #include "subsys/math_parser/expression_evaluator.h"
 #include "subsys/time/rtc_provider.h"
@@ -35,7 +34,6 @@
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::utilities::guid;
 using namespace eerie_leap::utilities::string;
 using namespace eerie_leap::utilities::voltage_interpolator;
 
@@ -179,8 +177,6 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     auto rtc_provider = std::make_shared<RtcProvider>();
     auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
 
-    std::shared_ptr<GuidGenerator> guid_generator = std::make_shared<GuidGenerator>();
-
     auto cbor_adc_config_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
 
     AdcFactory adc_factory(nullptr);
@@ -206,28 +202,20 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
         if(sensors[i]->configuration.type == SensorType::PHYSICAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderPhysicalAnalog>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i],
                 adc_configuration_manager);
         } else if(sensors[i]->configuration.type == SensorType::VIRTUAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderVirtualAnalog>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i]);
         } else if(sensors[i]->configuration.type == SensorType::PHYSICAL_INDICATOR) {
             sensor_reader = std::make_shared<SensorReaderPhysicalIndicator>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i],
                 gpio);
         } else if(sensors[i]->configuration.type == SensorType::VIRTUAL_INDICATOR) {
             sensor_reader = std::make_shared<SensorReaderVirtualIndicator>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i]);
         } else {
             throw std::runtime_error("Unsupported sensor type");
@@ -244,25 +232,11 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
 }
 
 class ReadingProcessedProcessor : public IReadingProcessor {
-private:
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
-
 public:
-    explicit ReadingProcessedProcessor(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
-        : sensor_readings_frame_(std::move(sensor_readings_frame)) {}
-
-    void ProcessReading(const uint32_t sensor_id_hash) override {
-        if(!sensor_readings_frame_->HasReading(sensor_id_hash))
-            return;
-
-        auto reading_opt = sensor_readings_frame_->TryGetReading(sensor_id_hash);
-        if(!reading_opt.has_value())
-            return;
-
-        auto reading = reading_opt.value();
+    void Process(const Sensor& sensor, SensorReading& reading) override {
+        ARG_UNUSED(sensor);
 
         reading.status = ReadingStatus::PROCESSED;
-        sensor_readings_frame_->AddOrUpdateReading(reading);
     }
 };
 
@@ -274,7 +248,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     auto sensors = helper.sensors;
 
     for(int i = 0; i < sensor_readers->size(); i++)
-        sensor_readers->at(i)->Read();
+        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read());
 
     auto reading_2_opt = sensor_readings_frame->TryGetReading("sensor_2");
     zassert_true(reading_2_opt.has_value());
@@ -298,11 +272,15 @@ ZTEST(sensor_processor, test_ProcessReading) {
 
     std::vector<std::shared_ptr<IReadingProcessor>> reading_processors;
     reading_processors.push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame));
-    reading_processors.push_back(std::make_shared<ReadingProcessedProcessor>(sensor_readings_frame));
+    reading_processors.push_back(std::make_shared<ReadingProcessedProcessor>());
 
+    // The stages work on a local copy and the result is committed once, as the services do.
     for(auto& sensor : sensors) {
+        auto reading = sensor_readings_frame->TryGetReading(sensor->id_hash).value();
         for(auto& reading_processor : reading_processors)
-            reading_processor->ProcessReading(sensor->id_hash);
+            reading_processor->Process(*sensor, reading);
+
+        sensor_readings_frame->AddOrUpdateReading(reading);
     }
 
     auto proc_reading_2_opt = sensor_readings_frame->TryGetReading("sensor_2");
@@ -312,12 +290,10 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_true(proc_reading_2.value.has_value());
     float proc_reading_2_value = reading_2_value * 4 + 1.6;
     zassert_equal(proc_reading_2.value.value(), proc_reading_2_value);
-    auto proc_reading_2_metadata_voltage = proc_reading_2.metadata.GetTag<float>(ReadingMetadataTag::VOLTAGE);
-    zassert_true(proc_reading_2_metadata_voltage.has_value());
-    zassert_between_inclusive(proc_reading_2_metadata_voltage.value(), 0.0f, 3.3f);
-    auto proc_reading_2_metadata_raw_value = proc_reading_2.metadata.GetTag<float>(ReadingMetadataTag::RAW_VALUE);
-    zassert_true(proc_reading_2_metadata_raw_value.has_value());
-    zassert_between_inclusive(proc_reading_2_metadata_raw_value.value(), 0.0f, 200.0f);
+    zassert_true(proc_reading_2.voltage.has_value());
+    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0f, 3.3f);
+    zassert_true(proc_reading_2.raw_value.has_value());
+    zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0f, 200.0f);
 
     auto proc_reading_1_opt = sensor_readings_frame->TryGetReading("sensor_1");
     zassert_true(proc_reading_1_opt.has_value());
@@ -326,12 +302,10 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_true(proc_reading_1.value.has_value());
     float proc_reading_1_value = reading_1_value * 2 + proc_reading_2_value + 1;
     zassert_equal(proc_reading_1.value.value(), proc_reading_1_value);
-    auto proc_reading_1_metadata_voltage = proc_reading_1.metadata.GetTag<float>(ReadingMetadataTag::VOLTAGE);
-    zassert_true(proc_reading_1_metadata_voltage.has_value());
-    zassert_between_inclusive(proc_reading_1_metadata_voltage.value(), 0.0f, 3.3f);
-    auto proc_reading_1_metadata_raw_value = proc_reading_1.metadata.GetTag<float>(ReadingMetadataTag::RAW_VALUE);
-    zassert_true(proc_reading_1_metadata_raw_value.has_value());
-    zassert_between_inclusive(proc_reading_1_metadata_raw_value.value(), 0.0f, 100.0f);
+    zassert_true(proc_reading_1.voltage.has_value());
+    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0f, 3.3f);
+    zassert_true(proc_reading_1.raw_value.has_value());
+    zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0f, 100.0f);
 
     auto proc_reading_3_opt = sensor_readings_frame->TryGetReading("sensor_3");
     zassert_true(proc_reading_3_opt.has_value());
@@ -342,8 +316,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     // Expression evaluator parses "8.34" at runtime independently of the compiler's constant
     // folding, so the result can differ by a ULP or two across platforms/libc - compare with tolerance.
     zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001f);
-    auto proc_reading_3_metadata_raw_value = proc_reading_3.metadata.GetTag<bool>(ReadingMetadataTag::RAW_VALUE);
-    zassert_false(proc_reading_3_metadata_raw_value.has_value());
+    zassert_false(proc_reading_3.raw_value.has_value(), "A virtual sensor has no raw value");
 
     auto proc_reading_4_opt = sensor_readings_frame->TryGetReading("sensor_4");
     zassert_true(proc_reading_4_opt.has_value());
@@ -351,8 +324,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_equal(proc_reading_4.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_4.value.has_value());
     zassert_true(proc_reading_4.value.value() == 1 || proc_reading_4.value.value() == 0);
-    auto proc_reading_4_metadata_raw_value = proc_reading_4.metadata.GetTag<bool>(ReadingMetadataTag::RAW_VALUE);
-    zassert_true(proc_reading_4_metadata_raw_value.has_value());
+    zassert_true(proc_reading_4.raw_value.has_value());
 
     auto proc_reading_5_opt = sensor_readings_frame->TryGetReading("sensor_5");
     zassert_true(proc_reading_5_opt.has_value());
@@ -360,6 +332,5 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_equal(proc_reading_5.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_5.value.has_value());
     zassert_true(proc_reading_5.value.value() ==  proc_reading_1_value < 400);
-    auto proc_reading_5_metadata_raw_value = proc_reading_5.metadata.GetTag<bool>(ReadingMetadataTag::RAW_VALUE);
-    zassert_false(proc_reading_5_metadata_raw_value.has_value());
+    zassert_false(proc_reading_5.raw_value.has_value(), "A virtual sensor has no raw value");
 }

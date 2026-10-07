@@ -1,6 +1,7 @@
 #include <stdexcept>
+#include <string>
 
-#include "zephyr/kernel.h"
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
 #include "canbus_sensor_reader_raw.h"
@@ -14,8 +15,6 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<Sensor> sensor,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
@@ -23,41 +22,21 @@ CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     const CanId& frame_id)
         : IsrSensorReaderBase(
             std::move(time_service),
-            std::move(guid_generator),
-            std::move(sensor_readings_frame),
             std::move(sensor),
             std::move(process_sensor_callback)),
         work_queue_thread_(std::move(work_queue_thread)),
-        canbus_(std::move(canbus)),
-        dispatch_guard_(std::make_shared<IsrDispatchGuard<CanbusSensorReaderRaw>>(this)) {
+        canbus_(std::move(canbus)) {
 
     if(!canbus_->IsValid())
         throw std::runtime_error("CANBus proxy is not valid");
 
+    pending_work_.reader = this;
+    k_work_init(&pending_work_.work, WorkHandler);
+
+    // Handler removal is serialised against dispatch, so `this` outlives every call.
     int handler_id = (*canbus_)->RegisterFrameReceivedHandler(
         frame_id,
-        [guard = dispatch_guard_, work_queue = work_queue_thread_](const CanFrame& frame) {
-            if(!guard->TryAcquire())
-                return;
-
-            try {
-                work_queue->Run(
-                    [guard, frame]() {
-                        guard->Dispatch([&frame](CanbusSensorReaderRaw& reader) { reader.ProcessFrame(frame); });
-
-                        // NOTE: High incoming frame rate floods processor
-                        // sleep is needed to let other threads to do work
-                        k_msleep(FRAME_PROCESSING_DELAY_MS);
-
-                        guard->Release();
-                    });
-            } catch(const std::exception& e) {
-                // The queue rejects submissions while it is stopping, drop the frame.
-                guard->Release();
-
-                LOG_DBG("CAN frame dropped: %s", e.what());
-            }
-        });
+        [this](const CanFrame& frame) { OnFrameReceived(frame); });
 
     if(handler_id <= 0)
         throw std::runtime_error("Failed to register CAN frame handler for frame ID: " + std::to_string(frame_id.id));
@@ -71,21 +50,60 @@ CanbusSensorReaderRaw::~CanbusSensorReaderRaw() {
 
 void CanbusSensorReaderRaw::Detach() {
     if(frame_handler_id_ > 0) {
-        // Removal is serialised against dispatch, so no further frame is handed out.
         if(auto* canbus = canbus_->Get(); canbus != nullptr)
             canbus->RemoveFrameReceivedHandler(frame_handler_id_);
 
         frame_handler_id_ = 0;
     }
 
-    dispatch_guard_->Detach();
+    // Waits for a running dispatch; nothing submits afterwards since the handler is gone.
+    k_work_cancel_sync(&pending_work_.work, &work_sync_);
+}
+
+// CAN thread. Keeps only the newest frame while the work queue is behind.
+void CanbusSensorReaderRaw::OnFrameReceived(const CanFrame& can_frame) {
+    if(can_frame.data.empty())
+        return;
+
+    K_SPINLOCK(&pending_lock_) {
+        pending_frame_ = can_frame;
+        has_pending_frame_ = true;
+    }
+
+    // Returns 0 while already queued; a stopping queue rejects the submission and the frame is dropped.
+    try {
+        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &pending_work_.work) < 0)
+            LOG_DBG("CAN frame ID 0x%08X dropped: work queue unavailable.", can_frame.id);
+    } catch(const std::exception& e) {
+        LOG_DBG("CAN frame ID 0x%08X dropped: %s", can_frame.id, e.what());
+    }
+}
+
+void CanbusSensorReaderRaw::WorkHandler(k_work* work) {
+    auto* pending_work = CONTAINER_OF(work, PendingWork, work);
+    pending_work->reader->ProcessPendingFrame();
 }
 
 // Exceptions must not unwind into the work queue's C dispatch.
-void CanbusSensorReaderRaw::ProcessFrame(const CanFrame& can_frame) noexcept {
+void CanbusSensorReaderRaw::ProcessPendingFrame() noexcept {
+    CanFrame can_frame;
+    bool has_frame = false;
+
+    K_SPINLOCK(&pending_lock_) {
+        has_frame = has_pending_frame_;
+        if(has_frame) {
+            can_frame = pending_frame_;
+            has_pending_frame_ = false;
+        }
+    }
+
+    if(!has_frame)
+        return;
+
     try {
-        AddOrUpdateReading(can_frame);
-        process_sensor_callback_(*sensor_);
+        SensorReading reading = CreateReading();
+        FillReading(reading, can_frame);
+        process_sensor_callback_(*sensor_, reading);
     } catch(const std::exception& e) {
         LOG_ERR("CAN frame ID 0x%08X processing failed: %s", can_frame.id, e.what());
     } catch(...) {
@@ -93,30 +111,9 @@ void CanbusSensorReaderRaw::ProcessFrame(const CanFrame& can_frame) noexcept {
     }
 }
 
-std::optional<SensorReading> CanbusSensorReaderRaw::CreateRawReading(const CanFrame& can_frame) {
-    if(can_frame.data.empty())
-        return std::nullopt;
-
-    SensorReading reading(guid_generator_->Generate(), sensor_);
-    reading.source = ReadingSource::ISR;
-    reading.timestamp = time_service_->GetCurrentTime();
-
-    reading.value = std::nullopt;
+void CanbusSensorReaderRaw::FillReading(SensorReading& reading, const CanFrame& can_frame) {
     reading.status = ReadingStatus::RAW;
-
-    reading.metadata.AddTag<CanFrame>(
-        ReadingMetadataTag::CANBUS_DATA,
-        can_frame);
-
-    return reading;
-}
-
-void CanbusSensorReaderRaw::AddOrUpdateReading(const CanFrame& can_frame) {
-    auto reading = CreateRawReading(can_frame);
-    if(!reading)
-        return;
-
-    sensor_readings_frame_->AddOrUpdateReading(reading.value());
+    reading.can_frame = &can_frame;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

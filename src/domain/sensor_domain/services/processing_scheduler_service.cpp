@@ -1,17 +1,11 @@
-#include <span>
-
-#include "subsys/time/time_helpers.hpp"
-#include "subsys/lua_script/lua_script.h"
-#include "domain/script_domain/utilities/global_fuctions_registry.h"
+#include "domain/sensor_domain/processors/reading_pipeline.hpp"
 
 #include "processing_scheduler_service.h"
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::subsys::time;
-using namespace eerie_leap::subsys::lua_script;
 using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::domain::script_domain::utilities;
+using namespace eerie_leap::domain::sensor_domain::processors;
 
 LOG_MODULE_DECLARE(processing_service_logger);
 
@@ -28,31 +22,22 @@ ProcessingSchedulerService::ProcessingSchedulerService(
         reading_processors_(std::move(reading_processors)) {};
 
 WorkQueueTaskResult ProcessingSchedulerService::ProcessSensorWorkTask(SensorTask* task) {
+    SensorReading reading(task->sensor.get());
+    reading.source = ReadingSource::PROCESSING;
+
     try {
-        task->reader->Read();
-
-        if(task->readings_frame->HasReading(task->sensor->id_hash)) {
-            for(auto processor : *task->reading_processors)
-                processor->ProcessReading(task->sensor->id_hash);
-
-            auto reading_optional = task->readings_frame->TryGetReading(task->sensor->id_hash);
-            if(reading_optional) {
-                auto reading = std::move(reading_optional.value());
-                if(reading.status < ReadingStatus::PROCESSED) {
-                    reading.status = ReadingStatus::PROCESSED;
-                    task->readings_frame->AddOrUpdateReading(reading);
-                }
-
-                LOG_DBG("Sensor Reading - ID: %s, Guid: %llu, Value: %.3f, Time: %s",
-                    task->sensor->id.c_str(),
-                    reading.id.AsUint64(),
-                    reading.value.value_or(0.0f),
-                    TimeHelpers::GetFormattedString(reading.timestamp.value()).c_str());
-            }
-        }
+        reading = task->reader->Read();
+        ReadingPipeline::Run(*task->reading_processors, *task->sensor, reading);
     } catch (const std::exception& e) {
-        LOG_DBG("Error processing sensor: %s, Error: %s", task->sensor->id.c_str(), e.what());
+        reading.SetError(ReadingError::READER_FAILED);
+
+        LOG_DBG("Error reading sensor: %s, Error: %s", task->sensor->id.c_str(), e.what());
     }
+
+    task->readings_frame->AddOrUpdateReading(reading);
+
+    if(reading.HasError())
+        LOG_DBG("Sensor %s: %s", task->sensor->id.c_str(), ToString(reading.error).data());
 
     return {
         .reschedule = true,

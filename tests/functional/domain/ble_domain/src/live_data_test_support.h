@@ -15,7 +15,6 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/guid/guid_generator.h"
 #include "utilities/memory/memory_resource_manager.h"
 #include "subsys/bluetooth/i_ble_notifier.h"
 #include "domain/sensor_domain/models/sensor.h"
@@ -27,7 +26,6 @@
 namespace live_data_test {
 
 using namespace eerie_leap::domain::sensor_domain::models;
-using eerie_leap::utilities::guid::GuidGenerator;
 using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::subsys::bluetooth::IBleNotifier;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
@@ -141,14 +139,13 @@ inline DecodedSample Decode(std::span<const uint8_t> data) {
 // A frame with processed values for some sensors.
 struct Readings {
     std::shared_ptr<SensorReadingsFrame> frame = std::make_shared<SensorReadingsFrame>();
-    GuidGenerator guid_generator;
     std::vector<std::shared_ptr<Sensor>> sensors;
 
     uint32_t Add(std::string_view id, std::optional<float> value) {
         auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
         sensors.push_back(sensor);
 
-        SensorReading reading(guid_generator.Generate(), sensor);
+        SensorReading reading(sensor.get());
         reading.source = ReadingSource::PROCESSING;
         if(value.has_value()) {
             reading.status = ReadingStatus::PROCESSED;

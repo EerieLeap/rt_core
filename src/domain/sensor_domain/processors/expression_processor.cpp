@@ -1,7 +1,6 @@
 #include <cmath>
 #include <memory>
 #include <stdexcept>
-#include <string>
 
 #include "expression_processor.h"
 
@@ -13,88 +12,124 @@ ExpressionProcessor::ExpressionProcessor(std::shared_ptr<SensorReadingsFrame> se
     sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
 // Evaluating against a sensor that has no value yet would read NaN, or 0 through a comparison.
-void ExpressionProcessor::EnsureInputsAvailable(const ExpressionEvaluator& expression_evaluator) const {
+bool ExpressionProcessor::AreInputsAvailable(const ExpressionEvaluator& expression_evaluator) const {
     for(const auto& sensor_id : expression_evaluator.GetVariableNames()) {
         if(sensor_id == "x")
             continue;
 
         if(!sensor_readings_frame_->TryGetReadingValue(sensor_id).has_value())
-            throw std::runtime_error("Input sensor " + sensor_id + " has no value yet.");
+            return false;
     }
+
+    return true;
 }
 
-float ExpressionProcessor::Evaluate(ExpressionEvaluator& expression_evaluator, std::optional<float> x) const {
-    EnsureInputsAvailable(expression_evaluator);
+// Returns the result, or nothing after recording the failure on the reading.
+std::optional<float> ExpressionProcessor::Evaluate(
+    ExpressionEvaluator& expression_evaluator, std::optional<float> x, SensorReading& reading) const {
 
-    const float value = expression_evaluator.Evaluate(x);
-    if(std::isnan(value))
-        throw std::runtime_error("Expression result is not a number.");
+    if(!AreInputsAvailable(expression_evaluator)) {
+        reading.SetError(ReadingError::INPUT_UNAVAILABLE);
+        return std::nullopt;
+    }
+
+    float value = 0.0F;
+    try {
+        value = expression_evaluator.Evaluate(x);
+    } catch(const std::exception&) {
+        reading.SetError(ReadingError::EXPRESSION_FAILED);
+        return std::nullopt;
+    }
+
+    if(std::isnan(value)) {
+        reading.SetError(ReadingError::EXPRESSION_NOT_A_NUMBER);
+        return std::nullopt;
+    }
 
     return value;
 }
 
-void ExpressionProcessor::ProcessReading(const uint32_t sensor_id_hash) {
-    auto reading_optioanl = sensor_readings_frame_->TryGetReading(sensor_id_hash);
-    if(!reading_optioanl)
+void ExpressionProcessor::Process(const Sensor& sensor, SensorReading& reading) {
+    if(reading.status > ReadingStatus::INTERPOLATED) {
+        reading.SetError(ReadingError::WRONG_STATE);
         return;
-    auto reading = std::move(reading_optioanl.value());
+    }
 
-    try {
-        if(reading.status > ReadingStatus::INTERPOLATED)
-            throw std::invalid_argument("Reading is in wrong state");
+    const auto& configuration = sensor.configuration;
+    auto* expression_evaluator = configuration.expression_evaluator.get();
 
-        const auto& configuration = reading.sensor->configuration;
-        auto* expression_evaluator = configuration.expression_evaluator.get();
-
-        switch(configuration.type) {
-        case SensorType::PHYSICAL_ANALOG:
-        case SensorType::CANBUS_ANALOG: {
-            float value = reading.value.value();
-
-            if(expression_evaluator != nullptr)
-                value = Evaluate(*expression_evaluator, value);
-
-            reading.value = value;
-            break;
-        }
-
-        case SensorType::PHYSICAL_INDICATOR:
-        case SensorType::CANBUS_INDICATOR: {
-            // Indicators are evaluated and stored as 0 or 1.
-            bool value = reading.value.value();
-
-            if(expression_evaluator != nullptr)
-                value = Evaluate(*expression_evaluator, static_cast<float>(value));
-
-            reading.value = value;
-            break;
-        }
-
-        case SensorType::VIRTUAL_ANALOG:
-        case SensorType::VIRTUAL_INDICATOR:
-            if(expression_evaluator == nullptr)
-                throw std::invalid_argument("Virtual sensor has no expression");
-
-            reading.value = Evaluate(*expression_evaluator);
-            break;
-
-        case SensorType::USER_ANALOG:
-        case SensorType::USER_INDICATOR:
-            if(expression_evaluator != nullptr)
-                reading.value = Evaluate(*expression_evaluator, reading.value);
-            break;
-
-        default:
+    switch(configuration.type) {
+    case SensorType::PHYSICAL_ANALOG:
+    case SensorType::CANBUS_ANALOG: {
+        if(!reading.value.has_value()) {
+            reading.SetError(ReadingError::NO_VALUE);
             return;
         }
 
-        reading.status = ReadingStatus::EXPRESSION_EVALUATED;
-    } catch (const std::exception& e) {
-        reading.status = ReadingStatus::ERROR;
-        reading.error_message = e.what();
+        if(expression_evaluator != nullptr) {
+            const auto value = Evaluate(*expression_evaluator, reading.value, reading);
+            if(!value.has_value())
+                return;
+
+            reading.value = value;
+        }
+        break;
     }
 
-    sensor_readings_frame_->AddOrUpdateReading(reading);
+    case SensorType::PHYSICAL_INDICATOR:
+    case SensorType::CANBUS_INDICATOR: {
+        if(!reading.value.has_value()) {
+            reading.SetError(ReadingError::NO_VALUE);
+            return;
+        }
+
+        // Indicators are evaluated and stored as 0 or 1.
+        bool value = reading.value.value() != 0.0F;
+
+        if(expression_evaluator != nullptr) {
+            const auto result = Evaluate(*expression_evaluator, static_cast<float>(value), reading);
+            if(!result.has_value())
+                return;
+
+            value = result.value() != 0.0F;
+        }
+
+        reading.value = value ? 1.0F : 0.0F;
+        break;
+    }
+
+    case SensorType::VIRTUAL_ANALOG:
+    case SensorType::VIRTUAL_INDICATOR: {
+        if(expression_evaluator == nullptr) {
+            reading.SetError(ReadingError::EXPRESSION_FAILED);
+            return;
+        }
+
+        const auto value = Evaluate(*expression_evaluator, std::nullopt, reading);
+        if(!value.has_value())
+            return;
+
+        reading.value = value;
+        break;
+    }
+
+    case SensorType::USER_ANALOG:
+    case SensorType::USER_INDICATOR: {
+        if(expression_evaluator != nullptr) {
+            const auto value = Evaluate(*expression_evaluator, reading.value, reading);
+            if(!value.has_value())
+                return;
+
+            reading.value = value;
+        }
+        break;
+    }
+
+    default:
+        return;
+    }
+
+    reading.status = ReadingStatus::EXPRESSION_EVALUATED;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::processors

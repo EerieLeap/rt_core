@@ -13,50 +13,42 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderFactory::SensorReaderFactory(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
     std::shared_ptr<IGpio> gpio,
-    std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
+    std::shared_ptr<AdcConfigurationManager> adc_configuration_manager)
         : time_service_(std::move(time_service)),
-        guid_generator_(std::move(guid_generator)),
         gpio_(std::move(gpio)),
-        adc_configuration_manager_(std::move(adc_configuration_manager)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)) {}
+        adc_configuration_manager_(std::move(adc_configuration_manager)) {}
 
 std::unique_ptr<ISensorReader> SensorReaderFactory::Create(std::shared_ptr<Sensor> sensor) {
     std::unique_ptr<ISensorReader> sensor_reader;
 
     if(sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
+        if(adc_configuration_manager_ == nullptr)
+            return nullptr;
+
         sensor_reader = std::make_unique<SensorReaderPhysicalAnalog>(
             time_service_,
-            guid_generator_,
-            sensor_readings_frame_,
             sensor,
             adc_configuration_manager_);
     } else if(sensor->configuration.type == SensorType::VIRTUAL_ANALOG) {
         sensor_reader = std::make_unique<SensorReaderVirtualAnalog>(
             time_service_,
-            guid_generator_,
-            sensor_readings_frame_,
             sensor);
     } else if(sensor->configuration.type == SensorType::PHYSICAL_INDICATOR) {
+        if(gpio_ == nullptr)
+            return nullptr;
+
         sensor_reader = std::make_unique<SensorReaderPhysicalIndicator>(
             time_service_,
-            guid_generator_,
-            sensor_readings_frame_,
             sensor,
             gpio_);
     } else if(sensor->configuration.type == SensorType::VIRTUAL_INDICATOR) {
         sensor_reader = std::make_unique<SensorReaderVirtualIndicator>(
             time_service_,
-            guid_generator_,
-            sensor_readings_frame_,
             sensor);
     } else if(sensor->configuration.type == SensorType::USER_ANALOG || sensor->configuration.type == SensorType::USER_INDICATOR) {
         sensor_reader = std::make_unique<SensorReaderUserValueType>(
             time_service_,
-            guid_generator_,
-            sensor_readings_frame_,
             sensor);
     } else {
         return nullptr;

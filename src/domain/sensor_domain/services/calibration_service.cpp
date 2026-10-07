@@ -24,12 +24,10 @@ LOG_MODULE_REGISTER(calibration_logger);
 
 CalibrationService::CalibrationService(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     std::shared_ptr<SensorsProcessingService> sensors_processing_service)
     : work_queue_thread_(nullptr),
     time_service_(std::move(time_service)),
-    guid_generator_(std::move(guid_generator)),
     adc_configuration_manager_(std::move(adc_configuration_manager)),
     sensors_processing_service_(std::move(sensors_processing_service)) {};
 
@@ -43,15 +41,12 @@ void CalibrationService::Initialize() {
 
 WorkQueueTaskResult CalibrationService::ProcessCalibrationWorkTask(SensorTask* task) {
     try {
-        task->reader->Read();
-        auto reading_optional = task->readings_frame->TryGetReading(task->sensor->id_hash);
-        if(reading_optional) {
-            auto reading = reading_optional.value();
+        const SensorReading reading = task->reader->Read();
+        task->readings_frame->AddOrUpdateReading(reading);
 
-            LOG_INF("ADC Calibration Reading: Value: %.3f, Time: %s\n",
-                reading.value.value_or(0.0f),
-                TimeHelpers::GetFormattedString(reading.timestamp.value()).c_str());
-        }
+        LOG_INF("ADC Calibration Reading: Value: %.3f, Time: %s\n",
+            static_cast<double>(reading.value.value_or(0.0f)),
+            TimeHelpers::GetFormattedString(reading.timestamp.value()).c_str());
     } catch (const std::exception& e) {
         LOG_ERR("Error processing calibrator on channel %d, Error: %s",
             task->sensor->configuration.channel.value_or(-1),
@@ -79,8 +74,6 @@ std::unique_ptr<SensorTask> CalibrationService::CreateCalibrationTask(int channe
 
     task->reader = std::make_unique<SensorReaderPhysicalAnalogCalibrator>(
         time_service_,
-        guid_generator_,
-        sensor_readings_frame,
         sensor,
         adc_configuration_manager_);
 

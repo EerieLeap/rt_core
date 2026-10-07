@@ -10,27 +10,19 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderVirtualAnalog::SensorReaderVirtualAnalog(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<Sensor> sensor)
-        : SensorReaderBase(
-            std::move(time_service),
-            std::move(guid_generator),
-            std::move(sensor_readings_frame),
-            std::move(sensor)) {
+        : SensorReaderBase(std::move(time_service), std::move(sensor)) {
 
     if(sensor_->configuration.type != SensorType::VIRTUAL_ANALOG)
         throw std::runtime_error("Unsupported sensor type");
 }
 
-void SensorReaderVirtualAnalog::Read() {
-    SensorReading reading(guid_generator_->Generate(), sensor_);
-    reading.source = ReadingSource::PROCESSING;
-    reading.timestamp = time_service_->GetCurrentTime();
-
+// The value comes from the expression; the reader only stamps the reading.
+SensorReading SensorReaderVirtualAnalog::Read() {
+    SensorReading reading = CreateReading();
     reading.status = ReadingStatus::UNINITIALIZED;
 
-    sensor_readings_frame_->AddOrUpdateReading(reading);
+    return reading;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::sensor_readers

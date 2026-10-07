@@ -13,13 +13,11 @@ class SensorReaderVirtualAnalog : public SensorReaderBase {
 public:
     SensorReaderVirtualAnalog(
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<GuidGenerator> guid_generator,
-        std::shared_ptr<SensorReadingsFrame> readings_frame,
         std::shared_ptr<Sensor> sensor);
 
     ~SensorReaderVirtualAnalog() override = default;
 
-    void Read() override;
+    SensorReading Read() override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::sensor_readers

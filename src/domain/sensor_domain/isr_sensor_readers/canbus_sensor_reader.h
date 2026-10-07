@@ -2,10 +2,6 @@
 
 #include <memory>
 
-#include <zephyr/kernel.h>
-#include <zephyr/spinlock.h>
-#include <zephyr/sys/atomic.h>
-
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "domain/canbus_domain/models/can_signal_configuration.h"
 
@@ -22,13 +18,11 @@ private:
     // Aliases the owning message configuration, so that stays alive too.
     std::shared_ptr<const CanSignalConfiguration> signal_configuration_;
 
-    void AddOrUpdateReading(const CanFrame& can_frame) override;
+    void FillReading(SensorReading& reading, const CanFrame& can_frame) override;
 
 public:
     CanbusSensorReader(
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<GuidGenerator> guid_generator,
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
         std::shared_ptr<Sensor> sensor,
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,

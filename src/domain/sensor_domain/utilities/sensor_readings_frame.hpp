@@ -8,34 +8,42 @@
 #include <span>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 
 #include <zephyr/kernel.h>
 
 #include "utilities/string/string_helpers.h"
 #include "subsys/threading/scoped_mutex.h"
+#include "subsys/canbus/can_frame.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 
 namespace eerie_leap::domain::sensor_domain::utilities {
 
 using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::subsys::threading::ScopedMutex;
+using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::sensor_domain::models::ReadingStatus;
 using eerie_leap::domain::sensor_domain::models::ReadingSource;
 
+// The latest reading of every sensor, shared between the processing pipeline and its consumers.
+//
+// Entries are created the first time a sensor is seen (Reserve() sizes the tables up front) and
+// updated in place afterwards, so a steady-state commit or snapshot does not allocate. Consumers
+// copy into buffers they own; nothing escapes the lock by reference except the value slots of
+// GetReadingValuePtr(), which are never freed.
 class SensorReadingsFrame {
 private:
-    std::unordered_map<uint32_t, SensorReading> isr_readings_;
-    std::unordered_map<uint32_t, SensorReading> readings_;
-    std::unordered_map<uint32_t, SensorReading> processed_readings_;
-    // A value slot is created on first use and only ever rewritten afterwards, so a pointer handed
-    // out by GetReadingValuePtr() stays valid for the lifetime of the frame. NaN marks "no value".
-    std::unordered_map<uint32_t, float> reading_values_;
-    // Sensors whose processed reading changed since the last TakeProcessedReadings().
-    std::unordered_set<uint32_t> updated_sensor_id_hashes_;
+    struct ProcessedEntry {
+        SensorReading reading;
+        bool is_updated = false;   // Changed since the last TakeProcessedReadings().
+    };
 
-    // Every method allocates while holding it, so the guard must release on a throw.
+    std::unordered_map<uint32_t, SensorReading> readings_;             // Latest reading, any status.
+    std::unordered_map<uint32_t, ProcessedEntry> processed_readings_;  // Latest reading with status PROCESSED.
+    std::unordered_map<uint32_t, float> reading_values_;               // Latest processed value, NaN for none.
+    std::unordered_map<uint32_t, CanFrame> can_frames_;                // CANBUS_RAW sensors only.
+
+    // Methods may allocate while holding it (first sight of a sensor), so the guard must release on a throw.
     mutable k_mutex lock_;
 
     static constexpr float kNoValue = std::numeric_limits<float>::quiet_NaN();
@@ -48,41 +56,6 @@ private:
         return std::isnan(value) ? std::nullopt : std::optional<float>(value);
     }
 
-    void StoreProcessedReading(uint32_t sensor_id_hash, const SensorReading& reading) {
-        reading_values_[sensor_id_hash] = reading.value.value();
-
-        if(processed_readings_.contains(sensor_id_hash))
-            processed_readings_.erase(sensor_id_hash);
-        processed_readings_.insert({ sensor_id_hash, reading });
-
-        updated_sensor_id_hashes_.insert(sensor_id_hash);
-    }
-
-    void AddOrUpdateReadingIsr(SensorReading& reading) {
-        uint32_t sensor_id_hash = reading.sensor->id_hash;
-
-        if(isr_readings_.contains(sensor_id_hash))
-            isr_readings_.erase(sensor_id_hash);
-        isr_readings_.insert({ sensor_id_hash, reading });
-
-        if(reading.status == ReadingStatus::PROCESSED && reading.value.has_value())
-            StoreProcessedReading(sensor_id_hash, reading);
-    }
-
-    void AddOrUpdateReadingProcessing(SensorReading& reading) {
-        uint32_t sensor_id_hash = reading.sensor->id_hash;
-
-        if(isr_readings_.contains(sensor_id_hash))
-            isr_readings_.erase(sensor_id_hash);
-
-        if(readings_.contains(sensor_id_hash))
-            readings_.erase(sensor_id_hash);
-        readings_.insert({ sensor_id_hash, reading });
-
-        if(reading.status == ReadingStatus::PROCESSED && reading.value.has_value())
-            StoreProcessedReading(sensor_id_hash, reading);
-    }
-
 public:
     SensorReadingsFrame() {
         k_mutex_init(&lock_);
@@ -93,37 +66,55 @@ public:
     SensorReadingsFrame& operator=(const SensorReadingsFrame&) = delete;
     SensorReadingsFrame& operator=(SensorReadingsFrame&&) = delete;
 
-    void AddOrUpdateReading(SensorReading& reading) {
+    /** @brief Sizes the tables for @p sensor_count sensors so later inserts do not rehash. */
+    void Reserve(size_t sensor_count) {
         ScopedMutex guard(lock_);
 
-        if(reading.source == ReadingSource::ISR)
-            AddOrUpdateReadingIsr(reading);
-        else if(reading.source == ReadingSource::PROCESSING)
-            AddOrUpdateReadingProcessing(reading);
+        readings_.reserve(sensor_count);
+        processed_readings_.reserve(sensor_count);
+        reading_values_.reserve(sensor_count);
     }
 
-    std::optional<SensorReading> TryGetIsrReading(const uint32_t sensor_id_hash) const {
+    /**
+     * @brief Stores @p reading as the sensor's latest state. A reading without a source is ignored.
+     *
+     * A PROCESSED reading also becomes the sensor's latest processed reading and, when it has a
+     * value, its latest value. A CAN frame referenced by the reading is copied into the frame store.
+     */
+    void AddOrUpdateReading(const SensorReading& reading) {
+        if(reading.source == ReadingSource::NONE)
+            return;
+
+        const uint32_t sensor_id_hash = reading.sensor_id_hash;
+
         ScopedMutex guard(lock_);
 
-        std::optional<SensorReading> reading = std::nullopt;
-        if(isr_readings_.contains(sensor_id_hash))
-            reading.emplace(isr_readings_.at(sensor_id_hash));
+        if(reading.can_frame != nullptr)
+            can_frames_.insert_or_assign(sensor_id_hash, *reading.can_frame);
 
-        return reading;
-    }
+        // Stored copies never point at a caller's frame.
+        SensorReading stored = reading;
+        stored.can_frame = nullptr;
 
-    std::optional<SensorReading> TryGetIsrReading(std::string_view sensor_id) const {
-        return TryGetIsrReading(GetSensorIdHash(sensor_id));
+        readings_.insert_or_assign(sensor_id_hash, stored);
+
+        if(stored.status != ReadingStatus::PROCESSED)
+            return;
+
+        auto& entry = processed_readings_[sensor_id_hash];
+        entry.reading = stored;
+        entry.is_updated = true;
+
+        if(stored.value.has_value())
+            reading_values_[sensor_id_hash] = stored.value.value();
     }
 
     std::optional<SensorReading> TryGetReading(const uint32_t sensor_id_hash) const {
         ScopedMutex guard(lock_);
 
-        std::optional<SensorReading> reading = std::nullopt;
-        if(readings_.contains(sensor_id_hash))
-            reading.emplace(readings_.at(sensor_id_hash));
+        const auto it = readings_.find(sensor_id_hash);
 
-        return reading;
+        return it != readings_.end() ? std::optional<SensorReading>(it->second) : std::nullopt;
     }
 
     std::optional<SensorReading> TryGetReading(std::string_view sensor_id) const {
@@ -169,38 +160,66 @@ public:
         return &reading_values_.try_emplace(GetSensorIdHash(sensor_id), kNoValue).first->second;
     }
 
-    /** @brief Copies the latest processed reading of every sensor that has one. */
-    std::unordered_map<uint32_t, SensorReading> GetProcessedReadings() const {
+    /** @brief Copies the latest CAN frame stored for a CANBUS_RAW sensor. */
+    bool TryGetCanFrame(const uint32_t sensor_id_hash, CanFrame& can_frame) const {
         ScopedMutex guard(lock_);
 
-        return std::unordered_map<uint32_t, SensorReading>(processed_readings_.begin(), processed_readings_.end());
+        const auto it = can_frames_.find(sensor_id_hash);
+        if(it == can_frames_.end())
+            return false;
+
+        can_frame = it->second;
+
+        return true;
+    }
+
+    [[nodiscard]] size_t GetProcessedReadingCount() const {
+        ScopedMutex guard(lock_);
+
+        return processed_readings_.size();
     }
 
     /**
-     * @brief Copies the readings processed since the previous call and forgets them, in one step,
-     *        so no update is lost between the copy and the reset.
+     * @brief Copies the latest processed reading of every sensor into @p readings.
+     * @return The number copied, at most readings.size().
      */
-    std::unordered_map<uint32_t, SensorReading> TakeProcessedReadings() {
+    size_t SnapshotProcessedReadings(std::span<SensorReading> readings) const {
         ScopedMutex guard(lock_);
 
-        std::unordered_map<uint32_t, SensorReading> readings;
-        readings.reserve(updated_sensor_id_hashes_.size());
+        size_t count = 0;
+        for(const auto& [_, entry] : processed_readings_) {
+            if(count == readings.size())
+                break;
 
-        for(const uint32_t sensor_id_hash : updated_sensor_id_hashes_) {
-            const auto it = processed_readings_.find(sensor_id_hash);
-            if(it != processed_readings_.end())
-                readings.insert(*it);
+            readings[count++] = entry.reading;
         }
 
-        updated_sensor_id_hashes_.clear();
-
-        return readings;
+        return count;
     }
 
-    bool HasIsrReading(const uint32_t sensor_id_hash) const {
+    /**
+     * @brief Copies the readings processed since they were last taken into @p readings and marks
+     *        those as taken, in one step, so no update is lost between the copy and the reset.
+     *
+     * Readings that do not fit stay pending for the next call.
+     * @return The number copied, at most readings.size().
+     */
+    size_t TakeProcessedReadings(std::span<SensorReading> readings) {
         ScopedMutex guard(lock_);
 
-        return isr_readings_.contains(sensor_id_hash);
+        size_t count = 0;
+        for(auto& [_, entry] : processed_readings_) {
+            if(count == readings.size())
+                break;
+
+            if(!entry.is_updated)
+                continue;
+
+            readings[count++] = entry.reading;
+            entry.is_updated = false;
+        }
+
+        return count;
     }
 
     bool HasReading(const uint32_t sensor_id_hash) const {
@@ -213,17 +232,15 @@ public:
         ScopedMutex guard(lock_);
 
         processed_readings_.clear();
-        updated_sensor_id_hashes_.clear();
     }
 
     /** @brief Drops every reading. Value slots are kept, see GetReadingValuePtr(). */
     void ClearReadings() {
         ScopedMutex guard(lock_);
 
-        isr_readings_.clear();
         readings_.clear();
         processed_readings_.clear();
-        updated_sensor_id_hashes_.clear();
+        can_frames_.clear();
 
         for(auto& [_, value] : reading_values_)
             value = kNoValue;

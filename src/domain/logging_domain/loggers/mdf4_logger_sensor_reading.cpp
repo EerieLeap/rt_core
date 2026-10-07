@@ -104,17 +104,7 @@ bool Mdf4LoggerSensorReading::LogValueReading(float time_delta_s, const SensorRe
     float value = reading.value.value();
 
     if(channel_group->second.has_raw_value_channel) {
-        float raw_value = 0;
-
-        if(reading.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
-            auto raw_value_data = reading.metadata.GetTag<float>(ReadingMetadataTag::RAW_VALUE);
-            if(raw_value_data.has_value())
-                raw_value = raw_value_data.value();
-        } else if(reading.sensor->configuration.type == SensorType::PHYSICAL_INDICATOR) {
-            auto raw_value_data = reading.metadata.GetTag<bool>(ReadingMetadataTag::RAW_VALUE);
-            if(raw_value_data.has_value())
-                raw_value = raw_value_data.value() ? 1.0F : 0.0F;
-        }
+        const float raw_value = reading.raw_value.value_or(0.0F);
 
         std::array<MdfValue, 3> values{time_delta_s, value, raw_value};
         current_file_size_bytes_ += mdf4_file_->WriteDataRecordToStream(channel_group->second.channel_group, *stream_, values);
@@ -131,12 +121,11 @@ bool Mdf4LoggerSensorReading::LogCanbusRawReading(float time_delta_s, const Sens
     if(channel_group == can_raw_channel_groups_.end())
         return false;
 
-    auto can_frame = reading.metadata.GetTag<CanFrame>(ReadingMetadataTag::CANBUS_DATA);
-    if(!can_frame.has_value())
+    if(reading.can_frame == nullptr)
         return false;
 
     current_file_size_bytes_ += mdf4_file_->WriteCanbusDataRecordToStream(
-        channel_group->second, *stream_, can_frame.value(), time_delta_s);
+        channel_group->second, *stream_, *reading.can_frame, time_delta_s);
 
     return true;
 }

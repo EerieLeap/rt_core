@@ -2,7 +2,6 @@
 #include <eerie_memory.hpp>
 
 #include "utilities/memory/memory_resource_manager.h"
-#include "utilities/guid/guid_generator.h"
 #include "utilities/string/string_helpers.h"
 
 #include "configuration/cbor/cbor_adc_config/cbor_adc_config.h"
@@ -35,7 +34,6 @@
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::utilities::guid;
 using namespace eerie_leap::utilities::string;
 using namespace eerie_leap::utilities::voltage_interpolator;
 
@@ -53,6 +51,7 @@ using namespace eerie_leap::domain::sensor_domain::configuration;
 using namespace eerie_leap::domain::sensor_domain::sensor_readers;
 
 using namespace eerie_leap::domain::sensor_domain::models;
+using namespace eerie_leap::domain::sensor_domain::utilities;
 
 ZTEST_SUITE(sensors_reader, NULL, NULL, NULL, NULL, NULL);
 
@@ -173,8 +172,6 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
     auto rtc_provider = std::make_shared<RtcProvider>();
     auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
 
-    std::shared_ptr<GuidGenerator> guid_generator = std::make_shared<GuidGenerator>();
-
     const auto adc_configuration = sensors_reader_GetTestConfiguration();
 
     auto cbor_adc_config_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
@@ -199,28 +196,20 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
         if(sensors[i]->configuration.type == SensorType::PHYSICAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderPhysicalAnalog>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i],
                 adc_configuration_manager);
         } else if(sensors[i]->configuration.type == SensorType::VIRTUAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderVirtualAnalog>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i]);
         } else if(sensors[i]->configuration.type == SensorType::PHYSICAL_INDICATOR) {
             sensor_reader = std::make_shared<SensorReaderPhysicalIndicator>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i],
                 gpio);
         } else if(sensors[i]->configuration.type == SensorType::VIRTUAL_INDICATOR) {
             sensor_reader = std::make_shared<SensorReaderVirtualIndicator>(
                 time_service,
-                guid_generator,
-                sensor_readings_frame,
                 sensors[i]);
         } else {
             throw std::runtime_error("Unsupported sensor type");
@@ -249,7 +238,7 @@ ZTEST(sensors_reader, test_Read) {
     }
 
     for(int i = 0; i < sensor_readers->size(); i++)
-        sensor_readers->at(i)->Read();
+        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read());
 
     for(auto& sensor_name : sensor_names) {
         auto sensor_hash = StringHelpers::GetHash(sensor_name);
@@ -262,7 +251,6 @@ ZTEST(sensors_reader, test_Read) {
     zassert_equal(reading_2.status, ReadingStatus::INTERPOLATED);
     zassert_true(reading_2.value.has_value());
     zassert_true(reading_2.timestamp.has_value());
-    zassert_true(reading_2.id.AsUint64() > 0);
     zassert_between_inclusive(reading_2.value.value(), 0.0f, 200.0f);
 
     auto reading_1_opt = sensor_readings_frame->TryGetReading("sensor_1");
@@ -271,7 +259,6 @@ ZTEST(sensors_reader, test_Read) {
     zassert_equal(reading_1.status, ReadingStatus::INTERPOLATED);
     zassert_true(reading_1.value.has_value());
     zassert_true(reading_1.timestamp.has_value());
-    zassert_true(reading_1.id.AsUint64() > 0);
     zassert_between_inclusive(reading_1.value.value(), 0.0f, 5.0f);
 
     auto reading_3_opt = sensor_readings_frame->TryGetReading("sensor_3");
@@ -279,7 +266,6 @@ ZTEST(sensors_reader, test_Read) {
     auto& reading_3 = reading_3_opt.value();
     zassert_equal(reading_3.status, ReadingStatus::UNINITIALIZED);
     zassert_true(reading_3.timestamp.has_value());
-    zassert_true(reading_3.id.AsUint64() > 0);
     zassert_false(reading_3.value.has_value());
 
     auto reading_4_opt = sensor_readings_frame->TryGetReading("sensor_4");
@@ -287,7 +273,6 @@ ZTEST(sensors_reader, test_Read) {
     auto& reading_4 = reading_4_opt.value();
     zassert_equal(reading_4.status, ReadingStatus::RAW);
     zassert_true(reading_4.timestamp.has_value());
-    zassert_true(reading_4.id.AsUint64() > 0);
     zassert_true(reading_4.value.has_value());
     zassert_true(reading_4.value.value() == 1 || reading_4.value.value() == 0);
 
@@ -296,6 +281,5 @@ ZTEST(sensors_reader, test_Read) {
     auto& reading_5 = reading_5_opt.value();
     zassert_equal(reading_5.status, ReadingStatus::UNINITIALIZED);
     zassert_true(reading_5.timestamp.has_value());
-    zassert_true(reading_5.id.AsUint64() > 0);
     zassert_false(reading_5.value.has_value());
 }

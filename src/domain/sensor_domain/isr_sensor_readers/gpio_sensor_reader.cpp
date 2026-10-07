@@ -1,7 +1,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "zephyr/kernel.h"
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
 #include "gpio_sensor_reader.h"
@@ -15,21 +15,16 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 GpioSensorReader::GpioSensorReader(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<GuidGenerator> guid_generator,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<Sensor> sensor,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<IGpio> gpio)
         : IsrSensorReaderBase(
             std::move(time_service),
-            std::move(guid_generator),
-            std::move(sensor_readings_frame),
             std::move(sensor),
             std::move(process_sensor_callback)),
         work_queue_thread_(std::move(work_queue_thread)),
-        gpio_(std::move(gpio)),
-        dispatch_guard_(std::make_shared<IsrDispatchGuard<GpioSensorReader>>(this)) {
+        gpio_(std::move(gpio)) {
 
     if(sensor_->configuration.type != SensorType::PHYSICAL_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");
@@ -42,13 +37,17 @@ GpioSensorReader::GpioSensorReader(
 
     int channel = static_cast<int>(sensor_->configuration.channel.value());
 
+    pending_work_.reader = this;
+    k_work_init(&pending_work_.work, WorkHandler);
+
+    // Handler removal is serialised against dispatch, so `this` outlives every call.
     int handler_id = gpio_->RegisterChannelChangedHandler(
         channel,
         GpioEdge::BOTH,
         [this](int channel, bool state) {
             ARG_UNUSED(channel);
 
-            QueueReading(state);
+            QueueState(state);
         });
 
     if(handler_id <= 0)
@@ -58,66 +57,54 @@ GpioSensorReader::GpioSensorReader(
     handler_id_ = handler_id;
 
     // Seeds the frame, the channel level is only reported on edges afterwards.
-    QueueReading(gpio_->ReadChannel(channel_));
+    QueueState(gpio_->ReadChannel(channel_));
 }
 
 GpioSensorReader::~GpioSensorReader() {
     if(handler_id_ > 0) {
-        // Removal is serialised against dispatch, so no further edge is handed out.
         gpio_->RemoveChannelChangedHandler(channel_, handler_id_);
 
         handler_id_ = 0;
     }
 
-    dispatch_guard_->Detach();
+    // Waits for a running dispatch; nothing submits afterwards since the handler is gone.
+    k_work_cancel_sync(&pending_work_.work, &work_sync_);
 }
 
-void GpioSensorReader::QueueReading(bool state) {
-    if(!dispatch_guard_->TryAcquire())
-        return;
+// Caller's thread. Keeps only the newest level while the work queue is behind.
+void GpioSensorReader::QueueState(bool state) {
+    atomic_set(&pending_state_, state ? 1 : 0);
 
+    // Returns 0 while already queued; a stopping queue rejects the submission and the edge is dropped.
     try {
-        work_queue_thread_->Run(
-            [guard = dispatch_guard_, state]() {
-                guard->Dispatch([state](GpioSensorReader& reader) { reader.ProcessState(state); });
-
-                // NOTE: Bouncing inputs flood processor
-                // sleep is needed to let other threads to do work
-                k_msleep(STATE_PROCESSING_DELAY_MS);
-
-                guard->Release();
-            });
+        if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &pending_work_.work) < 0)
+            LOG_DBG("Gpio channel %d reading dropped: work queue unavailable.", channel_);
     } catch(const std::exception& e) {
-        // The queue rejects submissions while it is stopping, drop the edge.
-        dispatch_guard_->Release();
-
         LOG_DBG("Gpio channel %d reading dropped: %s", channel_, e.what());
     }
 }
 
+void GpioSensorReader::WorkHandler(k_work* work) {
+    auto* pending_work = CONTAINER_OF(work, PendingWork, work);
+    pending_work->reader->ProcessPendingState();
+}
+
 // Exceptions must not unwind into the work queue's C dispatch.
-void GpioSensorReader::ProcessState(bool state) noexcept {
+void GpioSensorReader::ProcessPendingState() noexcept {
+    const bool state = atomic_get(&pending_state_) != 0;
+
     try {
-        AddOrUpdateReading(state);
-        process_sensor_callback_(*sensor_);
+        SensorReading reading = CreateReading();
+        reading.value = state ? 1.0F : 0.0F;
+        reading.raw_value = reading.value;
+        reading.status = ReadingStatus::RAW;
+
+        process_sensor_callback_(*sensor_, reading);
     } catch(const std::exception& e) {
         LOG_ERR("Gpio channel %d processing failed: %s", channel_, e.what());
     } catch(...) {
         LOG_ERR("Gpio channel %d processing failed.", channel_);
     }
-}
-
-void GpioSensorReader::AddOrUpdateReading(bool state) {
-    SensorReading reading(guid_generator_->Generate(), sensor_);
-    reading.source = ReadingSource::ISR;
-    reading.timestamp = time_service_->GetCurrentTime();
-
-    reading.value = static_cast<float>(state);
-    reading.status = ReadingStatus::RAW;
-
-    reading.metadata.AddTag<bool>(ReadingMetadataTag::RAW_VALUE, state);
-
-    sensor_readings_frame_->AddOrUpdateReading(reading);
 }
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

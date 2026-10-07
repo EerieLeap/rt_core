@@ -1,5 +1,8 @@
-#include <stdexcept>
-#include <string>
+#include <utility>
+
+#include <zephyr/logging/log.h>
+
+#include "subsys/lua_script/lua_script.h"
 
 #include "script_processor.h"
 
@@ -7,48 +10,36 @@ namespace eerie_leap::domain::sensor_domain::processors {
 
 using namespace eerie_leap::domain::sensor_domain::models;
 
-ScriptProcessor::ScriptProcessor(const std::string& function_name, std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
-    : function_name_(function_name), sensor_readings_frame_(std::move(sensor_readings_frame)) {}
+LOG_MODULE_REGISTER(script_processor_logger);
 
-void ScriptProcessor::ProcessReading(const uint32_t sensor_id_hash) {
-    auto reading_optioanl = sensor_readings_frame_->TryGetReading(sensor_id_hash);
-    if(!reading_optioanl)
+ScriptProcessor::ScriptProcessor(std::string function_name)
+    : function_name_(std::move(function_name)) {}
+
+void ScriptProcessor::Process(const Sensor& sensor, SensorReading& reading) {
+    auto* lua_script = sensor.configuration.lua_script.get();
+    if(lua_script == nullptr)
         return;
-    auto reading = std::move(reading_optioanl.value());
 
-    try {
-        auto lua_script = reading.sensor->configuration.lua_script;
-        if(lua_script == nullptr)
-            return;
-
-        auto* state = lua_script->GetState();
-        if(state == nullptr)
-            return;
-
-        lua_getglobal(state, function_name_.c_str());
-
-        if(!lua_isfunction(state, -1)) {
-            lua_pop(state, 1);
-            return;
-        }
-
-        lua_pushstring(state, reading.sensor->id.c_str());
-
-        if(lua_pcall(state, 1, 0, 0) != LUA_OK) {
-            const char* message = lua_tostring(state, -1);
-            std::string error_message = message != nullptr ? message : "Lua function failed.";
-            lua_pop(state, 1);
-
-            throw std::runtime_error(error_message);
-        }
-
+    auto* state = lua_script->GetState();
+    if(state == nullptr)
         return;
-    } catch (const std::exception& e) {
-        reading.status = ReadingStatus::ERROR;
-        reading.error_message = e.what();
+
+    lua_getglobal(state, function_name_.c_str());
+
+    if(!lua_isfunction(state, -1)) {
+        lua_pop(state, 1);
+        return;
     }
 
-    sensor_readings_frame_->AddOrUpdateReading(reading);
+    lua_pushstring(state, sensor.id.c_str());
+
+    if(lua_pcall(state, 1, 0, 0) != LUA_OK) {
+        const char* message = lua_tostring(state, -1);
+        LOG_ERR("Sensor %s: %s failed: %s", sensor.id.c_str(), function_name_.c_str(), message != nullptr ? message : "");
+        lua_pop(state, 1);
+
+        reading.SetError(ReadingError::SCRIPT_FAILED);
+    }
 }
 
 } // namespace eerie_leap::domain::sensor_domain::processors
