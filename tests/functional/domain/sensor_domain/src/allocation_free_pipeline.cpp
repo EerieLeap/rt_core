@@ -143,7 +143,7 @@ void RunSamples(Pipeline& pipeline, uint32_t iteration) {
 
     SensorReading raw_reading(pipeline.sensors[2].get());
     raw_reading.source = ReadingSource::ISR;
-    raw_reading.timestamp = std::chrono::system_clock::now();
+    raw_reading.timestamp = std::chrono::system_clock::time_point(std::chrono::milliseconds(k_uptime_get()));
     raw_reading.status = ReadingStatus::RAW;
     raw_reading.can_frame = &can_frame;
     pipeline.pipeline->Process(pipeline.generation->runtimes[2], raw_reading);

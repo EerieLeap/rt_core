@@ -39,7 +39,7 @@ jobs:
 
       - name: Run tests
         working-directory: rt_core
-        run: west twister -c --disable-warnings-as-errors -O ./twister-out -T ./tests
+        run: west twister -c --disable-warnings-as-errors --inline-logs -O ./twister-out -T ./tests
 
       - name: Upload test results
         if: always()
