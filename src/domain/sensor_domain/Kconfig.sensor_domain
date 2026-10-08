@@ -25,4 +25,15 @@ menu "EerieLeap Sensor Domain config"
           A sensors configuration with more sensors is rejected at validation.
           Every sensor holds its readings and runtime objects in internal RAM,
           so size this for the unit's memory rather than for the configuration.
+
+    config EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE
+        int "Raw CAN frames queued for the log writer"
+        range 1 1024
+        default 32
+        help
+          Frames of CANBUS_RAW sensors are queued for the log writer so every
+          frame is logged, not only the latest one at each logging tick. Frames
+          arriving while the queue is full are dropped and counted. Each entry
+          takes about 90 bytes of internal RAM; the queue only exists while a
+          CANBUS_RAW sensor is configured.
 endmenu

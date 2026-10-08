@@ -17,7 +17,6 @@ namespace eerie_leap::domain::logging_domain::services {
 using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::subsys::random;
 using namespace eerie_leap::utilities::string;
-using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::domain::sensor_domain::models::SensorType;
 
 LOG_MODULE_REGISTER(log_writer_service_logger);
@@ -150,21 +149,25 @@ bool LogWriterService::DoStop() {
 WorkQueueTaskResult LogWriterService::ProcessWorkTask(LogWriterTask* task) {
     auto time_now = task->time_service->GetCurrentTime();
 
+    // Values are sampled at the logging interval; raw CAN frames come through their queue below,
+    // so every frame is logged, not only the latest one.
     const size_t count = task->sensor_readings_frame->SnapshotProcessedReadings(task->readings);
     for(size_t i = 0; i < count; i++) {
-        SensorReading& reading = task->readings[i];
+        const SensorReading& reading = task->readings[i];
 
-        // A raw CAN reading is its frame; it lives in the frame store, not in the reading.
-        CanFrame can_frame;
-        if(reading.sensor->configuration.type == SensorType::CANBUS_RAW
-            && task->sensor_readings_frame->TryGetCanFrame(reading.sensor_id_hash, can_frame)) {
-
-            reading.can_frame = &can_frame;
-        }
+        if(reading.sensor->configuration.type == SensorType::CANBUS_RAW)
+            continue;
 
         task->logger->LogReading(time_now, reading);
-        reading.can_frame = nullptr;
     }
+
+    size_t raw_count = 0;
+    do {
+        raw_count = task->sensor_readings_frame->TakeRawCanFrames(task->raw_readings, task->raw_frames);
+
+        for(size_t i = 0; i < raw_count; i++)
+            task->logger->LogReading(time_now, task->raw_readings[i]);
+    } while(raw_count == task->raw_readings.size());
 
     return {
         .reschedule = true,

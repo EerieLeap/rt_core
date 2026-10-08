@@ -25,6 +25,7 @@ private:
     void BuildInterpolator(SensorRuntime& runtime) const;
     void BuildExpression(SensorRuntime& runtime) const;
     void BuildScript(SensorRuntime& runtime) const;
+    void LinkDependents(SensorGeneration& generation) const;
 
 public:
     SensorPipelineBuilder(

@@ -6,7 +6,7 @@
 
 #include "gpio_sensor_reader.h"
 
-LOG_MODULE_DECLARE(isr_sensor_reader_logger);
+LOG_MODULE_REGISTER(isr_sensor_reader_logger);
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 

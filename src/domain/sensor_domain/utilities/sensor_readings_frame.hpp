@@ -18,6 +18,7 @@
 #include "subsys/canbus/can_frame.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_slot.h"
+#include "domain/sensor_domain/models/sensor_limits.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 
 namespace eerie_leap::domain::sensor_domain::utilities {
@@ -27,6 +28,7 @@ using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::sensor_domain::models::SensorSlot;
+using eerie_leap::domain::sensor_domain::models::SensorLimits;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::sensor_domain::models::ReadingStatus;
 using eerie_leap::domain::sensor_domain::models::ReadingSource;
@@ -109,12 +111,26 @@ private:
         uint16_t slot;
     };
 
+    // A raw frame on its way to the log writer.
+    struct RawCanRecord {
+        uint16_t slot = 0;
+        int64_t timestamp = 0;
+        bool has_timestamp = false;
+        CanFrame frame{};
+    };
+
     std::vector<Slot> slots_;
     std::vector<const Sensor*> sensors_;     // By slot; owned by the generation that configured the frame.
     std::vector<float> values_;              // Latest processed value by slot, NaN for none. Addresses are stable.
     std::vector<IndexEntry> index_;          // Sorted by hash.
-    std::vector<CanFrame> can_frames_;       // One per CANBUS_RAW sensor.
+    std::vector<CanFrame> can_frames_;       // Latest frame, one per CANBUS_RAW sensor.
     uint32_t generation_ = 0;
+
+    // Every raw frame since the log writer last drained, oldest first; sized at Configure().
+    std::vector<RawCanRecord> raw_can_queue_;
+    size_t raw_can_head_ = 0;
+    size_t raw_can_count_ = 0;
+    uint32_t raw_can_dropped_ = 0;
 
     // Holds across the record copies; nothing allocates while it is held after Configure().
     mutable k_mutex lock_;
@@ -156,6 +172,27 @@ private:
 
         for(auto& can_frame : can_frames_)
             can_frame = CanFrame{};
+
+        raw_can_head_ = 0;
+        raw_can_count_ = 0;
+    }
+
+    void PushRawCanFrameLocked(uint16_t slot, const SensorReading& reading) {
+        if(raw_can_queue_.empty())
+            return;
+
+        if(raw_can_count_ == raw_can_queue_.size()) {
+            raw_can_dropped_++;
+            return;
+        }
+
+        auto& record = raw_can_queue_[(raw_can_head_ + raw_can_count_) % raw_can_queue_.size()];
+        record.slot = slot;
+        record.has_timestamp = reading.timestamp.has_value();
+        record.timestamp = record.has_timestamp ? reading.timestamp->time_since_epoch().count() : 0;
+        record.frame = *reading.can_frame;
+
+        raw_can_count_++;
     }
 
 public:
@@ -198,6 +235,10 @@ public:
             [](const IndexEntry& a, const IndexEntry& b) { return a.sensor_id_hash < b.sensor_id_hash; });
 
         can_frames_.assign(can_frame_count, CanFrame{});
+        raw_can_queue_.assign(can_frame_count > 0 ? SensorLimits::kRawCanQueueSize : 0, RawCanRecord{});
+        raw_can_head_ = 0;
+        raw_can_count_ = 0;
+        raw_can_dropped_ = 0;
 
         return ++generation_;
     }
@@ -280,8 +321,10 @@ public:
         slot.latest = Record::Pack(reading);
         slot.has_reading = true;
 
-        if(reading.can_frame != nullptr && slot.can_frame_index != SensorSlot::kInvalid)
+        if(reading.can_frame != nullptr && slot.can_frame_index != SensorSlot::kInvalid) {
             can_frames_[slot.can_frame_index] = *reading.can_frame;
+            PushRawCanFrameLocked(slot_index->index, reading);
+        }
 
         if(reading.status != ReadingStatus::PROCESSED)
             return true;
@@ -367,6 +410,48 @@ public:
         can_frame = can_frames_[can_frame_index];
 
         return true;
+    }
+
+    /**
+     * @brief Moves the oldest queued raw CAN frames into @p readings and @p frames, in arrival order.
+     *
+     * Each reading refers to its frame through SensorReading::can_frame for as long as @p frames lives.
+     * @return The number moved, at most the smaller span; call again until it returns 0.
+     */
+    size_t TakeRawCanFrames(std::span<SensorReading> readings, std::span<CanFrame> frames) {
+        const size_t capacity = std::min(readings.size(), frames.size());
+
+        ScopedMutex guard(lock_);
+
+        size_t count = 0;
+        while(count < capacity && raw_can_count_ > 0) {
+            const auto& record = raw_can_queue_[raw_can_head_];
+
+            frames[count] = record.frame;
+
+            SensorReading reading(sensors_[record.slot]);
+            reading.source = ReadingSource::ISR;
+            reading.status = ReadingStatus::PROCESSED;
+            if(record.has_timestamp) {
+                reading.timestamp = std::chrono::system_clock::time_point(
+                    std::chrono::system_clock::duration(record.timestamp));
+            }
+            reading.can_frame = &frames[count];
+            readings[count] = reading;
+
+            raw_can_head_ = (raw_can_head_ + 1) % raw_can_queue_.size();
+            raw_can_count_--;
+            count++;
+        }
+
+        return count;
+    }
+
+    /** @return Raw CAN frames dropped because the queue was full since Configure(). */
+    [[nodiscard]] uint32_t GetDroppedRawCanFrameCount() const {
+        ScopedMutex guard(lock_);
+
+        return raw_can_dropped_;
     }
 
     [[nodiscard]] size_t GetProcessedReadingCount() const {

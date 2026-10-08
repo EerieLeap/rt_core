@@ -59,18 +59,17 @@ struct SensorTypeTraits {
             traits.is_isr_driven = true;
             break;
 
+        // Without a sampling rate a virtual sensor is evaluated whenever one of its inputs commits.
         case SensorType::VIRTUAL_ANALOG:
             traits.source = SensorSourceKind::EXPRESSION;
             traits.value_kind = SensorValueKind::ANALOG;
             traits.requires_expression = true;
-            traits.requires_sampling_rate = true;
             break;
 
         case SensorType::VIRTUAL_INDICATOR:
             traits.source = SensorSourceKind::EXPRESSION;
             traits.value_kind = SensorValueKind::INDICATOR;
             traits.requires_expression = true;
-            traits.requires_sampling_rate = true;
             break;
 
         case SensorType::CANBUS_RAW:

@@ -8,11 +8,10 @@
 #include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "domain/sensor_domain/runtime/sensor_runtime.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
-#include "domain/sensor_domain/processors/i_reading_processor.h"
+#include "domain/sensor_domain/processors/reading_pipeline.hpp"
 
-#include "sensor_task.hpp"
+#include "rate_group_task.hpp"
 
 namespace eerie_leap::domain::sensor_domain::services {
 
@@ -24,23 +23,23 @@ using threading::WorkQueueThread;
 using threading::WorkQueueTaskResult;
 using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
 using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
+using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
 
-// Runs the polled sensors of a generation, one periodic task each.
+// Runs the polled sensors of a generation: one periodic task per distinct sampling rate, whose
+// sensors are read in processing order so a derived sensor in the group sees this tick's inputs.
 class ProcessingSchedulerService final : public ServiceBase<> {
 private:
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory_;
-
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
-    std::vector<threading::WorkQueueTask<SensorTask>> work_queue_tasks_;
+    std::shared_ptr<ReadingPipeline> pipeline_;
 
-    std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors_;
+    std::vector<threading::WorkQueueTask<RateGroupTask>> work_queue_tasks_;
     std::shared_ptr<const SensorGeneration> generation_;
 
     void StartTasks();
     void CancelTasks();
-    std::unique_ptr<SensorTask> CreateSensorTask(const SensorRuntime& runtime);
-    static WorkQueueTaskResult ProcessSensorWorkTask(SensorTask* task);
+    std::vector<std::unique_ptr<RateGroupTask>> CreateRateGroups() const;
+    static WorkQueueTaskResult ProcessRateGroup(RateGroupTask* task);
 
     bool DoStart() override;
     bool DoStop() override;
@@ -49,15 +48,17 @@ private:
 
 public:
     ProcessingSchedulerService(
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
         std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> reading_processors);
+        std::shared_ptr<ReadingPipeline> pipeline);
 
     // The generation to run; set while stopped, before Start().
     void SetGeneration(std::shared_ptr<const SensorGeneration> generation);
 
     [[nodiscard]] bool IsPausable() const noexcept override { return true; }
+
+    /** @return The number of rate groups (timers) running. */
+    [[nodiscard]] size_t GetRateGroupCount() const { return work_queue_tasks_.size(); }
 };
 
 } // namespace eerie_leap::domain::sensor_domain::services

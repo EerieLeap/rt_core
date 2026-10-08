@@ -72,9 +72,13 @@ struct SensorConfiguration {
     [[nodiscard]] bool HasScript() const { return !script_path.empty(); }
 
     SensorReadingUpdateMethod GetReadingUpdateMethod() const {
+        const auto traits = GetTraits();
+
         if(sampling_rate_ms.has_value())
             return SensorReadingUpdateMethod::SCHEDULER;
-        else if(GetTraits().is_isr_driven)
+        else if(traits.source == SensorSourceKind::EXPRESSION)
+            return SensorReadingUpdateMethod::DEPENDENT;
+        else if(traits.is_isr_driven)
             return SensorReadingUpdateMethod::ISR;
 
         return SensorReadingUpdateMethod::NONE;

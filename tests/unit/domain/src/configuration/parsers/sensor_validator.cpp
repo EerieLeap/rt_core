@@ -100,13 +100,19 @@ ZTEST(sensor_validator, test_every_type_validates_with_its_update_method) {
     zassert_true(Validates(SensorType::PHYSICAL_INDICATOR, std::nullopt), "GPIO edges need no sampling rate");
     zassert_true(Validates(SensorType::VIRTUAL_ANALOG, 100));
     zassert_true(Validates(SensorType::VIRTUAL_INDICATOR, 100));
+
+    // Without a sampling rate a virtual sensor is evaluated when an input commits.
+    auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
+    dependent->configuration.expression = "other_sensor * 2";
+    zassert_false(Validate({ dependent }).has_value());
     zassert_true(Validates(SensorType::CANBUS_RAW, std::nullopt));
     zassert_true(Validates(SensorType::CANBUS_ANALOG, std::nullopt));
     zassert_true(Validates(SensorType::CANBUS_INDICATOR, std::nullopt));
 }
 
 ZTEST(sensor_validator, test_sensor_that_would_never_update_is_rejected) {
-    // Polled sensors without a sampling rate resolve to no update method at all.
+    // Polled sensors without a sampling rate resolve to no update method at all; a virtual sensor
+    // without one needs an input to be evaluated after ("1 + 1" has none).
     for(auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::VIRTUAL_INDICATOR,
                       SensorType::USER_ANALOG, SensorType::USER_INDICATOR }) {
         auto error = Validate({ MakeSensor("sensor_1", type, std::nullopt) });

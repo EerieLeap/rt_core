@@ -17,8 +17,10 @@ LOG_MODULE_REGISTER(processing_service_logger);
 SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
+    std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
+    std::shared_ptr<CanbusService> canbus_service,
     std::shared_ptr<IFsService> sd_fs_service)
         : work_queue_thread_(nullptr),
         sensors_configuration_manager_(std::move(sensors_configuration_manager)),
@@ -34,21 +36,23 @@ SensorsProcessingService::SensorsProcessingService(
     reading_processors_->push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
 
-    if(isr_sensor_reader_factory != nullptr) {
+    pipeline_ = std::make_shared<ReadingPipeline>(sensor_readings_frame_, reading_processors_, time_service);
+
+    if(isr_sensor_reader_factory != nullptr || canbus_service != nullptr) {
         isr_service_ = std::make_shared<ProcessingIsrService>(
-            sensor_readings_frame_,
+            time_service,
             std::move(isr_sensor_reader_factory),
+            std::move(canbus_service),
             work_queue_thread_,
-            reading_processors_);
+            pipeline_);
         processing_services_.push_back(isr_service_);
     }
 
     if(sensor_reader_factory != nullptr) {
         scheduler_service_ = std::make_shared<ProcessingSchedulerService>(
-            sensor_readings_frame_,
             std::move(sensor_reader_factory),
             work_queue_thread_,
-            reading_processors_);
+            pipeline_);
         processing_services_.push_back(scheduler_service_);
     }
 };
@@ -99,7 +103,7 @@ bool SensorsProcessingService::DoStop() {
     for(const auto& processing_service : processing_services_)
         processing_service->Stop();
 
-    // Readers and tasks are gone, so nothing refers to the generation any more.
+    // Sources are gone, so nothing refers to the generation any more.
     sensor_readings_frame_->ClearReadings();
     generation_ = nullptr;
 

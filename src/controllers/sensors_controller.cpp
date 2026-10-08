@@ -72,7 +72,6 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
 
     isr_sensor_reader_factory_ = std::make_shared<IsrSensorReaderFactory>(
         time_service_,
-        canbus_service_,
         gpio_);
 
     // Polled sensors need no ADC unless they are PHYSICAL_ANALOG; the factory checks per sensor.
@@ -84,8 +83,10 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
     sensors_processing_service_ = std::make_shared<SensorsProcessingService>(
         sensors_configuration_manager_,
         sensor_readings_frame_,
+        time_service_,
         isr_sensor_reader_factory_,
         sensor_reader_factory_,
+        canbus_service_,
         sd_fs_service_);
     if(!sensors_processing_service_->Initialize()) {
         LOG_ERR("Failed to initialize the sensors processing service.");

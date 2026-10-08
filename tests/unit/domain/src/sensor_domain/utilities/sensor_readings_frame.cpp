@@ -11,6 +11,7 @@
 #include "subsys/canbus/can_frame.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
+#include "domain/sensor_domain/models/sensor_limits.h"
 #include "domain/sensor_domain/models/reading_status.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
@@ -494,4 +495,80 @@ ZTEST(sensor_readings_frame, test_AreValuesAvailable) {
 
     const std::array<SensorSlot, 1> invalid = { SensorSlot{} };
     zassert_false(sensor_readings_frame->AreValuesAvailable(invalid));
+}
+
+ZTEST(sensor_readings_frame, test_raw_can_frames_are_queued_for_the_log_writer) {
+    auto sensors = sensor_readings_frame_GetTestSensors();
+
+    auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
+    raw->configuration.type = SensorType::CANBUS_RAW;
+    auto sensor_readings_frame = MakeFrame({ raw, sensors[1] });
+
+    std::array<SensorReading, 4> readings;
+    std::array<CanFrame, 4> frames;
+    zassert_equal(sensor_readings_frame->TakeRawCanFrames(readings, frames), 0);
+
+    // Every frame is queued, not only the latest one.
+    for(uint8_t i = 1; i <= 3; i++) {
+        CanFrame can_frame;
+        can_frame.id = 0x100 + i;
+        can_frame.data = { i };
+
+        SensorReading reading = MakeReading(raw, ReadingSource::ISR, ReadingStatus::PROCESSED);
+        reading.timestamp = std::chrono::system_clock::time_point(std::chrono::seconds(i));
+        reading.can_frame = &can_frame;
+        sensor_readings_frame->AddOrUpdateReading(reading);
+    }
+
+    const size_t count = sensor_readings_frame->TakeRawCanFrames(readings, frames);
+    zassert_equal(count, 3);
+    for(size_t i = 0; i < count; i++) {
+        zassert_equal(readings[i].sensor_id_hash, raw->id_hash);
+        zassert_equal(readings[i].status, ReadingStatus::PROCESSED);
+        zassert_equal(readings[i].can_frame, &frames[i], "The reading refers to the caller's copy");
+        zassert_equal(frames[i].id, 0x100 + i + 1, "Oldest first");
+        zassert_equal(frames[i].data[0], i + 1);
+        zassert_equal(readings[i].timestamp.value().time_since_epoch(), std::chrono::seconds(i + 1));
+    }
+
+    zassert_equal(sensor_readings_frame->TakeRawCanFrames(readings, frames), 0, "Taken once");
+    zassert_equal(sensor_readings_frame->GetDroppedRawCanFrameCount(), 0);
+}
+
+ZTEST(sensor_readings_frame, test_raw_can_queue_drops_and_counts_when_full) {
+    auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
+    raw->configuration.type = SensorType::CANBUS_RAW;
+    auto sensor_readings_frame = MakeFrame({ raw });
+
+    CanFrame can_frame;
+    can_frame.id = 0x100;
+    can_frame.data = { 1 };
+
+    SensorReading reading = MakeReading(raw, ReadingSource::ISR, ReadingStatus::PROCESSED);
+    reading.can_frame = &can_frame;
+
+    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + 5; i++)
+        sensor_readings_frame->AddOrUpdateReading(reading);
+
+    zassert_equal(sensor_readings_frame->GetDroppedRawCanFrameCount(), 5);
+
+    // Draining in chunks returns everything that was kept, and nothing more.
+    std::array<SensorReading, 8> readings;
+    std::array<CanFrame, 8> frames;
+    size_t total = 0;
+    size_t count = 0;
+    do {
+        count = sensor_readings_frame->TakeRawCanFrames(readings, frames);
+        total += count;
+    } while(count == readings.size());
+
+    zassert_equal(total, SensorLimits::kRawCanQueueSize);
+
+    // The latest frame is still available for diagnostics, and ClearReadings() empties the queue.
+    CanFrame latest;
+    zassert_true(sensor_readings_frame->TryGetCanFrame(raw->id_hash, latest));
+
+    sensor_readings_frame->AddOrUpdateReading(reading);
+    sensor_readings_frame->ClearReadings();
+    zassert_equal(sensor_readings_frame->TakeRawCanFrames(readings, frames), 0);
 }

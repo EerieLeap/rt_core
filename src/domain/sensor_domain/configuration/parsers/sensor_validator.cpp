@@ -229,11 +229,19 @@ void SensorValidator::ValidateExpression(std::string_view sensor_id, const Senso
         return;
 
     // Parsed here so an invalid expression is reported at save time with its message.
+    size_t input_count = 0;
     try {
         ExpressionEvaluator expression_evaluator(std::string(sensor_configuration.expression));
+
+        for(const auto& name : expression_evaluator.GetVariableNames())
+            input_count += name == "x" ? 0 : 1;
     } catch(const std::invalid_argument& e) {
         InvalidSensorConfiguration(sensor_id, e.what());
     }
+
+    // A virtual sensor is either polled or evaluated when an input commits; with neither it never updates.
+    if(traits.source == SensorSourceKind::EXPRESSION && !sensor_configuration.sampling_rate_ms.has_value() && input_count == 0)
+        InvalidSensorConfiguration(sensor_id, "Sensor must have a sampling rate or depend on another sensor.");
 }
 
 } // namespace eerie_leap::domain::sensor_domain::configuration::parsers

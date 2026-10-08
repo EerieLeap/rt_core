@@ -12,6 +12,13 @@ struct SensorLimits {
 #else
     static constexpr size_t kMaxCount = 64;
 #endif
+
+    // Raw CAN frames queued for the log writer between its ticks.
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE
+    static constexpr size_t kRawCanQueueSize = CONFIG_EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE;
+#else
+    static constexpr size_t kRawCanQueueSize = 32;
+#endif
 };
 
 } // namespace eerie_leap::domain::sensor_domain::models

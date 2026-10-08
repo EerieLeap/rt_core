@@ -1,8 +1,6 @@
 #include <zephyr/logging/log.h>
 
 #include "domain/sensor_domain/models/sensor_type_traits.h"
-#include "domain/sensor_domain/isr_sensor_readers/canbus_sensor_reader_raw.h"
-#include "domain/sensor_domain/isr_sensor_readers/canbus_sensor_reader.h"
 #include "domain/sensor_domain/isr_sensor_readers/gpio_sensor_reader.h"
 
 #include "isr_sensor_reader_factory.h"
@@ -15,85 +13,19 @@ LOG_MODULE_REGISTER(isr_sr_factory_logger);
 
 IsrSensorReaderFactory::IsrSensorReaderFactory(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<CanbusService> canbus_service,
     std::shared_ptr<IGpio> gpio)
         : time_service_(std::move(time_service)),
-        canbus_service_(std::move(canbus_service)),
         gpio_(std::move(gpio)) {}
-
-std::optional<CanId> IsrSensorReaderFactory::GetFrameId(const Sensor& sensor) const {
-    const auto& source = *sensor.configuration.canbus_source;
-
-    const auto* channel_configuration = canbus_service_->GetChannelConfiguration(source.bus_channel);
-    if(channel_configuration == nullptr)
-        return std::nullopt;
-
-    return CanId {
-        source.frame_id,
-        channel_configuration->is_extended_id
-    };
-}
 
 std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
     const SensorRuntime& runtime,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     ProcessSensorCallback process_sensor_callback) {
 
-    const Sensor& sensor = runtime.GetSensor();
-    const auto traits = sensor.configuration.GetTraits();
+    const auto traits = runtime.GetSensor().configuration.GetTraits();
 
     try {
         switch(traits.source) {
-        case SensorSourceKind::CAN_FRAME: {
-            if(canbus_service_ == nullptr || sensor.configuration.canbus_source == nullptr)
-                return nullptr;
-
-            auto canbus = canbus_service_->GetCanbus(sensor.configuration.canbus_source->bus_channel);
-            const auto frame_id = GetFrameId(sensor);
-            if(canbus == nullptr || !frame_id.has_value())
-                return nullptr;
-
-            return std::make_unique<CanbusSensorReaderRaw>(
-                time_service_,
-                runtime,
-                std::move(process_sensor_callback),
-                std::move(work_queue_thread),
-                canbus,
-                frame_id.value());
-        }
-
-        case SensorSourceKind::CAN_SIGNAL: {
-            if(canbus_service_ == nullptr || sensor.configuration.canbus_source == nullptr)
-                return nullptr;
-
-            auto canbus = canbus_service_->GetCanbus(sensor.configuration.canbus_source->bus_channel);
-            const auto frame_id = GetFrameId(sensor);
-            if(canbus == nullptr || !frame_id.has_value())
-                return nullptr;
-
-            auto message_configuration = canbus_service_->GetMessageConfiguration(
-                sensor.configuration.canbus_source->bus_channel,
-                sensor.configuration.canbus_source->frame_id);
-
-            if(message_configuration == nullptr)
-                return nullptr;
-
-            const auto* signal_configuration = message_configuration->TryGetSignal(
-                sensor.configuration.canbus_source->signal_name_hash);
-
-            if(signal_configuration == nullptr)
-                return nullptr;
-
-            return std::make_unique<CanbusSensorReader>(
-                time_service_,
-                runtime,
-                std::move(process_sensor_callback),
-                std::move(work_queue_thread),
-                canbus,
-                frame_id.value(),
-                std::shared_ptr<const CanSignalConfiguration>(std::move(message_configuration), signal_configuration));
-        }
-
         case SensorSourceKind::GPIO:
             if(gpio_ == nullptr)
                 return nullptr;

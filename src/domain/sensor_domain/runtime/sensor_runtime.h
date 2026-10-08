@@ -35,6 +35,10 @@ struct SensorRuntime {
     // Slots of the sensors the expression reads, resolved when the generation was built.
     std::vector<SensorSlot> input_slots;
 
+    // DEPENDENT sensors that read this one, directly or through other dependents, in processing
+    // order. Evaluated right after a reading of this sensor is committed.
+    std::vector<const SensorRuntime*> dependents;
+
     [[nodiscard]] const Sensor& GetSensor() const { return *sensor; }
 };
 

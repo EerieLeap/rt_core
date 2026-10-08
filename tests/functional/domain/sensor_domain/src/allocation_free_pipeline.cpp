@@ -77,8 +77,11 @@ struct Pipeline {
     std::vector<std::shared_ptr<Sensor>> sensors;          // indicator, virtual, raw CAN
     std::shared_ptr<SensorGeneration> generation;
     std::vector<std::unique_ptr<ISensorReader>> readers;   // indicator, virtual
-    std::vector<std::shared_ptr<IReadingProcessor>> processors;
+    std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> processors;
+    std::shared_ptr<ReadingPipeline> pipeline;
     std::array<SensorReading, 8> buffer;
+    std::array<SensorReading, 8> raw_readings;
+    std::array<CanFrame, 8> raw_frames;
 };
 
 Pipeline MakePipeline() {
@@ -106,24 +109,31 @@ Pipeline MakePipeline() {
     auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
     raw->configuration.type = SensorType::CANBUS_RAW;
 
-    pipeline.sensors = { indicator, derived, raw };
+    // Evaluated after every indicator commit, without a timer.
+    auto dependent = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "dependent");
+    dependent->configuration.type = SensorType::VIRTUAL_ANALOG;
+    dependent->configuration.expression = "indicator + derived";
+
+    pipeline.sensors = { indicator, derived, raw, dependent };
     // Lays out the slots and binds "indicator" in the derived expression to its value slot.
     pipeline.generation = SensorPipelineBuilder(nullptr, pipeline.frame).Build(
         std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(pipeline.sensors));
     pipeline.readers.push_back(std::make_unique<SensorReaderPhysicalIndicator>(time_service, pipeline.generation->runtimes[0], pipeline.gpio));
     pipeline.readers.push_back(std::make_unique<SensorReaderVirtualAnalog>(time_service, pipeline.generation->runtimes[1]));
-    pipeline.processors.push_back(std::make_shared<ExpressionProcessor>(pipeline.frame));
-    pipeline.processors.push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
+    pipeline.processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    pipeline.processors->push_back(std::make_shared<ExpressionProcessor>(pipeline.frame));
+    pipeline.processors->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
+    pipeline.pipeline = std::make_shared<ReadingPipeline>(pipeline.frame, pipeline.processors, time_service);
 
     return pipeline;
 }
 
 // One sample of every source kind, the way the services run them.
 void RunSamples(Pipeline& pipeline, uint32_t iteration) {
+    // Readers in generation order; committing the indicator also evaluates the dependent sensor.
     for(size_t i = 0; i < pipeline.readers.size(); i++) {
         SensorReading reading = pipeline.readers[i]->Read();
-        ReadingPipeline::Run(pipeline.processors, pipeline.generation->runtimes[i], reading);
-        pipeline.frame->AddOrUpdateReading(reading);
+        pipeline.pipeline->Process(pipeline.generation->runtimes[i], reading);
     }
 
     // What a CAN reader produces for a raw sensor: the frame travels by pointer and is copied once.
@@ -136,8 +146,7 @@ void RunSamples(Pipeline& pipeline, uint32_t iteration) {
     raw_reading.timestamp = std::chrono::system_clock::now();
     raw_reading.status = ReadingStatus::RAW;
     raw_reading.can_frame = &can_frame;
-    ReadingPipeline::Run(pipeline.processors, pipeline.generation->runtimes[2], raw_reading);
-    pipeline.frame->AddOrUpdateReading(raw_reading);
+    pipeline.pipeline->Process(pipeline.generation->runtimes[2], raw_reading);
 }
 
 // What the renderer, the log writer, live data and the CAN frame builder do with the results.
@@ -147,6 +156,7 @@ void RunConsumers(Pipeline& pipeline) {
 
     CanFrame can_frame;
     (void)pipeline.frame->TryGetCanFrame(pipeline.sensors[2]->id_hash, can_frame);
+    (void)pipeline.frame->TakeRawCanFrames(pipeline.raw_readings, pipeline.raw_frames);
 
     const std::array<uint32_t, 2> hashes = { pipeline.sensors[0]->id_hash, pipeline.sensors[1]->id_hash };
     std::array<std::optional<float>, 2> values;
@@ -191,6 +201,9 @@ ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
     const float indicator = pipeline.frame->TryGetReadingValue("indicator").value();
     zassert_true(indicator == 0.0F || indicator == 1.0F);
     zassert_equal(pipeline.frame->TryGetReadingValue("derived").value(), indicator * 2.0F + 1.0F);
+    zassert_equal(pipeline.frame->TryGetReadingValue("dependent").value(), indicator + indicator * 2.0F + 1.0F,
+        "The dependent sensor was evaluated after the indicator, with the derived value of this pass");
+    zassert_equal(pipeline.frame->GetDroppedRawCanFrameCount(), 0, "The log writer path drained the raw queue every sample");
 
     CanFrame can_frame;
     zassert_true(pipeline.frame->TryGetCanFrame(pipeline.sensors[2]->id_hash, can_frame));

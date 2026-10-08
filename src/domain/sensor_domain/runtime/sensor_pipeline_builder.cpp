@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <zephyr/logging/log.h>
 #include <eerie_memory.hpp>
@@ -127,7 +129,48 @@ std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
         generation->runtimes.push_back(std::move(runtime));
     }
 
+    LinkDependents(*generation);
+
     return generation;
+}
+
+// Slots follow the configuration order, so a slot index is also the runtime's index.
+void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
+    auto& runtimes = generation.runtimes;
+    const size_t count = runtimes.size();
+
+    std::vector<std::vector<size_t>> direct(count);
+    for(size_t i = 0; i < count; i++) {
+        if(runtimes[i].update_method != SensorReadingUpdateMethod::DEPENDENT)
+            continue;
+
+        for(const auto input : runtimes[i].input_slots)
+            direct[input.index].push_back(i);
+    }
+
+    // The transitive closure in processing order evaluates every dependent once, after its inputs.
+    std::vector<bool> reached(count);
+    std::vector<size_t> pending;
+    for(size_t i = 0; i < count; i++) {
+        std::fill(reached.begin(), reached.end(), false);
+        pending.assign(direct[i].begin(), direct[i].end());
+
+        while(!pending.empty()) {
+            const size_t index = pending.back();
+            pending.pop_back();
+
+            if(reached[index])
+                continue;
+
+            reached[index] = true;
+            pending.insert(pending.end(), direct[index].begin(), direct[index].end());
+        }
+
+        for(size_t j = 0; j < count; j++) {
+            if(reached[j])
+                runtimes[i].dependents.push_back(&runtimes[j]);
+        }
+    }
 }
 
 } // namespace eerie_leap::domain::sensor_domain::runtime
