@@ -339,6 +339,35 @@ public:
         return true;
     }
 
+    /**
+     * @brief Replaces the value of the sensor's latest reading, and of its processed reading when
+     *        it has one, without touching the rest of the record. For scripts that write a sensor.
+     * @return False for a sensor that is not configured or has no reading yet.
+     */
+    bool UpdateReadingValue(uint32_t sensor_id_hash, float value) {
+        ScopedMutex guard(lock_);
+
+        const auto slot_index = FindSlotLocked(sensor_id_hash);
+        if(!slot_index.has_value())
+            return false;
+
+        Slot& slot = slots_[slot_index->index];
+        if(!slot.has_reading)
+            return false;
+
+        slot.latest.value = value;
+        slot.latest.flags |= Record::kHasValue;
+
+        if(slot.has_processed) {
+            slot.processed.value = value;
+            slot.processed.flags |= Record::kHasValue;
+            slot.is_updated = true;
+            values_[slot_index->index] = value;
+        }
+
+        return true;
+    }
+
     std::optional<SensorReading> TryGetReading(SensorSlot slot) const {
         ScopedMutex guard(lock_);
 

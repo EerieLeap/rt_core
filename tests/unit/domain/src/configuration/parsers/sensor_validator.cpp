@@ -104,7 +104,7 @@ ZTEST(sensor_validator, test_every_type_validates_with_its_update_method) {
     // Without a sampling rate a virtual sensor is evaluated when an input commits.
     auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
     dependent->configuration.expression = "other_sensor * 2";
-    zassert_false(Validate({ dependent }).has_value());
+    zassert_false(Validate({ MakeSensor("other_sensor", SensorType::PHYSICAL_ANALOG, 100), dependent }).has_value());
     zassert_true(Validates(SensorType::CANBUS_RAW, std::nullopt));
     zassert_true(Validates(SensorType::CANBUS_ANALOG, std::nullopt));
     zassert_true(Validates(SensorType::CANBUS_INDICATOR, std::nullopt));
@@ -190,6 +190,15 @@ ZTEST(sensor_validator, test_invalid_expression_is_rejected_with_its_message) {
     auto error = Validate({ sensor });
     zassert_true(Contains(error, "Sensor ID: sensor_1"));
     zassert_true(Contains(error, "Invalid expression"));
+}
+
+ZTEST(sensor_validator, test_expression_referencing_an_unknown_sensor_is_rejected) {
+    auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
+    dependent->configuration.expression = "other_sensor * 2";
+
+    auto error = Validate({ dependent });
+    zassert_true(Contains(error, "Sensor ID: derived"));
+    zassert_true(Contains(error, "unknown sensor other_sensor"));
 }
 
 ZTEST(sensor_validator, test_expression_rules_follow_the_type) {

@@ -5,7 +5,7 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/string/string_helpers.h"
-#include "subsys/math_parser/expression_evaluator.h"
+#include "subsys/expression_engine/expression_evaluator.h"
 #include "subsys/time/rtc_provider.h"
 #include "subsys/time/boot_elapsed_time_provider.h"
 #include "subsys/time/time_service.h"
@@ -45,7 +45,7 @@ using namespace eerie_leap::subsys::adc;
 using namespace eerie_leap::subsys::adc::models;
 using namespace eerie_leap::subsys::gpio;
 using namespace eerie_leap::subsys::time;
-using namespace eerie_leap::subsys::math_parser;
+using namespace eerie_leap::subsys::expression_engine;
 using namespace eerie_leap::subsys::fs::services;
 
 using namespace eerie_leap::domain::sensor_domain::processors;

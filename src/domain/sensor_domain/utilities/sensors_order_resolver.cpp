@@ -1,23 +1,29 @@
+#include <stdexcept>
 #include <string>
 
-#include "subsys/math_parser/expression_evaluator.h"
+#include "utilities/memory/memory_resource_manager.h"
+#include "subsys/expression_engine/expression_evaluator.h"
 
 #include "sensors_order_resolver.h"
 
 namespace eerie_leap::domain::sensor_domain::utilities {
 
 using namespace eerie_leap::domain::sensor_domain::models;
-using eerie_leap::subsys::math_parser::ExpressionEvaluator;
+using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
 
 void SensorsOrderResolver::AddSensor(std::shared_ptr<Sensor> sensor) {
     if(sensor->configuration.HasExpression()) {
-        // Parsed only for its variable names; the runtime builds its own evaluator.
-        ExpressionEvaluator expression_evaluator(std::string(sensor->configuration.expression));
+        // Compiled only for its variable names; the runtime builds its own evaluator.
+        auto evaluator = ExpressionEvaluator::Create(sensor->configuration.expression, Mrm::GetExtPmr());
+        if(!evaluator.has_value())
+            throw std::invalid_argument("Sensor " + std::string(sensor->id) + ": " + ExpressionEvaluator::Describe(evaluator.error()));
 
-        auto sensor_ids = expression_evaluator.GetVariableNames();
-        sensor_ids.erase("x");
+        std::unordered_set<std::string> sensor_ids;
+        for(const std::string_view name : evaluator->GetVariableNames())
+            sensor_ids.emplace(name);
 
-        dependencies_.try_emplace(sensor->id, std::unordered_set<std::string>(sensor_ids.begin(), sensor_ids.end()));
+        dependencies_.try_emplace(sensor->id, std::move(sensor_ids));
     } else {
         dependencies_.try_emplace(sensor->id, std::unordered_set<std::string>());
     }

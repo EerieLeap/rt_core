@@ -6,14 +6,14 @@
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
-// NOTE: calls the Lua function named according to function_name_ argument
-// with the reading's string sensor id as argument. The function returns nothing;
-// it changes values through update_sensor_value(sensor_id, value).
+// Calls the script's post-processing function with the reading being processed:
 //
-// function post_process_sensor_value(sensor_id)
-//     update_sensor_value(sensor_id, get_sensor_value(sensor_id) * 2)
-// end
-
+//     function post_process_sensor_value(sensor_id, value)
+//         return value * 2          -- the new value; nil keeps the reading's value
+//     end
+//
+// The result is written into the reading before it is committed, so the script sees and changes
+// the sample itself. update_sensor_value(sensor_id, value) remains for writing other sensors.
 class ScriptProcessor : public IReadingProcessor {
 private:
     std::string function_name_;

@@ -29,10 +29,21 @@ config EERIE_LEAP_LUA_SCRIPT
     help
       Add EerieLeap Lua Script.
 
-config EERIE_LEAP_MATH_PARSER
-    bool "EerieLeap Math Parser"
+config EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB
+    int "Memory limit of one Lua state in KiB (0 = unlimited)"
+    depends on EERIE_LEAP_LUA_SCRIPT
+    default 256
     help
-      Add EerieLeap Math Parser.
+      Allocations of a Lua state created on the external heap are counted and
+      refused past this limit, so a script that leaks or allocates without bound
+      fails its own call instead of exhausting the heap for the rest of the unit.
+
+config EERIE_LEAP_EXPRESSION_ENGINE
+    bool "EerieLeap Expression Engine"
+    select EXPRESSION_ENGINE
+    help
+      Add the sensor expression evaluator, built on the EerieLeap expression
+      engine module (modules/expression_engine).
 
 config EERIE_LEAP_MDF
     bool "EerieLeap MDF"

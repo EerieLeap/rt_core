@@ -7,14 +7,14 @@
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 #include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
-#include "subsys/math_parser/expression_evaluator.h"
+#include "subsys/expression_engine/expression_evaluator.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/utilities/sensors_order_resolver.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::voltage_interpolator;
-using namespace eerie_leap::subsys::math_parser;
+using namespace eerie_leap::subsys::expression_engine;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::utilities;
 
@@ -46,12 +46,11 @@ bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_
         if(!sensors[i]->configuration.HasExpression())
             continue;
 
-        ExpressionEvaluator expression_evaluator(std::string(sensors[i]->configuration.expression));
-        auto variables = expression_evaluator.GetVariableNames();
-        variables.erase("x");
+        auto expression_evaluator = ExpressionEvaluator::Create(sensors[i]->configuration.expression, Mrm::GetDefaultPmr());
+        zassert_true(expression_evaluator.has_value());
 
-        for(const auto& variable : variables) {
-            int position = sensors_order_resolver_IndexOf(sensors, variable);
+        for(const std::string_view variable : expression_evaluator->GetVariableNames()) {
+            int position = sensors_order_resolver_IndexOf(sensors, std::string(variable));
             if(position < 0 || static_cast<size_t>(position) >= i)
                 return false;
         }

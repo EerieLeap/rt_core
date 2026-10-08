@@ -1,7 +1,7 @@
 common:
   tags:
     - unit
-    - subsys.math_parser
+    - subsys.expression_engine
   platform_allow:
     - native_sim
     - qemu_cortex_a9
@@ -10,4 +10,4 @@ common:
     - qemu_malta
 
 tests:
-  unit.subsys.math_parser: {}
+  unit.subsys.expression_engine: {}

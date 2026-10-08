@@ -6,7 +6,8 @@
 #include <unordered_set>
 
 #include "utilities/string/string_helpers.h"
-#include "subsys/math_parser/expression_evaluator.h"
+#include "utilities/memory/memory_resource_manager.h"
+#include "subsys/expression_engine/expression_evaluator.h"
 #include "domain/sensor_domain/models/sensor_type_traits.h"
 
 #include "sensor_validator.h"
@@ -16,9 +17,10 @@ namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 using namespace eerie_leap::domain::sensor_domain::models;
 
 using eerie_leap::utilities::string::StringHelpers;
-using eerie_leap::subsys::math_parser::ExpressionEvaluator;
+using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
 
-static void InvalidSensorConfiguration(std::string_view sensor_id, std::string_view message) {
+[[noreturn]] static void InvalidSensorConfiguration(std::string_view sensor_id, std::string_view message) {
     throw std::invalid_argument(
         "Invalid Sensor configuration. Sensor ID: "
         + std::string(sensor_id)
@@ -26,7 +28,7 @@ static void InvalidSensorConfiguration(std::string_view sensor_id, std::string_v
         + std::string(message));
 }
 
-static void InvalidMetadataConfiguration(std::string_view sensor_id, std::string_view message) {
+[[noreturn]] static void InvalidMetadataConfiguration(std::string_view sensor_id, std::string_view message) {
     throw std::invalid_argument(
         "Invalid Sensor metadata configuration. Sensor ID: "
         + std::string(sensor_id)
@@ -123,7 +125,7 @@ void SensorValidator::ValidateSensorConfiguration(
         ValidateScriptPath(sensor->id, sensor->configuration, sd_fs_service);
         ValidateSamplingRateMs(sensor->id, sensor->configuration);
         ValidateInterpolationMethod(sensor->id, sensor->configuration);
-        ValidateExpression(sensor->id, sensor->configuration);
+        ValidateExpression(sensor->id, sensor->configuration, sensors);
     }
 }
 
@@ -216,7 +218,11 @@ void SensorValidator::ValidateInterpolationMethod(std::string_view sensor_id, co
         InvalidSensorConfiguration(sensor_id, "Calibration table must have at least 2 points.");
 }
 
-void SensorValidator::ValidateExpression(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
+void SensorValidator::ValidateExpression(
+    std::string_view sensor_id,
+    const SensorConfiguration& sensor_configuration,
+    const std::vector<std::shared_ptr<Sensor>>& sensors) {
+
     const auto traits = sensor_configuration.GetTraits();
 
     if(!traits.allows_expression && sensor_configuration.HasExpression())
@@ -228,15 +234,21 @@ void SensorValidator::ValidateExpression(std::string_view sensor_id, const Senso
     if(!sensor_configuration.HasExpression())
         return;
 
-    // Parsed here so an invalid expression is reported at save time with its message.
-    size_t input_count = 0;
-    try {
-        ExpressionEvaluator expression_evaluator(std::string(sensor_configuration.expression));
+    // Compiled here so an invalid expression is reported at save time with its position, and an
+    // unknown variable as a validation error instead of a failure when the pipeline is built.
+    auto evaluator = ExpressionEvaluator::Create(sensor_configuration.expression, Mrm::GetExtPmr());
+    if(!evaluator.has_value())
+        InvalidSensorConfiguration(sensor_id, ExpressionEvaluator::Describe(evaluator.error()));
 
-        for(const auto& name : expression_evaluator.GetVariableNames())
-            input_count += name == "x" ? 0 : 1;
-    } catch(const std::invalid_argument& e) {
-        InvalidSensorConfiguration(sensor_id, e.what());
+    size_t input_count = 0;
+    for(const std::string_view name : evaluator->GetVariableNames()) {
+        const bool known = std::any_of(sensors.begin(), sensors.end(),
+            [name](const auto& sensor) { return std::string_view(sensor->id) == name; });
+
+        if(!known)
+            InvalidSensorConfiguration(sensor_id, "Expression references unknown sensor " + std::string(name) + ".");
+
+        input_count++;
     }
 
     // A virtual sensor is either polled or evaluated when an input commits; with neither it never updates.

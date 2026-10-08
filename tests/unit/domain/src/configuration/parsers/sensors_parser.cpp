@@ -6,14 +6,14 @@
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 #include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
-#include "subsys/math_parser/expression_evaluator.h"
+#include "subsys/expression_engine/expression_evaluator.h"
 
 #include "domain/sensor_domain/configuration/parsers/sensors_cbor_parser.h"
 #include "domain/sensor_domain/models/sensor.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
-using namespace eerie_leap::subsys::math_parser;
+using namespace eerie_leap::subsys::expression_engine;
 
 using namespace eerie_leap::domain::sensor_domain::configuration::parsers;
 using namespace eerie_leap::domain::sensor_domain::models;

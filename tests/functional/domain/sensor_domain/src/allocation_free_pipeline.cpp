@@ -18,7 +18,7 @@
 #include "subsys/time/time_service.h"
 #include "subsys/gpio/gpio_simulator.h"
 #include "subsys/canbus/can_frame.h"
-#include "subsys/math_parser/expression_evaluator.h"
+#include "subsys/expression_engine/expression_evaluator.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
@@ -34,7 +34,7 @@ using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::subsys::gpio;
 using namespace eerie_leap::subsys::canbus;
-using namespace eerie_leap::subsys::math_parser;
+using namespace eerie_leap::subsys::expression_engine;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::utilities;
 using namespace eerie_leap::domain::sensor_domain::sensor_readers;

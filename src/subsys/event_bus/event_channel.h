@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <expected>
 #include <memory>
-#include <queue>
+#include <memory_resource>
 #include <string>
 #include <utility>
 #include <vector>
@@ -44,7 +44,12 @@ private:
     k_mutex subscribers_mutex_;
     size_t next_id_ = 1;
 
-    std::queue<EventMessage> event_queue_;
+    // A ring of max_queued_events_ slots, allocated once when the first bus registers the channel
+    // (an inert channel owns nothing). Publishing and draining move events in and out of the
+    // slots, so a queued event costs no allocation.
+    std::pmr::vector<EventMessage> event_queue_;
+    size_t queue_head_ = 0;
+    size_t queue_count_ = 0;
     k_mutex queue_mutex_;
     size_t dropped_events_ = 0;
     uint32_t last_dropped_source_id_ = 0;
@@ -69,6 +74,9 @@ private:
         }
     };
 
+    // Dispatch snapshots the matching subscribers; this many fit without touching the heap.
+    static constexpr size_t k_max_inline_subscribers = 16;
+
     void Dispatch(const EventMessage& event);
 
 protected:
@@ -82,7 +90,7 @@ public:
 
     const char* GetName() const override { return name_.c_str(); }
     const IEventBus* GetBus() const override { return bus_.load(std::memory_order_acquire); }
-    void OnRegistered(IEventBus* bus) override { bus_.store(bus, std::memory_order_release); }
+    void OnRegistered(IEventBus* bus) override;
     bool IsRegistered() const { return GetBus() != nullptr; }
 
     bool DrainOne() override;

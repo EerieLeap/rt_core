@@ -106,20 +106,10 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
-    if(CONFIG_EERIE_LEAP_MATH_PARSER)
+    if(CONFIG_EERIE_LEAP_EXPRESSION_ENGINE)
         list(APPEND SRC
-            "${SRC_DIR}/subsys/math_parser/*.c"
-            "${SRC_DIR}/subsys/math_parser/*.cpp"
-        )
-
-        add_subdirectory(libs/muparser)
-
-        zephyr_library_link_libraries(
-            muparser
-        )
-
-        target_link_libraries(app PRIVATE
-            muparser
+            "${SRC_DIR}/subsys/expression_engine/*.c"
+            "${SRC_DIR}/subsys/expression_engine/*.cpp"
         )
     endif()
 

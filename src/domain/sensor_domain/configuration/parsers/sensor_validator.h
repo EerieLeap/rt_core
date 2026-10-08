@@ -33,7 +33,10 @@ private:
     static void ValidateScriptPath(std::string_view sensor_id, const SensorConfiguration& sensor_configuration, IFsService* sd_fs_service);
     static void ValidateSamplingRateMs(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateInterpolationMethod(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
-    static void ValidateExpression(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
+    static void ValidateExpression(
+        std::string_view sensor_id,
+        const SensorConfiguration& sensor_configuration,
+        const std::vector<std::shared_ptr<Sensor>>& sensors);
 
 public:
     static void Validate(const std::vector<std::shared_ptr<Sensor>>& sensors, IFsService* sd_fs_service, uint32_t gpio_channel_count, uint32_t adc_channel_count);

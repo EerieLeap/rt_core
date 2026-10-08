@@ -1,6 +1,5 @@
 #include <cmath>
 #include <memory>
-#include <stdexcept>
 
 #include "domain/sensor_domain/models/sensor_type_traits.h"
 
@@ -23,15 +22,15 @@ std::optional<float> ExpressionProcessor::Evaluate(
         return std::nullopt;
     }
 
-    float value = 0.0F;
-    try {
-        value = runtime.expression_evaluator->Evaluate(x);
-    } catch(const std::exception&) {
+    // Nothing means an unbound variable or a missing x; both are build-time defects of this
+    // generation rather than a property of the sample.
+    const auto value = runtime.expression_evaluator->Evaluate(x);
+    if(!value.has_value()) {
         reading.SetError(ReadingError::EXPRESSION_FAILED);
         return std::nullopt;
     }
 
-    if(std::isnan(value)) {
+    if(std::isnan(*value)) {
         reading.SetError(ReadingError::EXPRESSION_NOT_A_NUMBER);
         return std::nullopt;
     }

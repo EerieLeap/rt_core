@@ -59,19 +59,22 @@ void SensorPipelineBuilder::BuildExpression(SensorRuntime& runtime) const {
     if(!configuration.HasExpression())
         return;
 
-    runtime.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(
-        Mrm::GetExtPmr(), std::string(configuration.expression));
+    auto* mr = Mrm::GetExtPmr();
+    auto evaluator = ExpressionEvaluator::Create(configuration.expression, mr);
+    if(!evaluator.has_value()) {
+        throw std::invalid_argument(
+            "Sensor " + std::string(runtime.sensor->id) + ": " + ExpressionEvaluator::Describe(evaluator.error()));
+    }
+
+    runtime.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(mr, std::move(*evaluator));
 
     // Variables are bound to the frame's value slots now, so nothing is resolved per sample and
     // the addresses stay valid for as long as this generation runs.
-    for(const auto& name : runtime.expression_evaluator->GetVariableNames()) {
-        if(name == "x")
-            continue;
-
+    for(const std::string_view name : runtime.expression_evaluator->GetVariableNames()) {
         const auto slot = sensor_readings_frame_->FindSlot(StringHelpers::GetHash(name));
         if(!slot.has_value()) {
             throw std::invalid_argument(
-                "Sensor " + std::string(runtime.sensor->id) + " depends on non-existent sensor " + name + ".");
+                "Sensor " + std::string(runtime.sensor->id) + " depends on non-existent sensor " + std::string(name) + ".");
         }
 
         runtime.expression_evaluator->BindVariable(name, sensor_readings_frame_->GetValueAddress(slot.value()));
@@ -79,7 +82,7 @@ void SensorPipelineBuilder::BuildExpression(SensorRuntime& runtime) const {
     }
 }
 
-void SensorPipelineBuilder::BuildScript(SensorRuntime& runtime) const {
+void SensorPipelineBuilder::BuildScript(SensorGeneration& generation, SensorRuntime& runtime) const {
     const auto& configuration = runtime.sensor->configuration;
     if(!configuration.HasScript())
         return;
@@ -101,37 +104,33 @@ void SensorPipelineBuilder::BuildScript(SensorRuntime& runtime) const {
         return;
     }
 
-    runtime.lua_script = make_shared_pmr<LuaScript>(Mrm::GetExtPmr(), LuaScript::CreateExt());
-    runtime.lua_script->Load(std::span<const uint8_t>(buffer.data(), out_len));
+    // One state serves every scripted sensor of the generation; the sensor functions are
+    // registered once, each script gets its own environment.
+    if(generation.script_host == nullptr) {
+        auto host = make_shared_pmr<LuaScript>(Mrm::GetExtPmr(), LuaScript::CreateExt());
+        if(!host->IsValid()) {
+            LOG_ERR("Sensor %s: no Lua state for script %s.", runtime.sensor->id.c_str(), configuration.script_path.c_str());
+            return;
+        }
 
-    GlobalFunctionsRegistry::RegisterGetSensorValue(*runtime.lua_script, *sensor_readings_frame_);
-    GlobalFunctionsRegistry::RegisterUpdateSensorValue(*runtime.lua_script, *sensor_readings_frame_);
-}
+        GlobalFunctionsRegistry::RegisterGetSensorValue(*host, *sensor_readings_frame_);
+        GlobalFunctionsRegistry::RegisterUpdateSensorValue(*host, *sensor_readings_frame_);
 
-std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
-    std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors) const {
-
-    auto generation = std::make_shared<SensorGeneration>();
-    generation->sensors = std::move(sensors);
-    generation->id = sensor_readings_frame_->Configure(*generation->sensors);
-    generation->runtimes.reserve(generation->sensors->size());
-
-    for(const auto& sensor : *generation->sensors) {
-        SensorRuntime runtime;
-        runtime.sensor = sensor;
-        runtime.slot = sensor_readings_frame_->FindSlot(sensor->id_hash).value();
-        runtime.update_method = sensor->configuration.GetReadingUpdateMethod();
-
-        BuildInterpolator(runtime);
-        BuildExpression(runtime);
-        BuildScript(runtime);
-
-        generation->runtimes.push_back(std::move(runtime));
+        generation.script_host = std::move(host);
     }
 
-    LinkDependents(*generation);
+    auto& script = runtime.script;
+    script.host = generation.script_host;
 
-    return generation;
+    auto guard = script.host->Lock();
+    script.environment = script.host->LoadChunk(std::span<const uint8_t>(buffer.data(), out_len), runtime.sensor->id.c_str());
+    if(script.environment == LuaScript::kNoRef) {
+        LOG_ERR("Sensor %s: script %s failed to load.", runtime.sensor->id.c_str(), configuration.script_path.c_str());
+        return;
+    }
+
+    script.create_value = script.host->FindFunction(script.environment, SensorScript::kCreateValueFunction);
+    script.post_process = script.host->FindFunction(script.environment, SensorScript::kPostProcessFunction);
 }
 
 // Slots follow the configuration order, so a slot index is also the runtime's index.
@@ -171,6 +170,32 @@ void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
                 runtimes[i].dependents.push_back(&runtimes[j]);
         }
     }
+}
+
+std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
+    std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors) const {
+
+    auto generation = std::make_shared<SensorGeneration>();
+    generation->sensors = std::move(sensors);
+    generation->id = sensor_readings_frame_->Configure(*generation->sensors);
+    generation->runtimes.reserve(generation->sensors->size());
+
+    for(const auto& sensor : *generation->sensors) {
+        SensorRuntime runtime;
+        runtime.sensor = sensor;
+        runtime.slot = sensor_readings_frame_->FindSlot(sensor->id_hash).value();
+        runtime.update_method = sensor->configuration.GetReadingUpdateMethod();
+
+        BuildInterpolator(runtime);
+        BuildExpression(runtime);
+        BuildScript(*generation, runtime);
+
+        generation->runtimes.push_back(std::move(runtime));
+    }
+
+    LinkDependents(*generation);
+
+    return generation;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::runtime

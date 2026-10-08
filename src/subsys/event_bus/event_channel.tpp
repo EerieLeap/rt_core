@@ -1,9 +1,11 @@
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <utility>
 
 #include <zephyr/logging/log.h>
 
+#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/threading/scoped_mutex.h"
 
 #include "event_channel.h"
@@ -11,13 +13,32 @@
 namespace eerie_leap::subsys::event_bus {
 
 using eerie_leap::subsys::threading::ScopedMutex;
+using eerie_leap::utilities::memory::Mrm;
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 EventChannel<TEventType, TPayloadType>::EventChannel(std::string name, size_t max_queued_events)
-    : name_(std::move(name)), max_queued_events_(max_queued_events) {
+    : name_(std::move(name)),
+    max_queued_events_(std::max<size_t>(max_queued_events, 1)),
+    event_queue_(Mrm::GetExtPmr()) {
 
     k_mutex_init(&subscribers_mutex_);
     k_mutex_init(&queue_mutex_);
+}
+
+template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
+void EventChannel<TEventType, TPayloadType>::OnRegistered(IEventBus* bus) {
+    if(bus != nullptr) {
+        ScopedMutex guard(queue_mutex_);
+
+        // Sized once; a later bus (tests register several in turn) reuses the slots.
+        if(event_queue_.size() != max_queued_events_) {
+            event_queue_.resize(max_queued_events_);
+            queue_head_ = 0;
+            queue_count_ = 0;
+        }
+    }
+
+    bus_.store(bus, std::memory_order_release);
 }
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
@@ -96,7 +117,6 @@ void EventChannel<TEventType, TPayloadType>::PublishErasedAsync(
         .type = static_cast<TEventType>(event_type)
     };
 
-    event.payload.reserve(payload.size());
     for(const auto& [key, value] : payload)
         event.payload.emplace(static_cast<TPayloadType>(key), value);
 
@@ -120,14 +140,18 @@ void EventChannel<TEventType, TPayloadType>::PublishAsync(const EventMessage& ev
     {
         ScopedMutex guard(queue_mutex_);
 
+        const size_t capacity = event_queue_.size();
+
         // Shed the oldest rather than the newest
-        while(event_queue_.size() >= max_queued_events_) {
-            last_dropped_source_id_ = event_queue_.front().source_id;
-            event_queue_.pop();
+        if(queue_count_ == capacity) {
+            last_dropped_source_id_ = event_queue_[queue_head_].source_id;
+            queue_head_ = (queue_head_ + 1) % capacity;
+            --queue_count_;
             ++dropped_events_;
         }
 
-        event_queue_.push(event);
+        event_queue_[(queue_head_ + queue_count_) % capacity] = event;
+        ++queue_count_;
     }
 
     bus->Wake();
@@ -142,9 +166,10 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
     {
         ScopedMutex guard(queue_mutex_);
 
-        if(!event_queue_.empty()) {
-            event = std::move(event_queue_.front());
-            event_queue_.pop();
+        if(queue_count_ != 0) {
+            event = std::move(event_queue_[queue_head_]);
+            queue_head_ = (queue_head_ + 1) % event_queue_.size();
+            --queue_count_;
         }
 
         dropped = std::exchange(dropped_events_, 0);
@@ -168,23 +193,29 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event) {
     // Snapshot under the lock: a handler may subscribe or unsubscribe, which would
-    // otherwise mutate the very vector being iterated.
-    std::vector<SubscriptionPtr<TEventType, TPayloadType>> matched;
+    // otherwise mutate the very vector being iterated. The first k_max_inline_subscribers
+    // matches stay on the stack; only a channel with more spills to the heap.
+    std::array<SubscriptionPtr<TEventType, TPayloadType>, k_max_inline_subscribers> matched;
+    size_t matched_count = 0;
+    std::vector<SubscriptionPtr<TEventType, TPayloadType>> overflow;
 
     {
         ScopedMutex guard(subscribers_mutex_);
 
         if(auto it = subscribers_.find(event.type); it != subscribers_.end()) {
-            matched.reserve(it->second.size());
-
             for(const auto& subscription : it->second) {
-                if(subscription->filter(event))
-                    matched.push_back(subscription);
+                if(!subscription->filter(event))
+                    continue;
+
+                if(matched_count < matched.size())
+                    matched[matched_count++] = subscription;
+                else
+                    overflow.push_back(subscription);
             }
         }
     }
 
-    for(const auto& subscription : matched) {
+    auto deliver = [this, &event](const SubscriptionPtr<TEventType, TPayloadType>& subscription) {
         try {
             subscription->handler(event);
         } catch (const std::exception& e) {
@@ -196,7 +227,13 @@ void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event)
             LOG_ERR("Channel '%s' subscriber threw a non-standard exception for event type %u",
                 name_.c_str(), static_cast<unsigned>(event.type));
         }
-    }
+    };
+
+    for(size_t i = 0; i < matched_count; i++)
+        deliver(matched[i]);
+
+    for(const auto& subscription : overflow)
+        deliver(subscription);
 }
 
 } // namespace eerie_leap::subsys::event_bus
