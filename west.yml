@@ -8,13 +8,9 @@ manifest:
     - name: eerieleap
       url-base: https://github.com/EerieLeap
 
+  # The Lua wrapper and the expression engine are Git submodules of this repository
+  # (modules/lua, modules/expression_engine), so they are not west projects.
   projects:
-    - name: eerie_leap_lua
-      remote: eerieleap
-      repo-path: zephyr_lua
-      revision: main
-      path: modules/eerie_leap_lua
-
     - name: zephyr
       remote: zephyrproject-rtos
       revision: main

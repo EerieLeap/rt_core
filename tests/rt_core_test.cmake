@@ -1,22 +1,16 @@
 # Shared setup for the eerie_leap_rt_core twister suites.
 #
 # Must be included before find_package(Zephyr) so that EXTRA_ZEPHYR_MODULES is
-# honoured. When rt_core is the west manifest repository both modules are
-# discovered automatically and the explicit registration below is a no-op.
+# honoured. The Lua wrapper and the expression engine are submodules of rt_core
+# (modules/), so they are available in every checkout; Zephyr does not discover
+# nested modules, so they are registered here.
 
 get_filename_component(RT_CORE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-get_filename_component(RT_CORE_PARENT_DIR "${RT_CORE_DIR}/.." ABSOLUTE)
 
-set(EXTRA_ZEPHYR_MODULES "${RT_CORE_DIR}")
-
-foreach(candidate
-    "${RT_CORE_PARENT_DIR}/eerie_leap_lua"
-    "${RT_CORE_PARENT_DIR}/modules/eerie_leap_lua")
-    if(EXISTS "${candidate}/zephyr/module.yml")
-        list(APPEND EXTRA_ZEPHYR_MODULES "${candidate}")
-        break()
-    endif()
-endforeach()
+set(EXTRA_ZEPHYR_MODULES
+    "${RT_CORE_DIR}/modules/zephyr_lua"
+    "${RT_CORE_DIR}/modules/expression_engine"
+    "${RT_CORE_DIR}")
 
 if(BOARD MATCHES "^qemu_cortex_a")
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_mmu.conf")

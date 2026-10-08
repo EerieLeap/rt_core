@@ -1,0 +1,6 @@
+[submodule "modules/expression_engine"]
+	path = modules/expression_engine
+	url = https://github.com/EerieLeap/expression_engine.git
+[submodule "modules/zephyr_lua"]
+	path = modules/zephyr_lua
+	url = https://github.com/EerieLeap/zephyr_lua.git
