@@ -1,10 +1,13 @@
 #include <algorithm>
 #include <cctype>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "utilities/string/string_helpers.h"
+#include "subsys/math_parser/expression_evaluator.h"
+#include "domain/sensor_domain/models/sensor_type_traits.h"
 
 #include "sensor_validator.h"
 
@@ -13,6 +16,7 @@ namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 using namespace eerie_leap::domain::sensor_domain::models;
 
 using eerie_leap::utilities::string::StringHelpers;
+using eerie_leap::subsys::math_parser::ExpressionEvaluator;
 
 static void InvalidSensorConfiguration(std::string_view sensor_id, std::string_view message) {
     throw std::invalid_argument(
@@ -28,12 +32,6 @@ static void InvalidMetadataConfiguration(std::string_view sensor_id, std::string
         + std::string(sensor_id)
         + ". "
         + std::string(message));
-}
-
-static bool IsCanbusType(SensorType type) {
-    return type == SensorType::CANBUS_RAW
-        || type == SensorType::CANBUS_ANALOG
-        || type == SensorType::CANBUS_INDICATOR;
 }
 
 void SensorValidator::Validate(
@@ -140,49 +138,39 @@ void SensorValidator::ValidateChannel(
     uint32_t gpio_channel_count,
     uint32_t adc_channel_count) {
 
-    if(sensor_configuration.type != SensorType::PHYSICAL_ANALOG
-        && sensor_configuration.type != SensorType::PHYSICAL_INDICATOR
-        && sensor_configuration.channel.has_value()) {
+    const auto traits = sensor_configuration.GetTraits();
 
-        InvalidSensorConfiguration(sensor_id, "Channel value is not supported for this sensor type.");
-    }
+    if(!traits.requires_channel) {
+        if(sensor_configuration.channel.has_value())
+            InvalidSensorConfiguration(sensor_id, "Channel value is not supported for this sensor type.");
 
-    if((sensor_configuration.type == SensorType::PHYSICAL_INDICATOR || sensor_configuration.type == SensorType::PHYSICAL_ANALOG)
-        && !sensor_configuration.channel.has_value()) {
-
-        InvalidSensorConfiguration(sensor_id, "Sensor channel is not set.");
+        return;
     }
 
     if(!sensor_configuration.channel.has_value())
-        return;
+        InvalidSensorConfiguration(sensor_id, "Sensor channel is not set.");
 
-    uint32_t channel_count = 0;
-    if(sensor_configuration.type == SensorType::PHYSICAL_INDICATOR)
-        channel_count = gpio_channel_count;
-    else if(sensor_configuration.type == SensorType::PHYSICAL_ANALOG)
-        channel_count = adc_channel_count;
+    const uint32_t channel_count = traits.source == SensorSourceKind::GPIO ? gpio_channel_count : adc_channel_count;
 
     if(sensor_configuration.channel.value() >= channel_count)
         InvalidSensorConfiguration(sensor_id, "Channel value is out of range.");
 }
 
 void SensorValidator::ValidateConnectionString(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
-    if(!IsCanbusType(sensor_configuration.type)) {
+    const auto traits = sensor_configuration.GetTraits();
+
+    if(!traits.uses_canbus) {
         if(!sensor_configuration.connection_string.empty())
             InvalidSensorConfiguration(sensor_id, "Connection string is not supported for this sensor type.");
 
         return;
     }
 
-    if(sensor_configuration.connection_string.empty())
+    if(sensor_configuration.connection_string.empty() || sensor_configuration.canbus_source == nullptr)
         InvalidSensorConfiguration(sensor_id, "Connection string cannot be empty.");
 
-    if((sensor_configuration.type == SensorType::CANBUS_ANALOG
-        || sensor_configuration.type == SensorType::CANBUS_INDICATOR)
-        && sensor_configuration.canbus_source->signal_name.empty()) {
-
+    if(traits.requires_signal_name && sensor_configuration.canbus_source->signal_name.empty())
         InvalidSensorConfiguration(sensor_id, "Sensor must have CAN bus signal name.");
-    }
 }
 
 void SensorValidator::ValidateScriptPath(std::string_view sensor_id, const SensorConfiguration& sensor_configuration, IFsService* sd_fs_service) {
@@ -198,58 +186,54 @@ void SensorValidator::ValidateScriptPath(std::string_view sensor_id, const Senso
 // Mirrors SensorConfiguration::GetReadingUpdateMethod(): a sensor whose update method
 // resolves to NONE would be accepted and then never produce a reading.
 void SensorValidator::ValidateSamplingRateMs(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
+    const auto traits = sensor_configuration.GetTraits();
     const bool has_sampling_rate = sensor_configuration.sampling_rate_ms.has_value();
 
     if(has_sampling_rate && sensor_configuration.sampling_rate_ms.value() <= 0)
         InvalidSensorConfiguration(sensor_id, "Invalid sampling rate value.");
 
-    switch(sensor_configuration.type) {
-    case SensorType::CANBUS_RAW:
-    case SensorType::CANBUS_ANALOG:
-    case SensorType::CANBUS_INDICATOR:
-        if(has_sampling_rate)
-            InvalidSensorConfiguration(sensor_id, "CAN bus sensors are updated by received frames and do not support a sampling rate.");
-        break;
+    if(!traits.allows_sampling_rate && has_sampling_rate)
+        InvalidSensorConfiguration(sensor_id, "CAN bus sensors are updated by received frames and do not support a sampling rate.");
 
-    case SensorType::PHYSICAL_ANALOG:
-    case SensorType::VIRTUAL_ANALOG:
-    case SensorType::VIRTUAL_INDICATOR:
-    case SensorType::USER_ANALOG:
-    case SensorType::USER_INDICATOR:
-        if(!has_sampling_rate)
-            InvalidSensorConfiguration(sensor_id, "Sensor must have a sampling rate.");
-        break;
-
-    default:
-        // PHYSICAL_INDICATOR is read on GPIO edges without a sampling rate, or polled with one.
-        break;
-    }
+    if(traits.requires_sampling_rate && !has_sampling_rate)
+        InvalidSensorConfiguration(sensor_id, "Sensor must have a sampling rate.");
 }
 
 void SensorValidator::ValidateInterpolationMethod(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
-    if(sensor_configuration.type != SensorType::PHYSICAL_ANALOG && sensor_configuration.voltage_interpolator != nullptr)
-        InvalidSensorConfiguration(sensor_id, "Sensor does not support interpolation.");
+    const auto traits = sensor_configuration.GetTraits();
 
-    if(sensor_configuration.type != SensorType::PHYSICAL_ANALOG)
+    if(!traits.requires_interpolation) {
+        if(sensor_configuration.HasInterpolation() || !sensor_configuration.calibration_table.empty())
+            InvalidSensorConfiguration(sensor_id, "Sensor does not support interpolation.");
+
         return;
+    }
 
-    if(sensor_configuration.voltage_interpolator == nullptr)
+    if(!sensor_configuration.HasInterpolation())
         InvalidSensorConfiguration(sensor_id, "Sensor must have interpolation method.");
 
-    const auto& calibration_table = *sensor_configuration.voltage_interpolator->GetCalibrationTable();
-
-    if(calibration_table.size() < 2)
+    if(sensor_configuration.calibration_table.size() < 2)
         InvalidSensorConfiguration(sensor_id, "Calibration table must have at least 2 points.");
 }
 
 void SensorValidator::ValidateExpression(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
-    if(sensor_configuration.type == SensorType::VIRTUAL_ANALOG || sensor_configuration.type == SensorType::VIRTUAL_INDICATOR) {
-        if(sensor_configuration.expression_evaluator == nullptr)
-            InvalidSensorConfiguration(sensor_id, "Sensor must have expression evaluator.");
-    }
+    const auto traits = sensor_configuration.GetTraits();
 
-    if(sensor_configuration.type == SensorType::CANBUS_RAW && sensor_configuration.expression_evaluator != nullptr)
+    if(!traits.allows_expression && sensor_configuration.HasExpression())
         InvalidSensorConfiguration(sensor_id, "Sensor does not support expression evaluator.");
+
+    if(traits.requires_expression && !sensor_configuration.HasExpression())
+        InvalidSensorConfiguration(sensor_id, "Sensor must have expression evaluator.");
+
+    if(!sensor_configuration.HasExpression())
+        return;
+
+    // Parsed here so an invalid expression is reported at save time with its message.
+    try {
+        ExpressionEvaluator expression_evaluator(std::string(sensor_configuration.expression));
+    } catch(const std::invalid_argument& e) {
+        InvalidSensorConfiguration(sensor_id, e.what());
+    }
 }
 
 } // namespace eerie_leap::domain::sensor_domain::configuration::parsers

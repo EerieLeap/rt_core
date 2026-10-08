@@ -11,17 +11,19 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderPhysicalAnalog::SensorReaderPhysicalAnalog(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor,
+    const SensorRuntime& runtime,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager)
-        : SensorReaderBase(std::move(time_service), std::move(sensor)),
+        : SensorReaderBase(std::move(time_service), runtime),
         adc_configuration_manager_(std::move(adc_configuration_manager)) {
 
-    if(sensor_->configuration.type != SensorType::PHYSICAL_ANALOG)
+    const auto& configuration = GetSensor().configuration;
+
+    if(configuration.type != SensorType::PHYSICAL_ANALOG)
         throw std::runtime_error("Unsupported sensor type");
 
     adc_manager_ = adc_configuration_manager_->Get();
-    adc_channel_configuration_ = adc_manager_->GetChannelConfiguration(sensor_->configuration.channel.value());
-    AdcChannelReader = adc_manager_->GetChannelReader(sensor_->configuration.channel.value());
+    adc_channel_configuration_ = adc_manager_->GetChannelConfiguration(configuration.channel.value());
+    AdcChannelReader = adc_manager_->GetChannelReader(configuration.channel.value());
 }
 
 SensorReading SensorReaderPhysicalAnalog::Read() {
@@ -31,7 +33,10 @@ SensorReading SensorReaderPhysicalAnalog::Read() {
     float voltage_calibrated = adc_channel_configuration_->calibrator->InterpolateToCalibratedRange(voltage);
     reading.voltage = voltage_calibrated;
 
-    reading.value = sensor_->configuration.voltage_interpolator->Interpolate(voltage_calibrated, true);
+    if(runtime_->voltage_interpolator == nullptr)
+        throw std::runtime_error("Sensor has no interpolator");
+
+    reading.value = runtime_->voltage_interpolator->Interpolate(voltage_calibrated, true);
     reading.raw_value = reading.value;
 
     reading.status = ReadingStatus::INTERPOLATED;

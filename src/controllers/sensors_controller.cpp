@@ -85,7 +85,8 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
         sensors_configuration_manager_,
         sensor_readings_frame_,
         isr_sensor_reader_factory_,
-        sensor_reader_factory_);
+        sensor_reader_factory_,
+        sd_fs_service_);
     if(!sensors_processing_service_->Initialize()) {
         LOG_ERR("Failed to initialize the sensors processing service.");
         return -1;

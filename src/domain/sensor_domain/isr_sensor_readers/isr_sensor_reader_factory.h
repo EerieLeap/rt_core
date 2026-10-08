@@ -9,6 +9,7 @@
 #include "subsys/canbus/can_id.h"
 
 #include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/runtime/sensor_runtime.h"
 #include "domain/canbus_domain/services/canbus_service.h"
 #include "i_isr_sensor_reader.h"
 
@@ -19,8 +20,10 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::gpio::IGpio;
 using eerie_leap::subsys::canbus::CanId;
 
+using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 
+// Creates the event-driven reader for a sensor's source kind; null when the unit lacks that source.
 class IsrSensorReaderFactory {
 protected:
     std::shared_ptr<ITimeService> time_service_;
@@ -38,7 +41,7 @@ public:
     virtual ~IsrSensorReaderFactory() = default;
 
     std::unique_ptr<IIsrSensorReader> Create(
-        std::shared_ptr<Sensor> sensor,
+        const SensorRuntime& runtime,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         ProcessSensorCallback process_sensor_callback);
 };

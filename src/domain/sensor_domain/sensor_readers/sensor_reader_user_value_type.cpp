@@ -10,21 +10,24 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderUserValueType::SensorReaderUserValueType(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor)
-        : SensorReaderBase(std::move(time_service), std::move(sensor)) {
+    const SensorRuntime& runtime)
+        : SensorReaderBase(std::move(time_service), runtime) {
 
-    if(sensor_->configuration.type != SensorType::USER_ANALOG && sensor_->configuration.type != SensorType::USER_INDICATOR)
+    const auto type = GetSensor().configuration.type;
+    if(type != SensorType::USER_ANALOG && type != SensorType::USER_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");
 
     has_create_reading_function_ = false;
 
-    if(sensor_->configuration.lua_script == nullptr)
+    if(runtime_->lua_script == nullptr)
         return;
 
-    lua_getglobal(sensor_->configuration.lua_script->GetState(), "create_sensor_value");
+    auto* state = runtime_->lua_script->GetState();
 
-    has_create_reading_function_ = lua_isfunction(sensor_->configuration.lua_script->GetState(), -1);
-    lua_pop(sensor_->configuration.lua_script->GetState(), 1);
+    lua_getglobal(state, "create_sensor_value");
+
+    has_create_reading_function_ = lua_isfunction(state, -1);
+    lua_pop(state, 1);
 }
 
 SensorReading SensorReaderUserValueType::Read() {
@@ -36,7 +39,7 @@ SensorReading SensorReaderUserValueType::Read() {
         return reading;
     }
 
-    auto* state = sensor_->configuration.lua_script->GetState();
+    auto* state = runtime_->lua_script->GetState();
 
     lua_getglobal(state, "create_sensor_value");
 
@@ -45,7 +48,7 @@ SensorReading SensorReaderUserValueType::Read() {
         throw std::runtime_error("create_sensor_value is not a function");
     }
 
-    lua_pushstring(state, sensor_->id.c_str());
+    lua_pushstring(state, GetSensor().id.c_str());
 
     if(lua_pcall(state, 1, 1, 0) != LUA_OK) {
         lua_pop(state, 1);

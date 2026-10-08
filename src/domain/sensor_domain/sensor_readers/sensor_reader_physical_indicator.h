@@ -3,7 +3,6 @@
 #include <memory>
 
 #include "subsys/gpio/i_gpio.h"
-#include "domain/sensor_domain/models/sensor.h"
 #include "sensor_reader_base.h"
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
@@ -17,7 +16,7 @@ private:
 public:
     SensorReaderPhysicalIndicator(
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<Sensor> sensor,
+        const SensorRuntime& runtime,
         std::shared_ptr<IGpio> gpio);
 
     ~SensorReaderPhysicalIndicator() override = default;

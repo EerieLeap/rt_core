@@ -28,7 +28,7 @@ std::shared_ptr<Sensor> sensors_order_resolver_MakeSensor(std::string_view id, c
     sensor->configuration.sampling_rate_ms = 1000;
 
     if(expression != nullptr)
-        sensor->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), expression);
+        sensor->configuration.expression = expression;
 
     return sensor;
 }
@@ -43,10 +43,11 @@ int sensors_order_resolver_IndexOf(const std::vector<std::shared_ptr<Sensor>>& s
 
 bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     for(size_t i = 0; i < sensors.size(); ++i) {
-        if(sensors[i]->configuration.expression_evaluator == nullptr)
+        if(!sensors[i]->configuration.HasExpression())
             continue;
 
-        auto variables = sensors[i]->configuration.expression_evaluator->GetVariableNames();
+        ExpressionEvaluator expression_evaluator(std::string(sensors[i]->configuration.expression));
+        auto variables = expression_evaluator.GetVariableNames();
         variables.erase("x");
 
         for(const auto& variable : variables) {
@@ -75,8 +76,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_1->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_1->configuration.channel = 0;
     sensor_1->configuration.sampling_rate_ms = 1000;
-    sensor_1->configuration.voltage_interpolator = make_unique_pmr<LinearVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_1_ptr);
-    sensor_1->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x * 2 + sensor_2 + 1");
+    sensor_1->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
+    sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
     std::pmr::vector<CalibrationData> calibration_data_2 {
         {0.0, 0.0},
@@ -96,8 +98,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_2->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_2->configuration.channel = 1;
     sensor_2->configuration.sampling_rate_ms = 500;
-    sensor_2->configuration.voltage_interpolator = make_unique_pmr<LinearVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_2_ptr);
-    sensor_2->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x * 4 + 1.6");
+    sensor_2->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    sensor_2->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
+    sensor_2->configuration.expression = "x * 4 + 1.6";
 
     auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
 
@@ -108,7 +111,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_3->configuration.type = SensorType::VIRTUAL_ANALOG;
     sensor_3->configuration.channel = std::nullopt;
     sensor_3->configuration.sampling_rate_ms = 2000;
-    sensor_3->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "sensor_1 + 8.34");
+    sensor_3->configuration.expression = "sensor_1 + 8.34";
 
     auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
 
@@ -119,7 +122,8 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_4->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_4->configuration.channel = 4;
     sensor_4->configuration.sampling_rate_ms = 2000;
-    sensor_4->configuration.voltage_interpolator = make_unique_pmr<CubicSplineVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_2_ptr);
+    sensor_4->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
+    sensor_4->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
 
     auto sensor_5 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_5");
 
@@ -130,7 +134,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_5->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_5->configuration.channel = 4;
     sensor_5->configuration.sampling_rate_ms = 2000;
-    sensor_5->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "sensor_6 + 2.34");
+    sensor_5->configuration.expression = "sensor_6 + 2.34";
 
     auto sensor_6 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_6");
     sensor_6->metadata.name = "Sensor 6";
@@ -140,7 +144,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_6->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_6->configuration.channel = 4;
     sensor_6->configuration.sampling_rate_ms = 2000;
-    sensor_6->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "sensor_5 + 4.34");
+    sensor_6->configuration.expression = "sensor_5 + 4.34";
 
     std::vector<std::shared_ptr<Sensor>> sensors = {
         sensor_1, sensor_2, sensor_3, sensor_4, sensor_5, sensor_6 };

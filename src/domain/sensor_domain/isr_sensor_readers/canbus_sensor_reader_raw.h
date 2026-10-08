@@ -57,7 +57,7 @@ protected:
 public:
     CanbusSensorReaderRaw(
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<Sensor> sensor,
+        const SensorRuntime& runtime,
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<CanbusProxy> canbus,

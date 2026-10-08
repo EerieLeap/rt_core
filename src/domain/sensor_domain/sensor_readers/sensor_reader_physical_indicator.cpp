@@ -10,19 +10,19 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderPhysicalIndicator::SensorReaderPhysicalIndicator(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor,
+    const SensorRuntime& runtime,
     std::shared_ptr<IGpio> gpio)
-        : SensorReaderBase(std::move(time_service), std::move(sensor)),
+        : SensorReaderBase(std::move(time_service), runtime),
         gpio_(std::move(gpio)) {
 
-    if(sensor_->configuration.type != SensorType::PHYSICAL_INDICATOR)
+    if(GetSensor().configuration.type != SensorType::PHYSICAL_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");
 }
 
 SensorReading SensorReaderPhysicalIndicator::Read() {
     SensorReading reading = CreateReading();
 
-    reading.value = gpio_->ReadChannel(sensor_->configuration.channel.value()) ? 1.0F : 0.0F;
+    reading.value = gpio_->ReadChannel(GetSensor().configuration.channel.value()) ? 1.0F : 0.0F;
     reading.raw_value = reading.value;
     reading.status = ReadingStatus::RAW;
 

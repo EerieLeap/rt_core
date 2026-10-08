@@ -37,8 +37,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_1->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_1->configuration.channel = 0;
     sensor_1->configuration.sampling_rate_ms = 1000;
-    sensor_1->configuration.voltage_interpolator = make_unique_pmr<LinearVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_1_ptr);
-    sensor_1->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x * 2 + sensor_2 + 1");
+    sensor_1->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
+    sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
     std::pmr::vector<CalibrationData> calibration_data_2 {
         {0.0, 0.0},
@@ -58,8 +59,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_2->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_2->configuration.channel = 1;
     sensor_2->configuration.sampling_rate_ms = 500;
-    sensor_2->configuration.voltage_interpolator = make_unique_pmr<CubicSplineVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_2_ptr);
-    sensor_2->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x * 4 + 1.6");
+    sensor_2->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
+    sensor_2->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
+    sensor_2->configuration.expression = "x * 4 + 1.6";
 
     auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
 
@@ -70,7 +72,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_3->configuration.type = SensorType::VIRTUAL_ANALOG;
     sensor_3->configuration.channel = std::nullopt;
     sensor_3->configuration.sampling_rate_ms = 2000;
-    sensor_3->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "sensor_1 + 8.34");
+    sensor_3->configuration.expression = "sensor_1 + 8.34";
 
     auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
 
@@ -81,7 +83,8 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_4->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_4->configuration.channel = 2;
     sensor_4->configuration.sampling_rate_ms = 2000;
-    sensor_4->configuration.voltage_interpolator = make_unique_pmr<CubicSplineVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_2_ptr);
+    sensor_4->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
+    sensor_4->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
 
     std::vector<std::shared_ptr<Sensor>> sensors = {
         std::move(sensor_1), std::move(sensor_2), std::move(sensor_3), std::move(sensor_4)
@@ -117,10 +120,9 @@ void sensors_parser_CompareSensors(
             zassert_true(!deserialized_sensor->configuration.channel.has_value() && !sensors[i]->configuration.channel.has_value());
         }
         zassert_true(deserialized_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
-        if(deserialized_sensor->configuration.voltage_interpolator != nullptr || sensors[i]->configuration.voltage_interpolator != nullptr)
-            zassert_true(deserialized_sensor->configuration.voltage_interpolator->GetInterpolationMethod() == sensors[i]->configuration.voltage_interpolator->GetInterpolationMethod());
-        if(deserialized_sensor->configuration.expression_evaluator != nullptr || sensors[i]->configuration.expression_evaluator != nullptr)
-            zassert_true(deserialized_sensor->configuration.expression_evaluator->GetExpression() == sensors[i]->configuration.expression_evaluator->GetExpression());
+        zassert_true(deserialized_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method);
+        zassert_true(deserialized_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size());
+        zassert_true(deserialized_sensor->configuration.expression == sensors[i]->configuration.expression);
     }
 }
 
@@ -147,10 +149,10 @@ ZTEST(sensors_parser, test_Deserialize_orders_an_unordered_calibration_table) {
     auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
 
     for(const auto& sensor : deserialized_sensors) {
-        if(sensor->configuration.voltage_interpolator == nullptr)
+        if(!sensor->configuration.HasInterpolation())
             continue;
 
-        const auto& calibration_table = *sensor->configuration.voltage_interpolator->GetCalibrationTable();
+        const auto& calibration_table = sensor->configuration.calibration_table;
         zassert_true(std::ranges::is_sorted(calibration_table, {}, &CalibrationData::voltage), "%s", sensor->id.c_str());
     }
 }

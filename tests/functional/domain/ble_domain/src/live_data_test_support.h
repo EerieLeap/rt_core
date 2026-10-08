@@ -140,18 +140,24 @@ inline DecodedSample Decode(std::span<const uint8_t> data) {
 struct Readings {
     std::shared_ptr<SensorReadingsFrame> frame = std::make_shared<SensorReadingsFrame>();
     std::vector<std::shared_ptr<Sensor>> sensors;
+    std::vector<std::optional<float>> values;
 
     uint32_t Add(std::string_view id, std::optional<float> value) {
         auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
         sensors.push_back(sensor);
+        values.push_back(value);
 
-        SensorReading reading(sensor.get());
-        reading.source = ReadingSource::PROCESSING;
-        if(value.has_value()) {
-            reading.status = ReadingStatus::PROCESSED;
-            reading.value = *value;
+        // Slots exist per configuration, so every added sensor reconfigures the frame and replays the readings.
+        frame->Configure(sensors);
+        for(size_t i = 0; i < sensors.size(); i++) {
+            SensorReading reading(sensors[i].get());
+            reading.source = ReadingSource::PROCESSING;
+            if(values[i].has_value()) {
+                reading.status = ReadingStatus::PROCESSED;
+                reading.value = *values[i];
+            }
+            frame->AddOrUpdateReading(reading);
         }
-        frame->AddOrUpdateReading(reading);
 
         return sensor->id_hash;
     }

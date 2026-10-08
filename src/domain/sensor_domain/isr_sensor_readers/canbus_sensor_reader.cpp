@@ -11,7 +11,7 @@ using eerie_leap::domain::canbus_domain::utilities::CanSignalCodec;
 
 CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor,
+    const SensorRuntime& runtime,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CanbusProxy> canbus,
@@ -19,7 +19,7 @@ CanbusSensorReader::CanbusSensorReader(
     std::shared_ptr<const CanSignalConfiguration> signal_configuration)
         : CanbusSensorReaderRaw(
             std::move(time_service),
-            std::move(sensor),
+            runtime,
             std::move(process_sensor_callback),
             std::move(work_queue_thread),
             std::move(canbus),

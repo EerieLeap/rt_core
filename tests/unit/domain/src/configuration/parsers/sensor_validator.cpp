@@ -10,8 +10,7 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/string/string_helpers.h"
-#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
-#include "subsys/math_parser/expression_evaluator.h"
+#include "utilities/voltage_interpolator/interpolation_method.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 #include "domain/sensor_domain/configuration/parsers/sensor_validator.h"
 
@@ -19,7 +18,6 @@ using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::string;
 using namespace eerie_leap::utilities::voltage_interpolator;
-using namespace eerie_leap::subsys::math_parser;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::models::sources;
 using eerie_leap::domain::sensor_domain::configuration::parsers::SensorValidator;
@@ -36,20 +34,17 @@ std::shared_ptr<Sensor> MakeSensor(std::string_view id, SensorType type, std::op
     sensor->configuration.sampling_rate_ms = sampling_rate_ms;
 
     switch(type) {
-    case SensorType::PHYSICAL_ANALOG: {
-        auto calibration_table = std::make_shared<std::pmr::vector<CalibrationData>>(
-            std::pmr::vector<CalibrationData>{ {0.0F, 0.0F}, {3.3F, 100.0F} });
+    case SensorType::PHYSICAL_ANALOG:
         sensor->configuration.channel = 0;
-        sensor->configuration.voltage_interpolator =
-            make_unique_pmr<LinearVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_table);
+        sensor->configuration.interpolation_method = InterpolationMethod::LINEAR;
+        sensor->configuration.calibration_table = { {0.0F, 0.0F}, {3.3F, 100.0F} };
         break;
-    }
     case SensorType::PHYSICAL_INDICATOR:
         sensor->configuration.channel = 0;
         break;
     case SensorType::VIRTUAL_ANALOG:
     case SensorType::VIRTUAL_INDICATOR:
-        sensor->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "1 + 1");
+        sensor->configuration.expression = "1 + 1";
         break;
     case SensorType::CANBUS_RAW:
         sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 0, 100);
@@ -180,4 +175,38 @@ ZTEST(sensor_validator, test_sensor_count_limit) {
     sensors.push_back(MakeSensor("one_too_many", SensorType::USER_ANALOG, 100));
 
     zassert_true(Contains(Validate(sensors), "at most"));
+}
+
+ZTEST(sensor_validator, test_invalid_expression_is_rejected_with_its_message) {
+    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    sensor->configuration.expression = "x +";
+
+    auto error = Validate({ sensor });
+    zassert_true(Contains(error, "Sensor ID: sensor_1"));
+    zassert_true(Contains(error, "Invalid expression"));
+}
+
+ZTEST(sensor_validator, test_expression_rules_follow_the_type) {
+    auto raw = MakeSensor("raw", SensorType::CANBUS_RAW, std::nullopt);
+    raw->configuration.expression = "x * 2";
+    zassert_true(Contains(Validate({ raw }), "does not support expression"));
+
+    auto virtual_sensor = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, 100);
+    virtual_sensor->configuration.expression.clear();
+    zassert_true(Contains(Validate({ virtual_sensor }), "must have expression"));
+}
+
+ZTEST(sensor_validator, test_interpolation_rules_follow_the_type) {
+    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    analog->configuration.calibration_table = { {0.0F, 0.0F} };
+    zassert_true(Contains(Validate({ analog }), "at least 2 points"));
+
+    analog->configuration.interpolation_method = InterpolationMethod::NONE;
+    analog->configuration.calibration_table.clear();
+    zassert_true(Contains(Validate({ analog }), "must have interpolation"));
+
+    auto indicator = MakeSensor("indicator", SensorType::PHYSICAL_INDICATOR, std::nullopt);
+    indicator->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    indicator->configuration.calibration_table = { {0.0F, 0.0F}, {1.0F, 1.0F} };
+    zassert_true(Contains(Validate({ indicator }), "does not support interpolation"));
 }

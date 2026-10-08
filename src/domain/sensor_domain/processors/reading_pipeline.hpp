@@ -16,14 +16,14 @@ public:
     // reading that went through as PROCESSED. The caller commits the result once.
     static void Run(
         const std::vector<std::shared_ptr<IReadingProcessor>>& processors,
-        const Sensor& sensor,
+        const SensorRuntime& runtime,
         SensorReading& reading) {
 
         for(const auto& processor : processors) {
             if(reading.HasError())
                 return;
 
-            processor->Process(sensor, reading);
+            processor->Process(runtime, reading);
         }
 
         if(reading.status < ReadingStatus::PROCESSED)

@@ -15,14 +15,14 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 CanbusSensorReaderRaw::CanbusSensorReaderRaw(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor,
+    const SensorRuntime& runtime,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CanbusProxy> canbus,
     const CanId& frame_id)
         : IsrSensorReaderBase(
             std::move(time_service),
-            std::move(sensor),
+            runtime,
             std::move(process_sensor_callback)),
         work_queue_thread_(std::move(work_queue_thread)),
         canbus_(std::move(canbus)) {
@@ -103,7 +103,7 @@ void CanbusSensorReaderRaw::ProcessPendingFrame() noexcept {
     try {
         SensorReading reading = CreateReading();
         FillReading(reading, can_frame);
-        process_sensor_callback_(*sensor_, reading);
+        process_sensor_callback_(*runtime_, reading);
     } catch(const std::exception& e) {
         LOG_ERR("CAN frame ID 0x%08X processing failed: %s", can_frame.id, e.what());
     } catch(...) {

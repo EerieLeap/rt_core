@@ -22,6 +22,7 @@
 #include "domain/sensor_domain/configuration/adc_configuration_manager.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/sensor_readers/i_sensor_reader.h"
+#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_physical_analog.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_physical_indicator.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_virtual_analog.h"
@@ -52,6 +53,7 @@ using namespace eerie_leap::domain::sensor_domain::sensor_readers;
 
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::utilities;
+using namespace eerie_leap::domain::sensor_domain::runtime;
 
 ZTEST_SUITE(sensors_reader, NULL, NULL, NULL, NULL, NULL);
 
@@ -71,8 +73,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_1->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_1->configuration.channel = 0;
     sensor_1->configuration.sampling_rate_ms = 1000;
-    sensor_1->configuration.voltage_interpolator = make_unique_pmr<LinearVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_1_ptr);
-    sensor_1->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x * 2 + sensor_2 + 1");
+    sensor_1->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
+    sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
     std::pmr::vector<CalibrationData> calibration_data_2 {
         {0.0, 0.0},
@@ -92,8 +95,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_2->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor_2->configuration.channel = 1;
     sensor_2->configuration.sampling_rate_ms = 500;
-    sensor_2->configuration.voltage_interpolator = make_unique_pmr<CubicSplineVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_2_ptr);
-    sensor_2->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x * 4 + 1.6");
+    sensor_2->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
+    sensor_2->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
+    sensor_2->configuration.expression = "x * 4 + 1.6";
 
     auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
 
@@ -104,7 +108,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_3->configuration.type = SensorType::VIRTUAL_ANALOG;
     sensor_3->configuration.channel = std::nullopt;
     sensor_3->configuration.sampling_rate_ms = 2000;
-    sensor_3->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "sensor_1 + 8.34");
+    sensor_3->configuration.expression = "sensor_1 + 8.34";
 
     auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
 
@@ -115,7 +119,8 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_4->configuration.type = SensorType::PHYSICAL_INDICATOR;
     sensor_4->configuration.channel = 1;
     sensor_4->configuration.sampling_rate_ms = 1000;
-    sensor_4->configuration.voltage_interpolator = make_unique_pmr<CubicSplineVoltageInterpolator>(Mrm::GetDefaultPmr(), calibration_data_2_ptr);
+    sensor_4->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
+    sensor_4->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
 
     auto sensor_5 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_5");
 
@@ -125,7 +130,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
 
     sensor_5->configuration.type = SensorType::VIRTUAL_INDICATOR;
     sensor_5->configuration.sampling_rate_ms = 1000;
-    sensor_5->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "sensor_1 < 400");
+    sensor_5->configuration.expression = "sensor_1 < 400";
 
     std::vector<std::shared_ptr<Sensor>> sensors = {
         sensor_1, sensor_2, sensor_3, sensor_4, sensor_5 };
@@ -159,6 +164,7 @@ AdcConfiguration sensors_reader_GetTestConfiguration() {
 
 struct sensors_reader_HelperInstances {
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
+    std::shared_ptr<SensorGeneration> generation;
     std::shared_ptr<std::vector<std::shared_ptr<ISensorReader>>> sensor_readers;
 };
 
@@ -189,28 +195,33 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
     auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
     auto sensors = sensors_reader_GetTestSensors();
 
+    // The builder lays out the frame's slots and binds the expressions, as the processing service does.
+    auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame).Build(
+        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+
     auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
-    for(int i = 0; i < sensors.size(); i++) {
+    for(size_t i = 0; i < generation->runtimes.size(); i++) {
+        const auto& runtime = generation->runtimes[i];
         std::shared_ptr<ISensorReader> sensor_reader;
 
-        if(sensors[i]->configuration.type == SensorType::PHYSICAL_ANALOG) {
+        if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderPhysicalAnalog>(
                 time_service,
-                sensors[i],
+                runtime,
                 adc_configuration_manager);
-        } else if(sensors[i]->configuration.type == SensorType::VIRTUAL_ANALOG) {
+        } else if(runtime.sensor->configuration.type == SensorType::VIRTUAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderVirtualAnalog>(
                 time_service,
-                sensors[i]);
-        } else if(sensors[i]->configuration.type == SensorType::PHYSICAL_INDICATOR) {
+                runtime);
+        } else if(runtime.sensor->configuration.type == SensorType::PHYSICAL_INDICATOR) {
             sensor_reader = std::make_shared<SensorReaderPhysicalIndicator>(
                 time_service,
-                sensors[i],
+                runtime,
                 gpio);
-        } else if(sensors[i]->configuration.type == SensorType::VIRTUAL_INDICATOR) {
+        } else if(runtime.sensor->configuration.type == SensorType::VIRTUAL_INDICATOR) {
             sensor_reader = std::make_shared<SensorReaderVirtualIndicator>(
                 time_service,
-                sensors[i]);
+                runtime);
         } else {
             throw std::runtime_error("Unsupported sensor type");
         }
@@ -220,6 +231,7 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
 
     return sensors_reader_HelperInstances {
         .sensor_readings_frame = sensor_readings_frame,
+        .generation = generation,
         .sensor_readers = sensor_readers
     };
 }

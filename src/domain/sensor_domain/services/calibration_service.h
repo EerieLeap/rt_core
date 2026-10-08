@@ -8,6 +8,7 @@
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
 #include "domain/sensor_domain/configuration/adc_configuration_manager.h"
+#include "domain/sensor_domain/runtime/sensor_runtime.h"
 #include "domain/sensor_domain/services/sensors_processing_service.h"
 
 #include "sensor_task.hpp"
@@ -20,6 +21,7 @@ using threading::WorkQueueThread;
 using threading::WorkQueueTaskResult;
 using eerie_leap::subsys::time::ITimeService;
 using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
+using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
 using eerie_leap::domain::sensor_domain::services::SensorTask;
 using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
 
@@ -33,6 +35,9 @@ private:
     std::shared_ptr<ITimeService> time_service_;
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager_;
     std::shared_ptr<SensorsProcessingService> sensors_processing_service_;
+
+    // The calibration sensor's own generation and frame, apart from the configured sensors.
+    std::shared_ptr<SensorGeneration> calibration_generation_;
 
     std::unique_ptr<SensorTask> CreateCalibrationTask(int channel);
     static WorkQueueTaskResult ProcessCalibrationWorkTask(SensorTask* task);

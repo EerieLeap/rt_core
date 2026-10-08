@@ -47,7 +47,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
 
             mdf4_file_->CreateDataChannel(channel_group, MdfDataType::Float32, "value", std::string(sensor->metadata.unit));
 
-            bool has_raw_value_channel = sensor->configuration.expression_evaluator != nullptr
+            bool has_raw_value_channel = sensor->configuration.HasExpression()
                 && logging_configuration->sensor_configurations.at(sensor->id_hash).log_raw_value
                 && (sensor->configuration.type == SensorType::PHYSICAL_ANALOG
                     || sensor->configuration.type == SensorType::PHYSICAL_INDICATOR);
@@ -55,7 +55,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
             if(has_raw_value_channel) {
                 auto channel_raw = mdf4_file_->CreateDataChannel(channel_group, MdfDataType::Float32, "raw_value", "");
                 channel_raw->SetConversion(
-                    mdf4_file_->CreateAlgebraicConversion(sensor->configuration.expression_evaluator->GetExpression()));
+                    mdf4_file_->CreateAlgebraicConversion(std::string(sensor->configuration.expression)));
             }
 
             value_channel_groups_.emplace(sensor->id_hash, SensorChannelGroup{channel_group, has_raw_value_channel});

@@ -26,6 +26,17 @@ void ExpressionEvaluator::RegisterVariableValueHandler(const MathParser::Variabl
     math_parser_->SetVariableFactory(handler);
 }
 
+void ExpressionEvaluator::BindVariable(const std::string& name, float* value) {
+    if(value == nullptr)
+        throw std::invalid_argument("Expression variable " + name + " has no storage.");
+
+    try {
+        math_parser_->DefineVariable(name, value);
+    } catch(const ParserError& e) {
+        throw std::invalid_argument("Invalid expression variable " + name + ": " + e.GetMsg());
+    }
+}
+
 float ExpressionEvaluator::Evaluate(std::optional<float> x) {
     if(uses_x_) {
         if(!x.has_value())

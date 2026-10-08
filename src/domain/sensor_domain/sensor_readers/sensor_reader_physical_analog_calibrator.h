@@ -8,7 +8,7 @@ class SensorReaderPhysicalAnalogCalibrator : public SensorReaderPhysicalAnalog {
 public:
     SensorReaderPhysicalAnalogCalibrator(
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<Sensor> sensor,
+        const SensorRuntime& runtime,
         std::shared_ptr<AdcConfigurationManager> adc_configuration_manager);
 
     ~SensorReaderPhysicalAnalogCalibrator() override = default;

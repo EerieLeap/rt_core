@@ -27,6 +27,7 @@
 #include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/processors/script_processor.h"
 #include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -38,6 +39,7 @@ using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::utilities;
 using namespace eerie_leap::domain::sensor_domain::sensor_readers;
 using namespace eerie_leap::domain::sensor_domain::processors;
+using namespace eerie_leap::domain::sensor_domain::runtime;
 
 ZTEST_SUITE(allocation_free_pipeline, NULL, NULL, NULL, NULL, NULL);
 
@@ -73,6 +75,7 @@ struct Pipeline {
     std::shared_ptr<SensorReadingsFrame> frame;
     std::shared_ptr<GpioSimulator> gpio;
     std::vector<std::shared_ptr<Sensor>> sensors;          // indicator, virtual, raw CAN
+    std::shared_ptr<SensorGeneration> generation;
     std::vector<std::unique_ptr<ISensorReader>> readers;   // indicator, virtual
     std::vector<std::shared_ptr<IReadingProcessor>> processors;
     std::array<SensorReading, 8> buffer;
@@ -85,7 +88,6 @@ Pipeline MakePipeline() {
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
 
     pipeline.frame = std::make_shared<SensorReadingsFrame>();
-    pipeline.frame->Reserve(4);
 
     pipeline.gpio = std::make_shared<GpioSimulator>();
     pipeline.gpio->Initialize();
@@ -94,21 +96,22 @@ Pipeline MakePipeline() {
     indicator->configuration.type = SensorType::PHYSICAL_INDICATOR;
     indicator->configuration.channel = 0;
     indicator->configuration.sampling_rate_ms = 100;
-    indicator->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "x");
+    indicator->configuration.expression = "x";
 
     auto derived = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "derived");
     derived->configuration.type = SensorType::VIRTUAL_ANALOG;
     derived->configuration.sampling_rate_ms = 100;
-    derived->configuration.expression_evaluator = make_unique_pmr<ExpressionEvaluator>(Mrm::GetDefaultPmr(), "indicator * 2 + 1");
-    derived->configuration.expression_evaluator->RegisterVariableValueHandler(
-        [frame = pipeline.frame](const std::string& sensor_id) { return frame->GetReadingValuePtr(sensor_id); });
+    derived->configuration.expression = "indicator * 2 + 1";
 
     auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
     raw->configuration.type = SensorType::CANBUS_RAW;
 
     pipeline.sensors = { indicator, derived, raw };
-    pipeline.readers.push_back(std::make_unique<SensorReaderPhysicalIndicator>(time_service, indicator, pipeline.gpio));
-    pipeline.readers.push_back(std::make_unique<SensorReaderVirtualAnalog>(time_service, derived));
+    // Lays out the slots and binds "indicator" in the derived expression to its value slot.
+    pipeline.generation = SensorPipelineBuilder(nullptr, pipeline.frame).Build(
+        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(pipeline.sensors));
+    pipeline.readers.push_back(std::make_unique<SensorReaderPhysicalIndicator>(time_service, pipeline.generation->runtimes[0], pipeline.gpio));
+    pipeline.readers.push_back(std::make_unique<SensorReaderVirtualAnalog>(time_service, pipeline.generation->runtimes[1]));
     pipeline.processors.push_back(std::make_shared<ExpressionProcessor>(pipeline.frame));
     pipeline.processors.push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
 
@@ -119,7 +122,7 @@ Pipeline MakePipeline() {
 void RunSamples(Pipeline& pipeline, uint32_t iteration) {
     for(size_t i = 0; i < pipeline.readers.size(); i++) {
         SensorReading reading = pipeline.readers[i]->Read();
-        ReadingPipeline::Run(pipeline.processors, *pipeline.sensors[i], reading);
+        ReadingPipeline::Run(pipeline.processors, pipeline.generation->runtimes[i], reading);
         pipeline.frame->AddOrUpdateReading(reading);
     }
 
@@ -133,7 +136,7 @@ void RunSamples(Pipeline& pipeline, uint32_t iteration) {
     raw_reading.timestamp = std::chrono::system_clock::now();
     raw_reading.status = ReadingStatus::RAW;
     raw_reading.can_frame = &can_frame;
-    ReadingPipeline::Run(pipeline.processors, *pipeline.sensors[2], raw_reading);
+    ReadingPipeline::Run(pipeline.processors, pipeline.generation->runtimes[2], raw_reading);
     pipeline.frame->AddOrUpdateReading(raw_reading);
 }
 

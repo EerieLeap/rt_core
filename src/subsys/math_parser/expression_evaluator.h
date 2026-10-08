@@ -28,6 +28,9 @@ public:
     const std::unordered_set<std::string>& GetVariableNames() const;
     void RegisterVariableValueHandler(const MathParser::VariableFactoryHandler& handler);
 
+    // Reads the variable from @p value on every evaluation; the address must outlive the evaluator's use.
+    void BindVariable(const std::string& name, float* value);
+
     // Throws std::invalid_argument when the expression uses x and none is given,
     // std::runtime_error when the parser fails.
     float Evaluate(std::optional<float> x = std::nullopt);

@@ -1,12 +1,20 @@
+#include <string>
+
+#include "subsys/math_parser/expression_evaluator.h"
+
 #include "sensors_order_resolver.h"
 
 namespace eerie_leap::domain::sensor_domain::utilities {
 
 using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::subsys::math_parser::ExpressionEvaluator;
 
 void SensorsOrderResolver::AddSensor(std::shared_ptr<Sensor> sensor) {
-    if(sensor->configuration.expression_evaluator != nullptr) {
-        auto sensor_ids = sensor->configuration.expression_evaluator->GetVariableNames();
+    if(sensor->configuration.HasExpression()) {
+        // Parsed only for its variable names; the runtime builds its own evaluator.
+        ExpressionEvaluator expression_evaluator(std::string(sensor->configuration.expression));
+
+        auto sensor_ids = expression_evaluator.GetVariableNames();
         sensor_ids.erase("x");
 
         dependencies_.try_emplace(sensor->id, std::unordered_set<std::string>(sensor_ids.begin(), sensor_ids.end()));

@@ -15,14 +15,16 @@ LOG_MODULE_REGISTER(script_processor_logger);
 ScriptProcessor::ScriptProcessor(std::string function_name)
     : function_name_(std::move(function_name)) {}
 
-void ScriptProcessor::Process(const Sensor& sensor, SensorReading& reading) {
-    auto* lua_script = sensor.configuration.lua_script.get();
+void ScriptProcessor::Process(const SensorRuntime& runtime, SensorReading& reading) {
+    auto* lua_script = runtime.lua_script.get();
     if(lua_script == nullptr)
         return;
 
     auto* state = lua_script->GetState();
     if(state == nullptr)
         return;
+
+    const Sensor& sensor = runtime.GetSensor();
 
     lua_getglobal(state, function_name_.c_str());
 

@@ -1,7 +1,7 @@
-#include "subsys/lua_script/lua_script.h"
+#include <stdexcept>
+
 #include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/processors/script_processor.h"
-#include "domain/script_domain/utilities/global_fuctions_registry.h"
 
 #include "processing_isr_service.h"
 #include "processing_scheduler_service.h"
@@ -9,10 +9,8 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using namespace eerie_leap::subsys::lua_script;
 using namespace eerie_leap::domain::sensor_domain::processors;
 using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::domain::script_domain::utilities;
 
 LOG_MODULE_REGISTER(processing_service_logger);
 
@@ -20,12 +18,12 @@ SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
-    std::shared_ptr<SensorReaderFactory> sensor_reader_factory)
+    std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
+    std::shared_ptr<IFsService> sd_fs_service)
         : work_queue_thread_(nullptr),
         sensors_configuration_manager_(std::move(sensors_configuration_manager)),
         sensor_readings_frame_(std::move(sensor_readings_frame)),
-        isr_sensor_reader_factory_(std::move(isr_sensor_reader_factory)),
-        sensor_reader_factory_(std::move(sensor_reader_factory)),
+        pipeline_builder_(std::move(sd_fs_service), sensor_readings_frame_),
         reading_processors_(std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>()) {
 
     work_queue_thread_ = std::make_shared<WorkQueueThread>(
@@ -36,22 +34,22 @@ SensorsProcessingService::SensorsProcessingService(
     reading_processors_->push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
 
-    if(isr_sensor_reader_factory_) {
-        processing_services_.emplace_back(std::make_unique<ProcessingIsrService>(
-            sensors_configuration_manager_,
+    if(isr_sensor_reader_factory != nullptr) {
+        isr_service_ = std::make_shared<ProcessingIsrService>(
             sensor_readings_frame_,
-            isr_sensor_reader_factory_,
+            std::move(isr_sensor_reader_factory),
             work_queue_thread_,
-            reading_processors_));
+            reading_processors_);
+        processing_services_.push_back(isr_service_);
     }
 
-    if(sensor_reader_factory_) {
-        processing_services_.emplace_back(std::make_unique<ProcessingSchedulerService>(
-            sensors_configuration_manager_,
+    if(sensor_reader_factory != nullptr) {
+        scheduler_service_ = std::make_shared<ProcessingSchedulerService>(
             sensor_readings_frame_,
-            sensor_reader_factory_,
+            std::move(sensor_reader_factory),
             work_queue_thread_,
-            reading_processors_));
+            reading_processors_);
+        processing_services_.push_back(scheduler_service_);
     }
 };
 
@@ -76,16 +74,23 @@ bool SensorsProcessingService::DoStart() {
         return false;
     }
 
-    // Sized once so a sample never grows the tables.
-    sensor_readings_frame_->Reserve(sensors->size());
+    // Everything a sample needs is allocated here, once per configuration.
+    try {
+        generation_ = pipeline_builder_.Build(sensors);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to build the sensor pipeline: %s", e.what());
+        return false;
+    }
 
-    for(const auto& sensor : *sensors)
-        InitializeScript(sensor);
+    if(isr_service_ != nullptr)
+        isr_service_->SetGeneration(generation_);
+    if(scheduler_service_ != nullptr)
+        scheduler_service_->SetGeneration(generation_);
 
     for(const auto& processing_service : processing_services_)
         processing_service->Start();
 
-    LOG_INF("Processing Service started.");
+    LOG_INF("Processing Service started with generation %u, %zu sensors.", generation_->id, generation_->runtimes.size());
 
     return true;
 }
@@ -94,7 +99,9 @@ bool SensorsProcessingService::DoStop() {
     for(const auto& processing_service : processing_services_)
         processing_service->Stop();
 
+    // Readers and tasks are gone, so nothing refers to the generation any more.
     sensor_readings_frame_->ClearReadings();
+    generation_ = nullptr;
 
     LOG_INF("Processing Service stopped.");
 
@@ -129,16 +136,6 @@ bool SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReading
     reading_processors_->push_back(std::move(processor));
 
     return true;
-}
-
-void SensorsProcessingService::InitializeScript(std::shared_ptr<Sensor> sensor) const {
-    auto lua_script = sensor->configuration.lua_script;
-
-    if(lua_script == nullptr)
-        return;
-
-    GlobalFunctionsRegistry::RegisterGetSensorValue(*lua_script, *sensor_readings_frame_);
-    GlobalFunctionsRegistry::RegisterUpdateSensorValue(*lua_script, *sensor_readings_frame_);
 }
 
 } // namespace eerie_leap::domain::sensor_domain::services

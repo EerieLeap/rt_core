@@ -1,6 +1,8 @@
 config EERIE_LEAP_DOMAIN_SENSOR
     depends on EERIE_LEAP_CONFIGURATION
     bool "EerieLeap Sensor Domain"
+    # The pipeline builder registers the Lua sensor functions of the script domain.
+    select EERIE_LEAP_DOMAIN_SCRIPT
     help
       Add EerieLeap Sensor Domain.
 

@@ -6,7 +6,7 @@
 #include "subsys/gpio/i_gpio.h"
 
 #include "domain/sensor_domain/configuration/adc_configuration_manager.h"
-#include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/runtime/sensor_runtime.h"
 #include "i_sensor_reader.h"
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
@@ -14,8 +14,9 @@ namespace eerie_leap::domain::sensor_domain::sensor_readers {
 using eerie_leap::subsys::time::ITimeService;
 using eerie_leap::subsys::gpio::IGpio;
 using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
-using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::runtime::SensorRuntime;
 
+// Creates the polled reader for a sensor's source kind; null when the unit lacks that source.
 class SensorReaderFactory {
 protected:
     std::shared_ptr<ITimeService> time_service_;
@@ -30,7 +31,7 @@ public:
 
     virtual ~SensorReaderFactory() = default;
 
-    std::unique_ptr<ISensorReader> Create(std::shared_ptr<Sensor> sensor);
+    std::unique_ptr<ISensorReader> Create(const SensorRuntime& runtime);
 };
 
 } // namespace eerie_leap::domain::sensor_domain::sensor_readers

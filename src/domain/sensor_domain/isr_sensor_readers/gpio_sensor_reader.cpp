@@ -15,27 +15,27 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 GpioSensorReader::GpioSensorReader(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor,
+    const SensorRuntime& runtime,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<IGpio> gpio)
         : IsrSensorReaderBase(
             std::move(time_service),
-            std::move(sensor),
+            runtime,
             std::move(process_sensor_callback)),
         work_queue_thread_(std::move(work_queue_thread)),
         gpio_(std::move(gpio)) {
 
-    if(sensor_->configuration.type != SensorType::PHYSICAL_INDICATOR)
+    if(GetSensor().configuration.type != SensorType::PHYSICAL_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");
 
     if(gpio_ == nullptr)
         throw std::runtime_error("GPIO is not available");
 
-    if(!sensor_->configuration.channel.has_value())
+    if(!GetSensor().configuration.channel.has_value())
         throw std::runtime_error("Sensor channel is not set");
 
-    int channel = static_cast<int>(sensor_->configuration.channel.value());
+    int channel = static_cast<int>(GetSensor().configuration.channel.value());
 
     pending_work_.reader = this;
     k_work_init(&pending_work_.work, WorkHandler);
@@ -99,7 +99,7 @@ void GpioSensorReader::ProcessPendingState() noexcept {
         reading.raw_value = reading.value;
         reading.status = ReadingStatus::RAW;
 
-        process_sensor_callback_(*sensor_, reading);
+        process_sensor_callback_(*runtime_, reading);
     } catch(const std::exception& e) {
         LOG_ERR("Gpio channel %d processing failed: %s", channel_, e.what());
     } catch(...) {

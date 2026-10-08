@@ -10,10 +10,10 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderVirtualAnalog::SensorReaderVirtualAnalog(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor)
-        : SensorReaderBase(std::move(time_service), std::move(sensor)) {
+    const SensorRuntime& runtime)
+        : SensorReaderBase(std::move(time_service), runtime) {
 
-    if(sensor_->configuration.type != SensorType::VIRTUAL_ANALOG)
+    if(GetSensor().configuration.type != SensorType::VIRTUAL_ANALOG)
         throw std::runtime_error("Unsupported sensor type");
 }
 

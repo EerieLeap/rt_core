@@ -12,11 +12,11 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderPhysicalAnalogCalibrator::SensorReaderPhysicalAnalogCalibrator(
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<Sensor> sensor,
+    const SensorRuntime& runtime,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager)
         : SensorReaderPhysicalAnalog(
             std::move(time_service),
-            std::move(sensor),
+            runtime,
             std::move(adc_configuration_manager)) { }
 
 SensorReading SensorReaderPhysicalAnalogCalibrator::Read() {

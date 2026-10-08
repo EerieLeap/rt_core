@@ -49,7 +49,7 @@ WorkQueueTaskResult CalibrationService::ProcessCalibrationWorkTask(SensorTask* t
             TimeHelpers::GetFormattedString(reading.timestamp.value()).c_str());
     } catch (const std::exception& e) {
         LOG_ERR("Error processing calibrator on channel %d, Error: %s",
-            task->sensor->configuration.channel.value_or(-1),
+            task->runtime->GetSensor().configuration.channel.value_or(-1),
             e.what());
     }
 
@@ -67,14 +67,25 @@ std::unique_ptr<SensorTask> CalibrationService::CreateCalibrationTask(int channe
 
     auto sensor_readings_frame = std::make_shared<SensorReadingsFrame>();
 
+    // A generation of one: the calibrator reads the ADC directly and needs no interpolator.
+    const std::vector<std::shared_ptr<Sensor>> sensors = { sensor };
+    sensor_readings_frame->Configure(sensors);
+
+    calibration_generation_ = std::make_shared<SensorGeneration>();
+    calibration_generation_->runtimes.emplace_back();
+    auto& runtime = calibration_generation_->runtimes.back();
+    runtime.sensor = sensor;
+    runtime.slot = sensor_readings_frame->FindSlot(sensor->id_hash).value();
+    runtime.update_method = SensorReadingUpdateMethod::SCHEDULER;
+
     auto task = std::make_unique<SensorTask>();
     task->sampling_rate_ms = K_MSEC(sensor->configuration.sampling_rate_ms.value());
-    task->sensor = sensor;
+    task->runtime = &runtime;
     task->readings_frame = sensor_readings_frame;
 
     task->reader = std::make_unique<SensorReaderPhysicalAnalogCalibrator>(
         time_service_,
-        sensor,
+        runtime,
         adc_configuration_manager_);
 
     return task;
@@ -104,6 +115,10 @@ void CalibrationService::Stop() {
     if(calibration_task_.has_value()) {
         while(calibration_task_.value().Cancel())
             k_sleep(K_MSEC(1));
+
+        // The task's reader refers to the generation, so it goes first.
+        calibration_task_.reset();
+        calibration_generation_ = nullptr;
     }
 
     LOG_INF("Calibration Service stopped");
