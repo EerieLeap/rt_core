@@ -7,6 +7,16 @@
 
 get_filename_component(RT_CORE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
+# An empty submodule directory would make Zephyr fail on the module list with a
+# message that does not name the cause, so it is checked here first.
+foreach(submodule "modules/zephyr_lua" "modules/expression_engine")
+    if(NOT EXISTS "${RT_CORE_DIR}/${submodule}/zephyr/module.yml")
+        message(FATAL_ERROR
+            "rt_core submodule '${submodule}' is not checked out "
+            "(${RT_CORE_DIR}/${submodule}). Run 'git submodule update --init --recursive' in rt_core.")
+    endif()
+endforeach()
+
 set(EXTRA_ZEPHYR_MODULES
     "${RT_CORE_DIR}/modules/zephyr_lua"
     "${RT_CORE_DIR}/modules/expression_engine"

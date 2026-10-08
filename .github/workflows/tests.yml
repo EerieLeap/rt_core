@@ -17,6 +17,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: rt_core
+          # The Lua wrapper and the expression engine are nested submodules, not west projects.
+          submodules: recursive
 
       # native_sim builds 32-bit binaries.
       - name: Install multilib toolchain
