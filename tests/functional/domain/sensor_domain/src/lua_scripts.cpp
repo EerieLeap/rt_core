@@ -234,3 +234,24 @@ ZTEST(lua_scripts, test_a_script_past_the_memory_limit_fails_its_call_only) {
     zassert_equal(modest_reader.Read(tick).value.value(), 3.0F);
     zassert_true(host->GetMemoryUsed() < 64 * 1024);
 }
+
+ZTEST(lua_scripts, test_the_base_library_is_available) {
+    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+
+    // pairs, pcall, error, tonumber and tostring come from the base library, which the host opens.
+    auto runtime = MakeScriptedRuntime(host, "base",
+        "function create_sensor_value(id)\n"
+        "  local sum = 0\n"
+        "  for _, v in pairs({1, 2, 3}) do sum = sum + v end\n"
+        "  local ok = pcall(error, 'caught')\n"
+        "  return sum + tonumber(tostring(4)) + (ok and 100 or 0)\n"
+        "end\n");
+
+    zassert_true(runtime.script.HasCreateValue());
+
+    auto time_service = MakeTimeService();
+    SensorReaderUserValueType reader(time_service, runtime);
+    const TickContext tick{ time_service->GetCurrentTime() };
+
+    zassert_equal(reader.Read(tick).value.value(), 10.0F, "1 + 2 + 3 + 4, and pcall reported the error");
+}

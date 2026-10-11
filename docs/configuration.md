@@ -1,0 +1,111 @@
+# Configuration system
+
+Every domain with user settings (system, ADC, CAN bus, sensors, logging) stores them the same
+way: one CBOR file per type on the internal filesystem, validated on every load and save, and
+exposed to clients through the SMP `config` group. This page describes the shared machinery;
+the per-domain pages describe the content of each configuration.
+
+Code: `src/configuration/`, `src/domain/configuration_domain/`.
+
+## Layers
+
+| Layer | Set by | Changes at |
+| --- | --- | --- |
+| Kconfig | `prj.conf`, board `.conf` | Build time: what is compiled, sizes, priorities, limits, product identity |
+| Device tree | Board `.dts` / overlay | Build time: which hardware exists (ADCs, CAN controllers, GPIO inputs, filesystems, display) |
+| Stored configuration | Firmware defaults, the C++ API, or an SMP client | Run time: calibrations, sensors, CAN messages, logging |
+
+## Storage
+
+`CborConfigurationService<T>` (`src/configuration/services/cbor_configuration_service.h`) owns
+one file: `config/<name>.cbor` relative to the internal filesystem mount point (see
+[filesystem.md](filesystem.md)). It encodes and decodes with the zcbor code generated from the
+schemas in `src/configuration/cbor/cbor_schemas/*.cddl`, and keeps the size and CRC32 of the
+file as last saved or loaded (`GetStoredInfo()`).
+
+When the service is given a work queue (the application's configuration work queue), every load
+and save runs on that queue and the caller waits, so no caller thread needs the stack for CBOR
+and filesystem work. Calls from the queue thread itself run inline.
+
+| Type | ID | Manager | File |
+| --- | --- | --- | --- |
+| System | 1 | `SystemConfigurationManager` | `config/system_config.cbor` |
+| ADC | 2 | `AdcConfigurationManager` | `config/adc_config.cbor` |
+| CAN bus | 3 | `CanbusConfigurationManager` | `config/canbus_config.cbor` |
+| Sensors | 4 | `SensorsConfigurationManager` | `config/sensors_config.cbor` |
+| Logging | 5 | `LoggingConfigurationManager` | `config/logging_config.cbor` |
+| UI, Display | 6, 7 | Reserved for applications | |
+
+The file names are set by the controllers that create the managers.
+
+## Configuration managers
+
+Each manager derives from `CborConfigurationManagerBase<TConfiguration, TCborConfig>`
+(`src/domain/configuration_domain/utilities/cbor_configuration_manager_base.h`) and provides
+three things: `Serialize()` (model to CBOR struct), `Deserialize()` (CBOR struct to model) and
+`CreateDefaultConfiguration()`. Both conversions validate, so nothing invalid is ever stored or
+handed out.
+
+Behaviour shared by every manager:
+
+- **Load or default.** The constructor loads the stored file. If no file exists, the default is
+  created and saved. If a file exists but fails to load (missing SD card, a stricter validator
+  after an update, corrupt data), the file is kept untouched, an unsaved default is used instead,
+  and `GetCborConfigurationInfo().is_applied` reports `false` until a valid configuration is
+  stored.
+- **`Get()`** returns the current configuration as a shared pointer. Consumers must treat it as
+  immutable; a change is always a whole new object.
+- **`Update(configuration)`** serializes, parses the result back (so what is kept is exactly what
+  a reload would give), saves, and replaces the current object.
+- **`ApplyCborConfiguration(bytes, reason)`** decodes and validates CBOR from a client, stores
+  the bytes as received (so the CRC a client computed stays the stored CRC), and replaces the
+  current object. On rejection `reason` receives the validator's message.
+- **Update handlers.** Managers whose configuration drives a running service also implement
+  `IConfigurationManager::RegisterConfigurationUpdatedHandler()`. The handler runs after a
+  successful `Update()` or `ApplyCborConfiguration()`, not on the initial load. Controllers use
+  it to restart the affected services (see each domain page).
+
+## Configuration service
+
+`ConfigurationService` (`src/domain/configuration_domain/services/configuration_service.h`)
+is the registry the SMP `config` group talks to. Each controller registers its manager under its
+type ID with an optional size cap (default 64 KiB) that bounds the transfer buffer of an SMP
+write. It routes `ApplyCborConfiguration`, `GetCborConfiguration` and `GetCborConfigurationInfo`
+to the manager of a type and lists the registered types.
+
+The `ManagementController` must be created after every manager has been registered, because the
+`config` group lists the types once at start.
+
+## SMP access
+
+With `CONFIG_EERIE_LEAP_SMP` and `CONFIG_EERIE_LEAP_CONTROLLER_MANAGEMENT`, clients read and
+write any registered type in chunks over the `config` group. The commands, errors, session rules
+and timeouts are in [smp.md](smp.md).
+
+## Kconfig
+
+| Symbol | Default | Meaning |
+| --- | --- | --- |
+| `EERIE_LEAP_CONFIGURATION` | n | Builds the storage service and the configuration domain. Selects `EERIE_LEAP_THREADING`. Required by every domain with stored configuration. |
+| `EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS` | 5000 | Idle time after which an SMP write session or read snapshot is dropped. |
+
+## Schemas
+
+The CDDL files in `src/configuration/cbor/cbor_schemas/` are the wire and file format. The
+generated zcbor sources next to them (`cbor_<type>_config/`) are committed; the generator
+invocation is kept in the application's `CMakeLists.txt` (`generate_zcbor_configuration`,
+commented out) for when a schema changes. Enumerations in the schemas are persisted integers:
+new values are appended, existing values are never reordered or reused.
+
+## Adding a configuration type
+
+1. Write the CDDL schema and generate the zcbor code.
+2. Add the model, a validator and a parser (`Serialize`/`Deserialize`) under the domain.
+3. Derive a manager from `CborConfigurationManagerBase` and call `LoadOrCreateDefault()` at the
+   end of its constructor, once the parser exists.
+4. Register a `CborTraitRegistry` entry for the CBOR struct (see
+   `src/configuration/cbor/traits/`) and add the sources to `CMakeLists.txt` under the domain's
+   Kconfig symbol.
+5. In the controller, create a `CborConfigurationService` with the file name and the
+   configuration work queue, construct the manager, and register it with `ConfigurationService`
+   under a new type ID.

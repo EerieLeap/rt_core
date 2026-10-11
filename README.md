@@ -2,6 +2,10 @@
 
 A repository containing common code used in EerieLeap projects.
 
+## Documentation
+
+How each subsystem and domain works and how to configure it: [`docs/README.md`](docs/README.md).
+
 ## Development
 
 This repository is a Zephyr module and doubles as a west manifest repository, so

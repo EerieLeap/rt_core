@@ -3,11 +3,3 @@ config EERIE_LEAP_CONFIGURATION
     select EERIE_LEAP_THREADING
     help
       Add EerieLeap Configuration.
-
-menu "EerieLeap Configuration config"
-    depends on EERIE_LEAP_CONFIGURATION
-
-    config EERIE_LEAP_SD_CARD_USER_CONFIG_DIR
-        string "User config directory"
-        default "configuration"
-endmenu

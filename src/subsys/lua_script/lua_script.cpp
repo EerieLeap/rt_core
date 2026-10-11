@@ -242,12 +242,13 @@ void LuaScript::OpenLuaStdLibs(lua_State* L) {
     }
 }
 
-/*
-** these libs are loaded by lua.c and are readily available to any Lua
-** program
-*/
+// Opened into every state. table, string, math and utf8 are always built; the base library
+// follows the Lua module's Kconfig. The host's print and sleep_ms are set afterwards, so they
+// replace the base library's print.
 const luaL_Reg LuaScript::lua_std_libs_[] = {
-    // {LUA_GNAME, luaopen_base},
+#ifdef CONFIG_LUA_LIB_BASE
+    {LUA_GNAME, luaopen_base},
+#endif
     // {LUA_LOADLIBNAME, luaopen_package},
     // {LUA_COLIBNAME, luaopen_coroutine},
     {LUA_TABLIBNAME, luaopen_table},
