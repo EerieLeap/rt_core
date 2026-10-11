@@ -64,7 +64,10 @@ present the validator rejects a configuration whose script file does not exist.
 - **Libraries.** The host opens the base library (`pairs`, `ipairs`, `tostring`, `tonumber`,
   `pcall`, `error`, ...; present when `LUA_LIB_BASE` is set, the default) and `table`, `string`,
   `math` and `utf8`. `print` is replaced by the host's version and `sleep_ms` is added.
-  `coroutine`, `package`, `io`, `os` and `debug` are not opened.
+  `coroutine`, `package`, `io`, `os` and `debug` are not opened. The base library's `loadfile`
+  and `dofile` go through the libc's `fopen`, which only works on targets with POSIX file I/O
+  (`POSIX_DEVICE_IO`, `POSIX_FD_MGMT`); elsewhere they fail with "Operation not supported",
+  so scripts are loaded through `script_path`, not from inside another script.
 
 ### Functions a script can call
 
