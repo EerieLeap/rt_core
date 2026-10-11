@@ -11,3 +11,17 @@ common:
 
 tests:
   functional.sensor_domain: {}
+  # The rate group statistics log, compiled out of the scenario above, under the timing tests,
+  # and the format of its channel line (processing_stats.cpp). The channel line formats volts with
+  # integers, so the scenario runs without floating-point printf support.
+  functional.sensor_domain.processing_stats:
+    # A Kconfig filter would be evaluated without rt_core_test.cmake's modules, so the boards
+    # the common list allows are excluded instead.
+    platform_exclude:
+      - qemu_cortex_a9
+      - qemu_cortex_a53
+      - qemu_riscv64
+      - qemu_malta
+    extra_configs:
+      - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS=y
+      - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S=1

@@ -1,6 +1,5 @@
 #ifdef CONFIG_ADC_EMUL
 
-#include <stdexcept>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/random/random.h>
@@ -11,25 +10,35 @@ namespace eerie_leap::subsys::adc {
 
 LOG_MODULE_REGISTER(adc_emulator_logger);
 
-float AdcEmulator::ReadChannel(int channel) {
-    if(channel < 0 || channel >= GetChannelCount())
-        throw std::invalid_argument("ADC channel out of range.");
+void AdcEmulator::Sample(const AdcSampleRequest& request) noexcept {
+    const size_t count = std::min(request.channels.size(), request.results.size());
 
-    uint32_t raw = sys_rand32_get();
-    auto input_mv = static_cast<uint16_t>((static_cast<uint64_t>(raw) * 3301) >> 32);
+    for(size_t i = 0; i < count; i++) {
+        const int channel = request.channels[i];
+        if(channel >= GetChannelCount() || externally_driven_[channel])
+            continue;
 
-    int err = adc_emul_const_value_set(adc_device_, channel_configs_[channel].channel_id, input_mv);
-    if(err < 0) {
-        LOG_ERR("Could not set constant value (%d).", err);
-        return 0;
+        uint32_t raw = sys_rand32_get();
+        auto input_mv = static_cast<uint16_t>((static_cast<uint64_t>(raw) * 3301) >> 32);
+
+        int err = adc_emul_const_value_set(adc_device_, channel_configs_[channel].channel_id, input_mv);
+        if(err < 0)
+            LOG_ERR("Could not set constant value for channel %d (%d)", channel, err);
     }
 
-    return Adc::ReadChannel(channel);
+    Adc::Sample(request);
 }
 
-AdcEmulatorManager::AdcEmulatorManager(std::vector<AdcDTInfo> adc_infos)
-    : AdcManager(std::move(adc_infos),
-        [](const AdcDTInfo& adc_info) { return std::make_shared<AdcEmulator>(adc_info); }) {}
+void AdcEmulator::SetExternallyDriven(int channel, bool driven) {
+    if(channel < 0 || channel >= GetChannelCount())
+        return;
+
+    externally_driven_[channel] = driven;
+}
+
+void AdcEmulator::OverrideCapabilities(const AdcCapabilities& capabilities) {
+    capabilities_ = capabilities;
+}
 
 }  // namespace eerie_leap::subsys::adc
 

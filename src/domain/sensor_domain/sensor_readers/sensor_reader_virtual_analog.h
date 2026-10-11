@@ -14,7 +14,7 @@ public:
 
     ~SensorReaderVirtualAnalog() override = default;
 
-    SensorReading Read() override;
+    SensorReading Read(const TickContext& tick) override;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::sensor_readers

@@ -162,6 +162,18 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
 
     # ======== Domain ========
 
+    if(CONFIG_EERIE_LEAP_DOMAIN_ADC)
+        list(APPEND SRC
+            "${SRC_DIR}/domain/adc_domain/*.c"
+            "${SRC_DIR}/domain/adc_domain/*.cpp"
+        )
+
+        list(APPEND SRC
+            "${SRC_DIR}/configuration/cbor/traits/adc_config_trait.cpp"
+            "${SRC_DIR}/configuration/cbor/cbor_adc_config/*.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_DOMAIN_BLE)
         list(APPEND SRC
             "${SRC_DIR}/domain/ble_domain/*.c"
@@ -202,8 +214,6 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
 
         list(APPEND SRC
-            "${SRC_DIR}/configuration/cbor/traits/adc_config_trait.cpp"
-            "${SRC_DIR}/configuration/cbor/cbor_adc_config/*.cpp"
             "${SRC_DIR}/configuration/cbor/traits/sensors_config_trait.cpp"
             "${SRC_DIR}/configuration/cbor/cbor_sensors_config/*.cpp"
         )
@@ -250,6 +260,12 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     if(CONFIG_EERIE_LEAP_CONTROLLER_CANBUS)
         list(APPEND SRC
             "${SRC_DIR}/controllers/canbus_controller.cpp"
+        )
+    endif()
+
+    if(CONFIG_EERIE_LEAP_CONTROLLER_ADC)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/adc_controller.cpp"
         )
     endif()
 

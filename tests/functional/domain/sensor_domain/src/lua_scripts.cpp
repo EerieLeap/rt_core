@@ -91,16 +91,17 @@ ZTEST(lua_scripts, test_scripts_in_one_state_do_not_share_globals) {
     auto time_service = MakeTimeService();
     SensorReaderUserValueType reader_a(time_service, runtime_a);
     SensorReaderUserValueType reader_b(time_service, runtime_b);
+    const TickContext tick{ time_service->GetCurrentTime() };
 
-    zassert_equal(reader_a.Read().value.value(), 20.0F);
-    zassert_equal(reader_b.Read().value.value(), 50.0F);
-    zassert_equal(reader_a.Read().value.value(), 20.0F, "Running b did not change a's globals");
+    zassert_equal(reader_a.Read(tick).value.value(), 20.0F);
+    zassert_equal(reader_b.Read(tick).value.value(), 50.0F);
+    zassert_equal(reader_a.Read(tick).value.value(), 20.0F, "Running b did not change a's globals");
 
     // The standard libraries and the host functions stay visible through the environment.
     auto runtime_c = MakeScriptedRuntime(host, "sensor_c",
         "function create_sensor_value(id) return math.floor(string.len(id) * 1.5) end\n");
     SensorReaderUserValueType reader_c(time_service, runtime_c);
-    zassert_equal(reader_c.Read().value.value(), 12.0F);
+    zassert_equal(reader_c.Read(tick).value.value(), 12.0F);
 }
 
 ZTEST(lua_scripts, test_a_script_that_fails_to_load_has_no_environment) {
@@ -117,8 +118,9 @@ ZTEST(lua_scripts, test_a_script_that_fails_to_load_has_no_environment) {
     auto fine = MakeScriptedRuntime(host, "fine", "function create_sensor_value(id) return 1 end\n");
     zassert_true(fine.script.HasCreateValue());
 
-    SensorReaderUserValueType reader(MakeTimeService(), broken);
-    zassert_equal(reader.Read().status, ReadingStatus::UNINITIALIZED, "No function, no value");
+    auto time_service = MakeTimeService();
+    SensorReaderUserValueType reader(time_service, broken);
+    zassert_equal(reader.Read({ time_service->GetCurrentTime() }).status, ReadingStatus::UNINITIALIZED, "No function, no value");
 }
 
 ZTEST(lua_scripts, test_post_process_receives_the_sample_and_returns_the_new_value) {
@@ -217,10 +219,11 @@ ZTEST(lua_scripts, test_a_script_past_the_memory_limit_fails_its_call_only) {
     auto time_service = MakeTimeService();
     SensorReaderUserValueType greedy_reader(time_service, greedy);
     SensorReaderUserValueType modest_reader(time_service, modest);
+    const TickContext tick{ time_service->GetCurrentTime() };
 
     bool failed = false;
     try {
-        (void)greedy_reader.Read();
+        (void)greedy_reader.Read(tick);
     } catch(const std::runtime_error&) {
         failed = true;
     }
@@ -228,6 +231,6 @@ ZTEST(lua_scripts, test_a_script_past_the_memory_limit_fails_its_call_only) {
     zassert_true(host->GetMemoryBudget().peak <= 64 * 1024 + 4096, "Peak %zu stayed near the limit", host->GetMemoryBudget().peak);
 
     // The table was collectable; the state and the other script keep working.
-    zassert_equal(modest_reader.Read().value.value(), 3.0F);
+    zassert_equal(modest_reader.Read(tick).value.value(), 3.0F);
     zassert_true(host->GetMemoryUsed() < 64 * 1024);
 }

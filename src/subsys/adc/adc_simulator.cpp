@@ -1,4 +1,6 @@
-#include <stdexcept>
+#include <algorithm>
+#include <cerrno>
+
 #include <zephyr/logging/log.h>
 #include <zephyr/random/random.h>
 
@@ -16,83 +18,42 @@ bool AdcSimulator::Initialize() {
     return true;
 }
 
-void AdcSimulator::UpdateConfiguration(uint16_t samples) {
-    samples_ = samples;
+void AdcSimulator::Sample(const AdcSampleRequest& request) noexcept {
+    const size_t count = std::min(request.channels.size(), request.results.size());
 
-    LOG_INF("Adc configuration updated.");
+    stats_.requests++;
+
+    // The same request contract as Adc: channels in range and ascending.
+    int last_channel = -1;
+    for(size_t i = 0; i < count; i++) {
+        request.results[i] = {};
+
+        const int channel = request.channels[i];
+        if(channel >= CHANNEL_COUNT || channel <= last_channel) {
+            request.results[i].error = AdcError::CHANNEL_OUT_OF_RANGE;
+            request.results[i].errno_value = -EINVAL;
+            stats_.errors++;
+            continue;
+        }
+
+        last_channel = channel;
+
+        uint32_t raw = sys_rand32_get();
+        request.results[i].volts = (raw / static_cast<float>(UINT32_MAX)) * 3.3F;
+        stats_.conversions++;
+    }
 }
 
-float AdcSimulator::ReadChannel(int channel) {
-    if(samples_ == 0)
-        throw std::runtime_error("ADC config is not set.");
-
-    if(channel < 0 || channel >= GetChannelCount())
-        throw std::invalid_argument("ADC channel out of range.");
-
-    uint32_t raw = sys_rand32_get();
-    float random_value = (raw / static_cast<float>(UINT32_MAX)) * 3.3F;
-
-    return random_value;
+int AdcSimulator::GetChannelCount() const {
+    return CHANNEL_COUNT;
 }
 
-int AdcSimulator::GetChannelCount() {
-    return 8;
+AdcCapabilities AdcSimulator::GetCapabilities() const {
+    return { .burst = false, .multi_channel = false, .us_per_conversion = 0 };
 }
 
-AdcSimulatorManager::AdcSimulatorManager()
-    : adc_(std::make_shared<AdcSimulator>()), adc_configuration_(nullptr) {}
-
-bool AdcSimulatorManager::IsChannelValid(int channel) {
-    return adc_configuration_ != nullptr
-        && channel >= 0
-        && channel < adc_configuration_->channel_configurations->size()
-        && channel < GetChannelCount();
-}
-
-bool AdcSimulatorManager::Initialize() {
-    return adc_->Initialize();
-}
-
-void AdcSimulatorManager::UpdateConfiguration(std::shared_ptr<AdcConfiguration> adc_configuration) {
-    if(adc_configuration == nullptr)
-        throw std::invalid_argument("ADC configuration cannot be null.");
-
-    adc_configuration_ = std::move(adc_configuration);
-
-    adc_->UpdateConfiguration(adc_configuration_->samples);
-}
-
-std::shared_ptr<AdcChannelConfiguration> AdcSimulatorManager::GetChannelConfiguration(int channel) {
-    if(!IsChannelValid(channel))
-        throw std::invalid_argument("ADC channel out of range.");
-
-    return adc_configuration_->channel_configurations->at(channel);
-}
-
-std::function<float ()> AdcSimulatorManager::GetChannelReader(int channel) {
-    if(!IsChannelValid(channel))
-        throw std::invalid_argument("ADC channel out of range.");
-
-    return [this, channel]() { return adc_->ReadChannel(channel); };
-}
-
-int AdcSimulatorManager::GetAdcCount() {
-    return 1;
-}
-
-int AdcSimulatorManager::GetChannelCount() {
-    return adc_->GetChannelCount();
-}
-
-void AdcSimulatorManager::UpdateSamplesCount(int samples) {
-    adc_->UpdateConfiguration(samples);
-}
-
-void AdcSimulatorManager::ResetSamplesCount() {
-    if(adc_configuration_ == nullptr)
-        throw std::runtime_error("ADC config is not set.");
-
-    adc_->UpdateConfiguration(adc_configuration_->samples);
+AdcStats AdcSimulator::GetStats() const {
+    return stats_;
 }
 
 }  // namespace eerie_leap::subsys::adc

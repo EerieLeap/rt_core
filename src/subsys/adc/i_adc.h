@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "adc_types.h"
 
 namespace eerie_leap::subsys::adc {
 
@@ -9,9 +9,13 @@ public:
     virtual ~IAdc() = default;
 
     virtual bool Initialize() = 0;
-    virtual void UpdateConfiguration(uint16_t samples) = 0;
-    virtual float ReadChannel(int channel) = 0;
-    virtual int GetChannelCount() = 0;
+
+    // Never throws and never allocates; every result carries its own status.
+    virtual void Sample(const AdcSampleRequest& request) noexcept = 0;
+
+    [[nodiscard]] virtual int GetChannelCount() const = 0;
+    [[nodiscard]] virtual AdcCapabilities GetCapabilities() const = 0;
+    [[nodiscard]] virtual AdcStats GetStats() const = 0;
 };
 
 }  // namespace eerie_leap::subsys::adc

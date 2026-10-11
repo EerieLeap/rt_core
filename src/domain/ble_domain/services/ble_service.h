@@ -32,6 +32,8 @@ private:
     std::shared_ptr<SmpBleRouter> smp_router_;
     std::shared_ptr<LiveDataService> live_data_service_;
     std::unique_ptr<LiveMgmtGroup> live_mgmt_group_;
+    // Whether pairing paused the processing service; both pairing handlers run on the system work queue.
+    bool is_processing_paused_ = false;
 
     static bool is_initialized_;
 
@@ -39,8 +41,8 @@ private:
 
     void ConfigureAdvertisingData() const;
     void ConfigureScanResponseData() const;
-    void PairingStarted() const;
-    void PairingFinished() const;
+    void PairingStarted();
+    void PairingFinished();
     bool InitializeAccessPoint();
 
     BleService(

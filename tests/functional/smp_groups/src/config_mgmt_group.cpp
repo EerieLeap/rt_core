@@ -70,7 +70,7 @@ public:
     }
 
     Response Crc(uint32_t type) {
-        return client.Read(SmpGroupId::CONFIG, Id(Command::CRC), CborMap().Put("type", type).Build());
+        return client.Read(SmpGroupId::CONFIG, Id(Command::STORED_CRC), CborMap().Put("type", type).Build());
     }
 
     Response ReadChunk(uint32_t type, uint32_t offset) {

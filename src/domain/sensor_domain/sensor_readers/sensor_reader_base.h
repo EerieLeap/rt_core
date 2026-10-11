@@ -23,10 +23,10 @@ protected:
 
     [[nodiscard]] const Sensor& GetSensor() const { return runtime_->GetSensor(); }
 
-    SensorReading CreateReading() const {
+    SensorReading CreateReading(const TickContext& tick) const {
         SensorReading reading(runtime_->sensor.get());
         reading.source = ReadingSource::PROCESSING;
-        reading.timestamp = time_service_->GetCurrentTime();
+        reading.timestamp = tick.timestamp;
 
         return reading;
     }

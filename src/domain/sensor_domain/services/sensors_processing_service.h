@@ -9,6 +9,7 @@
 #include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
+#include "domain/adc_domain/configuration/adc_configuration_manager.h"
 #include "domain/canbus_domain/services/canbus_service.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "domain/sensor_domain/runtime/sensor_runtime.h"
@@ -27,6 +28,7 @@ using eerie_leap::subsys::threading::ServiceBase;
 using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
+using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
@@ -40,13 +42,14 @@ using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
 class ProcessingIsrService;
 class ProcessingSchedulerService;
 
-// Builds a generation from the current sensors configuration on Start() and runs it until Stop();
-// a new configuration takes effect through a restart.
+// Builds a generation from the current sensors and ADC configurations on Start() and runs it until
+// Stop(); a new configuration of either takes effect through a restart.
 class SensorsProcessingService final : public ServiceBase<> {
 private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
 
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
+    std::shared_ptr<AdcConfigurationManager> adc_configuration_manager_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     SensorPipelineBuilder pipeline_builder_;
 
@@ -71,6 +74,8 @@ public:
         std::shared_ptr<ITimeService> time_service,
         std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
         std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
+        // Snapshotted into every generation; PHYSICAL_ANALOG sensors get no reader without it.
+        std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
         std::shared_ptr<CanbusService> canbus_service = nullptr,
         std::shared_ptr<IFsService> sd_fs_service = nullptr);
 

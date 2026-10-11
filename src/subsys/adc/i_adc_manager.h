@@ -1,28 +1,27 @@
 #pragma once
 
-#include <functional>
 #include <memory>
-#include <vector>
+#include <span>
 
-#include "models/adc_configuration.h"
+#include "adc_types.h"
+#include "i_adc.h"
 
 namespace eerie_leap::subsys::adc {
-
-using eerie_leap::subsys::adc::models::AdcConfiguration;
-using eerie_leap::subsys::adc::models::AdcChannelConfiguration;
 
 class IAdcManager {
 public:
     virtual ~IAdcManager() = default;
 
     virtual bool Initialize() = 0;
-    virtual void UpdateConfiguration(std::shared_ptr<AdcConfiguration> adc_configuration) = 0;
-    virtual std::shared_ptr<AdcChannelConfiguration> GetChannelConfiguration(int channel) = 0;
-    virtual int GetAdcCount() = 0;
-    virtual int GetChannelCount() = 0;
-    virtual std::function<float ()> GetChannelReader(int channel) = 0;
-    virtual void UpdateSamplesCount(int samples) = 0;
-    virtual void ResetSamplesCount() = 0;
+
+    [[nodiscard]] virtual int GetAdcCount() const = 0;
+    // Device-tree total over every ADC.
+    [[nodiscard]] virtual int GetChannelCount() const = 0;
+    [[nodiscard]] virtual std::span<const std::shared_ptr<IAdc>> GetAdcs() const = 0;
+
+    // Maps a global channel index (ADCs in alias order, channels in device-tree order) to its ADC.
+    // Throws std::invalid_argument when out of range; construction time only.
+    virtual AdcChannelHandle Resolve(int channel) = 0;
 };
 
 }  // namespace eerie_leap::subsys::adc

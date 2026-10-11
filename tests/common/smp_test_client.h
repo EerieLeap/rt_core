@@ -72,10 +72,15 @@ public:
 
 using Entry = std::map<std::string, uint32_t>;
 
-// A decoded response body: unsigned values, byte and text strings, one list of maps and the group error.
+// A decoded response body: unsigned values, floats, booleans, byte and text strings, one list of maps
+// and the group error.
 struct Response {
     SmpHeader header;
     std::map<std::string, uint32_t> values;
+    // Unsigned values that do not fit 32 bits.
+    std::map<std::string, uint64_t> wide_values;
+    std::map<std::string, float> floats;
+    std::map<std::string, bool> flags;
     std::map<std::string, Bytes> bytes;
     std::map<std::string, std::string> texts;
     std::vector<Entry> entries;
@@ -88,8 +93,30 @@ struct Response {
         return it->second;
     }
 
+    [[nodiscard]] uint64_t WideValue(const std::string& key) const {
+        if(auto it = values.find(key); it != values.end())
+            return it->second;
+
+        auto it = wide_values.find(key);
+        zassert_true(it != wide_values.end(), "Response has no \"%s\"", key.c_str());
+        return it->second;
+    }
+
+    [[nodiscard]] float Float(const std::string& key) const {
+        auto it = floats.find(key);
+        zassert_true(it != floats.end(), "Response has no float \"%s\"", key.c_str());
+        return it->second;
+    }
+
+    [[nodiscard]] bool Flag(const std::string& key) const {
+        auto it = flags.find(key);
+        zassert_true(it != flags.end(), "Response has no boolean \"%s\"", key.c_str());
+        return it->second;
+    }
+
     [[nodiscard]] bool Has(const std::string& key) const {
-        return values.contains(key) || bytes.contains(key) || texts.contains(key);
+        return values.contains(key) || wide_values.contains(key) || floats.contains(key) || flags.contains(key)
+            || bytes.contains(key) || texts.contains(key);
     }
     [[nodiscard]] bool IsOk() const { return !error.has_value() && !values.contains("rc"); }
 };
@@ -98,6 +125,10 @@ namespace detail {
 
 inline uint8_t MajorType(const zcbor_state_t* state) {
     return static_cast<uint8_t>(*state->payload >> 5);
+}
+
+inline uint8_t AdditionalInfo(const zcbor_state_t* state) {
+    return static_cast<uint8_t>(*state->payload & 0x1F);
 }
 
 inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry) {
@@ -141,10 +172,13 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
 
         switch(MajorType(zsd)) {
             case 0: {
-                uint32_t value = 0;
-                if(!zcbor_uint32_decode(zsd, &value))
+                uint64_t value = 0;
+                if(!zcbor_uint64_decode(zsd, &value))
                     return false;
-                response.values[name] = value;
+                if(value <= UINT32_MAX)
+                    response.values[name] = static_cast<uint32_t>(value);
+                else
+                    response.wide_values[name] = value;
                 break;
             }
             case 2: {
@@ -172,6 +206,24 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                 }
                 if(!zcbor_list_end_decode(zsd))
                     return false;
+                break;
+            }
+            case 7: {
+                // Simple values 20 and 21 are false and true, 26 a float32.
+                const uint8_t info = AdditionalInfo(zsd);
+                if(info == 20 || info == 21) {
+                    bool value = false;
+                    if(!zcbor_bool_decode(zsd, &value))
+                        return false;
+                    response.flags[name] = value;
+                } else if(info == 26) {
+                    float value = 0.0F;
+                    if(!zcbor_float32_decode(zsd, &value))
+                        return false;
+                    response.floats[name] = value;
+                } else if(!zcbor_any_skip(zsd, nullptr)) {
+                    return false;
+                }
                 break;
             }
             default:

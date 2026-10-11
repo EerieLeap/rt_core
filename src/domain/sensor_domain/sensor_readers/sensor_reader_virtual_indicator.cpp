@@ -18,8 +18,8 @@ SensorReaderVirtualIndicator::SensorReaderVirtualIndicator(
 }
 
 // The value comes from the expression; the reader only stamps the reading.
-SensorReading SensorReaderVirtualIndicator::Read() {
-    SensorReading reading = CreateReading();
+SensorReading SensorReaderVirtualIndicator::Read(const TickContext& tick) {
+    SensorReading reading = CreateReading(tick);
     reading.status = ReadingStatus::UNINITIALIZED;
 
     return reading;

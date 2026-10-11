@@ -1,8 +1,10 @@
 config EERIE_LEAP_DOMAIN_SENSOR
-    depends on EERIE_LEAP_CONFIGURATION
+    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_ADC
     bool "EerieLeap Sensor Domain"
     # The pipeline builder registers the Lua sensor functions of the script domain.
     select EERIE_LEAP_DOMAIN_SCRIPT
+    # Analog readers take their calibration from the ADC domain's configuration.
+    select EERIE_LEAP_DOMAIN_ADC
     help
       Add EerieLeap Sensor Domain.
 
@@ -16,6 +18,28 @@ menu "EerieLeap Sensor Domain config"
     config EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
         int "Sensor processing service priority"
         default 6
+
+    config EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
+        bool "Log rate group statistics"
+        help
+          Logs one line per rate group every
+          EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S seconds: ticks,
+          overruns, the last and longest tick, and the delivered period between
+          tick starts (average, minimum and maximum since the previous line,
+          from the cycle counter), followed by the latest result of each ADC
+          channel the group samples, named by its global channel index
+          ("ch0 0.898 V ch1 0.000 V"). The tick and overrun counters are kept
+          either way and read through GetRateGroupStats(); this adds the period
+          measurement and the log. The log runs on the processing thread after
+          the due groups, so its own time shows in the next line's period
+          maximum. A measurement aid for the sampling path; off in production
+          builds.
+
+    config EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S
+        int "Seconds between rate group statistics log lines"
+        depends on EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
+        range 1 3600
+        default 10
 
     config EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT
         int "Maximum number of configured sensors"

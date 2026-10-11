@@ -25,12 +25,15 @@ private:
     std::shared_ptr<ITimeService> time_service_;
 
     // Dependents are listed transitively and in processing order, so one pass gives each of them
-    // fresh inputs exactly once.
-    void EvaluateDependents(const SensorRuntime& runtime) {
+    // fresh inputs exactly once. They carry the time of the reading they were derived from, so a
+    // tick's dependents share its timestamp and a CAN-routed input's dependents its frame time.
+    void EvaluateDependents(const SensorRuntime& runtime, const SensorReading& reading) {
         for(const auto* dependent : runtime.dependents) {
             SensorReading derived(dependent->sensor.get());
             derived.source = ReadingSource::PROCESSING;
-            derived.timestamp = time_service_->GetCurrentTime();
+            derived.timestamp = reading.timestamp.has_value()
+                ? reading.timestamp
+                : time_service_->GetCurrentTime();
 
             Run(*processors_, *dependent, derived);
             sensor_readings_frame_->AddOrUpdateReading(derived);
@@ -71,7 +74,7 @@ public:
         sensor_readings_frame_->AddOrUpdateReading(reading);
 
         if(!reading.HasError())
-            EvaluateDependents(runtime);
+            EvaluateDependents(runtime, reading);
     }
 };
 

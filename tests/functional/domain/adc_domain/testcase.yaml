@@ -1,0 +1,20 @@
+common:
+  tags:
+    - functional
+    - domain.adc
+  platform_allow:
+    - native_sim
+    - qemu_cortex_a9
+    - qemu_cortex_a53
+    - qemu_riscv64
+    - qemu_malta
+
+tests:
+  functional.adc_domain: {}
+  # AdcController's SMP calibration group: registered with the controller's channel count once the
+  # service to pause is known, unregistered before the calibration service goes.
+  functional.adc_domain.smp:
+    tags:
+      - subsys.smp
+    extra_configs:
+      - CONFIG_EERIE_LEAP_SMP=y

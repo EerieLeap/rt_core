@@ -41,7 +41,7 @@ public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
         LIST = 0,  ///< Read: `{types: [{type, max}]}`.
-        CRC = 1,   ///< Read `{type}`: `{type, len, crc}` of the stored configuration.
+        STORED_CRC = 1, ///< Read `{type}`: `{type, len, crc}` of the stored configuration.
         READ = 2,  ///< Read `{type, off}`: `{off, data}`, plus `len` and `crc` at `off = 0`.
         WRITE = 3, ///< Write `{type, off, data}`, plus `len` and `crc` at `off = 0`, `tok` after: `{off, tok}`.
     };

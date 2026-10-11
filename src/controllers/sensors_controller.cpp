@@ -1,3 +1,4 @@
+#include <exception>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,7 @@ SensorsController::SensorsController(
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::shared_ptr<CanbusService> canbus_service,
     std::shared_ptr<IGpio> gpio,
+    std::shared_ptr<IAdcManager> adc_manager,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     std::shared_ptr<IFsService> sd_fs_service)
     : fs_service_(std::move(fs_service)),
@@ -49,10 +51,15 @@ SensorsController::SensorsController(
       sensor_readings_frame_(std::move(sensor_readings_frame)),
       canbus_service_(std::move(canbus_service)),
       gpio_(std::move(gpio)),
+      adc_manager_(std::move(adc_manager)),
       adc_configuration_manager_(std::move(adc_configuration_manager)),
       sd_fs_service_(std::move(sd_fs_service)) {}
 
 SensorsController::~SensorsController() {
+    // The ADC configuration manager is not ours and may outlive the handler's capture.
+    if(adc_configuration_manager_ != nullptr)
+        adc_configuration_manager_->RegisterConfigurationUpdatedHandler(nullptr);
+
     if(restart_task_.has_value())
         restart_task_->Cancel();
 }
@@ -64,7 +71,7 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
         std::move(cbor_sensors_config_service),
         sd_fs_service_,
         gpio_ != nullptr ? gpio_->GetChannelCount() : 0,
-        adc_configuration_manager_ != nullptr ? adc_configuration_manager_->Get()->GetChannelCount() : 0);
+        adc_manager_ != nullptr ? adc_manager_->GetChannelCount() : 0);
 
     if(configuration_service_ != nullptr)
         configuration_service_->RegisterCborConfigurationManager(
@@ -78,7 +85,7 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
     sensor_reader_factory_ = std::make_shared<SensorReaderFactory>(
         time_service_,
         gpio_,
-        adc_configuration_manager_);
+        adc_manager_);
 
     sensors_processing_service_ = std::make_shared<SensorsProcessingService>(
         sensors_configuration_manager_,
@@ -86,6 +93,7 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
         time_service_,
         isr_sensor_reader_factory_,
         sensor_reader_factory_,
+        adc_configuration_manager_,
         canbus_service_,
         sd_fs_service_);
     if(!sensors_processing_service_->Initialize()) {
@@ -109,26 +117,45 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
         restart_task_->Reschedule(K_NO_WAIT);
     });
 
+    // A generation snapshots the ADC configuration when it is built, so a new one takes effect
+    // through the same restart.
+    if(adc_configuration_manager_ != nullptr)
+        adc_configuration_manager_->RegisterConfigurationUpdatedHandler([this] {
+            restart_task_->Reschedule(K_NO_WAIT);
+        });
+
     return 0;
 }
 
 int SensorsController::Start() {
-    return sensors_processing_service_->Start() ? 0 : -1;
+    is_processing_requested_ = true;
+
+    try {
+        return sensors_processing_service_->Start() ? 0 : -1;
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to start the sensors processing service: %s", e.what());
+        return -1;
+    }
 }
 
 // Readers and tasks are built from the configuration in DoStart(), so a stored configuration
-// only takes effect through a restart.
+// only takes effect through a restart. Before Start() there is nothing to restart; after a failed
+// start or restart the service is stopped, and a new configuration is the way out of it.
 void SensorsController::RestartProcessing() {
-    if(sensors_processing_service_->IsStopped())
+    if(!is_processing_requested_)
         return;
 
-    if(!sensors_processing_service_->Stop()) {
-        LOG_ERR("Failed to stop the sensors processing service for the new configuration.");
-        return;
+    try {
+        if(!sensors_processing_service_->Stop()) {
+            LOG_ERR("Failed to stop the sensors processing service for the new configuration.");
+            return;
+        }
+
+        if(!sensors_processing_service_->Start())
+            LOG_ERR("Failed to start the sensors processing service with the new configuration.");
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to restart the sensors processing service: %s", e.what());
     }
-
-    if(!sensors_processing_service_->Start())
-        LOG_ERR("Failed to start the sensors processing service with the new configuration.");
 }
 
 void SensorsController::EmulateReadings() {

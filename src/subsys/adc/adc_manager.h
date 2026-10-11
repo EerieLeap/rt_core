@@ -1,53 +1,28 @@
 #pragma once
 
-#if defined(CONFIG_ADC) || defined(CONFIG_ADC_EMUL)
-
-#include <functional>
 #include <memory>
+#include <span>
 #include <vector>
-
-#include <zephyr/drivers/adc.h>
-
-#include "subsys/device_tree/adc_dt_info.h"
-#include "models/adc_configuration.h"
 
 #include "i_adc_manager.h"
 #include "i_adc.h"
 
 namespace eerie_leap::subsys::adc {
 
-using eerie_leap::subsys::device_tree::AdcDTInfo;
-using eerie_leap::subsys::adc::models::AdcConfiguration;
-using eerie_leap::subsys::adc::models::AdcChannelConfiguration;
-
+// The unit's ADCs in alias order; global channel indices run over them in that order.
 class AdcManager : public IAdcManager {
 private:
-    std::vector<AdcDTInfo> adc_infos_;
-
-protected:
     std::vector<std::shared_ptr<IAdc>> adcs_;
-    std::shared_ptr<AdcConfiguration> adc_configuration_;
-
-    using AdcProvider = std::function<std::shared_ptr<IAdc>(const AdcDTInfo&)>;
-
-    AdcManager(std::vector<AdcDTInfo> adc_infos, const AdcProvider& adc_provider);
-
-    bool IsChannelValid(int channel);
 
 public:
-    AdcManager(std::vector<AdcDTInfo> adc_infos);
+    explicit AdcManager(std::vector<std::shared_ptr<IAdc>> adcs);
+
     bool Initialize() override;
 
-    void UpdateConfiguration(std::shared_ptr<AdcConfiguration> adc_configuration) override;
-    std::shared_ptr<AdcChannelConfiguration> GetChannelConfiguration(int channel) override;
-    std::pair<IAdc*, int> GetAdcForChannel(int channel);
-    std::function<float ()> GetChannelReader(int channel) override;
-    int GetAdcCount() override;
-    int GetChannelCount() override;
-    void UpdateSamplesCount(int samples) override;
-    void ResetSamplesCount() override;
+    [[nodiscard]] int GetAdcCount() const override;
+    [[nodiscard]] int GetChannelCount() const override;
+    [[nodiscard]] std::span<const std::shared_ptr<IAdc>> GetAdcs() const override;
+    AdcChannelHandle Resolve(int channel) override;
 };
 
 }  // namespace eerie_leap::subsys::adc
-
-#endif // defined(CONFIG_ADC) || defined(CONFIG_ADC_EMUL)

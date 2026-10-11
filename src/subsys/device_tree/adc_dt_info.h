@@ -11,6 +11,7 @@ struct AdcDTInfo {
     std::vector<adc_channel_cfg> channel_configs;
     std::vector<uint32_t> references_mv;
     std::vector<uint8_t> resolutions;
+    std::vector<uint8_t> oversampling;
 };
 
 } // namespace eerie_leap::subsys::device_tree

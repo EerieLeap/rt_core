@@ -143,14 +143,20 @@ void BleService::ConfigureScanResponseData() const {
     Ble::UpdateScanResponseData(sd_builder.Build());
 }
 
-void BleService::PairingStarted() const {
-    if(sensors_processing_service_)
-        sensors_processing_service_->Pause();
+// Another owner (a calibration job, a restart) may hold the processing service, so pairing only
+// resumes what its own pause paused. A peer that disconnects before security changes leaves no
+// PairingFinished, so the next connection keeps the pause it still holds instead of losing it.
+void BleService::PairingStarted() {
+    if(sensors_processing_service_ && !is_processing_paused_)
+        is_processing_paused_ = sensors_processing_service_->Pause();
 }
 
-void BleService::PairingFinished() const {
-    if(sensors_processing_service_)
-        sensors_processing_service_->Resume();
+void BleService::PairingFinished() {
+    if(!std::exchange(is_processing_paused_, false))
+        return;
+
+    if(!sensors_processing_service_->Resume())
+        LOG_WRN("Pairing finished; the processing service was no longer paused and is left as it is.");
 }
 
 std::vector<uint8_t> BleService::GetManufacturerData() {

@@ -1,5 +1,6 @@
 // Virtual sensors without a sampling rate are evaluated right after one of their inputs commits.
 
+#include <chrono>
 #include <memory>
 #include <vector>
 
@@ -33,6 +34,7 @@ ZTEST_SUITE(dependent_sensors, NULL, NULL, NULL, NULL, NULL);
 namespace {
 
 struct Fixture {
+    std::shared_ptr<TimeService> time_service;
     std::shared_ptr<SensorReadingsFrame> frame;
     std::shared_ptr<SensorGeneration> generation;
     std::shared_ptr<ReadingPipeline> pipeline;
@@ -41,6 +43,8 @@ struct Fixture {
     const SensorRuntime& Runtime(std::string_view id) const {
         return *generation->Find(StringHelpers::GetHash(id));
     }
+
+    [[nodiscard]] TickContext Tick() const { return { time_service->GetCurrentTime() }; }
 };
 
 std::shared_ptr<Sensor> MakeVirtual(std::string_view id, const char* expression, std::optional<int> sampling_rate_ms = std::nullopt) {
@@ -57,7 +61,7 @@ std::shared_ptr<Sensor> MakeVirtual(std::string_view id, const char* expression,
 Fixture MakeFixture() {
     Fixture fixture;
 
-    auto time_service = std::make_shared<TimeService>(
+    fixture.time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
 
     auto gpio = std::make_shared<GpioSimulator>();
@@ -80,9 +84,9 @@ Fixture MakeFixture() {
 
     auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
-    fixture.pipeline = std::make_shared<ReadingPipeline>(fixture.frame, processors, time_service);
+    fixture.pipeline = std::make_shared<ReadingPipeline>(fixture.frame, processors, fixture.time_service);
 
-    fixture.indicator_reader = std::make_unique<SensorReaderPhysicalIndicator>(time_service, fixture.Runtime("indicator"), gpio);
+    fixture.indicator_reader = std::make_unique<SensorReaderPhysicalIndicator>(fixture.time_service, fixture.Runtime("indicator"), gpio);
 
     return fixture;
 }
@@ -117,7 +121,7 @@ ZTEST(dependent_sensors, test_committing_an_input_evaluates_its_dependents) {
 
     zassert_false(fixture.frame->TryGetReadingValue("doubled").has_value());
 
-    SensorReading reading = fixture.indicator_reader->Read();
+    SensorReading reading = fixture.indicator_reader->Read(fixture.Tick());
     fixture.pipeline->Process(fixture.Runtime("indicator"), reading);
 
     const float indicator = fixture.frame->TryGetReadingValue("indicator").value();
@@ -138,7 +142,7 @@ ZTEST(dependent_sensors, test_committing_an_input_evaluates_its_dependents) {
 ZTEST(dependent_sensors, test_a_failed_input_leaves_its_dependents_untouched) {
     auto fixture = MakeFixture();
 
-    SensorReading reading = fixture.indicator_reader->Read();
+    SensorReading reading = fixture.indicator_reader->Read(fixture.Tick());
     fixture.pipeline->Process(fixture.Runtime("indicator"), reading);
     const float before = fixture.frame->TryGetReadingValue("doubled").value();
 
@@ -149,4 +153,19 @@ ZTEST(dependent_sensors, test_a_failed_input_leaves_its_dependents_untouched) {
 
     zassert_equal(fixture.frame->TryGetReading("indicator").value().status, ReadingStatus::ERROR);
     zassert_equal(fixture.frame->TryGetReadingValue("doubled").value(), before);
+}
+
+ZTEST(dependent_sensors, test_dependents_carry_the_timestamp_of_their_input) {
+    auto fixture = MakeFixture();
+
+    // A tick taken well before the dependents are evaluated, so a fresh clock read would differ.
+    const TickContext tick{ fixture.time_service->GetCurrentTime() - std::chrono::seconds(10) };
+
+    SensorReading reading = fixture.indicator_reader->Read(tick);
+    zassert_equal(reading.timestamp.value(), tick.timestamp);
+    fixture.pipeline->Process(fixture.Runtime("indicator"), reading);
+
+    zassert_equal(fixture.frame->TryGetReading("doubled").value().timestamp.value(), tick.timestamp);
+    zassert_equal(fixture.frame->TryGetReading("doubled_plus").value().timestamp.value(), tick.timestamp,
+        "A dependent of a dependent shares the tick as well");
 }

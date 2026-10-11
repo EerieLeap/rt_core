@@ -19,8 +19,8 @@ SensorReaderPhysicalIndicator::SensorReaderPhysicalIndicator(
         throw std::runtime_error("Unsupported sensor type");
 }
 
-SensorReading SensorReaderPhysicalIndicator::Read() {
-    SensorReading reading = CreateReading();
+SensorReading SensorReaderPhysicalIndicator::Read(const TickContext& tick) {
+    SensorReading reading = CreateReading(tick);
 
     reading.value = gpio_->ReadChannel(GetSensor().configuration.channel.value()) ? 1.0F : 0.0F;
     reading.raw_value = reading.value;

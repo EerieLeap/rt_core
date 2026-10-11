@@ -8,6 +8,7 @@
 #include "utilities/voltage_interpolator/i_voltage_interpolator.h"
 #include "subsys/expression_engine/expression_evaluator.h"
 #include "subsys/lua_script/lua_script.h"
+#include "domain/adc_domain/models/adc_configuration.h"
 #include "domain/sensor_domain/runtime/sensor_script.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_slot.h"
@@ -18,6 +19,7 @@ namespace eerie_leap::domain::sensor_domain::runtime {
 using eerie_leap::utilities::voltage_interpolator::IVoltageInterpolator;
 using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
 using eerie_leap::subsys::lua_script::LuaScript;
+using eerie_leap::domain::adc_domain::models::AdcConfiguration;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::sensor_domain::models::SensorSlot;
 using eerie_leap::domain::sensor_domain::models::SensorReadingUpdateMethod;
@@ -50,6 +52,10 @@ struct SensorGeneration {
     std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors;   // Keeps the configuration alive.
     std::vector<SensorRuntime> runtimes;
     std::shared_ptr<LuaScript> script_host;   // One Lua state for every scripted sensor; null without scripts.
+
+    // The ADC configuration the analog readers were built with, null on a unit without one. Keeps
+    // their calibrators alive; a new ADC configuration takes effect with the next generation.
+    std::shared_ptr<const AdcConfiguration> adc_configuration;
 
     [[nodiscard]] const SensorRuntime* Find(uint32_t sensor_id_hash) const {
         for(const auto& runtime : runtimes) {

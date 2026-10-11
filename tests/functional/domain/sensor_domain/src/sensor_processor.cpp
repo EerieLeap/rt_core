@@ -10,14 +10,16 @@
 #include "subsys/time/boot_elapsed_time_provider.h"
 #include "subsys/time/time_service.h"
 
-#include "subsys/adc/models/adc_configuration.h"
 #include "subsys/adc/i_adc.h"
+#include "subsys/adc/adc_factory.hpp"
 #include "subsys/adc/adc_simulator.h"
 #include "subsys/gpio/i_gpio.h"
 #include "subsys/gpio/gpio_simulator.h"
 #include "subsys/fs/services/fs_service.h"
 
 #include "subsys/device_tree/dt_fs.h"
+#include "domain/adc_domain/configuration/adc_configuration_manager.h"
+#include "domain/adc_domain/models/adc_range.h"
 #include "domain/sensor_domain/utilities/sensors_order_resolver.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/models/sensor.h"
@@ -28,6 +30,8 @@
 #include "domain/sensor_domain/sensor_readers/sensor_reader_physical_indicator.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_virtual_analog.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_virtual_indicator.h"
+#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
+#include "domain/sensor_domain/services/adc_sample_set.h"
 #include "domain/sensor_domain/processors/expression_processor.h"
 
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
@@ -42,11 +46,14 @@ using namespace eerie_leap::configuration::services;
 
 using namespace eerie_leap::subsys::device_tree;
 using namespace eerie_leap::subsys::adc;
-using namespace eerie_leap::subsys::adc::models;
 using namespace eerie_leap::subsys::gpio;
 using namespace eerie_leap::subsys::time;
 using namespace eerie_leap::subsys::expression_engine;
 using namespace eerie_leap::subsys::fs::services;
+
+using namespace eerie_leap::domain::adc_domain::utilities;
+using namespace eerie_leap::domain::adc_domain::models;
+using namespace eerie_leap::domain::adc_domain::configuration;
 
 using namespace eerie_leap::domain::sensor_domain::processors;
 using namespace eerie_leap::domain::sensor_domain::sensor_readers;
@@ -54,6 +61,7 @@ using namespace eerie_leap::domain::sensor_domain::sensor_readers;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::utilities;
 using namespace eerie_leap::domain::sensor_domain::runtime;
+using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensor_processor, NULL, NULL, NULL, NULL, NULL);
 
@@ -167,33 +175,23 @@ AdcConfiguration sensor_processor_GetTestConfiguration() {
 }
 
 struct sensor_processor_HelperInstances {
+    std::shared_ptr<ITimeService> time_service;
+    std::shared_ptr<IAdcManager> adc_manager;   // Owns the ADCs the sample set points at.
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
     std::shared_ptr<SensorGeneration> generation;
+    std::shared_ptr<AdcSampleSet> adc_samples;
     std::shared_ptr<std::vector<std::shared_ptr<ISensorReader>>> sensor_readers;
     std::vector<std::shared_ptr<Sensor>> sensors;
 };
 
 sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
-    DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
-
-    fs_service->Format();
-
     auto time_provider = std::make_shared<BootElapsedTimeProvider>();
     auto rtc_provider = std::make_shared<RtcProvider>();
     auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
 
-    auto cbor_adc_config_service = std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service);
-
     AdcFactory adc_factory(nullptr);
     auto adc_manager = adc_factory.Create();
     adc_manager->Initialize();
-
-    auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
-        std::move(cbor_adc_config_service), adc_manager);
-
-    const auto adc_configuration = sensor_processor_GetTestConfiguration();
-    adc_configuration_manager->Update(adc_configuration);
 
     auto gpio = std::make_shared<GpioSimulator>();
     gpio->Initialize();
@@ -204,6 +202,15 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     // The builder lays out the frame's slots and binds the expressions, as the processing service does.
     auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame).Build(
         std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    generation->adc_configuration = std::make_shared<AdcConfiguration>(sensor_processor_GetTestConfiguration());
+
+    // Analog readers reserve their slots in the sample set, as in a rate group.
+    auto adc_samples = std::make_shared<AdcSampleSet>();
+    RateGroupBuildContext context {
+        .adc_samples = *adc_samples,
+        .adc_configuration = generation->adc_configuration.get()
+    };
+    SensorReaderFactory sensor_reader_factory(time_service, gpio, adc_manager);
 
     auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
     for(size_t i = 0; i < generation->runtimes.size(); i++) {
@@ -211,10 +218,7 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
         std::shared_ptr<ISensorReader> sensor_reader;
 
         if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
-            sensor_reader = std::make_shared<SensorReaderPhysicalAnalog>(
-                time_service,
-                runtime,
-                adc_configuration_manager);
+            sensor_reader = sensor_reader_factory.Create(runtime, context);
         } else if(runtime.sensor->configuration.type == SensorType::VIRTUAL_ANALOG) {
             sensor_reader = std::make_shared<SensorReaderVirtualAnalog>(
                 time_service,
@@ -235,9 +239,14 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
         sensor_readers->push_back(sensor_reader);
     }
 
+    adc_samples->Seal();
+
     return sensor_processor_HelperInstances {
+        .time_service = time_service,
+        .adc_manager = adc_manager,
         .sensor_readings_frame = sensor_readings_frame,
         .generation = generation,
+        .adc_samples = adc_samples,
         .sensor_readers = sensor_readers,
         .sensors = sensors
     };
@@ -259,8 +268,11 @@ ZTEST(sensor_processor, test_ProcessReading) {
     auto sensor_readers = helper.sensor_readers;
     auto sensors = helper.sensors;
 
+    helper.adc_samples->Acquire();
+    const TickContext tick{ helper.time_service->GetCurrentTime() };
+
     for(int i = 0; i < sensor_readers->size(); i++)
-        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read());
+        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
 
     auto reading_2_opt = sensor_readings_frame->TryGetReading("sensor_2");
     zassert_true(reading_2_opt.has_value());
@@ -294,7 +306,8 @@ ZTEST(sensor_processor, test_ProcessReading) {
     float proc_reading_2_value = reading_2_value * 4 + 1.6;
     zassert_equal(proc_reading_2.value.value(), proc_reading_2_value);
     zassert_true(proc_reading_2.voltage.has_value());
-    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0f, 3.3f);
+    // Calibrated voltages are sensor volts: the simulator's 0..3.3 V at the pin maps onto 0..sensor_max_v.
+    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0f, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_2.raw_value.has_value());
     zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0f, 200.0f);
 
@@ -306,7 +319,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     float proc_reading_1_value = reading_1_value * 2 + proc_reading_2_value + 1;
     zassert_equal(proc_reading_1.value.value(), proc_reading_1_value);
     zassert_true(proc_reading_1.voltage.has_value());
-    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0f, 3.3f);
+    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0f, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_1.raw_value.has_value());
     zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0f, 100.0f);
 

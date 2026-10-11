@@ -12,6 +12,7 @@ enum class SmpGroupId : uint16_t {
     DEVICE = MGMT_GROUP_ID_PERUSER + 1,
     NETWORK = MGMT_GROUP_ID_PERUSER + 2,
     LIVE = MGMT_GROUP_ID_PERUSER + 3,
+    CALIBRATION = MGMT_GROUP_ID_PERUSER + 4,
 };
 
 } // namespace eerie_leap::subsys::smp

@@ -1,51 +1,50 @@
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 #include <zephyr/ztest.h>
-
-#include "utilities/voltage_interpolator/calibration_data.h"
-#include "utilities/voltage_interpolator/interpolation_method.h"
 
 #include "subsys/device_tree/dt_adc.h"
 #include "subsys/adc/adc_emulator.h"
 #include "subsys/adc/adc_factory.hpp"
 #include "subsys/adc/adc_manager.h"
 #include "subsys/adc/adc_simulator.h"
-#include "subsys/adc/models/adc_configuration.h"
 
-using namespace eerie_leap::utilities::voltage_interpolator;
+#include "emulator_support.h"
+
 using namespace eerie_leap::subsys::device_tree;
 using namespace eerie_leap::subsys::adc;
-using namespace eerie_leap::subsys::adc::models;
+using namespace emulator_support;
 
 namespace {
 
-// The native_sim overlay declares two emulated ADCs: four channels then two.
-constexpr int kFirstAdcChannels = 4;
-constexpr int kDtChannelCount = 6;
-
 std::optional<std::vector<AdcDTInfo>> no_dt_adcs;
 
-std::shared_ptr<AdcConfiguration> MakeConfiguration(int channels, uint16_t samples = 40) {
-    auto calibration_table = std::make_shared<std::pmr::vector<CalibrationData>>(
-        std::pmr::vector<CalibrationData> {{0.0F, 0.0F}, {3.3F, 3.3F}});
-    auto calibrator = std::make_shared<AdcCalibrator>(InterpolationMethod::LINEAR, calibration_table);
+// The two working emulated ADCs; the third device of the overlay only serves the resolution test.
+std::shared_ptr<AdcManager> MakeEmulatorManager() {
+    ResetEmulator();
 
-    auto channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>();
-    for(int i = 0; i < channels; ++i)
-        channel_configurations->push_back(std::make_shared<AdcChannelConfiguration>(calibrator));
+    std::vector<std::shared_ptr<IAdc>> adcs {
+        std::make_shared<AdcEmulator>(DtAdc::Get().value().at(0)),
+        std::make_shared<AdcEmulator>(DtAdc::Get().value().at(1))
+    };
 
-    auto configuration = std::make_shared<AdcConfiguration>();
-    configuration->samples = samples;
-    configuration->channel_configurations = channel_configurations;
-
-    return configuration;
+    return std::make_shared<AdcManager>(std::move(adcs));
 }
 
-std::shared_ptr<AdcEmulatorManager> MakeEmulatorManager() {
-    DtAdc::Initialize();
+AdcEmulator& EmulatorAt(const AdcManager& manager, int index) {
+    return *dynamic_cast<AdcEmulator*>(manager.GetAdcs()[index].get());
+}
 
-    return std::make_shared<AdcEmulatorManager>(DtAdc::Get().value());
+float SampleOne(const AdcChannelHandle& handle, uint16_t samples = 10) {
+    const uint8_t channels[1] = { handle.local_channel };
+    AdcSample results[1];
+    AdcSampleRequest request { .channels = channels, .results = results, .samples = samples };
+
+    handle.adc->Sample(request);
+    zassert_equal(results[0].error, AdcError::NONE, "local channel %u", handle.local_channel);
+
+    return results[0].volts;
 }
 
 } // namespace
@@ -56,21 +55,39 @@ ZTEST(adc_manager, test_counts_come_from_the_device_tree) {
     auto manager = MakeEmulatorManager();
 
     zassert_equal(manager->GetAdcCount(), 2);
-    zassert_equal(manager->GetChannelCount(), kDtChannelCount);
+    zassert_equal(manager->GetChannelCount(), kWorkingChannelCount);
+    zassert_equal(manager->GetAdcs().size(), 2);
+    zassert_equal(manager->GetAdcs()[0]->GetChannelCount(), kFirstAdcChannels);
+    zassert_equal(manager->GetAdcs()[1]->GetChannelCount(), kSecondAdcChannels);
 }
 
 ZTEST(adc_manager, test_Initialize_succeeds) {
     auto manager = MakeEmulatorManager();
 
     zassert_true(manager->Initialize());
+
+    for(const auto& adc : manager->GetAdcs())
+        zassert_true(adc->GetCapabilities().burst, "every device was probed");
 }
 
-ZTEST(adc_manager, test_UpdateConfiguration_rejects_null) {
-    auto manager = MakeEmulatorManager();
+ZTEST(adc_manager, test_Initialize_fails_when_one_adc_is_rejected) {
+    ResetEmulator();
 
+    std::vector<std::shared_ptr<IAdc>> adcs;
+    for(const auto& info : DtAdc::Get().value())
+        adcs.push_back(std::make_shared<AdcEmulator>(info));
+
+    AdcManager manager(std::move(adcs));
+
+    zassert_equal(manager.GetAdcCount(), kDtAdcCount);
+    zassert_equal(manager.GetChannelCount(), kDtChannelCount);
+    zassert_false(manager.Initialize(), "the third device has no resolution");
+}
+
+ZTEST(adc_manager, test_rejects_a_null_adc) {
     bool threw = false;
     try {
-        manager->UpdateConfiguration(nullptr);
+        AdcManager manager({ std::make_shared<AdcSimulator>(), nullptr });
     } catch(const std::invalid_argument&) {
         threw = true;
     }
@@ -78,54 +95,27 @@ ZTEST(adc_manager, test_UpdateConfiguration_rejects_null) {
     zassert_true(threw);
 }
 
-ZTEST(adc_manager, test_GetChannelConfiguration_requires_configuration) {
+ZTEST(adc_manager, test_Resolve_maps_global_to_local) {
     auto manager = MakeEmulatorManager();
-    manager->Initialize();
+    zassert_true(manager->Initialize());
 
-    bool threw = false;
-    try {
-        manager->GetChannelConfiguration(0);
-    } catch(const std::invalid_argument&) {
-        threw = true;
-    }
+    for(int channel = 0; channel < kWorkingChannelCount; ++channel) {
+        auto handle = manager->Resolve(channel);
 
-    zassert_true(threw);
-}
-
-ZTEST(adc_manager, test_GetChannelConfiguration_returns_configured_channel) {
-    auto configuration = MakeConfiguration(kDtChannelCount);
-
-    auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(configuration);
-    manager->Initialize();
-
-    for(int channel = 0; channel < kDtChannelCount; ++channel)
-        zassert_equal(manager->GetChannelConfiguration(channel).get(),
-            configuration->channel_configurations->at(channel).get());
-}
-
-ZTEST(adc_manager, test_GetAdcForChannel_maps_to_a_local_index) {
-    auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount));
-    manager->Initialize();
-
-    for(int channel = 0; channel < kDtChannelCount; ++channel) {
-        auto [adc, channel_index] = manager->GetAdcForChannel(channel);
-
-        zassert_not_null(adc);
-        zassert_equal(channel_index, channel % kFirstAdcChannels);
+        zassert_not_null(handle.adc);
+        zassert_equal(handle.adc, manager->GetAdcs()[channel / kFirstAdcChannels].get(), "channel %d", channel);
+        zassert_equal(handle.local_channel, channel % kFirstAdcChannels, "channel %d", channel);
     }
 }
 
-ZTEST(adc_manager, test_GetAdcForChannel_rejects_out_of_range_channels) {
+ZTEST(adc_manager, test_Resolve_rejects_out_of_range_channels) {
     auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount));
-    manager->Initialize();
+    zassert_true(manager->Initialize());
 
-    for(int channel : { -1, kDtChannelCount, 100 }) {
+    for(int channel : { -1, kWorkingChannelCount, 100 }) {
         bool threw = false;
         try {
-            manager->GetAdcForChannel(channel);
+            manager->Resolve(channel);
         } catch(const std::invalid_argument&) {
             threw = true;
         }
@@ -134,114 +124,61 @@ ZTEST(adc_manager, test_GetAdcForChannel_rejects_out_of_range_channels) {
     }
 }
 
-ZTEST(adc_manager, test_channel_validity_is_bounded_by_the_configuration) {
+ZTEST(adc_manager, test_Sample_spans_multiple_adcs) {
     auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(2));
-    manager->Initialize();
+    zassert_true(manager->Initialize());
 
-    // Two configured channels even though the device tree exposes four.
-    zassert_not_null(manager->GetChannelConfiguration(1).get());
+    auto last_of_first = manager->Resolve(kFirstAdcChannels - 1);
+    auto first_of_second = manager->Resolve(kFirstAdcChannels);
+    auto second_of_second = manager->Resolve(kFirstAdcChannels + 1);
 
-    for(int channel : { 2, 3 }) {
-        bool threw = false;
-        try {
-            manager->GetChannelConfiguration(channel);
-        } catch(const std::invalid_argument&) {
-            threw = true;
-        }
+    zassert_equal(last_of_first.local_channel, kFirstAdcChannels - 1);
+    zassert_equal(first_of_second.local_channel, 0, "the first channel of the second ADC must map to local index 0");
+    zassert_equal(second_of_second.local_channel, 1);
+    zassert_true(last_of_first.adc != first_of_second.adc, "channels must resolve to different ADCs");
+    zassert_equal(first_of_second.adc, second_of_second.adc);
 
-        zassert_true(threw, "unconfigured channel %d should be rejected", channel);
-    }
-}
+    // Distinct constants per device prove the stimulus and the conversion meet on the right device.
+    DriveConstant(EmulatorAt(*manager, 0), 0, kFirstAdcChannels - 1, 500);
+    DriveConstant(EmulatorAt(*manager, 1), 1, 0, 1500);
+    DriveConstant(EmulatorAt(*manager, 1), 1, 1, 2500);
 
-ZTEST(adc_manager, test_ResetSamplesCount_requires_configuration) {
-    auto manager = MakeEmulatorManager();
-    manager->Initialize();
+    float last_of_first_volts = SampleOne(last_of_first);
+    float first_of_second_volts = SampleOne(first_of_second);
+    float second_of_second_volts = SampleOne(second_of_second);
 
-    bool threw = false;
-    try {
-        manager->ResetSamplesCount();
-    } catch(const std::runtime_error&) {
-        threw = true;
-    }
-
-    zassert_true(threw);
-}
-
-ZTEST(adc_manager, test_zero_samples_disables_reading) {
-    auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount, 0));
-    manager->Initialize();
-
-    auto reader = manager->GetChannelReader(0);
-
-    bool threw = false;
-    try {
-        reader();
-    } catch(const std::runtime_error&) {
-        threw = true;
-    }
-
-    zassert_true(threw, "a zero sample count must not divide by zero");
-}
-
-ZTEST(adc_manager, test_sample_count_can_be_overridden_and_restored) {
-    auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount, 8));
-    manager->Initialize();
-
-    auto reader = manager->GetChannelReader(0);
-
-    manager->UpdateSamplesCount(1);
-    zassert_between_inclusive(reader(), 0.0, 3.3);
-
-    manager->ResetSamplesCount();
-    zassert_between_inclusive(reader(), 0.0, 3.3);
+    zassert_within(last_of_first_volts, 0.5F, kEmulTolerance);
+    zassert_within(first_of_second_volts, 1.5F, kEmulTolerance);
+    zassert_within(second_of_second_volts, 2.5F, kEmulTolerance);
 }
 
 ZTEST(adc_manager, test_every_channel_reads_within_range) {
     auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount));
-    manager->Initialize();
+    zassert_true(manager->Initialize());
 
-    for(int channel = 0; channel < kDtChannelCount; ++channel) {
-        auto reader = manager->GetChannelReader(channel);
+    for(int channel = 0; channel < kWorkingChannelCount; ++channel) {
+        auto handle = manager->Resolve(channel);
 
-        for(int i = 0; i < 20; ++i)
-            zassert_between_inclusive(reader(), 0.0, 3.3, "channel %d out of range", channel);
+        for(int i = 0; i < 20; ++i) {
+            float volts = SampleOne(handle);
+            zassert_between_inclusive(volts, 0.0F, 3.3F, "channel %d out of range", channel);
+        }
     }
-}
-
-ZTEST(adc_manager, test_GetAdcForChannel_spans_multiple_adcs) {
-    auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount));
-    manager->Initialize();
-
-    auto [first_adc, first_index] = manager->GetAdcForChannel(kFirstAdcChannels - 1);
-    auto [second_adc, second_index] = manager->GetAdcForChannel(kFirstAdcChannels);
-    auto [third_adc, third_index] = manager->GetAdcForChannel(kFirstAdcChannels + 1);
-
-    zassert_equal(first_index, kFirstAdcChannels - 1);
-    zassert_equal(second_index, 0, "the first channel of the second ADC must map to local index 0");
-    zassert_equal(third_index, 1);
-    zassert_true(first_adc != second_adc, "channels must resolve to different ADCs");
-    zassert_equal(second_adc, third_adc);
 }
 
 ZTEST(adc_manager, test_every_channel_produces_varying_readings) {
     auto manager = MakeEmulatorManager();
-    manager->UpdateConfiguration(MakeConfiguration(kDtChannelCount));
-    manager->Initialize();
+    zassert_true(manager->Initialize());
 
     // Channels on the second ADC only vary if the emulator stimulus reaches the
     // right device with the right local channel.
-    for(int channel = 0; channel < kDtChannelCount; ++channel) {
-        auto reader = manager->GetChannelReader(channel);
+    for(int channel = 0; channel < kWorkingChannelCount; ++channel) {
+        auto handle = manager->Resolve(channel);
 
-        float first = reader();
+        float first = SampleOne(handle);
         bool changed = false;
         for(int i = 0; i < 20 && !changed; ++i)
-            changed = reader() != first;
+            changed = SampleOne(handle) != first;
 
         zassert_true(changed, "channel %d returned a constant value", channel);
     }
@@ -250,14 +187,17 @@ ZTEST(adc_manager, test_every_channel_produces_varying_readings) {
 ZTEST_SUITE(adc_factory, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(adc_factory, test_Create_uses_the_device_tree_when_available) {
-    DtAdc::Initialize();
+    ResetEmulator();
 
     AdcFactory factory(DtAdc::Get);
     auto manager = factory.Create();
 
     zassert_not_null(manager.get());
-    zassert_not_null(dynamic_cast<AdcEmulatorManager*>(manager.get()));
+    zassert_equal(manager->GetAdcCount(), kDtAdcCount, "one device per device-tree ADC");
     zassert_equal(manager->GetChannelCount(), kDtChannelCount);
+
+    for(const auto& adc : manager->GetAdcs())
+        zassert_not_null(dynamic_cast<AdcEmulator*>(adc.get()));
 }
 
 ZTEST(adc_factory, test_Create_falls_back_to_the_simulator) {
@@ -265,13 +205,15 @@ ZTEST(adc_factory, test_Create_falls_back_to_the_simulator) {
     auto manager = factory.Create();
 
     zassert_not_null(manager.get());
-    zassert_not_null(dynamic_cast<AdcSimulatorManager*>(manager.get()));
     zassert_equal(manager->GetAdcCount(), 1);
+    zassert_not_null(dynamic_cast<AdcSimulator*>(manager->GetAdcs()[0].get()));
+    zassert_true(manager->Initialize());
 }
 
 ZTEST(adc_factory, test_Create_falls_back_when_no_provider_is_given) {
     AdcFactory factory(nullptr);
     auto manager = factory.Create();
 
-    zassert_not_null(dynamic_cast<AdcSimulatorManager*>(manager.get()));
+    zassert_equal(manager->GetAdcCount(), 1);
+    zassert_not_null(dynamic_cast<AdcSimulator*>(manager->GetAdcs()[0].get()));
 }

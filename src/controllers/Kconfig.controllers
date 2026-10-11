@@ -30,6 +30,15 @@ config EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS
       have come over the CAN bus, is answered first. Each update restarts
       the delay.
 
+config EERIE_LEAP_CONTROLLER_ADC
+    bool "EerieLeap ADC Controller"
+    depends on EERIE_LEAP_DOMAIN_ADC && EERIE_LEAP_DEVICE_TREE && EERIE_LEAP_FS
+    select EERIE_LEAP_THREADING
+    help
+      Add EerieLeap ADC Controller: the ADCs, their configuration and, when
+      given a time service, the calibration service. With EERIE_LEAP_SMP the
+      calibration service is also served as the SMP calibration group.
+
 config EERIE_LEAP_CONTROLLER_SENSORS
     bool "EerieLeap Sensors Controller"
     depends on EERIE_LEAP_DOMAIN_SENSOR && EERIE_LEAP_DOMAIN_CANBUS

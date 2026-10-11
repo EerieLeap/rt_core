@@ -10,7 +10,6 @@ enum class ReadingStatus : uint8_t {
     INTERPOLATED,
     EXPRESSION_EVALUATED,
     PROCESSED,
-    CALIBRATION,
     ERROR,
 };
 

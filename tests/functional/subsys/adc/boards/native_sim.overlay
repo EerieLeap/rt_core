@@ -2,6 +2,7 @@
 	aliases {
 		adc0 = &adc_emul;
 		adc1 = &adc_emul1;
+		adc2 = &adc_emul2;
 	};
 
 	adc_emul: adc {
@@ -16,6 +17,16 @@
 	adc_emul1: adc1 {
 		compatible = "zephyr,adc-emul";
 		nchannels = <2>;
+		ref-internal-mv = <3300>;
+		ref-external1-mv = <5000>;
+		#io-channel-cells = <1>;
+		status = "okay";
+	};
+
+	/* Its only channel states no resolution, so Initialize() must reject this device. */
+	adc_emul2: adc2 {
+		compatible = "zephyr,adc-emul";
+		nchannels = <1>;
 		ref-internal-mv = <3300>;
 		ref-external1-mv = <5000>;
 		#io-channel-cells = <1>;
@@ -84,5 +95,18 @@
 		zephyr,vref-mv = <3300>;
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 		zephyr,resolution = <12>;
+	};
+};
+
+&adc_emul2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,vref-mv = <3300>;
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 	};
 };

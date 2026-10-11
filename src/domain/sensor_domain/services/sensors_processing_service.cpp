@@ -20,10 +20,12 @@ SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
+    std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     std::shared_ptr<CanbusService> canbus_service,
     std::shared_ptr<IFsService> sd_fs_service)
         : work_queue_thread_(nullptr),
         sensors_configuration_manager_(std::move(sensors_configuration_manager)),
+        adc_configuration_manager_(std::move(adc_configuration_manager)),
         sensor_readings_frame_(std::move(sensor_readings_frame)),
         pipeline_builder_(std::move(sd_fs_service), sensor_readings_frame_),
         reading_processors_(std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>()) {
@@ -50,6 +52,7 @@ SensorsProcessingService::SensorsProcessingService(
 
     if(sensor_reader_factory != nullptr) {
         scheduler_service_ = std::make_shared<ProcessingSchedulerService>(
+            time_service,
             std::move(sensor_reader_factory),
             work_queue_thread_,
             pipeline_);
@@ -78,11 +81,16 @@ bool SensorsProcessingService::DoStart() {
         return false;
     }
 
-    // Everything a sample needs is allocated here, once per configuration.
+    // Everything a sample needs is allocated here, once per configuration. The ADC configuration is
+    // taken as it is now; an apply swaps the manager's pointer and restarts, never touching this one.
     try {
         generation_ = pipeline_builder_.Build(sensors);
+        generation_->adc_configuration = adc_configuration_manager_ != nullptr
+            ? adc_configuration_manager_->Get()
+            : nullptr;
     } catch(const std::exception& e) {
         LOG_ERR("Failed to build the sensor pipeline: %s", e.what());
+        generation_ = nullptr;
         return false;
     }
 
@@ -91,8 +99,21 @@ bool SensorsProcessingService::DoStart() {
     if(scheduler_service_ != nullptr)
         scheduler_service_->SetGeneration(generation_);
 
-    for(const auto& processing_service : processing_services_)
-        processing_service->Start();
+    // Nothing may keep running on a generation that is being dropped. The child that threw has
+    // cleaned up after itself; DoStop() stops the ones that started before it.
+    try {
+        for(const auto& processing_service : processing_services_)
+            processing_service->Start();
+    } catch(...) {
+        DoStop();
+
+        if(isr_service_ != nullptr)
+            isr_service_->SetGeneration(nullptr);
+        if(scheduler_service_ != nullptr)
+            scheduler_service_->SetGeneration(nullptr);
+
+        throw;
+    }
 
     LOG_INF("Processing Service started with generation %u, %zu sensors.", generation_->id, generation_->runtimes.size());
 

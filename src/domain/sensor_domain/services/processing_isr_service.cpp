@@ -40,25 +40,33 @@ bool ProcessingIsrService::DoStart() {
 
     const auto callback = [this](const SensorRuntime& runtime, SensorReading& reading) { ProcessSensor(runtime, reading); };
 
-    if(canbus_service_ != nullptr) {
-        can_frame_router_ = std::make_unique<CanFrameRouter>(time_service_, work_queue_thread_, canbus_service_, callback);
+    // A failed start is stopped as far as Stop() can tell, so the sources attached before the
+    // failure are torn down here; nothing may keep delivering into a dropped generation.
+    try {
+        if(canbus_service_ != nullptr) {
+            can_frame_router_ = std::make_unique<CanFrameRouter>(time_service_, work_queue_thread_, canbus_service_, callback);
 
-        const size_t routes = can_frame_router_->Attach(*generation_);
-        LOG_INF("%zu CAN routes listening.", routes);
-    }
+            const size_t routes = can_frame_router_->Attach(*generation_);
+            LOG_INF("%zu CAN routes listening.", routes);
+        }
 
-    for(const auto& runtime : generation_->runtimes) {
-        if(runtime.update_method != SensorReadingUpdateMethod::ISR
-            || runtime.GetSensor().configuration.GetTraits().uses_canbus)
-            continue;
+        for(const auto& runtime : generation_->runtimes) {
+            if(runtime.update_method != SensorReadingUpdateMethod::ISR
+                || runtime.GetSensor().configuration.GetTraits().uses_canbus)
+                continue;
 
-        auto reader = isr_sensor_reader_factory_->Create(runtime, work_queue_thread_, callback);
-        if(reader == nullptr)
-            continue;
+            auto reader = isr_sensor_reader_factory_->Create(runtime, work_queue_thread_, callback);
+            if(reader == nullptr)
+                continue;
 
-        readers_.push_back(std::move(reader));
+            readers_.push_back(std::move(reader));
 
-        LOG_INF("Created ISR reader for sensor: %s", runtime.GetSensor().id.c_str());
+            LOG_INF("Created ISR reader for sensor: %s", runtime.GetSensor().id.c_str());
+        }
+    } catch(...) {
+        TearDown();
+        generation_ = nullptr;
+        throw;
     }
 
     return true;

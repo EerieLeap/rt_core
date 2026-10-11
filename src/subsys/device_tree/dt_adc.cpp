@@ -4,6 +4,19 @@
 
 #include "dt_adc.h"
 
+// One AdcDTInfo per adc<idx> alias, channels in device-tree child order.
+#define ADC_DT_INFO_ADD(idx) \
+    IF_ENABLED(DT_HAS_ALIAS(adc ## idx), ( \
+        adc_infos_.value().push_back(AdcDTInfo { \
+            .adc_device = DEVICE_DT_GET(ADC_NODE(idx)), \
+            .channel_configs = {DT_FOREACH_CHILD_SEP(ADC_NODE(idx), ADC_CHANNEL_CFG_DT, (,))}, \
+            .references_mv = {DT_FOREACH_CHILD_SEP(ADC_NODE(idx), ADC_CHANNEL_VREF, (,))}, \
+            .resolutions = {DT_FOREACH_CHILD_SEP(ADC_NODE(idx), ADC_CHANNEL_RESOLUTION, (,))}, \
+            .oversampling = {DT_FOREACH_CHILD_SEP(ADC_NODE(idx), ADC_CHANNEL_OVERSAMPLING, (,))} \
+        }); \
+        LOG_INF("ADC" #idx " initialized."); \
+    ))
+
 namespace eerie_leap::subsys::device_tree {
 
 LOG_MODULE_DECLARE(dt_logger);
@@ -15,53 +28,10 @@ void DtAdc::Initialize() {
     adc_infos_ = std::make_optional<std::vector<AdcDTInfo>>();
 #endif
 
-#if DT_HAS_ALIAS(adc0)
-    AdcDTInfo adc_info0 = {
-        .adc_device = DEVICE_DT_GET(ADC_NODE(0)),
-        .channel_configs = {DT_FOREACH_CHILD_SEP(ADC_NODE(0), ADC_CHANNEL_CFG_DT, (,))},
-        .references_mv = {DT_FOREACH_CHILD_SEP(ADC_NODE(0), ADC_CHANNEL_VREF, (,))},
-        .resolutions = {DT_FOREACH_CHILD_SEP(ADC_NODE(0), ADC_CHANNEL_RESOLUTION, (,))}
-    };
-    adc_infos_.value().push_back(adc_info0);
-
-    LOG_INF("ADC0 initialized.");
-#endif
-
-#if DT_HAS_ALIAS(adc1)
-    AdcDTInfo adc_info1 = {
-        .adc_device = DEVICE_DT_GET(ADC_NODE(1)),
-        .channel_configs = {DT_FOREACH_CHILD_SEP(ADC_NODE(1), ADC_CHANNEL_CFG_DT, (,))},
-        .references_mv = {DT_FOREACH_CHILD_SEP(ADC_NODE(1), ADC_CHANNEL_VREF, (,))},
-        .resolutions = {DT_FOREACH_CHILD_SEP(ADC_NODE(1), ADC_CHANNEL_RESOLUTION, (,))}
-    };
-    adc_infos_.value().push_back(adc_info1);
-
-    LOG_INF("ADC1 initialized.");
-#endif
-
-#if DT_HAS_ALIAS(adc2)
-    AdcDTInfo adc_info2 = {
-        .adc_device = DEVICE_DT_GET(ADC_NODE(2)),
-        .channel_configs = {DT_FOREACH_CHILD_SEP(ADC_NODE(2), ADC_CHANNEL_CFG_DT, (,))},
-        .references_mv = {DT_FOREACH_CHILD_SEP(ADC_NODE(2), ADC_CHANNEL_VREF, (,))},
-        .resolutions = {DT_FOREACH_CHILD_SEP(ADC_NODE(2), ADC_CHANNEL_RESOLUTION, (,))}
-    };
-    adc_infos_.value().push_back(adc_info2);
-
-    LOG_INF("ADC2 initialized.");
-#endif
-
-#if DT_HAS_ALIAS(adc3)
-    AdcDTInfo adc_info3 = {
-        .adc_device = DEVICE_DT_GET(ADC_NODE(3)),
-        .channel_configs = {DT_FOREACH_CHILD_SEP(ADC_NODE(3), ADC_CHANNEL_CFG_DT, (,))},
-        .references_mv = {DT_FOREACH_CHILD_SEP(ADC_NODE(3), ADC_CHANNEL_VREF, (,))},
-        .resolutions = {DT_FOREACH_CHILD_SEP(ADC_NODE(3), ADC_CHANNEL_RESOLUTION, (,))}
-    };
-    adc_infos_.value().push_back(adc_info3);
-
-    LOG_INF("ADC3 initialized.");
-#endif
+    ADC_DT_INFO_ADD(0)
+    ADC_DT_INFO_ADD(1)
+    ADC_DT_INFO_ADD(2)
+    ADC_DT_INFO_ADD(3)
 }
 
 } // namespace eerie_leap::subsys::device_tree

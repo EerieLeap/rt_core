@@ -18,8 +18,8 @@ SensorReaderUserValueType::SensorReaderUserValueType(
         throw std::runtime_error("Unsupported sensor type");
 }
 
-SensorReading SensorReaderUserValueType::Read() {
-    SensorReading reading = CreateReading();
+SensorReading SensorReaderUserValueType::Read(const TickContext& tick) {
+    SensorReading reading = CreateReading(tick);
 
     const auto& script = runtime_->script;
     if(!script.HasCreateValue()) {

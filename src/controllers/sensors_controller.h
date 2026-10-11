@@ -1,9 +1,11 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
 
+#include "subsys/adc/i_adc_manager.h"
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/gpio/i_gpio.h"
 #include "subsys/threading/work_queue_thread.h"
@@ -13,7 +15,8 @@
 
 #include "domain/canbus_domain/services/canbus_service.h"
 
-#include "domain/sensor_domain/configuration/adc_configuration_manager.h"
+#include "domain/adc_domain/configuration/adc_configuration_manager.h"
+
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "domain/sensor_domain/isr_sensor_readers/isr_sensor_reader_factory.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
@@ -22,6 +25,7 @@
 
 namespace eerie_leap::controllers {
 
+using eerie_leap::subsys::adc::IAdcManager;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::gpio::IGpio;
 using eerie_leap::subsys::threading::WorkQueueTask;
@@ -32,7 +36,8 @@ using eerie_leap::subsys::time::ITimeService;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 
-using eerie_leap::domain::sensor_domain::configuration::AdcConfigurationManager;
+using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
+
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
 using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
@@ -53,6 +58,7 @@ private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<IGpio> gpio_;
+    std::shared_ptr<IAdcManager> adc_manager_;
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager_;
     std::shared_ptr<IFsService> sd_fs_service_;
 
@@ -62,6 +68,8 @@ private:
     std::shared_ptr<SensorsProcessingService> sensors_processing_service_;
 
     std::optional<WorkQueueTask<SensorsController>> restart_task_;
+    // Set by Start(); a restart that failed leaves the service stopped, but a later apply retries it.
+    std::atomic<bool> is_processing_requested_ = false;
 
     void RestartProcessing();
 
@@ -74,7 +82,8 @@ public:
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
         std::shared_ptr<CanbusService> canbus_service,
         std::shared_ptr<IGpio> gpio,
-        // PHYSICAL_ANALOG sensors are only processed when provided.
+        // PHYSICAL_ANALOG sensors are only processed when both are provided.
+        std::shared_ptr<IAdcManager> adc_manager = nullptr,
         std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
         std::shared_ptr<IFsService> sd_fs_service = nullptr);
     ~SensorsController();
