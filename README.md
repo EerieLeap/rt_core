@@ -43,7 +43,10 @@ and can starve the container. Narrow a run with `-t <tag>` (`unit`, `functional`
 Each suite lists the platforms it runs on in `platform_allow`. Suites needing a
 flash or ADC backend pick up `qemu_flash.*` / `qemu_adc.*` from `tests/` by
 setting `RT_CORE_TEST_SIM_FLASH` or `RT_CORE_TEST_ADC_EMUL` before including
-`rt_core_test.cmake`.
+`rt_core_test.cmake`. Every QEMU build also gets `qemu_stack_checks.conf`
+(`CONFIG_STACK_SENTINEL`): work queue stacks come from the heap, unguarded on
+all of them but `qemu_riscv64`, so an overflow names the thread instead of
+surfacing later as heap corruption.
 
 Known gaps: `qemu_malta` cannot fit the heavier suites in RAM, `qemu_cortex_a53`
 faults in the sensor and ADC emulation paths, and `unit.subsys.mdf` and

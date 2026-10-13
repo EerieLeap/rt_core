@@ -22,6 +22,11 @@ set(EXTRA_ZEPHYR_MODULES
     "${RT_CORE_DIR}/modules/expression_engine"
     "${RT_CORE_DIR}")
 
+# Stack overflow detection; see the comment in the conf file.
+if(BOARD MATCHES "^qemu_")
+    list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_stack_checks.conf")
+endif()
+
 if(BOARD MATCHES "^qemu_cortex_a")
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_mmu.conf")
 endif()
