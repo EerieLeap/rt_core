@@ -26,6 +26,14 @@ ChannelGroupBlock::ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t reco
     vlsd_data_bytes_ = 0;
 }
 
+// Destroying the next block here would destroy the one after it from its destructor, one nested
+// call per block of the chain; each block this chain still owns gives up its next link first.
+ChannelGroupBlock::~ChannelGroupBlock() {
+    auto next = links_.TakeLink(LinkType::ChannelGroupNext);
+    while(next && next.use_count() == 1)
+        next = static_cast<ChannelGroupBlock&>(*next).links_.TakeLink(LinkType::ChannelGroupNext);
+}
+
 uint16_t ChannelGroupBlock::GetFlags() const {
     return flags_;
 }
@@ -38,31 +46,20 @@ uint8_t ChannelGroupBlock::GetRecordIdSizeBytes() const {
     return record_id_size_bytes_;
 }
 
-std::vector<uint8_t> ChannelGroupBlock::GetRecordIdData() const {
-    uint8_t id_size_bytes = GetRecordIdSizeBytes();
-    std::vector<uint8_t> buffer(id_size_bytes);
-
-    if(id_size_bytes == 1) {
-        uint8_t id = static_cast<uint8_t>(GetRecordId());
-        std::memcpy(buffer.data(), &id, id_size_bytes);
-    } else if(id_size_bytes == 2) {
-        uint16_t id = static_cast<uint16_t>(GetRecordId());
-        std::memcpy(buffer.data(), &id, id_size_bytes);
-    } else if(id_size_bytes == 4) {
-        uint32_t id = static_cast<uint32_t>(GetRecordId());
-        std::memcpy(buffer.data(), &id, id_size_bytes);
-    } else if(id_size_bytes == 8) {
-        uint64_t id = GetRecordId();
-        std::memcpy(buffer.data(), &id, id_size_bytes);
-    } else if(id_size_bytes != 0) {
-        throw std::runtime_error("Invalid record ID size bytes");
-    }
+std::array<uint8_t, 8> ChannelGroupBlock::GetRecordIdData() const {
+    // The constructor rejected an ID wider than its size, so the bytes past the size are zero.
+    std::array<uint8_t, 8> buffer{};
+    std::memcpy(buffer.data(), &record_id_, sizeof(record_id_));
 
     return buffer;
 }
 
 uint32_t ChannelGroupBlock::GetDataSizeBytes() const {
     return data_bytes_;
+}
+
+uint32_t ChannelGroupBlock::GetInvalidationBytes() const {
+    return invalidation_bytes_;
 }
 
 uint64_t ChannelGroupBlock::GetCycleCount() const {
@@ -114,12 +111,15 @@ void ChannelGroupBlock::AddChannel(std::shared_ptr<ChannelBlock> channel) {
 }
 
 void ChannelGroupBlock::LinkBlock(std::shared_ptr<ChannelGroupBlock> next_block) {
-    if(links_.GetLink(LinkType::ChannelGroupNext)) {
-        auto next_channel_group = dynamic_pointer_cast<ChannelGroupBlock>(links_.GetLink(LinkType::ChannelGroupNext));
-        next_channel_group->LinkBlock(std::move(next_block));
-    } else {
-        links_.SetLink(LinkType::ChannelGroupNext, next_block);
-    }
+    auto* last = this;
+    while(auto next = last->links_.GetLink(LinkType::ChannelGroupNext))
+        last = static_cast<ChannelGroupBlock*>(next.get());
+
+    last->links_.SetLink(LinkType::ChannelGroupNext, std::move(next_block));
+}
+
+void ChannelGroupBlock::UnlinkNext() {
+    links_.SetLink(LinkType::ChannelGroupNext, nullptr);
 }
 
 void ChannelGroupBlock::AddSourceInformation(std::shared_ptr<SourceInformationBlock> source_information) {
@@ -127,7 +127,17 @@ void ChannelGroupBlock::AddSourceInformation(std::shared_ptr<SourceInformationBl
 }
 
 void ChannelGroupBlock::SetFlags(uint16_t flags) {
+    if((flags & std::to_underlying(Flag::VlsdChannel)) && invalidation_bytes_ != 0)
+        throw std::runtime_error("A VLSD channel group has no invalidation bytes");
+
     flags_ = flags;
+}
+
+void ChannelGroupBlock::SetInvalidationBytes(uint32_t invalidation_bytes) {
+    if(flags_ & std::to_underlying(Flag::VlsdChannel))
+        throw std::runtime_error("A VLSD channel group has no invalidation bytes");
+
+    invalidation_bytes_ = invalidation_bytes;
 }
 
 void ChannelGroupBlock::SetPathSeparator(uint16_t path_separator) {
@@ -136,6 +146,10 @@ void ChannelGroupBlock::SetPathSeparator(uint16_t path_separator) {
 
 void ChannelGroupBlock::SetName(std::shared_ptr<TextBlock> name) {
     links_.SetLink(LinkType::TextAcquisitionName, name);
+}
+
+void ChannelGroupBlock::SetComment(std::shared_ptr<MetadataBlock> comment) {
+    links_.SetLink(LinkType::MetadataComment, std::move(comment));
 }
 
 uint64_t ChannelGroupBlock::GetBlockSize() const {

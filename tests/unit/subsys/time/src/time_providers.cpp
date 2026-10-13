@@ -22,6 +22,29 @@ constexpr auto kRtcEpoch = milliseconds(1761106217000);
 // upper bounds below only have to catch a mis-scaled clock.
 constexpr auto kSleepSlack = 100ms;
 
+// Two readings around a busy wait shorter than a millisecond: a provider truncated to whole
+// milliseconds reports 0 or 1 ms, one at the kernel tick's resolution the wait itself.
+template<typename TProvider>
+void AssertSubMillisecondResolution() {
+#if CONFIG_SYS_CLOCK_TICKS_PER_SEC >= 4000
+    TProvider time_provider;
+
+    // Start on a fresh tick so the wait spans whole ticks only. A sleep, not a spin: native_sim
+    // advances its clock only when a thread sleeps or busy-waits.
+    k_sleep(K_TICKS(1));
+
+    const auto before = time_provider.GetTime();
+    k_busy_wait(250);
+    const auto after = time_provider.GetTime();
+
+    const auto elapsed_us = duration_cast<microseconds>(after - before).count();
+    zassert_true(elapsed_us >= 200 && elapsed_us < 1000,
+        "a 250 us wait must read as 200..999 us, not whole milliseconds (got %lld us)", static_cast<long long>(elapsed_us));
+#else
+    ztest_test_skip();
+#endif
+}
+
 } // namespace
 
 ZTEST_SUITE(boot_elapsed_time_provider, NULL, NULL, NULL, NULL, NULL);
@@ -124,4 +147,12 @@ ZTEST(rtc_provider, test_GetTime_is_ahead_of_the_boot_elapsed_time) {
     std::shared_ptr<ITimeProvider> boot_provider = std::make_shared<BootElapsedTimeProvider>();
 
     zassert_true(rtc_provider->GetTime() > boot_provider->GetTime());
+}
+
+ZTEST(boot_elapsed_time_provider, test_GetTime_resolves_below_a_millisecond) {
+    AssertSubMillisecondResolution<BootElapsedTimeProvider>();
+}
+
+ZTEST(rtc_provider, test_GetTime_resolves_below_a_millisecond) {
+    AssertSubMillisecondResolution<RtcProvider>();
 }

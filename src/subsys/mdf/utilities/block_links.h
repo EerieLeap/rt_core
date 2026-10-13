@@ -61,6 +61,10 @@ public:
         return links_[ToIndex(type)];
     }
 
+    std::shared_ptr<IBlock> TakeLink(LinkType type) {
+        return std::exchange(links_[ToIndex(type)], nullptr);
+    }
+
     const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
         std::vector<std::shared_ptr<ISerializableBlock>> links;
         links.reserve(links_.size());

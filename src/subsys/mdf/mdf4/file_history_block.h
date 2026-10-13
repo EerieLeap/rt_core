@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "subsys/mdf/utilities/block_links.h"
@@ -28,17 +29,20 @@ private:
 
 public:
     FileHistoryBlock();
-    virtual ~FileHistoryBlock() = default;
+    virtual ~FileHistoryBlock();
 
     void SetTimeNs(uint64_t time_ns);
+    /** Rebuilds the FHcomment with the tool fields XML escaped. */
+    void SetTool(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version);
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
     const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    std::shared_ptr<ISerializableBlock> GetNext() const override {
+        return links_.GetLink(LinkType::FileHistoryNext);
+    }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
-        return {
-            links_.GetLink(LinkType::MetadataComment),
-            links_.GetLink(LinkType::FileHistoryNext) };
+        return { links_.GetLink(LinkType::MetadataComment) };
     }
 
     void LinkBlock(std::shared_ptr<FileHistoryBlock> next_block);

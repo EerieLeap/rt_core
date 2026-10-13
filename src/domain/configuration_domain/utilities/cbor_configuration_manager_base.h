@@ -8,10 +8,12 @@
 #include <utility>
 #include <vector>
 
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <eerie_memory.hpp>
 
 #include "configuration/services/cbor_configuration_service.h"
+#include "subsys/threading/scoped_mutex.h"
 
 #include "i_cbor_configuration_manager.h"
 
@@ -24,6 +26,9 @@ private:
     const char* name_;
     std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>> cbor_configuration_service_;
     std::shared_ptr<TConfiguration> configuration_;
+    // Get() runs on any thread (CDMP, shell, the log writer's start) while an apply replaces the
+    // pointer on the configuration work queue; copying a shared_ptr that is being assigned is a race.
+    mutable k_mutex configuration_mutex_;
 
     // Set while the stored configuration could not be applied and an unsaved default stands in for it.
     bool is_stored_configuration_rejected_ = false;
@@ -44,16 +49,31 @@ private:
         return std::shared_ptr<TConfiguration>(configuration.release(), deleter, control_block_allocator);
     }
 
+    std::shared_ptr<TConfiguration> CurrentConfiguration() const {
+        eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
+
+        return configuration_;
+    }
+
     void SetConfiguration(std::shared_ptr<TConfiguration> configuration) {
-        configuration_ = std::move(configuration);
-        OnConfigurationChanged(configuration_);
+        auto current = configuration;
+        {
+            eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
+            configuration_.swap(configuration);
+        }
+
+        // The previous configuration is released here, outside the lock, by whoever drops it last.
+        OnConfigurationChanged(current);
     }
 
 protected:
     CborConfigurationManagerBase(
         const char* name,
         std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>> cbor_configuration_service)
-            : name_(name), cbor_configuration_service_(std::move(cbor_configuration_service)) {}
+            : name_(name), cbor_configuration_service_(std::move(cbor_configuration_service)) {
+
+        k_mutex_init(&configuration_mutex_);
+    }
 
     // Returns whether a configuration is available afterwards.
     //
@@ -140,8 +160,11 @@ protected:
 
 public:
     std::shared_ptr<TConfiguration> Get(bool force_load = false) {
-        if(configuration_ != nullptr && !force_load)
-            return configuration_;
+        if(!force_load) {
+            auto current = CurrentConfiguration();
+            if(current != nullptr)
+                return current;
+        }
 
         auto loaded_config = cbor_configuration_service_->Load();
         if(!loaded_config.has_value())
@@ -150,7 +173,7 @@ public:
         // loaded_config still owns the bytes that decoded strings point into.
         SetConfiguration(Share(Deserialize(*loaded_config->config)));
 
-        return configuration_;
+        return CurrentConfiguration();
     }
 
     bool Update(const TConfiguration& configuration) {
@@ -223,7 +246,7 @@ public:
     }
 
     StoredCborInfo GetCborConfigurationInfo() override {
-        if(configuration_ == nullptr)
+        if(CurrentConfiguration() == nullptr)
             return {};
 
         auto info = cbor_configuration_service_->GetStoredInfo();

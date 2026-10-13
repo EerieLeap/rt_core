@@ -7,6 +7,7 @@
 
 #include "subsys/mdf/utilities/block_links.h"
 #include "file_history_block.h"
+#include "metadata_block.h"
 #include "data_group_block.h"
 #include "block_base.h"
 
@@ -40,10 +41,15 @@ public:
     virtual ~HeaderBlock() = default;
 
     void SetCurrentTimeNs(uint64_t time_ns);
+    void SetComment(std::shared_ptr<MetadataBlock> comment);
+    std::shared_ptr<FileHistoryBlock> GetFileHistory() const;
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
     const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    std::shared_ptr<ISerializableBlock> GetNext() const override {
+        return nullptr;
+    }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
         return {
             links_.GetLink(LinkType::MetadataComment),

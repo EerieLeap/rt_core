@@ -45,6 +45,7 @@ public:
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
+    std::shared_ptr<ISerializableBlock> GetNext() const override { return nullptr; }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override { return {}; }
 
     void AddStandardFlag(StandardFlag flag);

@@ -122,7 +122,7 @@ AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_coun
 
 void adc_configuration_manager_ExpectTestConfiguration(const std::shared_ptr<AdcConfiguration>& configuration, int channel_count) {
     zassert_not_null(configuration.get());
-    zassert_equal(configuration->channel_configurations->size(), channel_count);
+    zassert_equal(configuration->channel_configurations->size(), static_cast<size_t>(channel_count));
 
     for(int i = 0; i < channel_count; i++) {
         auto adc_channel_configuration = configuration->channel_configurations->at(i);
@@ -132,10 +132,10 @@ void adc_configuration_manager_ExpectTestConfiguration(const std::shared_ptr<Adc
 
         auto calibration_table = adc_channel_configuration->calibrator->GetCalibrationTable();
         zassert_equal(calibration_table->size(), 2);
-        zassert_equal(calibration_table->at(0).voltage, 0.0);
-        zassert_equal(calibration_table->at(0).value, 0.0);
-        zassert_equal(calibration_table->at(1).voltage, 5.0);
-        zassert_equal(calibration_table->at(1).value, 5.0);
+        zassert_equal(calibration_table->at(0).voltage, 0.0F);
+        zassert_equal(calibration_table->at(0).value, 0.0F);
+        zassert_equal(calibration_table->at(1).voltage, 5.0F);
+        zassert_equal(calibration_table->at(1).value, 5.0F);
     }
 }
 
@@ -198,7 +198,7 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfigura
 
     auto expect_imported_configuration = [&](const std::shared_ptr<AdcConfiguration>& imported_configuration) {
         zassert_not_null(imported_configuration.get());
-        zassert_equal(imported_configuration->channel_configurations->size(), adc_manager->GetChannelCount());
+        zassert_equal(imported_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount()));
 
         for(int i = 0; i < adc_manager->GetChannelCount(); i++) {
             auto calibration_table = imported_configuration->channel_configurations->at(i)->calibrator->GetCalibrationTable();
@@ -346,7 +346,7 @@ ZTEST(adc_configuration_manager, test_Default_configuration_matches_the_device_t
 
     zassert_not_null(default_configuration.get());
     zassert_equal(default_configuration->samples, AdcDefaultConfiguration::SAMPLES);
-    zassert_equal(default_configuration->channel_configurations->size(), adc_manager->GetChannelCount());
+    zassert_equal(default_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount()));
     zassert_equal(default_configuration->channel_configurations->size(), kDtChannelCount);
 
     auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());

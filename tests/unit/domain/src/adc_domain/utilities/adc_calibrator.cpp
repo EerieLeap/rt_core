@@ -57,11 +57,11 @@ ZTEST(adc_calibrator, test_production_range_maps_5V_to_3V1) {
 ZTEST(adc_calibrator, test_InterpolateToInputRange_maps_adc_range_to_sensor_range) {
     AdcCalibrator calibrator(InterpolationMethod::LINEAR, MakeTable({{0.0F, 0.0F}, {5.0F, 5.0F}}));
 
-    zassert_between_inclusive(calibrator.InterpolateToInputRange(0.0F), -0.001, 0.001);
+    zassert_between_inclusive(calibrator.InterpolateToInputRange(0.0F), -0.001F, 0.001F);
     zassert_between_inclusive(calibrator.InterpolateToInputRange(kAdcMaxVolts),
-        kSensorMaxVolts - 0.001, kSensorMaxVolts + 0.001);
+        kSensorMaxVolts - 0.001F, kSensorMaxVolts + 0.001F);
     zassert_between_inclusive(calibrator.InterpolateToInputRange(kAdcMaxVolts / 2.0F),
-        kSensorMaxVolts / 2.0 - 0.001, kSensorMaxVolts / 2.0 + 0.001);
+        kSensorMaxVolts / 2.0F - 0.001F, kSensorMaxVolts / 2.0F + 0.001F);
 }
 
 ZTEST(adc_calibrator, test_InterpolateToInputRange_uses_the_instance_range) {
@@ -172,8 +172,8 @@ ZTEST(adc_calibrator, test_GetCalibrationTable_returns_the_original_table) {
 ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_with_identity_table) {
     AdcCalibrator calibrator(InterpolationMethod::LINEAR, MakeTable({{0.0F, 0.0F}, {5.0F, 5.0F}}), kIdentityRange);
 
-    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(2.5F), 2.49, 2.51);
-    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(5.0F), 4.99, 5.01);
+    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(2.5F), 2.49F, 2.51F);
+    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(5.0F), 4.99F, 5.01F);
 }
 
 ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_inverts_the_calibration) {
@@ -181,8 +181,8 @@ ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_inverts_the_calibration)
     AdcCalibrator calibrator(InterpolationMethod::LINEAR, MakeTable({{0.0F, 0.0F}, {3.0F, 3.3F}}),
         AdcRange { .adc_max_v = 3.3F, .sensor_max_v = 3.3F });
 
-    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(3.3F), 2.99, 3.01);
-    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(1.65F), 1.49, 1.51);
+    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(3.3F), 2.99F, 3.01F);
+    zassert_between_inclusive(calibrator.InterpolateToCalibratedRange(1.65F), 1.49F, 1.51F);
 }
 
 ZTEST(adc_calibrator, test_normalized_table_is_sorted) {
@@ -213,7 +213,7 @@ ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_passes_through_calibrati
             // What the ADC pin sees when the unit measures point.value at the sensor input.
             float result = calibrator.InterpolateToCalibratedRange(calibrator.GetRange().ToAdcVolts(point.value));
 
-            zassert_between_inclusive(result, point.voltage - 0.01, point.voltage + 0.01,
+            zassert_between_inclusive(result, point.voltage - 0.01F, point.voltage + 0.01F,
                 "method %d: measured %f mapped to %f instead of %f",
                 static_cast<int>(method), (double)point.value, (double)result, (double)point.voltage);
         }
@@ -224,8 +224,8 @@ ZTEST(adc_calibrator, test_calibrators_are_independent) {
     AdcCalibrator identity(InterpolationMethod::LINEAR, MakeTable({{0.0F, 0.0F}, {5.0F, 5.0F}}), kIdentityRange);
     AdcCalibrator halved(InterpolationMethod::LINEAR, MakeTable({{0.0F, 0.0F}, {2.5F, 5.0F}}), kIdentityRange);
 
-    zassert_between_inclusive(identity.InterpolateToCalibratedRange(5.0F), 4.99, 5.01);
-    zassert_between_inclusive(halved.InterpolateToCalibratedRange(5.0F), 2.49, 2.51);
+    zassert_between_inclusive(identity.InterpolateToCalibratedRange(5.0F), 4.99F, 5.01F);
+    zassert_between_inclusive(halved.InterpolateToCalibratedRange(5.0F), 2.49F, 2.51F);
 }
 
 ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_clamps_like_the_calibration_reading) {

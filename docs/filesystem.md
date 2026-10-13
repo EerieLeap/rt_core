@@ -12,18 +12,31 @@ with the mount prefix. The interface (`IFsService`) offers `WriteFile` (overwrit
 `ListFiles`, `GetFileSize`, `GetTotalSpace`, `GetUsedSpace` and `Format`. All calls hold one
 mutex per service.
 
-`FsServiceStreamBuf` is a `std::streambuf` over a file of a service (read, write or append,
-4 KiB buffer, seekable). The MDF4 logger writes through it.
-
 Two instances exist in the application:
 
 | Instance | Mount | Holds |
 | --- | --- | --- |
 | Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor` |
-| SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts, `data_logs/`, log metadata |
+| SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts, `data_logs/` |
 
 The SD service is optional: the sensors, CAN and logging code accept a null SD service and then
 skip script validation and logging.
+
+## Stream buffer
+
+`FsServiceStreamBuf` is a seekable `std::streambuf` over a file of a service, in read, write or
+append mode. Reads go through a 4 KiB buffer. Writes collect in a put area of
+`EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE` bytes that is written in one `fs_write()` when it fills,
+on a seek, a read, `pubsync()` and `close()`; a request of at least the buffer size goes to the
+file directly. A write that fails or falls short latches the stream: every later write is refused,
+so a caller sees one failure instead of a file with a hole in it. `GetBytesWritten()` counts the
+bytes accepted and `GetWriteCallCount()` the `fs_write()` calls. The MDF4 logger writes through
+it; its sync cadence is the logging domain's (`EERIE_LEAP_LOG_SYNC_INTERVAL_MS`, see
+[logging.md](logging.md)).
+
+| Symbol | Default | Meaning |
+| --- | --- | --- |
+| `EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE` | 0..65536, 4096 | Put area of write and append streams; 0 writes every request straight to the file. Fewer, larger writes, not a larger loss window: the writer's sync interval bounds that. |
 
 ## SD card service
 
@@ -53,5 +66,4 @@ other options.
 | --- | --- | --- |
 | `config/<type>_config.cbor` | internal | Configuration managers |
 | `scripts/*.lua` (by convention) | SD | The user; referenced by sensors and CAN messages through `script_path` |
-| `data_logs/log_data_<ms>_<rand>.mf4` | SD | Log writer (`EERIE_LEAP_LOG_DATA_FILES_DIR`, `_PREFIX`) |
-| `logs_metadata/log_metadata` | SD | Simple logger metadata (`EERIE_LEAP_LOG_METADATA_FILE_*`) |
+| `data_logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`EERIE_LEAP_LOG_DATA_FILES_DIR`, `_PREFIX`); UTC start time |

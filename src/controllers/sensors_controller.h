@@ -4,10 +4,12 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "subsys/adc/i_adc_manager.h"
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/gpio/i_gpio.h"
+#include "subsys/threading/i_service.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
 
@@ -28,6 +30,7 @@ namespace eerie_leap::controllers {
 using eerie_leap::subsys::adc::IAdcManager;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::gpio::IGpio;
+using eerie_leap::subsys::threading::IService;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
@@ -67,6 +70,9 @@ private:
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory_;
     std::shared_ptr<SensorsProcessingService> sensors_processing_service_;
 
+    // Readers of the frame and its generation, stopped around a restart.
+    std::vector<std::shared_ptr<IService>> dependent_services_;
+
     std::optional<WorkQueueTask<SensorsController>> restart_task_;
     // Set by Start(); a restart that failed leaves the service stopped, but a later apply retries it.
     std::atomic<bool> is_processing_requested_ = false;
@@ -90,6 +96,14 @@ public:
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();
+
+    /**
+     * A service that reads the readings frame or the sensors of the running generation, such as the
+     * log writer. A restart for a new sensors or ADC configuration stops the registered services that
+     * are running before processing stops, and starts exactly those again once it runs on the new
+     * generation. Register before Start().
+     */
+    void RegisterDependentService(std::shared_ptr<IService> service);
 
     std::shared_ptr<SensorsConfigurationManager> GetConfigurationManager() const { return sensors_configuration_manager_; }
     std::shared_ptr<SensorsProcessingService> GetProcessingService() const { return sensors_processing_service_; }

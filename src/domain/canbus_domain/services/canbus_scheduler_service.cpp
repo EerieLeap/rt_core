@@ -60,7 +60,7 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
 
         LOG_HEXDUMP_DBG(
             can_frame_data.data(),
-            can_frame_data.size(),
+            static_cast<uint32_t>(can_frame_data.size()),
             ("Can frame " + std::to_string(task->message_configuration->frame_id)).c_str());
     } catch (const std::exception& e) {
         LOG_DBG("Error processing Frame ID: %d, Error: %s", task->message_configuration->frame_id, e.what());

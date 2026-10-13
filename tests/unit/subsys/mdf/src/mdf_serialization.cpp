@@ -72,6 +72,73 @@ ZTEST(mdf_serialization, test_ResolveAddressVisitsSharedChildOnce) {
     zassert_equal(end, 160, "a shared block only takes up space once");
 }
 
+// A *_next sibling comes after every child of the block before it, which is the order the
+// recursive traversal produced when the next link was the last child.
+ZTEST(mdf_serialization, test_NextChainIsLaidOutAfterTheChildren) {
+    auto root = MakeBlock("RT");
+    auto first = MakeBlock("AA");
+    auto first_child = MakeBlock("AC");
+    auto second = MakeBlock("BB");
+    auto second_child = MakeBlock("BC");
+    auto third = MakeBlock("CC");
+
+    root->AddChild(first);
+    first->AddChild(first_child);
+    first->SetNext(second);
+    second->AddChild(second_child);
+    second->SetNext(third);
+
+    const auto end = root->ResolveAddress(0);
+    zassert_equal(end, 6 * BLOCK_HEADER_SIZE);
+
+    const std::vector<std::shared_ptr<TestBlock>> expected_order{root, first, first_child, second, second_child, third};
+    for(size_t i = 0; i < expected_order.size(); i++) {
+        zassert_equal(expected_order[i]->GetAddress(), i * BLOCK_HEADER_SIZE,
+            "block %s is not at position %zu", expected_order[i]->GetId().c_str(), i);
+    }
+
+    auto stream = MakeStream();
+    zassert_equal(root->WriteToStream(stream), end, "every block of the chain is written once");
+
+    const auto data = stream.str();
+    for(const auto& block : expected_order) {
+        zassert_equal(BlockId(AsBytes(data), block->GetAddress()), "##" + block->GetId(),
+            "block %s is not at its resolved address", block->GetId().c_str());
+    }
+
+    root->Reset();
+    for(const auto& block : expected_order) {
+        zassert_equal(block->GetAddress(), 0, "block %s keeps an address after a reset", block->GetId().c_str());
+        zassert_false(block->IsSerialized(), "block %s stays serialized after a reset", block->GetId().c_str());
+    }
+}
+
+// The VLSD channel group a CAN channel points at is also a sibling on the channel group chain.
+ZTEST(mdf_serialization, test_ChainTraversalsTerminateOnAChildThatIsAlsoASibling) {
+    auto head = MakeBlock("AA");
+    auto sibling = MakeBlock("BB");
+    auto last = MakeBlock("CC");
+
+    head->AddChild(sibling);
+    head->SetNext(sibling);
+    sibling->SetNext(last);
+    last->AddChild(head);
+
+    const auto end = head->ResolveAddress(64);
+    zassert_equal(end, 64 + 3 * BLOCK_HEADER_SIZE, "each block takes up space once");
+
+    auto stream = MakeStream();
+    head->WriteToStream(stream);
+    zassert_equal(stream.str().size(), 3 * BLOCK_HEADER_SIZE, "no block is written twice");
+
+    head->Reset();
+    zassert_false(last->IsSerialized(), "the reset reaches the end of the chain");
+
+    head->ClearChildren();
+    head->SetNext(nullptr);
+    last->ClearChildren();
+}
+
 ZTEST(mdf_serialization, test_WriteToStreamPlacesEveryBlockAtItsResolvedAddress) {
     auto root = MakeBlock("RT");
     auto first = MakeBlock("AA");
@@ -275,8 +342,8 @@ ZTEST(mdf_serialization, test_BlockLinksSerializeAddresses) {
     links.SetLink(TestLink::First, first);
 
     const auto buffer = links.Serialize();
-    zassert_equal(Read<uint64_t>({buffer.get(), links.GetLinksSizeBytes()}, 0), 256);
-    zassert_equal(Read<uint64_t>({buffer.get(), links.GetLinksSizeBytes()}, LINK_SIZE), 0, "unset links stay null");
+    zassert_equal(Read<uint64_t>({buffer.get(), static_cast<size_t>(links.GetLinksSizeBytes())}, 0), 256);
+    zassert_equal(Read<uint64_t>({buffer.get(), static_cast<size_t>(links.GetLinksSizeBytes())}, LINK_SIZE), 0, "unset links stay null");
 }
 
 ZTEST(mdf_serialization, test_BlockLinksRejectUnresolvedAddresses) {

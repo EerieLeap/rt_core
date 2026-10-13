@@ -9,3 +9,6 @@ project(unit_domain)
 file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)
 
 target_sources(app PRIVATE ${TEST_SOURCES})
+
+# MemoryStreamBuf: std::stringbuf seeks do not link on every supported platform.
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../common)

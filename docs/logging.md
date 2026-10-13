@@ -6,44 +6,192 @@ card at a fixed interval, in MDF 4.10 by default. The MDF writer itself is the M
 
 ## How it works
 
-`LogWriterService` is a pausable service with its own work queue (priority 8, stack
+`LogWriterService` is a service with its own work queue (priority 8, stack
 `EERIE_LEAP_LOG_WRITER_STACK_SIZE`). `Start()`:
 
-1. needs a logger, an available SD card and a `logging_interval_ms` of at least 10;
-2. creates `EERIE_LEAP_LOG_DATA_FILES_DIR` if missing and picks a new file name
-   `<prefix>_<start ms>_<random>.<ext>` (`log_data_1700000000_4242.mf4` by default);
-3. opens the file through a seekable stream and calls the logger's `StartLogging()`;
-4. schedules its tick every `logging_interval_ms`.
+1. needs a logger factory, an available SD card, a `logging_interval_ms` of at least 10 and
+   `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` free on the card;
+2. builds this session's logger with the factory (`SetLoggerFactory()`), so every start, a
+   restart included, writes the layout of the configurations in effect at that moment;
+3. creates `EERIE_LEAP_LOG_DATA_FILES_DIR` if missing and picks a new file name
+   `<prefix>_<YYYYMMDD>T<HHMMSS>Z_<rand4>.<ext>` from the start time in UTC and a random
+   four-digit suffix (`log_data_20261011T093000Z_4242.mf4` by default), so names sort by start
+   time; it tries up to ten suffixes when a name is taken (`LogFileNaming` builds the name);
+4. discards the raw CAN frames queued before the start (the frame queues them whether or not
+   logging runs), then opens the file through a seekable stream and calls the logger's
+   `StartLogging()`;
+5. publishes `StatusUpdated` with `IsActive = true` (see below) and schedules the first tick one
+   `logging_interval_ms` later.
 
-Each tick snapshots every processed reading from the `SensorReadingsFrame` and logs the ones the
+Each tick snapshots every sensor's latest processed reading from the `SensorReadingsFrame`, or
+its latest reading when that is an error (see Invalidation bits below), logs the ones the
 configuration enables, then drains the raw CAN frame queue so every frame of a `CANBUS_RAW`
-sensor is logged, not only the latest one. The tick allocates nothing: its buffers are sized by
-`EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` and `_RAW_CAN_QUEUE_SIZE`. `Stop()` finalizes and closes
-the file.
+sensor is logged, not only the latest one. The tick passes its own time to the logger, which
+writes every reading at the reading's own timestamp, so values keep their sample time and the
+frames drained in one tick keep their arrival times; the tick time stands in for a reading without
+a timestamp and for a held sample written again (`log_only_new_data` off). Neither the tick nor
+the logger follows a reading's sensor pointer, which belongs to the generation of sensor
+processing that produced it. The tick allocates nothing: its buffers are sized by
+`EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` and `_RAW_CAN_QUEUE_SIZE`. `Start()` writes and syncs the
+file header, so a card that refuses writes fails the start instead of a later tick and no empty
+file is left behind. Records collect in the stream's write buffer (see
+[filesystem.md](filesystem.md)); at the end of a tick, once `EERIE_LEAP_LOG_SYNC_INTERVAL_MS`
+has elapsed since the last sync, the tick flushes and syncs the file, so the size and allocation
+on the card cover everything up to that point and a power loss costs at most one interval plus
+one buffer. `Stop()` waits for a tick in progress, then finalizes and closes the file; finalizing
+syncs twice, once after the lengths and counts are patched and once after the identifier flips,
+so the identifier never claims a length the card does not hold yet. It publishes `IsActive =
+false` with the reason `Stopped`.
+
+### Deadlines and raw CAN capacity
+
+Ticks run on absolute deadlines (`K_TIMEOUT_ABS_TICKS`, so `CONFIG_TIMEOUT_64BIT` is required),
+each one interval after the previous one: neither the tick's own duration nor the kernel's
+rounding of a relative timeout adds to the period. A tick that runs past the next deadline (a
+slow sync, a rotation) keeps the phase; the deadlines it missed are skipped and counted as
+`overruns` rather than run late, back to back.
+
+Raw CAN frames wait in the frame's queue between two drains: `EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE`
+entries (32 by default), about 90 bytes each, and the writer's drain buffers are sized the same.
+A frame that arrives while the queue is full is dropped and counted in `frames_dropped`, and the
+writer warns once per `EERIE_LEAP_LOG_STATS_LOG_PERIOD_S` while that count grows. When a drain
+fills the buffers the queue may already be dropping, so the next tick comes a quarter interval
+later (10 ms at the least) and the phase goes on from there. Size the queue for
+`logging_interval_ms` x the peak frame rate of the `CANBUS_RAW` sensors: at 100 ms and 1000
+frames/s, 100 entries; the shortened tick absorbs a burst, not a sustained rate above that.
+
+### Rotation and free space
+
+With `max_log_size_mb` above 0, the tick that brings the file to that size marks it for
+rotation, and the next tick, before its snapshot, finalizes and closes it and opens the next
+file. The next file starts at the time of the previous tick rather than of the rotation, so the
+frames and samples that arrived meanwhile are not older than the file and keep their own times;
+every raw frame is in exactly one of the two files. Rotations are counted in `rotations`, and the
+stats' byte and write counts cover every file of the session.
+
+`EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` (default 16, 0 disables the check) is checked when logging
+starts and before each rotation, never per tick: the free space comes from FatFs's free cluster
+count, which can take a scan of the whole FAT on a large card. A start without it fails; a
+rotation without it ends the session with the reason `NoSpace`, leaving the full file open for
+the stop to finalize.
+
+### Status events and failures
+
+The writer publishes `StatusUpdated` on the `logging_events` channel (see
+[infrastructure.md](infrastructure.md)) with `IsActive` and, when inactive, `Reason`
+(`LoggingStatusReason`):
+
+| Reason | When |
+| --- | --- |
+| `Stopped` | `Stop()` finalized and closed the file. |
+| `WriteFailed` | A record or a sync did not reach the card: the stream refuses every write after one that failed or fell short (a full or removed card). |
+| `NoSpace` | Less than `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` was free at a rotation. |
+| `RotationFailed` | The next file of a rotation could not be opened or its header written. |
+
+A failure ends the session on the writer thread: the error is counted in `write_errors` (not for
+`NoSpace`) and logged once, the failure is published, and no further tick is scheduled.
+`HasFailed()` reports it until the next `Start()`. The service stays `RUNNING` without a tick:
+the writer never stops its own service, because `Stop()` waits for the running tick. Its owner
+stops it from another thread when the event arrives; that stop finalizes what it can and closes
+the file (a file whose stream failed stays readable as unfinalized), then publishes `Stopped`.
+Events are published with `PublishAsync()`, so subscribers run on the bus thread, never on the
+writer thread or inside a transition of the service; the channel drops every publish until a bus
+carries it, and `LoggingEventBus` (one thread, 4 KiB) is that bus for an application that has no
+other. The active event goes out from inside `Start()`, before the service reports `RUNNING`.
+
+### Restarts
+
+A new sensors or ADC configuration restarts sensor processing, which replaces the generation
+the frame's readings belong to. Registered with `SensorsController::RegisterDependentService()`
+(see [sensors.md](sensors.md)), the writer is stopped before that generation goes and started
+again on the new one: the file is finalized and the next one describes the new sensors. A CAN
+reconfiguration also restarts processing, without the writer; the configurations, and so the
+file layout, are the same, and the drop count goes on across the frame's reset.
+`LoggingConfigurationManager` calls its updated handler after `Update()` and
+`ApplyCborConfiguration()`, for the application to restart a running writer with the new
+interval, size limit and sensor selection.
 
 Starting and stopping is the application's business: rt_daq's `LoggingController` does it from
-the CDMP `LOGGING` command (so one broadcast starts every unit, see [cdmp.md](cdmp.md)) and
-shows a `log` status on the display. The `logging_events` channel (`StatusUpdated`, payload
-`IsActive`) is available for other consumers.
+the CDMP `LOGGING` command (so one broadcast starts every unit, see [cdmp.md](cdmp.md)), restarts
+the writer for a new logging configuration, stops a failed session and shows a `log` status on
+the display.
 
 ## Loggers
 
-`ILogger<SensorReading>` has `StartLogging(stream, start_time)`, `LogReading(time, reading)`,
-`StopLogging()` and the file extension. Two implementations exist:
+`ILogger<SensorReading>` has `StartLogging(stream, start_time)`, `LogReading(time, reading)`
+(`time` is the caller's current time, see above), `StopLogging()`, `GetBytesWritten()` and the
+file extension. `LogReading()` throws only
+`std::ios_base::failure`, when the stream refuses a record; `StopLogging()` never throws and
+returns false when the file could not be finalized. One implementation exists:
 
-**`Mdf4LoggerSensorReading`** (used by rt_daq). Built from the current sensors configuration,
-so it must be recreated when the sensors change. For every enabled sensor it creates a channel
-group named after the sensor ID with a `value` channel (float, unit from the metadata) and, when
-`log_raw_value` is set and the sensor is a `PHYSICAL_ANALOG` or `PHYSICAL_INDICATOR` with an
-expression, a `raw_value` channel whose MDF conversion is the expression text. `CANBUS_RAW`
-sensors get a CAN data frame channel group with variable-length frame data. Each record carries
-the time since the file start. The file is written with the "unfinalized" identifier and patched
-on `StopLogging()`, so a file cut by a power loss stays readable.
+**`Mdf4LoggerSensorReading`** (used by rt_daq). Built from a `LoggingConfiguration`, the sensors
+and a `LoggerMetadata` (device name, tool ID and version, product ID, CDMP device ID, packed
+hardware and software versions, sensors configuration hash), all copied at construction: a
+reading is matched by its sensor ID hash only and its sensor pointer is never followed. It
+describes the sensors as they were when it was built, which is why the service builds one
+through its factory at every start. The file is written with the "unfinalized" identifier and
+patched on `StopLogging()`, so a file cut by a power loss stays readable. `StartLogging()` seals
+the layout into one record writer per group; each record (a CAN frame together with its payload
+record) then reaches the stream's buffer in a single write, without a heap allocation, and the
+header is serialized along the block chains in loops, so its stack depth does not grow with the
+sensor count.
 
-**`SimpleLoggerSensorReading`**. A compact binary format: a header
-(`EERIE_LEAP_LOG_DATA_FILE_VERSION`, start time, CRC) followed by one CRC-protected record per
-reading (time delta in ms, sensor ID hash, value), plus a separate metadata file
-(`EERIE_LEAP_LOG_METADATA_FILE_DIR/_NAME`, `_VERSION`) that describes the sensors.
+- **Time.** The master channel `Timestamp` of every group is Float64 seconds since the start
+  time in the header, the record time minus the start time (0 for a reading older than the
+  file). Float64 resolves microseconds over any session length; readings are stamped at the
+  kernel tick's resolution (100 µs on the ESP32-S3 boards, see
+  [infrastructure.md](infrastructure.md)), so frames that arrive within one tick share a time.
+  Within a value group the times strictly increase: a sample stamped before the tick that last
+  wrote its predecessor again (it was still being processed) is moved to 1 µs after that
+  record.
+- **Record IDs.** One byte while every group fits (2 x enabled sensors + 1 ≤ 255; a `CANBUS_RAW`
+  sensor uses two groups), else two bytes.
+- **Names.** Per enabled sensor one channel group named after the sensor ID. A value sensor's
+  group holds the value channel, named after the sensor ID (Float32, unit from the metadata), and
+  with `log_raw_value` on a `PHYSICAL_ANALOG` or `PHYSICAL_INDICATOR` sensor with an expression,
+  the raw channel `<id>.raw`. A `CANBUS_RAW` sensor's group, also named after the sensor ID, is a
+  `CAN_DataFrame` bus-event group (`BusChannel` = the source's CAN interface index + 1, `ID`,
+  `IDE`, `DLC`, `Dir`, `EDL`, `BRS`, `ESI`, `DataLength`, `DataBytes` as a 64-bit VLSD offset)
+  backed by a VLSD group for the payloads; asammdf's bus extraction reads it. Each frame's
+  payload record is written before its frame record, so a file cut between the two ends in a
+  payload no frame points at, which readers skip, rather than in a frame pointing past the end.
+- **Comments.** The value channel's comment (the CAN group's, for a raw sensor) is the sensor name,
+  followed by `: ` and the description when there is one. The header comment is
+  `Eerie Leap sensor log` with the common properties `device_name`, `product_id`, `device_id`,
+  `hw_version`, `sw_version`, `sensors_configuration_hash` and `logging_interval_ms`, in decimal;
+  the file history carries the tool ID and version with the vendor `Eerie Leap`.
+- **Conversion.** The raw channel gets an algebraic conversion only when a reader evaluates it
+  the way the expression engine does: the only identifier is `x`, and the expression uses
+  nothing but `+ - * /`, parentheses, decimal numbers (no leading zero, which numexpr rejects)
+  and `sin cos tan sqrt abs log`. The formula is the expression with `x` renamed to `X`
+  token-wise and `a ^ n` written as the product `(a * ... * a)` when `a` is a single token and `n`
+  a whole number from 1 to 4 (asammdf's numexpr has no `pow()`; other powers are not
+  converted): `x * 4 + 1.6` becomes `X * 4 + 1.6`, `x ^ 2 * 0.5` becomes `(X * X) * 0.5`. Any
+  other expression goes into the raw channel's comment as `expression: <text>`.
+- **Invalidation bits.** The value channel and the raw channel each have an invalidation bit
+  (bits 0 and 1 of one byte after the record's data, so with a one-byte record ID value records
+  are 14 bytes, 18 with the raw value; the master channel and CAN groups have none). A reading
+  with an error (`HasError()`) or without a value is written, not skipped: the value field is 0
+  and the value channel's bit is set, so the stale value an error reading may still carry never
+  looks valid. A missing raw value is written as 0 with only the raw channel's bit set; an error
+  reading's raw value, when it has one, stays valid (the input was measured, a later step
+  failed). The service logs each sensor's latest processed reading, or its latest reading when
+  that is an error (`SensorReadingsFrame::SnapshotLoggableReadings()`), so a sensor whose readings
+  fail shows invalid samples from the first failed one until it recovers, not its last good value
+  held.
+- **Invalid samples in asammdf** (8.8). `MDF.get(name)` honours the bits by dropping the invalid
+  samples, timestamps included (`invalidation_bits` is `None`); `get(name,
+  ignore_invalidation_bits=True)` returns every sample, the 0 placeholders included, with the
+  bits in `Signal.invalidation_bits` (`True` = invalid; `validate()` drops those samples).
+  `to_dataframe()` interpolates across the dropped samples unless `use_interpolation=False`,
+  which leaves NaN there, and `MDF(path, ignore_invalidation_bits=True)` reads the placeholders
+  as values. The GUI opens files with the bits honoured unless its setting says otherwise.
+- **Readings.** The tick offers every sensor's latest sample each time. A sample whose
+  timestamp was already written is skipped with `log_only_new_data`, and otherwise written
+  again at the tick time (sample and hold at the logging interval); a reading without a
+  timestamp is always written. An invalid reading follows the same rules: its own timestamp
+  makes it a new or a held sample, and a held one is written invalid again. Raw CAN frames ignore
+  the flag: every queued frame is written.
 
 ## Stored configuration
 
@@ -58,11 +206,11 @@ CborLoggingConfig = [ logging_interval_ms: uint, max_log_size_mb: uint, sensor_c
 | Field | Default | Rules and meaning |
 | --- | --- | --- |
 | `logging_interval_ms` | 100 | ≥ 10. Period of the writer's tick. |
-| `max_log_size_mb` | 10 | ≤ 1024. Stored but not enforced yet; files are not rolled over. |
+| `max_log_size_mb` | 10 | ≤ 1024. A file that reaches this size is finalized and the next one opened (see [Rotation and free space](#rotation-and-free-space)); 0 never rotates. |
 | `sensor_configs[].sensor_id_hash` | | 32-bit hash of the sensor ID (see [smp.md](smp.md)). A sensor without an entry is not logged. |
 | `is_enabled` | false | Log this sensor. |
-| `log_raw_value` | false | Also log the value before the expression (MDF4: the `raw_value` channel). |
-| `log_only_new_data` | false | Skip a tick when the reading's timestamp has not changed since the last record of this sensor. |
+| `log_raw_value` | false | Also log the value before the expression (MDF4: the `<id>.raw` channel). |
+| `log_only_new_data` | false | Skip a tick when the reading's timestamp has not changed since the last record of this sensor; off, the held sample is written again at the tick time. A reading without a timestamp is always logged. Does not apply to `CANBUS_RAW` sensors, whose every frame is logged. |
 
 The default configuration logs nothing.
 
@@ -70,20 +218,26 @@ The default configuration logs nothing.
 
 | Symbol | Default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_DOMAIN_LOGGING` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION`. |
-| `EERIE_LEAP_LOG_WRITER_STACK_SIZE` | 8192 | Stack of the writer's work queue (rt_daq uses 3072). |
+| `EERIE_LEAP_DOMAIN_LOGGING` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION`; selects `EERIE_LEAP_EVENT_BUS` and `EERIE_LEAP_MDF`. |
+| `EERIE_LEAP_LOG_WRITER_STACK_SIZE` | 8192 | Stack of the writer's work queue. A rotation finalizes a file and writes the next header on it (3648 bytes on the ESP32-S3), and a failed write unwinds an exception on it (rt_daq uses 6144). |
+| `EERIE_LEAP_LOG_SYNC_INTERVAL_MS` | 0..3600000, 1000 | How often a tick flushes and syncs the log file; bounds what a power loss can take. 0 syncs only when logging stops. |
+| `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` | 0..1048576, 16 | Free space needed to start logging and to rotate to the next file. 0 disables the check. |
+| `EERIE_LEAP_DOMAIN_LOGGING_STATS` | n | Logs the writer's counters once per period: ticks, readings, frames, drops, bytes, stream writes, syncs, rotations, overruns, errors, tick duration. The counters are always kept (`GetStats()`). |
+| `EERIE_LEAP_LOG_STATS_LOG_PERIOD_S` | 1..3600, 10 | Period of the statistics line, and the shortest interval between two dropped-frame warnings. |
 | `EERIE_LEAP_LOG_DATA_FILES_DIR` | `"data_logs"` | Directory of the log files on the SD card. |
 | `EERIE_LEAP_LOG_DATA_FILE_PREFIX` | `"log_data"` | File name prefix; empty drops the prefix and the underscore. |
-| `EERIE_LEAP_LOG_DATA_FILE_VERSION` | 0..65535, 0 | Written into the simple logger's data header. |
-| `EERIE_LEAP_LOG_METADATA_FILE_DIR` | `"logs_metadata"` | Simple logger metadata directory. |
-| `EERIE_LEAP_LOG_METADATA_FILE_NAME` | `"log_metadata"` | Simple logger metadata file. |
-| `EERIE_LEAP_LOG_METADATA_FILE_VERSION` | 0..65535, 0 | Its version field. |
-| `EERIE_LEAP_MDF` | n | Builds the MDF 4 writer. |
+| `EERIE_LEAP_MDF` | n | Builds the MDF 4 writer; selected by `EERIE_LEAP_DOMAIN_LOGGING`, and usable without it. |
 
 ## Wiring
 
 rt_core has no logging controller; an application creates `LoggingConfigurationManager` on
 `config/logging_config.cbor` with the configuration work queue, registers it as type 5, creates
 `LogWriterService(sd_fs, logging_manager, time_service, readings_frame)`, initializes it, sets a
-logger, and starts and stops it as needed. rt_daq's `app/src/controllers/logging_controller.cpp`
-is the reference.
+logger factory that builds a logger from the current configurations and its own
+`LoggerMetadata`, and registers the service with `SensorsController::RegisterDependentService()`
+before processing starts, or a wrapper that takes the lock of its own starts and stops, so a
+restart does not bring back a writer that was stopped meanwhile. It makes sure a bus carries
+`logging_events` (`LoggingEventBus`), stops the service from another thread when a failure is
+published, restarts a running writer from the logging manager's updated handler, and starts and
+stops it as needed. rt_daq's
+`app/src/controllers/logging_controller.cpp` is the reference.

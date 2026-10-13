@@ -119,7 +119,7 @@ void canbus_configuration_parser_CompareCanbusConfigurations(
 
         zassert_equal(deserialized_configuration.channel_configurations[bus_channel].message_configurations.size(), channel_configuration.message_configurations.size());
 
-        for(int j = 0; j < channel_configuration.message_configurations.size(); j++) {
+        for(size_t j = 0; j < channel_configuration.message_configurations.size(); j++) {
             const auto& message_configuration = channel_configuration.message_configurations[j];
             const auto& deserialized_message_configuration = deserialized_configuration.channel_configurations[bus_channel].message_configurations[j];
 
@@ -129,7 +129,7 @@ void canbus_configuration_parser_CompareCanbusConfigurations(
 
             zassert_equal(deserialized_message_configuration->signal_configurations.size(), message_configuration->signal_configurations.size());
 
-            for(int k = 0; k < message_configuration->signal_configurations.size(); k++) {
+            for(size_t k = 0; k < message_configuration->signal_configurations.size(); k++) {
                 const auto& signal_configuration = message_configuration->signal_configurations[k];
                 const auto& deserialized_signal_configuration = deserialized_message_configuration->signal_configurations[k];
 

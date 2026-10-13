@@ -1,4 +1,6 @@
 #include <cstring>
+#include <memory>
+#include <utility>
 
 #include "file_history_block.h"
 
@@ -10,14 +12,25 @@ FileHistoryBlock::FileHistoryBlock(): BlockBase("FH") {
     dst_offset_min_ = 0;
     time_flags_ = 0;
 
-    auto metadata_comment_block = std::make_shared<MetadataBlock>();
+    links_.SetLink(LinkType::MetadataComment, std::make_shared<MetadataBlock>());
+    SetTool("none", "Eerie Leap", "0.0.0");
+}
+
+// See ~ChannelGroupBlock(): no destructor recursion along the chain.
+FileHistoryBlock::~FileHistoryBlock() {
+    auto next = links_.TakeLink(LinkType::FileHistoryNext);
+    while(next && next.use_count() == 1)
+        next = static_cast<FileHistoryBlock&>(*next).links_.TakeLink(LinkType::FileHistoryNext);
+}
+
+void FileHistoryBlock::SetTool(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version) {
+    auto metadata_comment_block = std::dynamic_pointer_cast<MetadataBlock>(links_.GetLink(LinkType::MetadataComment));
     metadata_comment_block->SetText(GetId(),
         "<TX>created</TX>"
-        "<tool_id>none</tool_id>"
-        "<tool_vendor>Eerie Leap</tool_vendor>"
-        "<tool_version>0.0.0</tool_version>"
+        "<tool_id>" + MetadataBlock::EscapeXml(tool_id) + "</tool_id>"
+        "<tool_vendor>" + MetadataBlock::EscapeXml(tool_vendor) + "</tool_vendor>"
+        "<tool_version>" + MetadataBlock::EscapeXml(tool_version) + "</tool_version>"
     );
-    links_.SetLink(LinkType::MetadataComment, std::move(metadata_comment_block));
 }
 
 void FileHistoryBlock::SetTimeNs(uint64_t time_ns) {
@@ -25,12 +38,11 @@ void FileHistoryBlock::SetTimeNs(uint64_t time_ns) {
 }
 
 void FileHistoryBlock::LinkBlock(std::shared_ptr<FileHistoryBlock> next_block) {
-    if(links_.GetLink(LinkType::FileHistoryNext)) {
-        auto linked_file_history = std::dynamic_pointer_cast<FileHistoryBlock>(links_.GetLink(LinkType::FileHistoryNext));
-        linked_file_history->LinkBlock(std::move(next_block));
-    } else {
-        links_.SetLink(LinkType::FileHistoryNext, std::move(next_block));
-    }
+    auto* last = this;
+    while(auto next = last->links_.GetLink(LinkType::FileHistoryNext))
+        last = static_cast<FileHistoryBlock*>(next.get());
+
+    last->links_.SetLink(LinkType::FileHistoryNext, std::move(next_block));
 }
 
 uint64_t FileHistoryBlock::GetBlockSize() const {

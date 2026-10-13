@@ -13,6 +13,8 @@
 
 #include <zephyr/ztest.h>
 
+#include "memory_stream_buf.h"
+
 #include "subsys/mdf/i_serializable_block.h"
 #include "subsys/mdf/mdf4/block_base.h"
 
@@ -69,8 +71,10 @@ inline std::string BlockId(std::span<const uint8_t> data, size_t offset = 0) {
     return AsText(data, offset, 4);
 }
 
-inline std::stringbuf MakeStream() {
-    return std::stringbuf(std::ios::in | std::ios::out | std::ios::binary);
+using rt_core_test::MemoryStreamBuf;
+
+inline MemoryStreamBuf MakeStream() {
+    return MemoryStreamBuf{};
 }
 
 // Any other exception type propagates so an unexpected failure is not mistaken for the expected one.
@@ -89,6 +93,7 @@ bool Throws(auto&& action) {
 class TestBlock : public BlockBase {
 private:
     uint64_t payload_size_;
+    std::shared_ptr<ISerializableBlock> next_;
     std::vector<std::shared_ptr<ISerializableBlock>> children_;
 
 public:
@@ -103,12 +108,20 @@ public:
         children_.clear();
     }
 
+    void SetNext(std::shared_ptr<ISerializableBlock> next) {
+        next_ = std::move(next);
+    }
+
     uint64_t GetBlockSize() const override {
         return GetBaseSize() + payload_size_;
     }
 
     std::unique_ptr<uint8_t[]> Serialize() const override {
         return SerializeBase();
+    }
+
+    std::shared_ptr<ISerializableBlock> GetNext() const override {
+        return next_;
     }
 
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
@@ -148,6 +161,76 @@ public:
     explicit LimitedStreamBuf(size_t limit) : limit_(limit) {}
 
     size_t Size() const { return data_.size(); }
+};
+
+// cg_cycle_count follows the 6 links and cg_record_id of a ##CG block.
+constexpr size_t CG_CYCLE_COUNT_OFFSET = BLOCK_LINKS_OFFSET + 6 * LINK_SIZE + 8;
+
+// A seekable in-memory stream that records, at every sync(), what a reader would have found on
+// the medium: the file identifier, the length field of the DT block and the cycle count of the CG
+// block at the addresses the test sets once the header is written. Optionally refuses to sync.
+class SyncProbeStreamBuf : public MemoryStreamBuf {
+public:
+    struct Snapshot {
+        std::string identifier;
+        uint64_t data_block_length;
+        uint64_t cycle_count;
+    };
+
+private:
+    size_t data_block_address_ = 0;
+    size_t channel_group_address_ = 0;
+    bool fail_sync_ = false;
+    std::vector<Snapshot> snapshots_;
+
+    static uint64_t ReadField(const std::string& content, size_t offset) {
+        uint64_t value = 0;
+        if(offset + sizeof(value) <= content.size())
+            std::memcpy(&value, content.data() + offset, sizeof(value));
+
+        return value;
+    }
+
+protected:
+    int sync() override {
+        const auto content = str();
+
+        snapshots_.push_back(Snapshot{
+            content.substr(0, 8),
+            ReadField(content, data_block_address_ + BLOCK_LENGTH_OFFSET),
+            ReadField(content, channel_group_address_ + CG_CYCLE_COUNT_OFFSET)});
+
+        return fail_sync_ ? -1 : 0;
+    }
+
+public:
+    SyncProbeStreamBuf() = default;
+
+    void SetDataBlockAddress(size_t address) { data_block_address_ = address; }
+    void SetChannelGroupAddress(size_t address) { channel_group_address_ = address; }
+    void FailSync() { fail_sync_ = true; }
+
+    const std::vector<Snapshot>& Snapshots() const { return snapshots_; }
+};
+
+// Counts the calls that hand bytes to the stream: a record has to arrive in one sputn().
+class WriteCountingStreamBuf : public MemoryStreamBuf {
+private:
+    size_t write_count_ = 0;
+
+protected:
+    std::streamsize xsputn(const char* s, std::streamsize n) override {
+        write_count_++;
+        return MemoryStreamBuf::xsputn(s, n);
+    }
+
+    int_type overflow(int_type c) override {
+        write_count_++;
+        return MemoryStreamBuf::overflow(c);
+    }
+
+public:
+    size_t WriteCount() const { return write_count_; }
 };
 
 // Accepts every write but does not implement seeking.

@@ -143,6 +143,9 @@ void CdmpNetworkService::ProcessFrame(std::span<const uint8_t> frame_data) {
         case CdmpManagementMessageType::ID_CLAIM_RESPONSE:
             ProcessIdClaimResponseFrame(frame_data);
             break;
+
+        case CdmpManagementMessageType::HEARTBEAT:
+            break;
     }
 }
 

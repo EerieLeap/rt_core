@@ -1,0 +1,19 @@
+menu "Zephyr"
+source "Kconfig.zephyr"
+endmenu
+
+config EERIE_LEAP_FS_SD_THREAD_STACK_SIZE
+	int "SD thread stack size"
+	default 2048
+
+config EERIE_LEAP_SD_CHECK_INTERVAL_MS
+	int "SD check interval ms"
+	default 1000
+
+config LOGGING_TEST_DUMP_DIR
+	string "Host directory the log_writer_service suite copies a finalized file into (empty: not copied)"
+	default ""
+	depends on ARCH_POSIX
+	help
+	  Only native_sim reaches the host file system: it links the host libc, so std::ofstream
+	  writes there. Other platforms do not link std::ofstream at all.

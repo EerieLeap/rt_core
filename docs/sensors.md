@@ -133,6 +133,14 @@ work queue. A restart that fails (a script that no longer loads, a channel that 
 leaves the service stopped and logged; the next valid configuration starts it again. The service
 is pausable: the calibration service and BLE pairing pause it and resume it.
 
+Services that read the frame or the sensors of the running generation register with
+`SensorsController::RegisterDependentService()` before `Start()`. A restart stops the registered
+services that are running before processing stops, and starts exactly those again once
+processing has been started, whether or not that start succeeded; a dependent that does not stop
+or does not come back is logged and does not fail the restart. rt_daq registers its log writer
+this way, so a sensors apply while logging finalizes the file and opens the next one for the new
+sensors (see [logging.md](logging.md#restarts)).
+
 ## Stored configuration
 
 Schema (`sensors_config.cddl`):
@@ -194,7 +202,8 @@ internal filesystem, the configuration work queue, the configuration service, th
 the shared `SensorReadingsFrame`, the CAN service, the GPIO, and optionally the ADC manager, the
 ADC configuration manager and the SD service. It creates the configuration manager (validating
 channels against the GPIO and ADC channel counts), the reader factories and the processing
-service, registers type 4, and wires the restart handlers. `Start()` starts processing; the
+service, registers type 4, and wires the restart handlers. `Start()` starts processing;
+`RegisterDependentService()` adds a service to stop and start around a restart (see above). The
 application also registers the processing service with the ADC controller (to be paused during
 calibration) and the CAN controller (to be restarted on CAN reconfiguration).
 

@@ -70,7 +70,6 @@ private:
     std::atomic<uint32_t> tx_dropped_ = 0;
 
     static int Output(net_buf* packet);
-    static uint16_t GetMtu(const net_buf* packet);
     static void TxWorkHandler(k_work* work);
 
     void ResetRx();

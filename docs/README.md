@@ -134,7 +134,8 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
 10. The shared `SensorReadingsFrame` and `SensorsController`. Register the processing service
     with the ADC controller (`RegisterPausedService`) and the CAN controller
     (`RegisterDependentService`).
-11. The application's logging controller when an SD card exists.
+11. The application's logging controller when an SD card exists; its log writer is registered
+    with the sensors controller (`RegisterDependentService`).
 12. `ManagementController`, after every manager is registered.
 13. `CanbusSchedulerService`, registered as a CAN dependent service.
 14. `sensors_controller->Start()`, `canbus_scheduler_service->Start()`.

@@ -29,7 +29,10 @@ returns `{reschedule, delay}` to run periodically. `Run()` queues a one-off call
 
 Code: `src/subsys/time/`. `TimeService` combines an RTC provider (wall clock) and a boot-elapsed
 provider: `GetCurrentTime()` and `GetTimeSinceBoot()` return `std::chrono::system_clock`
-time points. Every reading, log record and calibration result is stamped through `ITimeService`,
+time points at the kernel tick's resolution (`SYS_CLOCK_TICKS_PER_SEC`; 100 µs at the 10 kHz the
+ESP32-S3 boards run). The RTC provider is not backed by hardware yet: it adds the uptime to a
+fixed epoch (2025-10-22T04:10:17Z), so wall-clock dates in file names and log headers are only
+relative. Every reading, log record and calibration result is stamped through `ITimeService`,
 so a test can inject its own clock.
 
 ## Event bus (`EERIE_LEAP_EVENT_BUS`)
@@ -48,7 +51,9 @@ Code: `src/subsys/event_bus/`. A typed publish/subscribe transport:
 
 Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `SensorId`,
 `Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack) and `logging_events`
-(`LoggingEventType::StatusUpdated`, payload `IsActive`; 8 queued events).
+(`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued
+events, on `LoggingEventBus` with a 4 KiB stack when the application creates it; see
+[logging.md](logging.md#status-events-and-failures)).
 
 ## Random (`EERIE_LEAP_RANDOM`)
 

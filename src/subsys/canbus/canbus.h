@@ -105,6 +105,13 @@ private:
     atomic_t auto_detect_frame_count_ = ATOMIC_INIT(0);
     atomic_t rx_dropped_ = ATOMIC_INIT(0);
     BitrateDetectedCallback bitrate_detected_fn_;
+    // Registered on the configured device in Configure() and removed in the destructor; the
+    // driver keeps a pointer to it, so it lives in the object, never on a stack.
+    can_state_change_callback state_change_callback_{};
+    const device* state_change_callback_dev_ = nullptr;
+
+    void RegisterStateChangeCallback();
+    void UnregisterStateChangeCallback();
 
     static constexpr uint32_t AUTO_DETECT_SAMPLE_MS = 500;
     static constexpr uint32_t MIN_FRAMES_FOR_DETECTION = 3;
@@ -161,7 +168,7 @@ private:
     bool SetDataTiming(uint32_t bitrate) const;
     static void CanFrameReceivedCallback(const device *dev, can_frame *frame, void *user_data);
     static void AutoDetectFrameCallback(const device *dev, can_frame *frame, void *user_data);
-    static void BusStateChangedCallback(const device *dev, can_state state, can_bus_err_cnt err_cnt, void *user_data);
+    static void BusStateChangedCallback(const device *dev, can_state_change_callback *callback, can_state state, can_bus_err_cnt err_cnt);
     void PrintCanLimits() const;
     void PrintCanFdLimits() const;
 

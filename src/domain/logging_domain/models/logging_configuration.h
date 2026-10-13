@@ -12,7 +12,7 @@ struct LoggingConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;
 
     uint32_t logging_interval_ms = 100;
-    // TODO: Implement creation of new log files when the size exceeds this value
+    // A file that reaches this size is finalized and the next one opened; 0 never rotates.
     uint32_t max_log_size_mb = 10;
 
     std::pmr::unordered_map<uint32_t, SensorLoggingConfiguration> sensor_configurations;

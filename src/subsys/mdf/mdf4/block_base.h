@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <string>
 
@@ -7,6 +8,9 @@
 #include "subsys/mdf/serializable_block_base.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {
+
+// Blocks and records are serialized by copying the in-memory representation of their fields.
+static_assert(std::endian::native == std::endian::little, "MDF 4 data is little endian");
 
 using eerie_leap::subsys::mdf::utilities::IBlockLinks;
 

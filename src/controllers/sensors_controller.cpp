@@ -138,6 +138,11 @@ int SensorsController::Start() {
     }
 }
 
+void SensorsController::RegisterDependentService(std::shared_ptr<IService> service) {
+    if(service != nullptr)
+        dependent_services_.push_back(std::move(service));
+}
+
 // Readers and tasks are built from the configuration in DoStart(), so a stored configuration
 // only takes effect through a restart. Before Start() there is nothing to restart; after a failed
 // start or restart the service is stopped, and a new configuration is the way out of it.
@@ -145,16 +150,40 @@ void SensorsController::RestartProcessing() {
     if(!is_processing_requested_)
         return;
 
+    // The dependents stop before the generation they read goes, and start once the new one runs.
+    std::vector<std::shared_ptr<IService>> stopped_services;
+    for(const auto& service : dependent_services_) {
+        if(!service->IsRunning())
+            continue;
+
+        try {
+            if(service->Stop())
+                stopped_services.push_back(service);
+            else
+                LOG_ERR("Failed to stop a dependent service for the new configuration.");
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to stop a dependent service for the new configuration: %s", e.what());
+        }
+    }
+
     try {
         if(!sensors_processing_service_->Stop()) {
             LOG_ERR("Failed to stop the sensors processing service for the new configuration.");
-            return;
-        }
-
-        if(!sensors_processing_service_->Start())
+        } else if(!sensors_processing_service_->Start()) {
             LOG_ERR("Failed to start the sensors processing service with the new configuration.");
+        }
     } catch(const std::exception& e) {
         LOG_ERR("Failed to restart the sensors processing service: %s", e.what());
+    }
+
+    // Whatever processing came back with: a dependent without readings waits for them, as at boot.
+    for(const auto& service : stopped_services) {
+        try {
+            if(!service->Start())
+                LOG_ERR("Failed to restart a dependent service after the new configuration.");
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to restart a dependent service after the new configuration: %s", e.what());
+        }
     }
 }
 

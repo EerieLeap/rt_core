@@ -11,6 +11,10 @@ class SerializableBlockBase : public virtual ISerializableBlock {
 private:
     static void WriteBlockData(std::streambuf& stream, const uint8_t* data, uint64_t size);
 
+    uint64_t WriteBlockToStream(std::streambuf& stream) override;
+    uint64_t ResolveBlockAddress(uint64_t address) override;
+    void ResetBlock() override;
+
 protected:
     uint64_t address_;
     bool is_serialized_;

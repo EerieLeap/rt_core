@@ -103,7 +103,7 @@ void adc_configuration_parser_CompareCalibrators(const AdcCalibrator& calibrator
     auto deserialized_calibration_table = deserialized_calibrator.GetCalibrationTable();
     zassert_equal(calibration_table->size(), deserialized_calibration_table->size());
 
-    for(int j = 0; j < calibration_table->size(); j++) {
+    for(size_t j = 0; j < calibration_table->size(); j++) {
         zassert_equal(calibration_table->at(j).voltage, deserialized_calibration_table->at(j).voltage);
         zassert_equal(calibration_table->at(j).value, deserialized_calibration_table->at(j).value);
     }
@@ -113,7 +113,7 @@ void adc_configuration_parser_CompareAdcConfigurations(AdcConfiguration& adc_con
     zassert_equal(deserialized_adc_configuration.samples, adc_configuration.samples);
     zassert_equal(deserialized_adc_configuration.channel_configurations->size(), adc_configuration.channel_configurations->size());
 
-    for(int i = 0; i < adc_configuration.channel_configurations->size(); i++) {
+    for(size_t i = 0; i < adc_configuration.channel_configurations->size(); i++) {
         adc_configuration_parser_CompareCalibrators(
             *adc_configuration.channel_configurations->at(i)->calibrator,
             *deserialized_adc_configuration.channel_configurations->at(i)->calibrator);

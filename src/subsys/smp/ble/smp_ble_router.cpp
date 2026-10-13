@@ -66,7 +66,6 @@ bool SmpBleRouter::Initialize() {
         return true;
 
     smp_transport_.functions.output = Output;
-    smp_transport_.functions.get_mtu = GetMtu;
 
     if(smp_transport_init(&smp_transport_) != 0) {
         LOG_ERR("Failed to initialize the SMP transport.");
@@ -232,10 +231,6 @@ int SmpBleRouter::Output(net_buf* packet) {
     router->EnqueueTx(user_data.route, user_data.generation, std::move(owned));
 
     return 0;
-}
-
-uint16_t SmpBleRouter::GetMtu(const net_buf* /*packet*/) {
-    return MAX_PACKET_SIZE;
 }
 
 void SmpBleRouter::EnqueueTx(uint8_t route, uint8_t generation, SmpPacket packet) {

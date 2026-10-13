@@ -85,7 +85,12 @@ void WorkQueueThread::PruneCompletedTasks(std::vector<std::unique_ptr<WorkQueueR
 }
 
 void WorkQueueThread::TaskHandler(k_work* work) {
+    // The task types have virtual functions, so offsetof() is only conditionally supported;
+    // `work` is a plain data member and GCC lays it out as C would.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
     WorkQueueTaskBase* task = CONTAINER_OF(work, WorkQueueTaskBase, work);
+#pragma GCC diagnostic pop
 
     // Unwinding into the C work queue loop terminates the queue thread and strands
     // every other task it owns, so a throwing task must not take the queue with it.
@@ -105,7 +110,10 @@ void WorkQueueThread::TaskHandler(k_work* work) {
 }
 
 void WorkQueueThread::RunnerTaskHandler(k_work* work) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
     WorkQueueRunnerTask* task = CONTAINER_OF(work, WorkQueueRunnerTask, work);
+#pragma GCC diagnostic pop
 
     try {
         task->Execute();

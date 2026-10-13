@@ -223,7 +223,12 @@ private:
     static void WorkTaskLoad(k_work* work) {
         LOG_MODULE_DECLARE(configuration_service_logger);
 
+        // LoadTask is not standard-layout, so offsetof() is only conditionally supported;
+        // `work` is a plain data member and GCC lays it out as C would.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
         LoadTask* task = CONTAINER_OF(work, LoadTask, work);
+#pragma GCC diagnostic pop
 
         try {
             task->result = task->instance->LoadProcessor(task->decode);

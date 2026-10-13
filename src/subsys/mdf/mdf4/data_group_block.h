@@ -26,9 +26,12 @@ private:
     uint8_t record_id_size_bytes_;      // 1 byte, Length of record ID bytes
     // uint8_t reserved_1_[7];          // 7 bytes, Reserved
 
+    // Where the next channel group is linked; owned by the chain.
+    ChannelGroupBlock* last_channel_group_;
+
 public:
     DataGroupBlock(uint8_t record_id_size_bytes);
-    virtual ~DataGroupBlock() = default;
+    virtual ~DataGroupBlock();
 
     uint8_t GetRecordIdSizeBytes() const;
     std::shared_ptr<DataBlock> GetDataBlock() const;
@@ -36,15 +39,19 @@ public:
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
     const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    std::shared_ptr<ISerializableBlock> GetNext() const override {
+        return links_.GetLink(LinkType::DataGroupNext);
+    }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
         return {
             links_.GetLink(LinkType::MetadataComment),
             links_.GetLink(LinkType::ChannelGroupFirst),
-            links_.GetLink(LinkType::Data),
-            links_.GetLink(LinkType::DataGroupNext) };
+            links_.GetLink(LinkType::Data) };
     }
 
     void AddChannelGroup(std::shared_ptr<ChannelGroupBlock> channel_group);
+    /** Drops the chain; the file calls it when it frees its groups, so the tail never dangles. */
+    void ClearChannelGroups();
     void LinkBlock(std::shared_ptr<DataGroupBlock> next_block);
 };
 

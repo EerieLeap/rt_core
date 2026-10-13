@@ -134,13 +134,14 @@ SchedulerRig MakeSchedulerRig(
     return rig;
 }
 
-int64_t TicksToMs(int64_t ticks) {
+// Both helpers serve the native_sim timing suite only; the other boards build it out.
+[[maybe_unused]] int64_t TicksToMs(int64_t ticks) {
     return static_cast<int64_t>(k_ticks_to_ms_floor64(static_cast<uint64_t>(ticks)));
 }
 
 // An absolute wake-up: a relative sleep would be rounded up by a tick and could land on a deadline.
 // Every offset below falls between two deadlines, so what ran before it is never in doubt.
-void SleepUntil(int64_t start_ticks, int offset_ms) {
+[[maybe_unused]] void SleepUntil(int64_t start_ticks, int offset_ms) {
     k_sleep(K_TIMEOUT_ABS_TICKS(start_ticks + static_cast<int64_t>(k_ms_to_ticks_ceil64(offset_ms))));
 }
 

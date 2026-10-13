@@ -1,4 +1,5 @@
 #include <cstring>
+#include <utility>
 
 #include "channel_block.h"
 
@@ -23,6 +24,13 @@ ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, ui
     limit_ext_max_ = 0;
 }
 
+// See ~ChannelGroupBlock(): no destructor recursion along the chain.
+ChannelBlock::~ChannelBlock() {
+    auto next = links_.TakeLink(LinkType::ChannelNext);
+    while(next && next.use_count() == 1)
+        next = static_cast<ChannelBlock&>(*next).links_.TakeLink(LinkType::ChannelNext);
+}
+
 ChannelBlock::Type ChannelBlock::GetType() const {
     return type_;
 }
@@ -43,6 +51,14 @@ uint32_t ChannelBlock::GetDataOffsetBytes() const {
     return byte_offset_;
 }
 
+bool ChannelBlock::HasInvalidationBit() const {
+    return (flags_ & std::to_underlying(Flag::InvalidValid)) != 0;
+}
+
+uint32_t ChannelBlock::GetInvalidationBitPosition() const {
+    return invalidation_bit_pos_;
+}
+
 std::shared_ptr<ChannelBlock> ChannelBlock::GetLinkedChannel() const {
     return std::dynamic_pointer_cast<ChannelBlock>(links_.GetLink(LinkType::ChannelNext));
 }
@@ -52,12 +68,11 @@ void ChannelBlock::SetConversion(std::shared_ptr<ChannelConversionBlock> convers
 }
 
 void ChannelBlock::LinkBlock(std::shared_ptr<ChannelBlock> next_block) {
-    if(links_.GetLink(LinkType::ChannelNext)) {
-        auto linked_channel = std::dynamic_pointer_cast<ChannelBlock>(links_.GetLink(LinkType::ChannelNext));
-        linked_channel->LinkBlock(std::move(next_block));
-    } else {
-        links_.SetLink(LinkType::ChannelNext, std::move(next_block));
-    }
+    auto* last = this;
+    while(auto next = last->links_.GetLink(LinkType::ChannelNext))
+        last = static_cast<ChannelBlock*>(next.get());
+
+    last->links_.SetLink(LinkType::ChannelNext, std::move(next_block));
 }
 
 void ChannelBlock::SetType(Type type) {
@@ -66,6 +81,11 @@ void ChannelBlock::SetType(Type type) {
 
 void ChannelBlock::SetFlags(uint32_t flags) {
     flags_ = flags;
+}
+
+void ChannelBlock::SetInvalidationBit(uint32_t position) {
+    invalidation_bit_pos_ = position;
+    flags_ |= std::to_underlying(Flag::InvalidValid);
 }
 
 void ChannelBlock::SetName(std::shared_ptr<TextBlock> name) {
@@ -94,6 +114,10 @@ void ChannelBlock::SetBitCount(uint32_t bit_count) {
 
 void ChannelBlock::SetSignalDataBlock(std::shared_ptr<IBlock> block) {
     links_.SetLink(LinkType::SignalData, block);
+}
+
+void ChannelBlock::SetComment(std::shared_ptr<MetadataBlock> comment) {
+    links_.SetLink(LinkType::MetadataComment, std::move(comment));
 }
 
 uint64_t ChannelBlock::GetBlockSize() const {

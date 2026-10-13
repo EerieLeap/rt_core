@@ -367,7 +367,7 @@ void CanbusConfigurationValidator::ValidateSignalName(const CanMessageConfigurat
                 "Name must start with a letter or an underscore."
             );
 
-        if(!std::ranges::all_of(signal.name, [&valid_symbols](char c) {
+        if(!std::ranges::all_of(signal.name, [](char c) {
             return std::isalnum(c) || valid_symbols.find(c) != std::string_view::npos;})) {
 
             InvalidCanSignalConfiguration(

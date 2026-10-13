@@ -223,6 +223,51 @@ ZTEST(sensor_readings_frame, test_failed_update_keeps_last_processed_value) {
     zassert_equal(snapshot[0].value.value(), 5.5F, "The last processed reading survives a failed update");
 }
 
+ZTEST(sensor_readings_frame, test_SnapshotLoggableReadings_reports_a_latest_error) {
+    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensor_readings_frame = MakeFrame(sensors);
+
+    sensor_readings_frame->AddOrUpdateReading(MakeReading(sensors[0], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 1.0F));
+    sensor_readings_frame->AddOrUpdateReading(MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 5.5F));
+
+    SensorReading failed = MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::UNINITIALIZED);
+    failed.SetError(ReadingError::EXPRESSION_FAILED);
+    sensor_readings_frame->AddOrUpdateReading(failed);
+
+    // Never processed, failing from the first reading.
+    SensorReading never_processed = MakeReading(sensors[2], ReadingSource::PROCESSING, ReadingStatus::UNINITIALIZED);
+    never_processed.SetError(ReadingError::READER_FAILED);
+    sensor_readings_frame->AddOrUpdateReading(never_processed);
+
+    std::array<SensorReading, 4> snapshot;
+    zassert_equal(sensor_readings_frame->SnapshotLoggableReadings(snapshot), 3, "every sensor with a processed or failed reading");
+
+    auto find = [&](const std::shared_ptr<Sensor>& sensor) -> const SensorReading& {
+        for(size_t i = 0; i < 3; i++) {
+            if(snapshot[i].sensor_id_hash == sensor->id_hash)
+                return snapshot[i];
+        }
+        zassert_unreachable("sensor %s missing from the snapshot", sensor->id.c_str());
+        return snapshot[0];
+    };
+
+    zassert_equal(find(sensors[0]).status, ReadingStatus::PROCESSED, "a healthy sensor reports its processed reading");
+    zassert_true(find(sensors[1]).HasError(), "a failed update is reported, not the last good value");
+    zassert_equal(find(sensors[1]).error, ReadingError::EXPRESSION_FAILED);
+    zassert_true(find(sensors[2]).HasError(), "a sensor that never processed reports its failure");
+
+    // Recovery: the next processed reading replaces the error.
+    sensor_readings_frame->AddOrUpdateReading(MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 6.5F));
+    zassert_equal(sensor_readings_frame->SnapshotLoggableReadings(snapshot), 3);
+    zassert_equal(find(sensors[1]).status, ReadingStatus::PROCESSED, "a recovered sensor reports its processed reading again");
+    zassert_equal(find(sensors[1]).value.value(), 6.5F);
+
+    // An intermediate stage is not an error: the processed reading stands.
+    sensor_readings_frame->AddOrUpdateReading(MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::RAW, 7.0F));
+    zassert_equal(sensor_readings_frame->SnapshotLoggableReadings(snapshot), 3);
+    zassert_equal(find(sensors[1]).value.value(), 6.5F, "a reading still in the pipeline is not logged");
+}
+
 ZTEST(sensor_readings_frame, test_SnapshotProcessedReadings_copies_every_processed_reading) {
     auto sensors = sensor_readings_frame_GetTestSensors();
     auto sensor_readings_frame = MakeFrame(sensors);

@@ -1,4 +1,5 @@
 #include <cstring>
+#include <utility>
 
 #include "header_block.h"
 
@@ -23,6 +24,14 @@ void HeaderBlock::SetCurrentTimeNs(uint64_t time_ns) {
         auto file_history = std::dynamic_pointer_cast<FileHistoryBlock>(links_.GetLink(LinkType::FileHistoryFirst));
         file_history->SetTimeNs(time_ns);
     }
+}
+
+void HeaderBlock::SetComment(std::shared_ptr<MetadataBlock> comment) {
+    links_.SetLink(LinkType::MetadataComment, std::move(comment));
+}
+
+std::shared_ptr<FileHistoryBlock> HeaderBlock::GetFileHistory() const {
+    return std::dynamic_pointer_cast<FileHistoryBlock>(links_.GetLink(LinkType::FileHistoryFirst));
 }
 
 void HeaderBlock::AddFileHistory(std::shared_ptr<FileHistoryBlock> file_history) {

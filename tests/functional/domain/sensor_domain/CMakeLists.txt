@@ -10,3 +10,6 @@ project(functional_sensor_domain)
 file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)
 
 target_sources(app PRIVATE ${TEST_SOURCES})
+
+# allocation_counter.h
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../common)

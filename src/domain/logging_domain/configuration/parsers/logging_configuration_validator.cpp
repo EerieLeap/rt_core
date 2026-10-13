@@ -18,19 +18,13 @@ void LoggingConfigurationValidator::Validate(const LoggingConfiguration& configu
 }
 
 void LoggingConfigurationValidator::ValidateLoggingIntervalMs(const LoggingConfiguration& configuration) {
-    for(const auto& logging_interval_ms : {configuration.logging_interval_ms}) {
-        if(logging_interval_ms < 10) {
-            InvalidLoggingConfiguration("Logging interval must be greater or equal than 10 ms.");
-        }
-    }
+    if(configuration.logging_interval_ms < 10)
+        InvalidLoggingConfiguration("Logging interval must be greater or equal than 10 ms.");
 }
 
 void LoggingConfigurationValidator::ValidateMaxLogSizeMb(const LoggingConfiguration& configuration) {
-    for(const auto& max_log_size_mb : {configuration.max_log_size_mb}) {
-        if(max_log_size_mb > 1024) {
-            InvalidLoggingConfiguration("Max log size must be less or equal than 1024 MB.");
-        }
-    }
+    if(configuration.max_log_size_mb > 1024)
+        InvalidLoggingConfiguration("Max log size must be less or equal than 1024 MB.");
 }
 
 void LoggingConfigurationValidator::ValidateSensorConfigurations(const LoggingConfiguration& configuration) {

@@ -66,8 +66,8 @@ uint8_t CdmpTransactionService::StartTransaction(
 
     PendingTransaction transaction{
         .transaction_id = transaction_id,
-        .start_time = k_uptime_get(),
-        .timeout = timeout,
+        .start_time = static_cast<uint64_t>(k_uptime_get()),
+        .timeout = static_cast<uint64_t>(timeout),
         .callback = std::move(callback),
         .expected_command = expected_command
     };

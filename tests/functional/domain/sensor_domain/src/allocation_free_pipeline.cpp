@@ -3,9 +3,7 @@
 // from the ADC and a reader through the processors into the frame and out to a consumer.
 
 #include <array>
-#include <cstdlib>
 #include <memory>
-#include <new>
 #include <vector>
 
 #include <zephyr/kernel.h>
@@ -31,6 +29,7 @@
 #include "domain/sensor_domain/processors/reading_pipeline.hpp"
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 
+#include "allocation_counter.h"
 #include "processing_test_support.h"
 
 using namespace eerie_memory;
@@ -46,34 +45,9 @@ using namespace eerie_leap::domain::sensor_domain::sensor_readers;
 using namespace eerie_leap::domain::sensor_domain::processors;
 using namespace eerie_leap::domain::sensor_domain::runtime;
 using namespace eerie_leap::domain::sensor_domain::services;
+using rt_core_test::GetAllocationCount;
 
 ZTEST_SUITE(allocation_free_pipeline, NULL, NULL, NULL, NULL, NULL);
-
-// Replaces the global allocation functions for this test binary so every allocation is counted.
-namespace {
-
-size_t g_allocations = 0;
-
-void* CountedAllocate(size_t size) {
-    g_allocations++;
-
-    void* pointer = std::malloc(size == 0 ? 1 : size);
-    if(pointer == nullptr)
-        throw std::bad_alloc();
-
-    return pointer;
-}
-
-} // namespace
-
-void* operator new(size_t size) { return CountedAllocate(size); }
-void* operator new[](size_t size) { return CountedAllocate(size); }
-void* operator new(size_t size, const std::nothrow_t&) noexcept { g_allocations++; return std::malloc(size == 0 ? 1 : size); }
-void* operator new[](size_t size, const std::nothrow_t&) noexcept { g_allocations++; return std::malloc(size == 0 ? 1 : size); }
-void operator delete(void* pointer) noexcept { std::free(pointer); }
-void operator delete[](void* pointer) noexcept { std::free(pointer); }
-void operator delete(void* pointer, size_t) noexcept { std::free(pointer); }
-void operator delete[](void* pointer, size_t) noexcept { std::free(pointer); }
 
 namespace {
 
@@ -208,10 +182,10 @@ void RunConsumers(Pipeline& pipeline) {
 } // namespace
 
 ZTEST(allocation_free_pipeline, test_counting_allocator_is_in_use) {
-    const size_t before = g_allocations;
+    const size_t before = GetAllocationCount();
     auto block = std::make_unique<uint8_t[]>(32);
 
-    zassert_equal(g_allocations - before, 1, "The replaced operator new must count, or the test below proves nothing");
+    zassert_equal(GetAllocationCount() - before, 1, "The replaced operator new must count, or the test below proves nothing");
 }
 
 ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
@@ -226,7 +200,7 @@ ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
     const auto derived = pipeline.frame->TryGetReading("derived").value();
     zassert_equal(derived.status, ReadingStatus::PROCESSED, "Warm-up must have produced a processed derived value");
 
-    const size_t allocations_before = g_allocations;
+    const size_t allocations_before = GetAllocationCount();
     const uint32_t adc_requests_before = pipeline.adc->GetStats().requests;
 
     for(uint32_t i = 3; i < 103; i++) {
@@ -234,8 +208,8 @@ ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
         RunConsumers(pipeline);
     }
 
-    zassert_equal(g_allocations - allocations_before, 0,
-        "%zu allocations during 100 steady-state samples", g_allocations - allocations_before);
+    zassert_equal(GetAllocationCount() - allocations_before, 0,
+        "%zu allocations during 100 steady-state samples", GetAllocationCount() - allocations_before);
 
     // And the pipeline still produced the right results while being counted (the simulator's level is random).
     const float indicator = pipeline.frame->TryGetReadingValue("indicator").value();

@@ -53,8 +53,8 @@ ZTEST(cubic_spline_voltage_interpolator, test_Interpolate) {
 
     zassert_equal(voltage_interpolator_1.Interpolate(-1.23, true), 0);
     float value = voltage_interpolator_1.Interpolate(4.26, true);
-    zassert_between_inclusive(value, 42.59, 42.61);
-    zassert_equal(voltage_interpolator_1.Interpolate(12, true), 100.0);
+    zassert_between_inclusive(value, 42.59F, 42.61F);
+    zassert_equal(voltage_interpolator_1.Interpolate(12, true), 100.0F);
 
     std::pmr::vector<CalibrationData> calibration_data_2 {
         {0.0, 1.0},
@@ -66,13 +66,13 @@ ZTEST(cubic_spline_voltage_interpolator, test_Interpolate) {
     auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
     CubicSplineVoltageInterpolator voltage_interpolator_2(calibration_data_2_ptr);
 
-    zassert_equal(voltage_interpolator_2.Interpolate(-1.2, true), 1.0);
+    zassert_equal(voltage_interpolator_2.Interpolate(-1.2, true), 1.0F);
     value = voltage_interpolator_2.Interpolate(0.5, true);
-    zassert_between_inclusive(value, 10.53, 10.54);
+    zassert_between_inclusive(value, 10.53F, 10.54F);
     value = voltage_interpolator_2.Interpolate(2.25, true);
-    zassert_between_inclusive(value, 137.97, 137.99);
-    zassert_equal(voltage_interpolator_2.Interpolate(2.5, true), 162.0);
-    zassert_equal(voltage_interpolator_2.Interpolate(4, true), 200.0);
+    zassert_between_inclusive(value, 137.97F, 137.99F);
+    zassert_equal(voltage_interpolator_2.Interpolate(2.5, true), 162.0F);
+    zassert_equal(voltage_interpolator_2.Interpolate(4, true), 200.0F);
 }
 
 ZTEST(cubic_spline_voltage_interpolator, test_constructor_rejects_null_table) {
@@ -124,9 +124,9 @@ ZTEST(cubic_spline_voltage_interpolator, test_Interpolate_passes_through_calibra
         float clamped = interpolator.Interpolate(point.voltage, true);
         float unclamped = interpolator.Interpolate(point.voltage);
 
-        zassert_between_inclusive(clamped, point.value - 0.01, point.value + 0.01,
+        zassert_between_inclusive(clamped, point.value - 0.01F, point.value + 0.01F,
             "clamped node at %f returned %f", (double)point.voltage, (double)clamped);
-        zassert_between_inclusive(unclamped, point.value - 0.01, point.value + 0.01,
+        zassert_between_inclusive(unclamped, point.value - 0.01F, point.value + 0.01F,
             "unclamped node at %f returned %f", (double)point.voltage, (double)unclamped);
     }
 }
@@ -135,9 +135,9 @@ ZTEST(cubic_spline_voltage_interpolator, test_two_point_table_degenerates_to_a_l
     auto table = MakeTable({{0.0F, 0.0F}, {10.0F, 100.0F}});
     CubicSplineVoltageInterpolator interpolator(table);
 
-    zassert_between_inclusive(interpolator.Interpolate(2.5F), 24.99, 25.01);
-    zassert_between_inclusive(interpolator.Interpolate(5.0F), 49.99, 50.01);
-    zassert_between_inclusive(interpolator.Interpolate(7.5F), 74.99, 75.01);
+    zassert_between_inclusive(interpolator.Interpolate(2.5F), 24.99F, 25.01F);
+    zassert_between_inclusive(interpolator.Interpolate(5.0F), 49.99F, 50.01F);
+    zassert_between_inclusive(interpolator.Interpolate(7.5F), 74.99F, 75.01F);
 }
 
 ZTEST(cubic_spline_voltage_interpolator, test_Interpolate_clamps_at_exact_bounds) {
@@ -176,8 +176,8 @@ ZTEST(cubic_spline_voltage_interpolator, test_Interpolate_with_negative_voltages
     auto table = MakeTable({{-5.0F, -50.0F}, {0.0F, 0.0F}, {5.0F, 50.0F}});
     CubicSplineVoltageInterpolator interpolator(table);
 
-    zassert_between_inclusive(interpolator.Interpolate(0.0F), -0.01, 0.01);
-    zassert_between_inclusive(interpolator.Interpolate(-2.5F), -25.01, -24.99);
+    zassert_between_inclusive(interpolator.Interpolate(0.0F), -0.01F, 0.01F);
+    zassert_between_inclusive(interpolator.Interpolate(-2.5F), -25.01F, -24.99F);
     zassert_equal(interpolator.Interpolate(-10.0F, true), -50.0F);
 }
 
@@ -186,8 +186,8 @@ ZTEST(cubic_spline_voltage_interpolator, test_Interpolate_unclamped_extrapolates
     CubicSplineVoltageInterpolator interpolator(table);
 
     // A two-point spline is a straight line, so extrapolation stays on that line.
-    zassert_between_inclusive(interpolator.Interpolate(-2.0F), -20.01, -19.99);
-    zassert_between_inclusive(interpolator.Interpolate(12.0F), 119.99, 120.01);
+    zassert_between_inclusive(interpolator.Interpolate(-2.0F), -20.01F, -19.99F);
+    zassert_between_inclusive(interpolator.Interpolate(12.0F), 119.99F, 120.01F);
 }
 
 ZTEST(cubic_spline_voltage_interpolator, test_Interpolate_unclamped_is_continuous_at_table_bounds) {
@@ -215,5 +215,5 @@ ZTEST(cubic_spline_voltage_interpolator, test_usable_through_interface) {
 
     zassert_equal(interpolator->GetInterpolationMethod(), InterpolationMethod::CUBIC_SPLINE);
     zassert_equal(interpolator->GetCalibrationTable().get(), table.get());
-    zassert_between_inclusive(interpolator->Interpolate(5.0F, true), 49.99, 50.01);
+    zassert_between_inclusive(interpolator->Interpolate(5.0F, true), 49.99F, 50.01F);
 }

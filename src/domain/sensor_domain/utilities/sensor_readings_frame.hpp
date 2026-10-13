@@ -510,6 +510,29 @@ public:
     }
 
     /**
+     * @brief Like SnapshotProcessedReadings(), but a sensor whose latest reading is an error is
+     *        reported with that reading rather than its last processed one, so a recorder shows the
+     *        fault instead of the last good value held. Every commit replaces the latest reading,
+     *        so an error there is newer than the processed one.
+     * @return The number copied, at most readings.size().
+     */
+    size_t SnapshotLoggableReadings(std::span<SensorReading> readings) const {
+        ScopedMutex guard(lock_);
+
+        size_t count = 0;
+        for(size_t i = 0; i < slots_.size() && count < readings.size(); i++) {
+            const Slot& slot = slots_[i];
+
+            if(slot.has_reading && slot.latest.status == ReadingStatus::ERROR)
+                readings[count++] = slot.latest.Unpack(sensors_[i]);
+            else if(slot.has_processed)
+                readings[count++] = slot.processed.Unpack(sensors_[i]);
+        }
+
+        return count;
+    }
+
+    /**
      * @brief Copies the readings processed since they were last taken into @p readings and marks
      *        those as taken, in one step, so no update is lost between the copy and the reset.
      *

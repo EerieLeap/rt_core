@@ -308,10 +308,182 @@ ZTEST(fs_service_stream_buf, test_operations_fail_after_close) {
     auto* fs_service = GetFsService();
 
     FsServiceStreamBuf stream_buf(fs_service, "test_closed.txt", OpenMode::Write);
-    zassert_true(stream_buf.close());
+    zassert_true(stream_buf.close(), "closing an untouched stream must succeed");
 
-    zassert_equal(stream_buf.sputn("abc", 3), 0);
-    zassert_equal(stream_buf.pubsync(), -1);
+    zassert_equal(stream_buf.sputn("abc", 3), 0, "a closed stream must refuse sputn");
+    zassert_equal(stream_buf.sputc('x'), std::streambuf::traits_type::eof(),
+        "a closed stream must refuse sputc, not store it in a put area nobody flushes");
+    zassert_equal(stream_buf.GetBytesWritten(), 0, "refused bytes must not be counted");
+    zassert_equal(stream_buf.pubsync(), -1, "a closed stream cannot sync");
     zassert_equal(
         static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::beg, std::ios_base::out)), -1);
+}
+
+// The tests below exercise the put area, so they assume the default (non-zero) buffer size.
+static constexpr size_t kWriteBufferSize = CONFIG_EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE;
+
+ZTEST(fs_service_stream_buf, test_buffered_writes_reach_the_file_on_sync) {
+    if(kWriteBufferSize == 0)
+        ztest_test_skip();
+
+    auto* fs_service = GetFsService();
+    std::string file_path = "test_buffered_sync.bin";
+
+    auto content = MakeText(100);
+
+    FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
+
+    zassert_equal(stream_buf.sputn(content.data(), 100), 100, "a write that fits the buffer is accepted whole");
+    zassert_equal(stream_buf.GetBytesWritten(), 100, "buffered bytes count as written");
+    zassert_equal(stream_buf.GetWriteCallCount(), 0, "a write that fits the buffer must not reach the file system");
+    zassert_equal(fs_service->GetFileSize(file_path).value(), 0, "nothing is in the file before the sync");
+
+    zassert_equal(stream_buf.pubsync(), 0, "a sync with room on the volume must succeed");
+    zassert_equal(stream_buf.GetWriteCallCount(), 1, "the sync flushes the put area in one write");
+    zassert_equal(fs_service->GetFileSize(file_path).value(), 100, "the sync must put the buffered bytes in the file");
+
+    zassert_true(stream_buf.close(), "close must report the flush and the close");
+    zassert_equal(stream_buf.GetWriteCallCount(), 1, "an empty put area must not be written at close");
+    zassert_true(ReadText(file_path) == content);
+}
+
+ZTEST(fs_service_stream_buf, test_close_flushes_the_put_area) {
+    if(kWriteBufferSize == 0)
+        ztest_test_skip();
+
+    auto* fs_service = GetFsService();
+    std::string file_path = "test_close_flush.txt";
+
+    FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
+
+    zassert_equal(stream_buf.sputn("buffered", 8), 8, "a write that fits the buffer is accepted whole");
+    zassert_equal(stream_buf.GetWriteCallCount(), 0, "a write that fits the buffer must not reach the file system");
+
+    zassert_true(stream_buf.close(), "close must report the flush and the close");
+    zassert_equal(stream_buf.GetWriteCallCount(), 1, "close flushes the put area in one write");
+    zassert_str_equal(ReadText(file_path).c_str(), "buffered");
+}
+
+ZTEST(fs_service_stream_buf, test_write_larger_than_the_buffer_is_written_directly) {
+    if(kWriteBufferSize == 0)
+        ztest_test_skip();
+
+    auto* fs_service = GetFsService();
+    std::string file_path = "test_direct_write.bin";
+
+    auto head = MakeText(10);
+    auto body = MakeText(kWriteBufferSize + 1);
+
+    FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
+
+    zassert_equal(stream_buf.sputn(head.data(), static_cast<std::streamsize>(head.size())), 10);
+    zassert_equal(stream_buf.GetWriteCallCount(), 0, "the head fits the buffer");
+
+    zassert_equal(
+        static_cast<size_t>(stream_buf.sputn(body.data(), static_cast<std::streamsize>(body.size()))), body.size());
+    zassert_equal(stream_buf.GetWriteCallCount(), 2,
+        "a write of at least the buffer size flushes the pending head, then goes to the file directly");
+    zassert_equal(stream_buf.GetBytesWritten(), head.size() + body.size(), "both writes count as written");
+
+    zassert_true(stream_buf.close(), "close must report the flush and the close");
+    zassert_equal(stream_buf.GetWriteCallCount(), 2, "nothing was left to flush at close");
+    zassert_true(ReadText(file_path) == head + body, "the head must precede the body in the file");
+}
+
+ZTEST(fs_service_stream_buf, test_seek_flushes_before_moving) {
+    if(kWriteBufferSize == 0)
+        ztest_test_skip();
+
+    auto* fs_service = GetFsService();
+    std::string file_path = "test_seek_flush.bin";
+
+    auto content = MakeText(1000);
+    const std::string patch = "ABCDEFGH";
+
+    FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
+
+    zassert_equal(stream_buf.sputn(content.data(), static_cast<std::streamsize>(content.size())), 1000,
+        "a write that fits the buffer is accepted whole");
+    zassert_equal(stream_buf.GetWriteCallCount(), 0, "a write that fits the buffer must not reach the file system");
+
+    zassert_equal(static_cast<std::streamoff>(stream_buf.pubseekpos(0, std::ios_base::out)), 0);
+    zassert_equal(stream_buf.GetWriteCallCount(), 1, "the pending bytes must be written before the position moves");
+
+    zassert_equal(stream_buf.sputn(patch.data(), 8), 8, "the patch fits the buffer");
+    zassert_true(stream_buf.close(), "close must report the flush and the close");
+    zassert_equal(stream_buf.GetWriteCallCount(), 2, "close flushes the patch in one write");
+
+    auto expected = content;
+    expected.replace(0, patch.size(), patch);
+
+    auto read_back = ReadText(file_path);
+    zassert_equal(read_back.size(), expected.size(), "the rewrite must not change the file size");
+    zassert_true(read_back == expected, "the patch must land at the seeked position, after the earlier bytes");
+}
+
+// The buffer size is a Kconfig symbol, so it cannot be varied at run time: this test asserts the
+// behaviour the build configured. The functional.subsys.fs.unbuffered scenario builds the suite
+// with a 0 buffer, so both branches run under twister.
+ZTEST(fs_service_stream_buf, test_unbuffered_when_the_buffer_size_is_zero) {
+    auto* fs_service = GetFsService();
+    std::string file_path = "test_unbuffered.txt";
+
+    FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
+
+    zassert_equal(stream_buf.sputn("abc", 3), 3, "sputn must accept the bytes whether buffered or not");
+    zassert_equal(stream_buf.sputc('d'), 'd', "sputc must accept the byte whether buffered or not");
+    zassert_equal(stream_buf.GetBytesWritten(), 4, "every accepted byte counts as written");
+
+    if(kWriteBufferSize == 0)
+        zassert_equal(stream_buf.GetWriteCallCount(), 2, "without a buffer every write goes straight to the file");
+    else
+        zassert_equal(stream_buf.GetWriteCallCount(), 0, "with a buffer nothing reaches the file before a flush");
+
+    zassert_true(stream_buf.close(), "close must report the flush and the close");
+    zassert_str_equal(ReadText(file_path).c_str(), "abcd");
+}
+
+// Fills the volume with a separate file until a write fails, then checks that a buffered stream
+// reports the write it cannot complete instead of crashing or pretending.
+ZTEST(fs_service_stream_buf, test_short_write_on_a_full_volume_is_reported) {
+    if(kWriteBufferSize == 0)
+        ztest_test_skip();
+
+    auto* fs_service = GetFsService();
+    std::string file_path = "test_full_volume.bin";
+    std::string filler_path = "test_full_volume_filler.bin";
+
+    // Opened before the fill so the open itself cannot fail for lack of space.
+    FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
+
+    auto chunk = MakeText(4096);
+    int appends = 0;
+    while(appends < 4096 && WriteText(filler_path, chunk, true))
+        appends++;
+    zassert_true(appends > 0 && appends < 4096, "the volume did not fill up");
+
+    // Fits the buffer, so the failure can only surface when the stream tries to flush.
+    zassert_equal(stream_buf.sputn(chunk.data(), 100), 100, "a write that fits the buffer is accepted");
+    bool reported = stream_buf.pubsync() != 0;
+
+    // The filler's failed append may have left a block or two behind; direct writes through the
+    // stream take them, and the one that does not fit has to come back short.
+    int direct_writes = 0;
+    while(!reported && direct_writes < 512) {
+        const auto written = stream_buf.sputn(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+        reported = static_cast<size_t>(written) < chunk.size();
+        direct_writes++;
+    }
+    zassert_true(reported, "a write on a full volume must be reported by a failed sync or a short write");
+
+    zassert_equal(stream_buf.sputn("x", 1), 0, "once a write failed every later write must be refused");
+    zassert_equal(stream_buf.sputc('x'), std::streambuf::traits_type::eof(),
+        "once a write failed sputc must be refused as well");
+    zassert_equal(stream_buf.pubsync(), -1, "a sync of a latched stream must not report success");
+
+    zassert_true(stream_buf.close(), "the file still closes once the failed bytes were dropped");
+    zassert_false(stream_buf.is_open());
+
+    if(!fs_service->DeleteFile(filler_path))
+        zassert_true(fs_service->Format(), "the filler could neither be deleted nor formatted away");
 }

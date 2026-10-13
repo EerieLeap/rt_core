@@ -6,6 +6,7 @@
 
 #include "logging_event_type.h"
 #include "logging_payload_type.h"
+#include "logging_status_reason.h"
 
 namespace eerie_leap::domain::logging_domain::event_bus {
 

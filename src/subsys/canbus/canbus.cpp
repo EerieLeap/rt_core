@@ -70,6 +70,7 @@ Canbus::Canbus(const CanbusConfig& config)
 Canbus::~Canbus() {
     if(GetState() != ServiceState::STOPPED) {
         Stop();
+        UnregisterStateChangeCallback();
         return;
     }
 
@@ -78,6 +79,9 @@ Canbus::~Canbus() {
 
     if(thread_ && thread_->IsRunning())
         thread_->Join();
+
+    // Same for the state change callback node: the driver's list must not point into this object.
+    UnregisterStateChangeCallback();
 
     ScopedMutex guard(lock_);
     RemoveAllFilters();
@@ -183,13 +187,14 @@ bool Canbus::Configure(const CanbusConfig& config) {
 
     auto rollback = [&]() {
         config_ = previous_config;
+        RegisterStateChangeCallback();
         return false;
     };
 
     if(!ApplyMode(config_.extra_modes))
         return rollback();
 
-    can_set_state_change_callback(config_.canbus_dev, BusStateChangedCallback, this);
+    RegisterStateChangeCallback();
 
     atomic_clear(&bitrate_detected_);
 
@@ -331,9 +336,33 @@ void Canbus::CanFrameReceivedCallback(const device *dev, can_frame *frame, void 
         atomic_inc(&canbus->rx_dropped_);
 }
 
-void Canbus::BusStateChangedCallback(const device *dev, can_state state, can_bus_err_cnt err_cnt, void *user_data) {
+void Canbus::RegisterStateChangeCallback() {
+    if(state_change_callback_dev_ == config_.canbus_dev)
+        return;
+
+    UnregisterStateChangeCallback();
+
+    can_init_state_change_callback(&state_change_callback_, BusStateChangedCallback);
+    const int err = can_add_state_change_callback(config_.canbus_dev, &state_change_callback_);
+    if(err != 0) {
+        LOG_WRN("Failed to register the CAN state change callback [%d].", err);
+        return;
+    }
+
+    state_change_callback_dev_ = config_.canbus_dev;
+}
+
+void Canbus::UnregisterStateChangeCallback() {
+    if(state_change_callback_dev_ == nullptr)
+        return;
+
+    can_remove_state_change_callback(state_change_callback_dev_, &state_change_callback_);
+    state_change_callback_dev_ = nullptr;
+}
+
+void Canbus::BusStateChangedCallback(const device *dev, can_state_change_callback *callback, can_state state, can_bus_err_cnt err_cnt) {
     ARG_UNUSED(dev);
-    ARG_UNUSED(user_data);
+    ARG_UNUSED(callback);
 
     LOG_WRN("CAN bus state changed to %d (tx errors: %u, rx errors: %u).",
         static_cast<int>(state), err_cnt.tx_err_cnt, err_cnt.rx_err_cnt);

@@ -78,7 +78,6 @@ bool SmpCanTransport::Initialize() {
         return true;
 
     smp_transport_.functions.output = Output;
-    smp_transport_.functions.get_mtu = GetMtu;
 
     if(smp_transport_init(&smp_transport_) != 0) {
         LOG_ERR("Failed to initialize the SMP transport.");
@@ -191,10 +190,6 @@ int SmpCanTransport::Output(net_buf* packet) {
     const uint8_t target = UserData(*owned).peer;
 
     return transport->Enqueue(target, std::move(owned)) ? 0 : -ENOTCONN;
-}
-
-uint16_t SmpCanTransport::GetMtu(const net_buf* /*packet*/) {
-    return CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE;
 }
 
 bool SmpCanTransport::Enqueue(uint8_t target, SmpPacket packet) {

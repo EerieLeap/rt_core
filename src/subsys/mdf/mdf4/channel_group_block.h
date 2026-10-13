@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -50,13 +51,15 @@ private:
 
 public:
     ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id);
-    virtual ~ChannelGroupBlock() = default;
+    virtual ~ChannelGroupBlock();
 
     uint16_t GetFlags() const;
     uint64_t GetRecordId() const;
     uint8_t GetRecordIdSizeBytes() const;
-    std::vector<uint8_t> GetRecordIdData() const;
+    /** The record ID as it prefixes a record: the first GetRecordIdSizeBytes() bytes, the rest zero. */
+    std::array<uint8_t, 8> GetRecordIdData() const;
     uint32_t GetDataSizeBytes() const;
+    uint32_t GetInvalidationBytes() const;
     uint64_t GetCycleCount() const;
     uint64_t GetVlsdDataSizeBytes() const;
     void IncrementCycleCount();
@@ -67,22 +70,33 @@ public:
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
     const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    std::shared_ptr<ISerializableBlock> GetNext() const override {
+        return links_.GetLink(LinkType::ChannelGroupNext);
+    }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
         return {
             links_.GetLink(LinkType::MetadataComment),
             links_.GetLink(LinkType::TextAcquisitionName),
             links_.GetLink(LinkType::SourceInformation),
             links_.GetLink(LinkType::SampleReductionFirst),
-            links_.GetLink(LinkType::ChannelFirst),
-            links_.GetLink(LinkType::ChannelGroupNext) };
+            links_.GetLink(LinkType::ChannelFirst) };
     }
 
     void AddChannel(std::shared_ptr<ChannelBlock> channel);
+    /** Appends @p next_block to the end of the chain this block belongs to. */
     void LinkBlock(std::shared_ptr<ChannelGroupBlock> next_block);
+    void UnlinkNext();
     void AddSourceInformation(std::shared_ptr<SourceInformationBlock> source_information);
+    /** Throws for VlsdChannel on a group with invalidation bytes: see SetInvalidationBytes(). */
     void SetFlags(uint16_t flags);
+    /**
+     * Bytes after the data bytes of every record that hold the channels' invalidation bits. Throws
+     * on a VLSD group, whose cg_inval_bytes field holds the high half of its total value size.
+     */
+    void SetInvalidationBytes(uint32_t invalidation_bytes);
     void SetPathSeparator(uint16_t path_separator);
     void SetName(std::shared_ptr<TextBlock> name);
+    void SetComment(std::shared_ptr<MetadataBlock> comment);
 };
 
 } // namespace eerie_leap::subsys::mdf::mdf4

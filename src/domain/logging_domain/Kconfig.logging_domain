@@ -1,29 +1,14 @@
 config EERIE_LEAP_DOMAIN_LOGGING
     depends on EERIE_LEAP_CONFIGURATION
+    select EERIE_LEAP_EVENT_BUS
+    select EERIE_LEAP_MDF
     bool "EerieLeap Logging Domain"
     help
-      Add EerieLeap Logging Domain.
+      Add EerieLeap Logging Domain. The log writer publishes its status on
+      the logging_events channel, hence the event bus, and writes MDF 4.
 
 menu "EerieLeap Logging Domain config"
     depends on EERIE_LEAP_DOMAIN_LOGGING
-
-    config EERIE_LEAP_LOG_METADATA_FILE_VERSION
-        int "Log metadata file version"
-        range 0 65535
-        default 0
-
-    config EERIE_LEAP_LOG_METADATA_FILE_DIR
-        string "Log metadata file directory"
-        default "logs_metadata"
-
-    config EERIE_LEAP_LOG_METADATA_FILE_NAME
-        string "Log metadata file name"
-        default "log_metadata"
-
-    config EERIE_LEAP_LOG_DATA_FILE_VERSION
-        int "Log data file version"
-        range 0 65535
-        default 0
 
     config EERIE_LEAP_LOG_DATA_FILES_DIR
         string "Log data files directory"
@@ -36,4 +21,47 @@ menu "EerieLeap Logging Domain config"
     config EERIE_LEAP_LOG_WRITER_STACK_SIZE
         int "Log writer stack size"
         default 8192
+
+    config EERIE_LEAP_LOG_SYNC_INTERVAL_MS
+        int "Log file sync interval"
+        range 0 3600000
+        default 1000
+        help
+          How often the log writer flushes its stream buffer and syncs the log
+          file, in milliseconds, checked at the end of each logging tick. A
+          sync puts the file size and the allocation on the card, so a power
+          loss costs at most this interval plus one stream buffer
+          (EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE) of records. Each sync is a
+          few sector writes; 0 syncs only when logging stops.
+
+    config EERIE_LEAP_LOG_MIN_FREE_SPACE_MB
+        int "Minimum free space to start or rotate a log file"
+        range 0 1048576
+        default 16
+        help
+          Free space, in MiB, the log volume must have when logging starts
+          and before each rotation to the next file. A start without it
+          fails; a rotation without it ends the session with the reason
+          NoSpace. Checked through the file system's free cluster count,
+          which FatFs computes by scanning the FAT on a large card, so it is
+          never checked per tick. 0 disables the check.
+
+    config EERIE_LEAP_DOMAIN_LOGGING_STATS
+        bool "Log writer statistics log"
+        help
+          Logs one line per EERIE_LEAP_LOG_STATS_LOG_PERIOD_S with the log
+          writer's counters: ticks, readings, frames, dropped frames, bytes,
+          stream writes, syncs, rotations, overruns, write errors and tick
+          duration. The counters themselves are always kept and readable
+          through LogWriterService::GetStats().
+
+    config EERIE_LEAP_LOG_STATS_LOG_PERIOD_S
+        int "Log writer statistics log period"
+        range 1 3600
+        default 10
+        help
+          Period of the statistics log line, and the shortest interval
+          between two warnings about raw CAN frames dropped before the log
+          writer could drain them; the warning is logged whether or not the
+          statistics log is on.
 endmenu

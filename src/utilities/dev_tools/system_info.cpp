@@ -16,7 +16,7 @@ void SystemInfo::PrintThreadInfo(int cpu) {
 }
 
 static const char* stack_info_thread_name_filter = nullptr;
-static void PrintStackInfoCallback(thread_analyzer_info* info) {
+[[maybe_unused]] static void PrintStackInfoCallback(thread_analyzer_info* info) {
     if(stack_info_thread_name_filter != nullptr && strcmp(stack_info_thread_name_filter, info->name) != 0) {
         return;
     }
@@ -73,7 +73,7 @@ void SystemInfo::PrintStackInfo(int cpu, const char *thread_name) {
 }
 
 static const char* cpu_info_thread_name_filter = nullptr;
-static void PrintCpuInfoCallback(thread_analyzer_info *info) {
+[[maybe_unused]] static void PrintCpuInfoCallback(thread_analyzer_info *info) {
     if(cpu_info_thread_name_filter != nullptr && strcmp(cpu_info_thread_name_filter, info->name) != 0)
         return;
 
@@ -116,7 +116,7 @@ void SystemInfo::PrintHeapInfo() {
     sys_heap **heap_p;
 
     int heaps_count = sys_heap_array_get(&heap_p);
-    LOG_INF("Heap analyze, there are %zu heaps allocated at addrs:", heaps_count);
+    LOG_INF("Heap analyze, there are %d heaps allocated at addrs:", heaps_count);
 
     for(int i = 0; i < heaps_count; ++i)
         PrintHeapStats(heap_p[i]);

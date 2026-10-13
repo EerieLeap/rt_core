@@ -12,6 +12,30 @@ LoggingConfigurationManager::LoggingConfigurationManager(
     LoadOrCreateDefault();
 }
 
+void LoggingConfigurationManager::RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) {
+    configuration_updated_handler_ = std::move(handler);
+}
+
+bool LoggingConfigurationManager::Update(const LoggingConfiguration& configuration) {
+    if(!CborConfigurationManagerBase::Update(configuration))
+        return false;
+
+    if(configuration_updated_handler_)
+        configuration_updated_handler_();
+
+    return true;
+}
+
+bool LoggingConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) {
+    if(!CborConfigurationManagerBase::ApplyCborConfiguration(cbor_data, reason))
+        return false;
+
+    if(configuration_updated_handler_)
+        configuration_updated_handler_();
+
+    return true;
+}
+
 pmr_unique_ptr<CborLoggingConfig> LoggingConfigurationManager::Serialize(const LoggingConfiguration& configuration) {
     return cbor_parser_.Serialize(configuration);
 }

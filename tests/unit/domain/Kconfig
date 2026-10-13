@@ -44,3 +44,11 @@ config EERIE_LEAP_SD_CHECK_INTERVAL_MS
 	int "SD check interval ms"
 	default 1000
 
+
+config LOGGING_UNIT_TEST_DUMP_DIR
+	string "Host directory the mdf4_logger suite writes its CAN file into (empty: not written)"
+	default ""
+	depends on ARCH_POSIX
+	help
+	  Only native_sim reaches the host file system: it links the host libc, so std::ofstream
+	  writes there. Other platforms do not link std::ofstream at all.

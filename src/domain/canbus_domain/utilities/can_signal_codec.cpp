@@ -74,7 +74,7 @@ std::optional<float> CanSignalCodec::Decode(const CanSignalConfiguration& signal
         physical = static_cast<double>(raw);
     }
 
-    return static_cast<float>(physical * signal.factor + signal.offset);
+    return static_cast<float>(physical * static_cast<double>(signal.factor) + static_cast<double>(signal.offset));
 }
 
 bool CanSignalCodec::Encode(const CanSignalConfiguration& signal, float value, std::span<uint8_t> data) {
@@ -84,7 +84,7 @@ bool CanSignalCodec::Encode(const CanSignalConfiguration& signal, float value, s
     if(signal.factor == 0.0F || !std::isfinite(value))
         return false;
 
-    const double scaled = (static_cast<double>(value) - signal.offset) / signal.factor;
+    const double scaled = (static_cast<double>(value) - static_cast<double>(signal.offset)) / static_cast<double>(signal.factor);
     const uint64_t mask = SignalMask(signal.size_bits);
 
     // Saturate in double space, the limits are chosen to stay castable to the target integer type.

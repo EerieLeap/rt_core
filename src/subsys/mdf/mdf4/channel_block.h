@@ -7,6 +7,7 @@
 
 #include "subsys/mdf/utilities/block_links.h"
 #include "text_block.h"
+#include "metadata_block.h"
 #include "channel_conversion_block.h"
 #include "block_base.h"
 
@@ -106,19 +107,24 @@ private:
 
 public:
     ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count);
-    virtual ~ChannelBlock() = default;
+    virtual ~ChannelBlock();
 
     Type GetType() const;
     DataType GetDataType() const;
     uint32_t GetBitCount() const;
     uint32_t GetDataSizeBytes() const;
     uint32_t GetDataOffsetBytes() const;
+    bool HasInvalidationBit() const;
+    uint32_t GetInvalidationBitPosition() const;
     std::shared_ptr<ChannelBlock> GetLinkedChannel() const;
     void SetConversion(std::shared_ptr<ChannelConversionBlock> conversion);
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
     const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    std::shared_ptr<ISerializableBlock> GetNext() const override {
+        return links_.GetLink(LinkType::ChannelNext);
+    }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
         return {
             links_.GetLink(LinkType::MetadataComment),
@@ -127,13 +133,19 @@ public:
             links_.GetLink(LinkType::SourceInformation),
             links_.GetLink(LinkType::ChannelConversion),
             links_.GetLink(LinkType::ChannelArray),
-            links_.GetLink(LinkType::SignalData),
-            links_.GetLink(LinkType::ChannelNext) };
+            links_.GetLink(LinkType::SignalData) };
     }
 
+    /** Appends @p next_block to the end of the chain this block belongs to. */
     void LinkBlock(std::shared_ptr<ChannelBlock> next_block);
     void SetType(Type type);
+    /** Replaces every flag, InvalidValid included. */
     void SetFlags(uint32_t flags);
+    /**
+     * Bit @p position of the group's invalidation bytes tells whether this channel's value in a
+     * record is invalid; sets InvalidValid. The group needs invalidation bytes that cover it.
+     */
+    void SetInvalidationBit(uint32_t position);
     void SetName(std::shared_ptr<TextBlock> name);
     void SetUnit(std::shared_ptr<TextBlock> unit);
     void SetArrayBlock(std::shared_ptr<IBlock> array_block);
@@ -141,6 +153,7 @@ public:
     void SetOffsetBits(uint8_t offset_bits);
     void SetBitCount(uint32_t bit_count);
     void SetSignalDataBlock(std::shared_ptr<IBlock> block);
+    void SetComment(std::shared_ptr<MetadataBlock> comment);
 };
 
 } // namespace eerie_leap::subsys::mdf::mdf4

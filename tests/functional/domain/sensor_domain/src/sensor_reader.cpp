@@ -261,7 +261,7 @@ ZTEST(sensors_reader, test_Read) {
     helper.adc_samples->Acquire();
     const TickContext tick{ helper.time_service->GetCurrentTime() };
 
-    for(int i = 0; i < sensor_readers->size(); i++)
+    for(size_t i = 0; i < sensor_readers->size(); i++)
         sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
 
     for(auto& sensor_name : sensor_names) {

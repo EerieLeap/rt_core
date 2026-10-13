@@ -271,7 +271,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     helper.adc_samples->Acquire();
     const TickContext tick{ helper.time_service->GetCurrentTime() };
 
-    for(int i = 0; i < sensor_readers->size(); i++)
+    for(size_t i = 0; i < sensor_readers->size(); i++)
         sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
 
     auto reading_2_opt = sensor_readings_frame->TryGetReading("sensor_2");
@@ -303,7 +303,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     auto& proc_reading_2 = proc_reading_2_opt.value();
     zassert_equal(proc_reading_2.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_2.value.has_value());
-    float proc_reading_2_value = reading_2_value * 4 + 1.6;
+    float proc_reading_2_value = reading_2_value * 4 + 1.6F;
     zassert_equal(proc_reading_2.value.value(), proc_reading_2_value);
     zassert_true(proc_reading_2.voltage.has_value());
     // Calibrated voltages are sensor volts: the simulator's 0..3.3 V at the pin maps onto 0..sensor_max_v.
@@ -328,7 +328,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     auto& proc_reading_3 = proc_reading_3_opt.value();
     zassert_equal(proc_reading_3.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_3.value.has_value());
-    float proc_reading_3_value = proc_reading_1_value + 8.34;
+    float proc_reading_3_value = proc_reading_1_value + 8.34F;
     // Expression evaluator parses "8.34" at runtime independently of the compiler's constant
     // folding, so the result can differ by a ULP or two across platforms/libc - compare with tolerance.
     zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001f);
@@ -347,6 +347,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     auto& proc_reading_5 = proc_reading_5_opt.value();
     zassert_equal(proc_reading_5.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_5.value.has_value());
-    zassert_true(proc_reading_5.value.value() ==  proc_reading_1_value < 400);
+    // "sensor_1 < 400" evaluates to 1 or 0; the previous form compared (value == x) < 400, always true.
+    zassert_equal(proc_reading_5.value.value(), (proc_reading_1_value < 400) ? 1.0F : 0.0F);
     zassert_false(proc_reading_5.raw_value.has_value(), "A virtual sensor has no raw value");
 }
