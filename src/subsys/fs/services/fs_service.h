@@ -58,6 +58,12 @@ public:
     bool DeleteFile(std::string_view relative_path) override;
     bool DeleteRecursive(std::string_view relative_path) override;
     std::vector<std::string> ListFiles(std::string_view relative_path) const override;
+    int ListDirectory(
+        std::string_view relative_path,
+        size_t first,
+        size_t max_entries,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count) const override;
     std::optional<size_t> GetFileSize(std::string_view relative_path) const override;
     uint64_t GetTotalSpace() const override;
     uint64_t GetUsedSpace() const override;

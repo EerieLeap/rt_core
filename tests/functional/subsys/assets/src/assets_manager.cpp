@@ -16,6 +16,7 @@
 
 using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::device_tree::DtFs;
+using eerie_leap::subsys::fs::services::DirectoryEntry;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::subsys::fs::services::IFsService;
 
@@ -65,6 +66,11 @@ public:
     bool DeleteFile(std::string_view) override { return false; }
     bool DeleteRecursive(std::string_view) override { return false; }
     std::vector<std::string> ListFiles(std::string_view) const override { return {}; }
+    int ListDirectory(std::string_view, size_t, size_t, std::vector<DirectoryEntry>& entries, size_t& count) const override {
+        entries.clear();
+        count = 0;
+        return -ENODEV;
+    }
     std::optional<size_t> GetFileSize(std::string_view) const override { return std::nullopt; }
     uint64_t GetTotalSpace() const override { return 0; }
     uint64_t GetUsedSpace() const override { return 0; }

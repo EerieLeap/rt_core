@@ -369,6 +369,76 @@ std::vector<std::string> FsService::ListFiles(std::string_view relative_path) co
     return files;
 }
 
+int FsService::ListDirectory(
+    std::string_view relative_path,
+    size_t first,
+    size_t max_entries,
+    std::vector<DirectoryEntry>& entries,
+    size_t& count) const {
+
+    ScopedMutex lock(mutex_);
+
+    entries.clear();
+    count = 0;
+
+    if(!IsMounted()) {
+        LOG_ERR("Filesystem not mounted.");
+        return -ENODEV;
+    }
+
+    FilesystemPath<PATH_BUFFER_SIZE> full_path;
+    if(!TryBuildPath(relative_path, full_path))
+        return -EINVAL;
+
+    struct fs_dir_t dir;
+    struct fs_dirent entry;
+    fs_dir_t_init(&dir);
+
+    int rc = fs_opendir(&dir, full_path.String().CStr());
+    if(rc < 0) {
+        // FAT takes a file for a missing directory; littlefs answers -ENOTDIR itself.
+        if(rc == -ENOENT && fs_stat(full_path.String().CStr(), &entry) == 0 && entry.type == FS_DIR_ENTRY_FILE)
+            return -ENOTDIR;
+
+        LOG_ERR("fs_opendir failed on path: %s (%d).", full_path.String().CStr(), rc);
+        return rc;
+    }
+
+    // Storing an entry may throw, and the directory has to be closed however the walk ends.
+    struct DirectoryCloser {
+        fs_dir_t* dir;
+
+        ~DirectoryCloser() { fs_closedir(dir); }
+    } closer{&dir};
+
+    while(true) {
+        rc = fs_readdir(&dir, &entry);
+        if(rc < 0) {
+            LOG_ERR("fs_readdir failed on path: %s (%d).", full_path.String().CStr(), rc);
+            entries.clear();
+            count = 0;
+
+            return rc;
+        }
+
+        if(entry.name[0] == '\0')
+            break;
+
+        if(count >= first && entries.size() < max_entries) {
+            const bool is_directory = entry.type == FS_DIR_ENTRY_DIR;
+            entries.push_back({
+                .name = entry.name,
+                .size = is_directory ? 0 : entry.size,
+                .is_directory = is_directory,
+            });
+        }
+
+        count++;
+    }
+
+    return 0;
+}
+
 std::optional<size_t> FsService::GetFileSize(std::string_view relative_path) const {
     ScopedMutex lock(mutex_);
 

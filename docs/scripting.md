@@ -42,8 +42,11 @@ Code: `src/subsys/lua_script/` (the host), `src/domain/script_domain/` (the sens
 interpreter in `modules/zephyr_lua/`.
 
 Scripts are plain Lua files on the SD card, referenced by a path relative to the card's mount
-point (`scripts/sensor_8.lua`) in a sensor's or a CAN message's `script_path`. When an SD card is
-present the validator rejects a configuration whose script file does not exist.
+point (`scripts/sensor_8.lua`) in a sensor's or a CAN message's `script_path`. A client lists
+`scripts/` with the SMP `files` group to pick one (see [smp.md](smp.md)). On a unit with an SD
+service the validators reject a configuration whose script file is not on the card, so while no
+card is mounted every non-empty `script_path` is rejected; a unit without an SD service checks no
+`script_path` and runs no script.
 
 ### Hosting
 

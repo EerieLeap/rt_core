@@ -9,8 +9,8 @@ Code: `src/subsys/fs/`, `src/subsys/assets/`.
 into the global mount list. Every path is relative to the mount point and limited to 256 bytes
 with the mount prefix. The interface (`IFsService`) offers `WriteFile` (overwrite or append),
 `ReadFile`, `OpenFile`, `CreateDirectory`, `Exists`, `DeleteFile`, `DeleteRecursive`,
-`ListFiles`, `GetFileSize`, `GetTotalSpace`, `GetUsedSpace` and `Format`. All calls hold one
-mutex per service.
+`ListFiles`, `ListDirectory` (a page of a directory's entries with their sizes and types),
+`GetFileSize`, `GetTotalSpace`, `GetUsedSpace` and `Format`. All calls hold one mutex per service.
 
 Two instances exist in the application:
 
@@ -21,6 +21,9 @@ Two instances exist in the application:
 
 The SD service is optional: the sensors, CAN and logging code accept a null SD service and then
 skip script validation and logging.
+
+Clients list a directory of the card, such as `scripts/`, with the SMP `files` group, which the
+`ManagementController` serves with the SD service it is given (see [smp.md](smp.md)).
 
 ## Stream buffer
 

@@ -13,6 +13,7 @@
 using namespace smp_groups_test;
 
 using eerie_leap::controllers::ManagementController;
+using eerie_leap::domain::system_domain::smp::FilesMgmtGroup;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
@@ -51,4 +52,40 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
     zassert_true(types.IsOk());
     zassert_equal(types.entries.size(), 1);
     zassert_equal(types.entries[0].at("type"), std::to_underlying(ConfigurationService::Type::Ui));
+}
+
+ZTEST(management_controller, test_serves_the_files_group) {
+    auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_files_wq", 4096, 5);
+    zassert_true(work_queue->Initialize());
+
+    auto configuration_service = std::make_shared<ConfigurationService>();
+    const uint8_t list = std::to_underlying(FilesMgmtGroup::Command::LIST);
+    const auto request = CborMap().PutText("dir", "scripts").Build();
+
+    {
+        ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER);
+        zassert_equal(controller.Initialize(), 0);
+
+        SmpTestClient client;
+        const auto response = client.Read(SmpGroupId::FILES, list, request);
+
+        zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::FILES));
+        zassert_equal(response.error.value_or(0), std::to_underlying(FilesMgmtGroup::Error::NO_CARD),
+            "Served without an SD service, to say there is no card");
+    }
+
+    auto card = std::make_shared<FakeFsService>();
+    card->directories["scripts"] = {{.name = "oil.lua", .size = 120}};
+
+    ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt, card);
+    zassert_equal(controller.Initialize(), 0);
+
+    SmpTestClient client;
+    const auto response = client.Read(SmpGroupId::FILES, list, request);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("total"), 1);
+    zassert_equal(response.entry_texts.size(), 1);
+    zassert_str_equal(response.entry_texts[0].at("name").c_str(), "oil.lua");
+    zassert_equal(response.entries[0].at("size"), 120);
 }

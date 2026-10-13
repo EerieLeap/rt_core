@@ -20,6 +20,7 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 | `network` | 66 | `CanbusController` | `DEVICES` 0 |
 | `live` | 67 | `BleService` | `SUBSCRIBE` 0, `UNSUBSCRIBE` 1 |
 | `calibration` | 68 | `AdcController` | `START` 0, `STOP` 1, `READ` 2 |
+| `files` | 69 | `ManagementController` | `LIST` 0 |
 
 ### `config`: read and write stored configurations
 
@@ -87,6 +88,32 @@ Errors: `BAD_CHANNEL` (2), `BUSY` (3, a job runs or processing could not be paus
 string: the low 32 bits of XXH64 of the UTF-8 bytes with seed 0 (`StringHelpers::GetHash`,
 `src/utilities/string/xx_hash64.hpp`). The same hash keys the logging configuration.
 
+### `files`: the SD card's files
+
+`LIST` (read) with an optional `{dir, off}` returns `{total, off, entries: [{name, size, type}]}`:
+the entries of `dir` from `off`, as many as fit into one response; request the rest from `off`
+plus the entries listed, until a page comes back empty or `total` entries are listed. `dir` is
+relative to the card's mount point, as a `script_path` is, and the card's root when absent; an
+empty request lists the root from its first entry. Entries come in the file system's order, not
+sorted, without `.` and `..`. `type` is 0 for a file and 1 for a directory, `size` is in bytes
+(0 for a directory), and `total` counts the directory's entries.
+
+Each request reads the directory again from its start, at most 48 entries, on the configuration
+work queue while the handler waits: paging keeps no state on the unit and holds together while
+the directory does not change. `dir` is at most 128 bytes. Names are the card's FAT long names in
+its code page (437 by default), not UTF-8, so only ASCII names work in a `script_path`. A card is
+mounted when the unit starts; one put in later is mounted only while the SD monitor runs (see
+[filesystem.md](filesystem.md)). A unit without an SD service still serves the group and answers
+`NO_CARD`; firmware without the group answers `rc` 8 (`MGMT_ERR_ENOTSUP`).
+
+| Error | Code | Meaning |
+| --- | --- | --- |
+| `NO_CARD` | 2 | The unit has no SD service, or no card is mounted. |
+| `NOT_FOUND` | 3 | No such directory. |
+| `BAD_PATH` | 4 | `dir` is absolute, has a `..` segment, a backslash or a NUL, is longer than 128 bytes, or names a file. |
+| `IO_ERROR` | 5 | The card could not be read. |
+| `NO_MEMORY` | 6 | The entries could not be stored. |
+
 ## Transports
 
 | Transport | Kconfig | Route |
@@ -108,7 +135,7 @@ Both transports share MCUmgr's packet pool, so a client keeps no more requests i
 | `MCUMGR_TRANSPORT_NETBUF_SIZE` | 1024 | Largest packet. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO` | 7 | MCUmgr handler thread, below sensor processing. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_CONTROLLER_ADC` | The calibration group pauses and resumes processing on this queue, which 2048 bytes do not cover. |
-| `EERIE_LEAP_CONTROLLER_MANAGEMENT` | n | Serves `config` and `device`. Depends on `EERIE_LEAP_SMP` and `EERIE_LEAP_DOMAIN_SYSTEM`; create it after every configuration manager is registered. |
+| `EERIE_LEAP_CONTROLLER_MANAGEMENT` | n | Serves `config`, `device` and `files`. Depends on `EERIE_LEAP_SMP` and `EERIE_LEAP_DOMAIN_SYSTEM`; create it after every configuration manager is registered. |
 
 ## Writing a group
 

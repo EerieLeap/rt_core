@@ -30,7 +30,8 @@ using eerie_leap::subsys::smp::SmpOperation;
 
 using Bytes = std::vector<uint8_t>;
 
-// Builds a request body: a CBOR map of unsigned integers, byte strings and lists of unsigned integers.
+// Builds a request body: a CBOR map of unsigned integers, byte strings, text strings and lists of
+// unsigned integers.
 class CborMap {
 private:
     std::array<uint8_t, CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE> buffer_{};
@@ -53,6 +54,12 @@ public:
         return *this;
     }
 
+    CborMap& PutText(std::string_view key, std::string_view value) {
+        zassert_true(zcbor_tstr_encode_ptr(states_, key.data(), key.size())
+            && zcbor_tstr_encode_ptr(states_, value.data(), value.size()));
+        return *this;
+    }
+
     CborMap& Put(std::string_view key, std::span<const uint32_t> values) {
         bool ok = zcbor_tstr_encode_ptr(states_, key.data(), key.size())
             && zcbor_list_start_encode(states_, values.size());
@@ -71,9 +78,10 @@ public:
 };
 
 using Entry = std::map<std::string, uint32_t>;
+using TextEntry = std::map<std::string, std::string>;
 
 // A decoded response body: unsigned values, floats, booleans, byte and text strings, one list of maps
-// and the group error.
+// of unsigned and text values, and the group error.
 struct Response {
     SmpHeader header;
     std::map<std::string, uint32_t> values;
@@ -84,6 +92,8 @@ struct Response {
     std::map<std::string, Bytes> bytes;
     std::map<std::string, std::string> texts;
     std::vector<Entry> entries;
+    // The text values of the maps in `entries`, index for index.
+    std::vector<TextEntry> entry_texts;
     std::optional<uint32_t> error_group;
     std::optional<uint32_t> error;
 
@@ -131,17 +141,32 @@ inline uint8_t AdditionalInfo(const zcbor_state_t* state) {
     return static_cast<uint8_t>(*state->payload & 0x1F);
 }
 
-inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry) {
+// Decodes a map of unsigned values into entry, and its text values into texts when given.
+inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry, TextEntry* texts = nullptr) {
     if(!zcbor_map_start_decode(zsd))
         return false;
 
     while(!zcbor_array_at_end(zsd)) {
         zcbor_string key{};
-        uint32_t value = 0;
-        if(!zcbor_tstr_decode(zsd, &key) || !zcbor_uint32_decode(zsd, &value))
+        if(!zcbor_tstr_decode(zsd, &key))
             return false;
 
-        entry[std::string(reinterpret_cast<const char*>(key.value), key.len)] = value;
+        const std::string name(reinterpret_cast<const char*>(key.value), key.len);
+
+        if(texts != nullptr && MajorType(zsd) == 3) {
+            zcbor_string value{};
+            if(!zcbor_tstr_decode(zsd, &value))
+                return false;
+
+            (*texts)[name] = std::string(reinterpret_cast<const char*>(value.value), value.len);
+            continue;
+        }
+
+        uint32_t value = 0;
+        if(!zcbor_uint32_decode(zsd, &value))
+            return false;
+
+        entry[name] = value;
     }
 
     return zcbor_map_end_decode(zsd);
@@ -200,9 +225,11 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                     return false;
                 while(!zcbor_array_at_end(zsd)) {
                     Entry entry;
-                    if(!DecodeEntry(zsd, entry))
+                    TextEntry texts;
+                    if(!DecodeEntry(zsd, entry, &texts))
                         return false;
                     response.entries.push_back(entry);
+                    response.entry_texts.push_back(texts);
                 }
                 if(!zcbor_list_end_decode(zsd))
                     return false;

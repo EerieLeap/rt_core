@@ -25,7 +25,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [sensors.md](sensors.md) | Sensor types, the processing pipeline, rate groups, event-driven sensors, the readings frame |
 | [canbus.md](canbus.md) | CAN buses, messages and signals, sending, reconfiguration |
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, SMP over CAN |
-| [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`) and transports |
+| [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`) and transports |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
 | [logging.md](logging.md) | Log writer, MDF4 and simple loggers, logging configuration |
 | [system.md](system.md) | Product identity and the system configuration |
@@ -136,7 +136,8 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
     (`RegisterDependentService`).
 11. The application's logging controller when an SD card exists; its log writer is registered
     with the sensors controller (`RegisterDependentService`).
-12. `ManagementController`, after every manager is registered.
+12. `ManagementController`, after every manager is registered, with the sensors' capabilities and
+    the SD service.
 13. `CanbusSchedulerService`, registered as a CAN dependent service.
 14. `sensors_controller->Start()`, `canbus_scheduler_service->Start()`.
 

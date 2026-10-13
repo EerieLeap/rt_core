@@ -1,7 +1,11 @@
+#include <algorithm>
 #include <array>
+#include <cerrno>
 #include <string>
+#include <string_view>
 #include <cstdint>
 #include <unordered_set>
+#include <vector>
 #include <zephyr/ztest.h>
 
 #include "subsys/device_tree/dt_fs.h"
@@ -346,6 +350,171 @@ ZTEST(fs_service, test_ListFiles_returns_empty_for_missing_directory) {
     auto* fs_service = GetFsService();
 
     zassert_equal(fs_service->ListFiles("test_ListFiles_missing_dir").size(), 0);
+}
+
+namespace {
+
+// Entries come in the file system's order, so they are looked up by name.
+const DirectoryEntry& EntryNamed(const std::vector<DirectoryEntry>& entries, std::string_view name) {
+    const auto entry = std::ranges::find(entries, name, &DirectoryEntry::name);
+    zassert_true(entry != entries.end(), "No entry named %.*s", static_cast<int>(name.size()), name.data());
+
+    return *entry;
+}
+
+// Five files of 1 to 5 bytes.
+void SetupDirectory(const std::string& dir_path) {
+    zassert_true(GetFsService()->CreateDirectory(dir_path));
+
+    for(size_t i = 0; i < 5; i++)
+        zassert_true(WriteText(dir_path + "/file_" + std::to_string(i) + ".txt", MakeText(i + 1)));
+}
+
+} // namespace
+
+ZTEST(fs_service, test_ListDirectory_lists_files_with_sizes_and_directories) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(fs_service->CreateDirectory("test_ListDirectory_dir/lib"));
+    zassert_true(WriteText("test_ListDirectory_dir/oil.lua", MakeText(120)));
+    zassert_true(WriteText("test_ListDirectory_dir/boost_control.lua", MakeText(2048)));
+
+    std::vector<DirectoryEntry> entries;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_dir", 0, 10, entries, count), 0);
+    zassert_equal(count, 3);
+    zassert_equal(entries.size(), 3);
+    zassert_equal(EntryNamed(entries, "oil.lua").size, 120);
+    zassert_false(EntryNamed(entries, "oil.lua").is_directory);
+    zassert_equal(EntryNamed(entries, "boost_control.lua").size, 2048);
+    zassert_false(EntryNamed(entries, "boost_control.lua").is_directory);
+    zassert_equal(EntryNamed(entries, "lib").size, 0);
+    zassert_true(EntryNamed(entries, "lib").is_directory);
+}
+
+ZTEST(fs_service, test_ListDirectory_lists_the_root) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(WriteText("test_ListDirectory_root.txt", "abc"));
+    zassert_true(fs_service->CreateDirectory("test_ListDirectory_root_dir"));
+
+    std::vector<DirectoryEntry> entries;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("", 0, 10, entries, count), 0);
+    zassert_equal(count, 2);
+    zassert_equal(EntryNamed(entries, "test_ListDirectory_root.txt").size, 3);
+    zassert_true(EntryNamed(entries, "test_ListDirectory_root_dir").is_directory);
+}
+
+ZTEST(fs_service, test_ListDirectory_starts_at_first_and_counts_all) {
+    auto* fs_service = GetFsService();
+    SetupDirectory("test_ListDirectory_paged");
+
+    std::vector<DirectoryEntry> all;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_paged", 0, 10, all, count), 0);
+    zassert_equal(count, 5);
+    zassert_equal(all.size(), 5);
+
+    std::vector<DirectoryEntry> rest;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_paged", 2, 10, rest, count), 0);
+    zassert_equal(count, 5, "The count is the directory's, not the page's");
+    zassert_equal(rest.size(), 3);
+    for(size_t i = 0; i < rest.size(); i++)
+        zassert_str_equal(rest[i].name.c_str(), all[i + 2].name.c_str());
+}
+
+ZTEST(fs_service, test_ListDirectory_keeps_at_most_max_entries) {
+    auto* fs_service = GetFsService();
+    SetupDirectory("test_ListDirectory_capped");
+
+    std::vector<DirectoryEntry> all;
+    size_t count = 0;
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_capped", 0, 10, all, count), 0);
+
+    std::vector<DirectoryEntry> entries;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_capped", 1, 2, entries, count), 0);
+    zassert_equal(count, 5);
+    zassert_equal(entries.size(), 2);
+    zassert_str_equal(entries[0].name.c_str(), all[1].name.c_str());
+    zassert_str_equal(entries[1].name.c_str(), all[2].name.c_str());
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_capped", 0, 0, entries, count), 0);
+    zassert_equal(count, 5, "Entries are counted when none are kept");
+    zassert_true(entries.empty());
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_capped", 9, 10, entries, count), 0);
+    zassert_equal(count, 5);
+    zassert_true(entries.empty(), "Nothing past the end");
+}
+
+ZTEST(fs_service, test_ListDirectory_accepts_a_trailing_slash) {
+    auto* fs_service = GetFsService();
+    SetupDirectory("test_ListDirectory_slash");
+
+    std::vector<DirectoryEntry> entries;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_slash/", 0, 10, entries, count), 0);
+    zassert_equal(count, 5);
+}
+
+ZTEST(fs_service, test_ListDirectory_missing_directory_is_ENOENT) {
+    auto* fs_service = GetFsService();
+
+    std::vector<DirectoryEntry> entries{DirectoryEntry{.name = "stale"}};
+    size_t count = 7;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_missing", 0, 10, entries, count), -ENOENT);
+    zassert_true(entries.empty());
+    zassert_equal(count, 0);
+}
+
+ZTEST(fs_service, test_ListDirectory_a_file_is_ENOTDIR) {
+    auto* fs_service = GetFsService();
+    zassert_true(WriteText("test_ListDirectory_file.txt", "abc"));
+
+    std::vector<DirectoryEntry> entries;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_file.txt", 0, 10, entries, count), -ENOTDIR);
+}
+
+ZTEST(fs_service, test_ListDirectory_rejects_parent_references) {
+    auto* fs_service = GetFsService();
+    zassert_true(fs_service->CreateDirectory("test_ListDirectory_parent"));
+
+    std::vector<DirectoryEntry> entries;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("..", 0, 10, entries, count), -EINVAL);
+    zassert_equal(fs_service->ListDirectory("test_ListDirectory_parent/../..", 0, 10, entries, count), -EINVAL);
+}
+
+ZTEST(fs_service, test_ListDirectory_rejects_absolute_and_overlong_paths) {
+    auto* fs_service = GetFsService();
+
+    std::vector<DirectoryEntry> entries;
+    size_t count = 0;
+
+    zassert_equal(fs_service->ListDirectory("/", 0, 10, entries, count), -EINVAL);
+    zassert_equal(fs_service->ListDirectory(std::string(300, 'a'), 0, 10, entries, count), -EINVAL);
+}
+
+ZTEST(fs_service, test_ListDirectory_unmounted_is_ENODEV) {
+    FsService orphan_service(nullptr);
+
+    std::vector<DirectoryEntry> entries{DirectoryEntry{.name = "stale"}};
+    size_t count = 7;
+
+    zassert_equal(orphan_service.ListDirectory("", 0, 10, entries, count), -ENODEV);
+    zassert_true(entries.empty());
+    zassert_equal(count, 0);
 }
 
 ZTEST(fs_service, test_Delete) {
