@@ -89,13 +89,12 @@ constexpr size_t kBlockHeaderSize = 24;
 constexpr size_t kBlockLengthOffset = 8;
 constexpr size_t kHeaderStartTimeOffset = kIdBlockSize + kBlockHeaderSize + 6 * 8;   // hd_start_time_ns
 
-// rt_daq's configuration work queue, where the stop of a failed session unwinds the finalize that
-// the dead stream refused. 64-bit unwinding needs more than the 32-bit boards' 6144 bytes.
-#ifdef CONFIG_64BIT
+// The configuration work queue stops a failed session, which unwinds the exception of the finalize
+// the dead stream refused. What that costs depends on the unwinder, not the word size: ARM's EHABI
+// tables are light (1476 bytes measured on qemu_cortex_a9), libgcc's DWARF unwinder is not (6580 on
+// qemu_malta, 7712 on qemu_cortex_a53, 8836 on qemu_riscv64). The stack comes from the heap without
+// a guard, so an overflow corrupts the heap rather than faulting.
 constexpr int kConfigWorkQueueStackSize = 16384;
-#else
-constexpr int kConfigWorkQueueStackSize = 6144;
-#endif
 
 // One volume for the suite, formatted on first use; the service is shared like the SD service is.
 inline std::shared_ptr<FsService> GetFormattedFsService() {
