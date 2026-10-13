@@ -54,8 +54,10 @@ characters).
 ### `device`: identity
 
 `INFO` (read) returns `{family, product, revision, features, hw, sw, build}` (versions packed as
-`major << 24 | minor << 16 | patch`) and, with CDMP, `{cdmp_id, uid, device_type, status}`.
-See [system.md](system.md).
+`major << 24 | minor << 16 | patch`), with CDMP `{cdmp_id, uid, device_type, status}`, and on a
+unit with sensors `{adc_channels, gpio_channels, sensors_max}`: the ADC and GPIO channels a sensor
+can read, each numbered from 0, and the most sensors a configuration holds, which the sensors
+configuration is validated against. See [system.md](system.md) and [sensors.md](sensors.md).
 
 ### `network`: other units
 

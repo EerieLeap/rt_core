@@ -12,6 +12,7 @@ using namespace smp_groups_test;
 
 using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::domain::system_domain::smp::DeviceMgmtGroup;
 using eerie_leap::domain::canbus_com_domain::smp::NetworkMgmtGroup;
 
@@ -70,6 +71,21 @@ ZTEST(smp_device_group, test_info_without_cdmp_has_no_identity) {
     zassert_true(response.IsOk());
     zassert_true(response.Has("product"));
     zassert_false(response.Has("cdmp_id"));
+    zassert_false(response.Has("adc_channels"), "No sensor inputs on a unit without sensors");
+}
+
+ZTEST(smp_device_group, test_info_reports_the_sensor_inputs) {
+    DeviceMgmtGroup group(BUILD_NUMBER, nullptr, SensorCapabilities{ .adc_channels = 4, .gpio_channels = 8, .sensors_max = 64 });
+    group.Register();
+    SmpTestClient client;
+
+    auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("build"), BUILD_NUMBER);
+    zassert_equal(response.Value("adc_channels"), 4);
+    zassert_equal(response.Value("gpio_channels"), 8);
+    zassert_equal(response.Value("sensors_max"), 64);
 }
 
 ZTEST(smp_device_group, test_only_one_instance_is_registered) {

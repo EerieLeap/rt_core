@@ -105,7 +105,8 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
     uint32_t gpio_channel_count,
     uint32_t adc_channel_count) {
 
-    SensorsOrderResolver order_resolver;
+    std::vector<std::shared_ptr<Sensor>> stored_sensors;
+    stored_sensors.reserve(sensors_config.CborSensorConfig_m.size());
 
     for(const auto& sensor_config : sensors_config.CborSensorConfig_m) {
         auto sensor = make_shared_pmr<Sensor>(mr, CborHelpers::ToPmrString(mr, sensor_config.id));
@@ -117,8 +118,8 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
         else
             sensor->configuration.channel = std::nullopt;
 
+        // Parsed into canbus_source once the validator has read the text.
         sensor->configuration.connection_string = CborHelpers::ToPmrString(mr, sensor_config.configuration.connection_string);
-        sensor->configuration.UnwrapConnectionString();
 
         sensor->configuration.script_path = CborHelpers::ToPmrString(mr, sensor_config.configuration.script_path);
 
@@ -130,6 +131,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
         if(interpolation_method != InterpolationMethod::NONE && sensor_config.configuration.calibration_table_present) {
             sensor->configuration.interpolation_method = interpolation_method;
 
+            // Ordered once the validator has checked it.
             auto& calibration_table = sensor->configuration.calibration_table;
             calibration_table.reserve(sensor_config.configuration.calibration_table.float32float.size());
             for(const auto& calibration_data : sensor_config.configuration.calibration_table.float32float) {
@@ -137,13 +139,6 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
                     .voltage = calibration_data.float32float_key,
                     .value = calibration_data.float32float});
             }
-
-            // Interpolators binary search the table, and an imported one may be stored unordered.
-            std::ranges::sort(
-                calibration_table,
-                [](const CalibrationData& a, const CalibrationData& b) {
-                    return a.voltage < b.voltage;
-                });
         } else {
             sensor->configuration.interpolation_method = InterpolationMethod::NONE;
         }
@@ -156,13 +151,34 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
 
         sensor->metadata.description = CborHelpers::ToPmrString(mr, sensor_config.metadata.description);
 
+        stored_sensors.push_back(std::move(sensor));
+    }
+
+    // Validated as stored, as Serialize() validates: the order resolver keeps only the first of two
+    // sensors with one ID, so the validator would not see the second after it.
+    SensorValidator::Validate(stored_sensors, sd_fs_service_.get(), gpio_channel_count, adc_channel_count);
+
+    SensorsOrderResolver order_resolver;
+
+    for(auto& sensor : stored_sensors) {
+        auto& configuration = sensor->configuration;
+
+        // Interpolators binary search the table, and an imported one may be stored unordered. Its
+        // voltages are finite and distinct now, which the sort's ordering needs.
+        std::ranges::sort(
+            configuration.calibration_table,
+            [](const CalibrationData& a, const CalibrationData& b) {
+                return a.voltage < b.voltage;
+            });
+
+        // The validator has parsed the text, so this does not throw.
+        configuration.UnwrapConnectionString();
+
         order_resolver.AddSensor(std::move(sensor));
     }
 
-    auto sensors = order_resolver.GetProcessingOrder();
-    SensorValidator::Validate(sensors, sd_fs_service_.get(), gpio_channel_count, adc_channel_count);
-
-    return sensors;
+    // Refuses a dependency cycle.
+    return order_resolver.GetProcessingOrder();
 }
 
 } // namespace eerie_leap::domain::sensor_domain::configuration::parsers

@@ -1,5 +1,8 @@
 #include <algorithm>
 #include <cctype>
+#include <cinttypes>
+#include <cmath>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -34,6 +37,25 @@ using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
         + std::string(sensor_id)
         + ". "
         + std::string(message));
+}
+
+// The channels a unit has of one kind, for the out-of-range message.
+static std::string ChannelRangeText(std::string_view kind, uint32_t channel_count) {
+    if(channel_count == 0)
+        return "This unit has no " + std::string(kind) + " channels.";
+
+    if(channel_count == 1)
+        return "This unit has only " + std::string(kind) + " channel 0.";
+
+    return "This unit has " + std::string(kind) + " channels 0 to " + std::to_string(channel_count - 1) + ".";
+}
+
+// In hex, as CAN tools, the CAN bus validator and the app show frame IDs.
+static std::string FrameIdText(uint32_t frame_id) {
+    char text[sizeof("0xFFFFFFFF")];
+    snprintf(text, sizeof(text), "0x%" PRIX32, frame_id);
+
+    return text;
 }
 
 void SensorValidator::Validate(
@@ -99,17 +121,17 @@ void SensorValidator::ValidateMetadata(const std::vector<std::shared_ptr<Sensor>
 
 void SensorValidator::ValidateName(std::string_view sensor_id, const std::pmr::string& name) {
     if(name.size() > 32)
-        InvalidMetadataConfiguration(sensor_id, "Sensor name must be less than 32 characters.");
+        InvalidMetadataConfiguration(sensor_id, "Sensor name must be at most 32 bytes.");
 }
 
 void SensorValidator::ValidateUnit(std::string_view sensor_id, const std::pmr::string& unit) {
     if(unit.size() > 32)
-        InvalidMetadataConfiguration(sensor_id, "Sensor unit must be less than 32 characters.");
+        InvalidMetadataConfiguration(sensor_id, "Sensor unit must be at most 32 bytes.");
 }
 
 void SensorValidator::ValidateDescription(std::string_view sensor_id, const std::pmr::string& description) {
     if(description.size() > 128)
-        InvalidMetadataConfiguration(sensor_id, "Sensor description must be less than 128 characters.");
+        InvalidMetadataConfiguration(sensor_id, "Sensor description must be at most 128 bytes.");
 }
 
 void SensorValidator::ValidateSensorConfiguration(
@@ -152,10 +174,13 @@ void SensorValidator::ValidateChannel(
     if(!sensor_configuration.channel.has_value())
         InvalidSensorConfiguration(sensor_id, "Sensor channel is not set.");
 
-    const uint32_t channel_count = traits.source == SensorSourceKind::GPIO ? gpio_channel_count : adc_channel_count;
+    const bool is_gpio = traits.source == SensorSourceKind::GPIO;
+    const uint32_t channel_count = is_gpio ? gpio_channel_count : adc_channel_count;
 
-    if(sensor_configuration.channel.value() >= channel_count)
-        InvalidSensorConfiguration(sensor_id, "Channel value is out of range.");
+    if(sensor_configuration.channel.value() >= channel_count) {
+        InvalidSensorConfiguration(sensor_id,
+            "Channel value is out of range. " + ChannelRangeText(is_gpio ? "GPIO" : "ADC", channel_count));
+    }
 }
 
 void SensorValidator::ValidateConnectionString(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
@@ -168,10 +193,12 @@ void SensorValidator::ValidateConnectionString(std::string_view sensor_id, const
         return;
     }
 
-    if(sensor_configuration.connection_string.empty() || sensor_configuration.canbus_source == nullptr)
-        InvalidSensorConfiguration(sensor_id, "Connection string cannot be empty.");
+    // The text rather than canbus_source: a stored configuration is parsed into it after validation.
+    const auto source = CanbusSource::Parse(sensor_configuration.connection_string);
+    if(!source.has_value())
+        InvalidSensorConfiguration(sensor_id, source.error());
 
-    if(traits.requires_signal_name && sensor_configuration.canbus_source->signal_name.empty())
+    if(traits.requires_signal_name && source->signal_name.empty())
         InvalidSensorConfiguration(sensor_id, "Sensor must have CAN bus signal name.");
 }
 
@@ -216,6 +243,34 @@ void SensorValidator::ValidateInterpolationMethod(std::string_view sensor_id, co
 
     if(sensor_configuration.calibration_table.size() < 2)
         InvalidSensorConfiguration(sensor_id, "Calibration table must have at least 2 points.");
+
+    ValidateCalibrationTable(sensor_id, sensor_configuration);
+}
+
+// Both interpolators binary search the table and the spline divides by the distance between
+// neighbouring voltages, so the voltages must be finite and distinct. On the wire the table is a
+// map keyed by voltage, and the decoder lets a repeated key through. The table is not ordered yet.
+void SensorValidator::ValidateCalibrationTable(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
+    const auto& calibration_table = sensor_configuration.calibration_table;
+
+    if(calibration_table.size() > MAX_CALIBRATION_POINTS) {
+        InvalidSensorConfiguration(sensor_id,
+            "Calibration table must have at most " + std::to_string(MAX_CALIBRATION_POINTS) + " points.");
+    }
+
+    const bool is_finite = std::ranges::all_of(calibration_table, [](const CalibrationData& point) {
+        return std::isfinite(point.voltage) && std::isfinite(point.value);
+    });
+
+    if(!is_finite)
+        InvalidSensorConfiguration(sensor_id, "Calibration table must hold finite numbers.");
+
+    for(size_t i = 1; i < calibration_table.size(); i++) {
+        for(size_t j = 0; j < i; j++) {
+            if(calibration_table[i].voltage == calibration_table[j].voltage)
+                InvalidSensorConfiguration(sensor_id, "Calibration voltages must be unique.");
+        }
+    }
 }
 
 void SensorValidator::ValidateExpression(
@@ -240,6 +295,10 @@ void SensorValidator::ValidateExpression(
     if(!evaluator.has_value())
         InvalidSensorConfiguration(sensor_id, ExpressionEvaluator::Describe(evaluator.error()));
 
+    // Without an input the evaluation has no x, fails every time, and the sensor never gets a value.
+    if(!traits.has_input && evaluator->UsesInput())
+        InvalidSensorConfiguration(sensor_id, "Sensor has no input value, the expression cannot use x.");
+
     size_t input_count = 0;
     for(const std::string_view name : evaluator->GetVariableNames()) {
         const bool known = std::any_of(sensors.begin(), sensors.end(),
@@ -254,6 +313,46 @@ void SensorValidator::ValidateExpression(
     // A virtual sensor is either polled or evaluated when an input commits; with neither it never updates.
     if(traits.source == SensorSourceKind::EXPRESSION && !sensor_configuration.sampling_rate_ms.has_value() && input_count == 0)
         InvalidSensorConfiguration(sensor_id, "Sensor must have a sampling rate or depend on another sensor.");
+}
+
+void SensorValidator::ValidateCanbusSources(
+    const std::vector<std::shared_ptr<Sensor>>& sensors,
+    const CanbusConfiguration& canbus_configuration) {
+
+    for(const auto& sensor : sensors) {
+        const auto& sensor_configuration = sensor->configuration;
+        const auto traits = sensor_configuration.GetTraits();
+
+        if(!traits.uses_canbus || sensor_configuration.canbus_source == nullptr)
+            continue;
+
+        const auto& source = *sensor_configuration.canbus_source;
+        const std::string bus = std::to_string(source.bus_channel);
+
+        const auto channel = canbus_configuration.channel_configurations.find(source.bus_channel);
+        if(channel == canbus_configuration.channel_configurations.end())
+            InvalidSensorConfiguration(sensor->id, "CAN bus " + bus + " is not configured.");
+
+        if(traits.source != SensorSourceKind::CAN_SIGNAL)
+            continue;
+
+        // Looked up as the frame router resolves the signal when the pipeline is built.
+        const auto& messages = channel->second.message_configurations;
+        const auto message = std::ranges::find_if(messages, [&source](const auto& message_configuration) {
+            return message_configuration != nullptr && message_configuration->frame_id == source.frame_id;
+        });
+
+        if(message == messages.end()) {
+            InvalidSensorConfiguration(sensor->id,
+                "CAN bus " + bus + " has no message with frame ID " + FrameIdText(source.frame_id) + ".");
+        }
+
+        if((*message)->TryGetSignal(source.signal_name_hash) == nullptr) {
+            InvalidSensorConfiguration(sensor->id,
+                "CAN message " + FrameIdText(source.frame_id) + " on bus " + bus
+                + " has no signal " + std::string(source.signal_name) + ".");
+        }
+    }
 }
 
 } // namespace eerie_leap::domain::sensor_domain::configuration::parsers

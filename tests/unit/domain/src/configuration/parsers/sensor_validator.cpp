@@ -1,3 +1,4 @@
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -11,10 +12,13 @@
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/string/string_helpers.h"
 #include "utilities/voltage_interpolator/interpolation_method.h"
+#include "domain/canbus_domain/models/can_channel_configuration.h"
+#include "domain/canbus_domain/models/can_message_configuration.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 #include "domain/sensor_domain/configuration/parsers/sensor_validator.h"
 
 using namespace eerie_memory;
+using namespace eerie_leap::domain::canbus_domain::models;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::string;
 using namespace eerie_leap::utilities::voltage_interpolator;
@@ -79,6 +83,81 @@ bool Validates(SensorType type, std::optional<int> sampling_rate_ms = 100) {
 
 bool Contains(const std::optional<std::string>& error, std::string_view text) {
     return error.has_value() && error->find(text) != std::string::npos;
+}
+
+// The validation error on a unit with these channel counts, or nothing when the sensors validate.
+std::optional<std::string> ValidateOn(
+    const std::vector<std::shared_ptr<Sensor>>& sensors,
+    uint32_t gpio_channel_count,
+    uint32_t adc_channel_count) {
+
+    try {
+        SensorValidator::Validate(sensors, nullptr, gpio_channel_count, adc_channel_count);
+    } catch(const std::invalid_argument& e) {
+        return e.what();
+    }
+
+    return std::nullopt;
+}
+
+void AssertRejection(const std::optional<std::string>& error, std::string_view expected) {
+    zassert_true(error.has_value(), "Accepted, expected: %s", std::string(expected).c_str());
+    zassert_true(*error == expected, "Got: %s\nExpected: %s", error->c_str(), std::string(expected).c_str());
+}
+
+std::string Rejected(std::string_view sensor_id, std::string_view message) {
+    return "Invalid Sensor configuration. Sensor ID: " + std::string(sensor_id) + ". " + std::string(message);
+}
+
+// A CAN sensor with its connection string as written, which is what the validator reads.
+std::shared_ptr<Sensor> MakeCanSensor(SensorType type, std::string_view connection_string) {
+    auto sensor = MakeSensor("can_1", type, std::nullopt);
+    sensor->configuration.connection_string = connection_string;
+
+    return sensor;
+}
+
+std::shared_ptr<Sensor> MakeCanSensor(SensorType type, uint8_t bus_channel, uint32_t frame_id, std::string_view signal_name) {
+    auto sensor = MakeSensor("can_1", type, std::nullopt);
+    sensor->configuration.canbus_source =
+        make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), bus_channel, frame_id, signal_name);
+    sensor->configuration.UpdateConnectionString();
+
+    return sensor;
+}
+
+// Bus 0 with message 0x7E0, which has the signal rpm.
+CanbusConfiguration MakeCanbusConfiguration() {
+    CanbusConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
+
+    CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
+    channel.bus_channel = 0;
+
+    auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+    message->frame_id = 0x7E0;
+
+    CanSignalConfiguration signal(std::allocator_arg, Mrm::GetDefaultPmr());
+    signal.size_bits = 16;
+    signal.SetName("rpm");
+    message->signal_configurations.emplace_back(std::move(signal));
+
+    channel.message_configurations.emplace_back(std::move(message));
+    configuration.channel_configurations.emplace(0, std::move(channel));
+
+    return configuration;
+}
+
+std::optional<std::string> CanbusSourcesRejection(
+    const std::vector<std::shared_ptr<Sensor>>& sensors,
+    const CanbusConfiguration& canbus_configuration) {
+
+    try {
+        SensorValidator::ValidateCanbusSources(sensors, canbus_configuration);
+    } catch(const std::invalid_argument& e) {
+        return e.what();
+    }
+
+    return std::nullopt;
 }
 
 } // namespace
@@ -160,6 +239,154 @@ ZTEST(sensor_validator, test_invalid_sensor_id_message_names_the_sensor) {
     zassert_true(Contains(Validate({ MakeSensor("1_sensor", SensorType::USER_ANALOG, 100) }), "Sensor ID: 1_sensor"));
     zassert_true(Contains(Validate({ MakeSensor("sen#sor", SensorType::USER_ANALOG, 100) }), "Sensor ID: sen#sor"));
     zassert_true(Contains(Validate({ MakeSensor("", SensorType::USER_ANALOG, 100) }), "cannot be empty"));
+}
+
+ZTEST(sensor_validator, test_metadata_limits_are_in_bytes_and_include_the_limit) {
+    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    sensor->metadata.name.assign(32, 'n');
+    sensor->metadata.unit.assign(32, 'u');
+    sensor->metadata.description.assign(128, 'd');
+    zassert_false(Validate({ sensor }).has_value(), "The limits themselves are allowed");
+
+    // 17 two-byte characters are 34 bytes.
+    sensor->metadata.name.clear();
+    for(int i = 0; i < 17; i++)
+        sensor->metadata.name += "\xC3\xA9";
+    AssertRejection(Validate({ sensor }),
+        "Invalid Sensor metadata configuration. Sensor ID: sensor_1. Sensor name must be at most 32 bytes.");
+
+    sensor->metadata.name.assign(32, 'n');
+    sensor->metadata.unit.assign(33, 'u');
+    AssertRejection(Validate({ sensor }),
+        "Invalid Sensor metadata configuration. Sensor ID: sensor_1. Sensor unit must be at most 32 bytes.");
+
+    sensor->metadata.unit.assign(32, 'u');
+    sensor->metadata.description.assign(129, 'd');
+    AssertRejection(Validate({ sensor }),
+        "Invalid Sensor metadata configuration. Sensor ID: sensor_1. Sensor description must be at most 128 bytes.");
+}
+
+ZTEST(sensor_validator, test_channel_out_of_range_names_the_channels_of_the_unit) {
+    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+
+    analog->configuration.channel = 4;
+    AssertRejection(ValidateOn({ analog }, 8, 4),
+        Rejected("analog", "Channel value is out of range. This unit has ADC channels 0 to 3."));
+
+    analog->configuration.channel = 1;
+    AssertRejection(ValidateOn({ analog }, 8, 1),
+        Rejected("analog", "Channel value is out of range. This unit has only ADC channel 0."));
+
+    analog->configuration.channel = 0;
+    AssertRejection(ValidateOn({ analog }, 8, 0),
+        Rejected("analog", "Channel value is out of range. This unit has no ADC channels."));
+
+    auto indicator = MakeSensor("indicator", SensorType::PHYSICAL_INDICATOR, std::nullopt);
+    indicator->configuration.channel = 8;
+    AssertRejection(ValidateOn({ indicator }, 8, 4),
+        Rejected("indicator", "Channel value is out of range. This unit has GPIO channels 0 to 7."));
+
+    indicator->configuration.channel = 7;
+    zassert_false(ValidateOn({ indicator }, 8, 4).has_value(), "The last channel is in range");
+}
+
+ZTEST(sensor_validator, test_connection_string_is_read_strictly) {
+    for(const char* text : { "1/0010/rpm", "1/0x7E0/rpm", "1/0X7e0/rpm", "255/536870911/rpm", "0/0x1FFFFFFF/rpm", "1/100/a/b" })
+        zassert_false(Validate({ MakeCanSensor(SensorType::CANBUS_ANALOG, text) }).has_value(), "Rejected %s", text);
+    zassert_false(Validate({ MakeCanSensor(SensorType::CANBUS_RAW, "1/100") }).has_value(), "A raw sensor has no signal");
+
+    AssertRejection(Validate({ MakeCanSensor(SensorType::CANBUS_ANALOG, "") }),
+        Rejected("can_1", "Connection string cannot be empty."));
+
+    for(const char* text : { "1", "1/100/" }) {
+        AssertRejection(Validate({ MakeCanSensor(SensorType::CANBUS_ANALOG, text) }),
+            Rejected("can_1", "Connection string must be bus_channel/frame_id or bus_channel/frame_id/signal_name."));
+    }
+
+    for(const char* text : { "256/1/rpm", "-1/1/rpm", "+1/1/rpm", " 1/1/rpm", "0x/1/rpm", "/1/rpm", "1a/1/rpm" }) {
+        AssertRejection(Validate({ MakeCanSensor(SensorType::CANBUS_ANALOG, text) }),
+            Rejected("can_1", "Connection string bus channel must be a number from 0 to 255."));
+    }
+
+    for(const char* text : { "1/536870912/rpm", "1/0x20000000/rpm", "1/12abc/rpm", "1//rpm", "1/99999999999999999999/rpm", "1/0x/rpm" }) {
+        AssertRejection(Validate({ MakeCanSensor(SensorType::CANBUS_ANALOG, text) }),
+            Rejected("can_1", "Connection string frame ID must be a number from 0 to 0x1FFFFFFF."));
+    }
+
+    AssertRejection(Validate({ MakeCanSensor(SensorType::CANBUS_ANALOG, "1/100") }),
+        Rejected("can_1", "Sensor must have CAN bus signal name."));
+}
+
+ZTEST(sensor_validator, test_calibration_table_holds_at_most_50_finite_points_with_distinct_voltages) {
+    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    auto& calibration_table = analog->configuration.calibration_table;
+
+    calibration_table.clear();
+    for(size_t i = 0; i < SensorValidator::MAX_CALIBRATION_POINTS; i++)
+        calibration_table.push_back({ .voltage = static_cast<float>(i) * 0.1F, .value = static_cast<float>(i) });
+    zassert_false(Validate({ analog }).has_value(), "50 points are allowed");
+
+    calibration_table.push_back({ .voltage = 10.0F, .value = 50.0F });
+    AssertRejection(Validate({ analog }), Rejected("analog", "Calibration table must have at most 50 points."));
+
+    constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+    constexpr float infinity = std::numeric_limits<float>::infinity();
+
+    calibration_table = { {0.0F, 0.0F}, {nan, 1.0F} };
+    AssertRejection(Validate({ analog }), Rejected("analog", "Calibration table must hold finite numbers."));
+
+    calibration_table = { {0.0F, 0.0F}, {1.0F, -infinity} };
+    AssertRejection(Validate({ analog }), Rejected("analog", "Calibration table must hold finite numbers."));
+
+    // A repeated voltage need not be next to the first one: the table is ordered only after validation.
+    calibration_table = { {0.0F, 0.0F}, {3.0F, 1.0F}, {0.0F, 2.0F} };
+    AssertRejection(Validate({ analog }), Rejected("analog", "Calibration voltages must be unique."));
+
+    calibration_table = { {0.0F, 0.0F}, {-0.0F, 1.0F} };
+    AssertRejection(Validate({ analog }), Rejected("analog", "Calibration voltages must be unique."));
+
+    calibration_table = { {3.0F, 1.0F}, {0.0F, 0.0F} };
+    zassert_false(Validate({ analog }).has_value(), "An unordered table with distinct voltages is valid");
+}
+
+ZTEST(sensor_validator, test_expression_of_a_sensor_without_an_input_cannot_use_x) {
+    for(auto type : { SensorType::VIRTUAL_ANALOG, SensorType::VIRTUAL_INDICATOR }) {
+        auto sensor = MakeSensor("derived", type, 100);
+        sensor->configuration.expression = "x + 1";
+
+        AssertRejection(Validate({ sensor }), Rejected("derived", "Sensor has no input value, the expression cannot use x."));
+    }
+
+    for(auto type : { SensorType::PHYSICAL_ANALOG, SensorType::PHYSICAL_INDICATOR, SensorType::CANBUS_ANALOG,
+                      SensorType::CANBUS_INDICATOR, SensorType::USER_ANALOG, SensorType::USER_INDICATOR }) {
+        const auto sampling_rate_ms = SensorTypeTraits::Of(type).allows_sampling_rate ? std::optional<int>(100) : std::nullopt;
+        auto sensor = MakeSensor("sensor_1", type, sampling_rate_ms);
+        sensor->configuration.expression = "x * 2";
+
+        zassert_false(Validate({ sensor }).has_value(), "Rejected x for type %u.", static_cast<unsigned>(type));
+    }
+}
+
+ZTEST(sensor_validator, test_can_sources_must_name_a_configured_bus_message_and_signal) {
+    const auto canbus_configuration = MakeCanbusConfiguration();
+
+    zassert_false(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E0, "rpm") }, canbus_configuration).has_value());
+    zassert_false(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_INDICATOR, 0, 0x7E0, "rpm") }, canbus_configuration).has_value());
+    zassert_false(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_RAW, 0, 0x123, "") }, canbus_configuration).has_value(),
+        "A raw sensor reads any frame on a configured bus");
+
+    AssertRejection(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_ANALOG, 1, 0x7E0, "rpm") }, canbus_configuration),
+        Rejected("can_1", "CAN bus 1 is not configured."));
+    AssertRejection(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_RAW, 2, 0x7E0, "") }, canbus_configuration),
+        Rejected("can_1", "CAN bus 2 is not configured."));
+    AssertRejection(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E1, "rpm") }, canbus_configuration),
+        Rejected("can_1", "CAN bus 0 has no message with frame ID 0x7E1."));
+    AssertRejection(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_INDICATOR, 0, 0x7E0, "speed") }, canbus_configuration),
+        Rejected("can_1", "CAN message 0x7E0 on bus 0 has no signal speed."));
+
+    const CanbusConfiguration no_channels(std::allocator_arg, Mrm::GetDefaultPmr());
+    zassert_false(CanbusSourcesRejection({ MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100) }, no_channels).has_value(),
+        "Only CAN sensors are checked");
 }
 
 ZTEST(sensor_validator, test_metadata_error_names_the_sensor) {

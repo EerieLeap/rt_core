@@ -67,11 +67,18 @@ SensorsController::~SensorsController() {
 int SensorsController::Initialize(const ConfigurationSetup& setup_test_configuration) {
     auto cbor_sensors_config_service = std::make_unique<config_services::CborConfigurationService<CborSensorsConfig>>(
         SENSORS_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_);
+
+    // A client's CAN sensors are checked against the CAN bus configuration in use.
+    SensorsConfigurationManager::CanbusConfigurationProvider canbus_configuration_provider = nullptr;
+    if(canbus_service_ != nullptr)
+        canbus_configuration_provider = [canbus_service = canbus_service_] { return canbus_service->GetConfiguration(); };
+
     sensors_configuration_manager_ = std::make_shared<SensorsConfigurationManager>(
         std::move(cbor_sensors_config_service),
         sd_fs_service_,
         gpio_ != nullptr ? gpio_->GetChannelCount() : 0,
-        adc_manager_ != nullptr ? adc_manager_->GetChannelCount() : 0);
+        adc_manager_ != nullptr ? adc_manager_->GetChannelCount() : 0,
+        std::move(canbus_configuration_provider));
 
     if(configuration_service_ != nullptr)
         configuration_service_->RegisterCborConfigurationManager(
@@ -136,6 +143,14 @@ int SensorsController::Start() {
         LOG_ERR("Failed to start the sensors processing service: %s", e.what());
         return -1;
     }
+}
+
+SensorCapabilities SensorsController::GetCapabilities() const {
+    return {
+        .adc_channels = static_cast<uint32_t>(sensors_configuration_manager_->GetAdcChannelCount()),
+        .gpio_channels = static_cast<uint32_t>(sensors_configuration_manager_->GetGpioChannelCount()),
+        .sensors_max = CONFIG_EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT,
+    };
 }
 
 void SensorsController::RegisterDependentService(std::shared_ptr<IService> service) {

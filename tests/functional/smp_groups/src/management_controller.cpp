@@ -13,6 +13,7 @@
 using namespace smp_groups_test;
 
 using eerie_leap::controllers::ManagementController;
+using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 
@@ -32,7 +33,8 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
     configuration_service->RegisterCborConfigurationManager(
         ConfigurationService::Type::Ui, std::make_shared<FakeConfigurationManager>());
 
-    ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER);
+    ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER,
+        SensorCapabilities{ .adc_channels = 0, .gpio_channels = 1, .sensors_max = 64 });
     zassert_equal(controller.Initialize(), 0);
 
     SmpTestClient client;
@@ -41,6 +43,9 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
     zassert_true(device.IsOk());
     zassert_equal(device.Value("build"), BUILD_NUMBER);
     zassert_false(device.Has("cdmp_id"), "No CDMP identity without network info");
+    zassert_equal(device.Value("adc_channels"), 0);
+    zassert_equal(device.Value("gpio_channels"), 1);
+    zassert_equal(device.Value("sensors_max"), 64);
 
     const auto types = client.Read(SmpGroupId::CONFIG, 0);
     zassert_true(types.IsOk());

@@ -59,7 +59,11 @@ Behaviour shared by every manager:
   a reload would give), saves, and replaces the current object.
 - **`ApplyCborConfiguration(bytes, reason)`** decodes and validates CBOR from a client, stores
   the bytes as received (so the CRC a client computed stays the stored CRC), and replaces the
-  current object. On rejection `reason` receives the validator's message.
+  current object. On rejection `reason` receives the validator's message. A manager can also
+  check a client's configuration against the rest of the unit before it is stored
+  (`ValidateApply()`; the sensors manager checks CAN sensors against the CAN bus configuration).
+  Loading and `Update()` skip that check, so a stored configuration still loads after what it was
+  checked against has changed.
 - **Update handlers.** Managers whose configuration drives a running service also implement
   `IConfigurationManager::RegisterConfigurationUpdatedHandler()`. The handler runs after a
   successful `Update()` or `ApplyCborConfiguration()`, not on the initial load. Controllers use

@@ -41,9 +41,11 @@ There are no validation rules. The file is `config/system_config.cbor`.
 
 ## SMP `device` group
 
-Command `INFO` (read) returns `{family, product, revision, features, hw, sw, build}` and, on a
-unit with CDMP, `{cdmp_id, uid, device_type, status}`. Served by the `ManagementController`;
-see [smp.md](smp.md).
+Command `INFO` (read) returns `{family, product, revision, features, hw, sw, build}`, on a unit
+with CDMP `{cdmp_id, uid, device_type, status}`, and on a unit with sensors
+`{adc_channels, gpio_channels, sensors_max}`, which the application passes to the
+`ManagementController` from `SensorsController::GetCapabilities()`. Served by the
+`ManagementController`; see [smp.md](smp.md).
 
 ## Wiring
 

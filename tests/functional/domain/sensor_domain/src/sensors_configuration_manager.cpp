@@ -1,5 +1,6 @@
 #include <array>
 #include <memory>
+#include <string_view>
 #include <vector>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
@@ -11,7 +12,9 @@
 #include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 
+#include "domain/canbus_domain/models/canbus_configuration.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
+#include "domain/sensor_domain/models/sources/canbus_source.h"
 
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/i_fs_service.h"
@@ -26,8 +29,10 @@ using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::utilities::voltage_interpolator;
 using namespace eerie_leap::configuration::services;
+using namespace eerie_leap::domain::canbus_domain::models;
 using namespace eerie_leap::domain::sensor_domain::configuration;
 using namespace eerie_leap::domain::sensor_domain::models;
+using namespace eerie_leap::domain::sensor_domain::models::sources;
 using namespace eerie_leap::subsys::device_tree;
 using namespace eerie_leap::subsys::fs::services;
 using namespace eerie_leap::subsys::expression_engine;
@@ -386,4 +391,80 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_rejected_s
     zassert_true(sensors_configuration_manager->Update(sensors_configuration_manager_SetupTestSensors()));
     zassert_true(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
     zassert_not_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), stored.size());
+}
+
+namespace {
+
+std::shared_ptr<Sensor> sensors_configuration_manager_MakeCanSensor(std::string_view signal_name) {
+    auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "engine_rpm");
+    sensor->configuration.type = SensorType::CANBUS_ANALOG;
+    sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 0, 0x100, signal_name);
+
+    return sensor;
+}
+
+// Bus 0 with message 0x100, which has one signal.
+std::shared_ptr<const CanbusConfiguration> sensors_configuration_manager_MakeCanbusConfiguration(std::string_view signal_name) {
+    auto configuration = std::make_shared<CanbusConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+
+    CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
+    channel.bus_channel = 0;
+
+    auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+    message->frame_id = 0x100;
+
+    CanSignalConfiguration signal(std::allocator_arg, Mrm::GetDefaultPmr());
+    signal.size_bits = 16;
+    signal.SetName(signal_name);
+    message->signal_configurations.emplace_back(std::move(signal));
+
+    channel.message_configurations.emplace_back(std::move(message));
+    configuration->channel_configurations.emplace(0, std::move(channel));
+
+    return configuration;
+}
+
+} // namespace
+
+ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_signal_the_unit_does_not_have) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    // What a client sends, written where nothing checks it against a CAN bus configuration.
+    auto client = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config_client", fs_service), nullptr, 16, 16);
+    zassert_true(client->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
+    const auto cbor = client->GetCborConfiguration();
+
+    auto canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("speed");
+    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
+        [&canbus_configuration] { return canbus_configuration; });
+
+    std::array<char, 192> reason{};
+    zassert_false(sensors_configuration_manager->ApplyCborConfiguration(cbor, reason));
+    zassert_str_equal(reason.data(), "Invalid Sensor configuration. Sensor ID: engine_rpm. CAN message 0x100 on bus 0 has no signal rpm.");
+    zassert_equal(sensors_configuration_manager->Get()->size(), 0, "The refused configuration is not applied");
+
+    canbus_configuration = nullptr;
+    zassert_false(sensors_configuration_manager->ApplyCborConfiguration(cbor, reason));
+    zassert_str_equal(reason.data(), "Invalid Sensor configuration. Sensor ID: engine_rpm. CAN bus 0 is not configured.",
+        "Without a CAN bus configuration there are no channels");
+
+    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm");
+    zassert_true(sensors_configuration_manager->ApplyCborConfiguration(cbor, reason));
+    zassert_equal(sensors_configuration_manager->Get()->size(), 1);
+
+    // The stored configuration still loads once the CAN bus configuration has lost the signal.
+    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("speed");
+    auto reloaded = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
+        [&canbus_configuration] { return canbus_configuration; });
+    zassert_false(reloaded->IsStoredConfigurationRejected());
+    zassert_equal(reloaded->Get()->size(), 1);
+
+    // The unit's own updates are not checked against it either.
+    zassert_true(reloaded->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
 }

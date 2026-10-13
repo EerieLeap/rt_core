@@ -16,6 +16,7 @@ using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanbusComConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 
@@ -49,6 +50,8 @@ public:
     /** @brief A copy of the CDMP and SMP settings. */
     [[nodiscard]] CanbusComConfiguration GetComConfiguration() const;
 
+    /** @brief The configuration in use; kept alive by the returned pointer while a new one replaces it. */
+    [[nodiscard]] std::shared_ptr<const CanbusConfiguration> GetConfiguration() const;
     [[nodiscard]] const CanChannelConfiguration* GetChannelConfiguration(uint8_t bus_channel) const;
     [[nodiscard]] std::shared_ptr<CanMessageConfiguration> GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const;
 

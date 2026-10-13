@@ -15,10 +15,14 @@ const mgmt_handler DeviceMgmtGroup::HANDLERS[] = {
     {.mh_read = Dispatch<&DeviceMgmtGroup::HandleInfo>, .mh_write = nullptr},
 };
 
-DeviceMgmtGroup::DeviceMgmtGroup(uint32_t build_number, std::shared_ptr<const ICdmpNetworkInfo> network_info)
+DeviceMgmtGroup::DeviceMgmtGroup(
+    uint32_t build_number,
+    std::shared_ptr<const ICdmpNetworkInfo> network_info,
+    std::optional<SensorCapabilities> sensor_capabilities)
     : SmpGroup(SmpGroupId::DEVICE, HANDLERS, nullptr),
     build_number_(build_number),
-    network_info_(std::move(network_info)) {}
+    network_info_(std::move(network_info)),
+    sensor_capabilities_(sensor_capabilities) {}
 
 DeviceMgmtGroup::~DeviceMgmtGroup() {
     Unregister();
@@ -42,6 +46,12 @@ int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
             && zcbor_tstr_put_lit(zse, "uid") && zcbor_uint32_put(zse, device.uid)
             && zcbor_tstr_put_lit(zse, "device_type") && zcbor_uint32_put(zse, std::to_underlying(device.device_type))
             && zcbor_tstr_put_lit(zse, "status") && zcbor_uint32_put(zse, std::to_underlying(device.status));
+    }
+
+    if(ok && sensor_capabilities_.has_value()) {
+        ok = zcbor_tstr_put_lit(zse, "adc_channels") && zcbor_uint32_put(zse, sensor_capabilities_->adc_channels)
+            && zcbor_tstr_put_lit(zse, "gpio_channels") && zcbor_uint32_put(zse, sensor_capabilities_->gpio_channels)
+            && zcbor_tstr_put_lit(zse, "sensors_max") && zcbor_uint32_put(zse, sensor_capabilities_->sensors_max);
     }
 
     return MGMT_RETURN_CHECK(ok);

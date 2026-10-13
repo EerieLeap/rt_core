@@ -1,9 +1,13 @@
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
 
 #include "utilities/memory/memory_resource_manager.h"
+#include "utilities/cbor/cbor_helpers.hpp"
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 #include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
 #include "subsys/expression_engine/expression_evaluator.h"
@@ -13,6 +17,7 @@
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
+using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::subsys::expression_engine;
 
 using namespace eerie_leap::domain::sensor_domain::configuration::parsers;
@@ -155,4 +160,122 @@ ZTEST(sensors_parser, test_Deserialize_orders_an_unordered_calibration_table) {
         const auto& calibration_table = sensor->configuration.calibration_table;
         zassert_true(std::ranges::is_sorted(calibration_table, {}, &CalibrationData::voltage), "%s", sensor->id.c_str());
     }
+}
+
+namespace {
+
+// Deserialize()'s error, or nothing when it reads the configuration.
+std::string DeserializeRejection(SensorsCborParser& parser, const CborSensorsConfig& sensors_config) {
+    try {
+        parser.Deserialize(Mrm::GetDefaultPmr(), sensors_config, 16, 16);
+    } catch(const std::invalid_argument& e) {
+        return e.what();
+    }
+
+    return {};
+}
+
+// sensor_2, whose table has five points.
+bool HasFivePointTable(const CborSensorConfig& sensor_config) {
+    return sensor_config.configuration.calibration_table.float32float.size() == 5;
+}
+
+} // namespace
+
+ZTEST(sensors_parser, test_Deserialize_refuses_a_non_finite_voltage_before_ordering_the_table) {
+    SensorsCborParser parser(nullptr);
+    const auto sensors = sensors_parser_GetTestSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
+    const auto sensor_config = std::ranges::find_if(sensor_configs, HasFivePointTable);
+    zassert_true(sensor_config != sensor_configs.end());
+
+    // Ordering a table with a NaN in it would break the sort's ordering requirement.
+    auto& points = sensor_config->configuration.calibration_table.float32float;
+    std::ranges::reverse(points);
+    points[2].float32float_key = std::numeric_limits<float>::quiet_NaN();
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(error.ends_with("Calibration table must hold finite numbers."), "%s", error.c_str());
+}
+
+ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_voltage) {
+    SensorsCborParser parser(nullptr);
+    const auto sensors = sensors_parser_GetTestSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
+    const auto sensor_config = std::ranges::find_if(sensor_configs, HasFivePointTable);
+    zassert_true(sensor_config != sensor_configs.end());
+
+    // A CBOR map with a repeated key, which the decoder lets through.
+    auto& points = sensor_config->configuration.calibration_table.float32float;
+    points[3].float32float_key = points[1].float32float_key;
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(error.ends_with("Calibration voltages must be unique."), "%s", error.c_str());
+}
+
+ZTEST(sensors_parser, test_Deserialize_reads_the_connection_string_strictly) {
+    SensorsCborParser parser(nullptr);
+
+    auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "engine_rpm");
+    sensor->configuration.type = SensorType::CANBUS_ANALOG;
+    sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 1, 100, "rpm");
+
+    auto serialized_sensors = parser.Serialize({ sensor }, 16, 16);
+    auto& connection_string = serialized_sensors->CborSensorConfig_m.front().configuration.connection_string;
+
+    // Read as octal, 0100 was frame 64.
+    const std::string leading_zero = "1/0100/rpm";
+    connection_string = CborHelpers::ToZcborString(leading_zero);
+
+    const auto sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
+    zassert_equal(sensors.size(), 1);
+    zassert_not_null(sensors.front()->configuration.canbus_source);
+    zassert_equal(sensors.front()->configuration.canbus_source->frame_id, 100);
+
+    const std::string trailing_text = "1/100abc/rpm";
+    connection_string = CborHelpers::ToZcborString(trailing_text);
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(
+        error == "Invalid Sensor configuration. Sensor ID: engine_rpm. Connection string frame ID must be a number from 0 to 0x1FFFFFFF.",
+        "%s", error.c_str());
+}
+
+ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_sensor_id) {
+    SensorsCborParser parser(nullptr);
+    const auto sensors = sensors_parser_GetTestSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    // sensor_4 stored as a second sensor_1, which ordering the sensors would drop.
+    auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
+    sensor_configs[3].id = sensor_configs[0].id;
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(error == "Invalid Sensor configuration. Sensor ID: sensor_1. Duplicate sensor ID.", "%s", error.c_str());
+}
+
+ZTEST(sensors_parser, test_Deserialize_names_the_sensor_whose_expression_is_wrong) {
+    SensorsCborParser parser(nullptr);
+    const auto sensors = sensors_parser_GetTestSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+    auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
+
+    const std::string unknown_reference = "sensor_9 + 1";
+    sensor_configs[2].configuration.expression = CborHelpers::ToZcborString(unknown_reference);
+
+    auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(
+        error == "Invalid Sensor configuration. Sensor ID: sensor_3. Expression references unknown sensor sensor_9.",
+        "%s", error.c_str());
+
+    const std::string unfinished = "x +";
+    sensor_configs[2].configuration.expression = sensor_configs[0].configuration.expression;
+    sensor_configs[1].configuration.expression = CborHelpers::ToZcborString(unfinished);
+
+    error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(error.starts_with("Invalid Sensor configuration. Sensor ID: sensor_2. Invalid expression"), "%s", error.c_str());
 }

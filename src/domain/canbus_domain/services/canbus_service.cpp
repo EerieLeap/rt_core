@@ -149,6 +149,10 @@ void CanbusService::Configure() {
     return canbus_configuration_manager_->Get()->com_configuration;
 }
 
+std::shared_ptr<const CanbusConfiguration> CanbusService::GetConfiguration() const {
+    return canbus_configuration_manager_->Get();
+}
+
 const CanChannelConfiguration* CanbusService::GetChannelConfiguration(uint8_t bus_channel) const {
     auto canbus_configuration = canbus_configuration_manager_->Get();
 

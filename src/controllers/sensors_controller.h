@@ -14,6 +14,7 @@
 #include "subsys/time/i_time_service.h"
 
 #include "domain/configuration_domain/services/configuration_service.h"
+#include "domain/system_domain/models/sensor_capabilities.h"
 
 #include "domain/canbus_domain/services/canbus_service.h"
 
@@ -38,6 +39,7 @@ using eerie_leap::subsys::time::ITimeService;
 
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
+using eerie_leap::domain::system_domain::models::SensorCapabilities;
 
 using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
 
@@ -107,6 +109,9 @@ public:
 
     std::shared_ptr<SensorsConfigurationManager> GetConfigurationManager() const { return sensors_configuration_manager_; }
     std::shared_ptr<SensorsProcessingService> GetProcessingService() const { return sensors_processing_service_; }
+
+    /** @brief The inputs and sensor count the configuration is validated against; after Initialize(). */
+    [[nodiscard]] SensorCapabilities GetCapabilities() const;
 
     // TODO: For test purposes only
     void EmulateReadings();

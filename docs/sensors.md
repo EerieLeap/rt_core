@@ -12,14 +12,14 @@ A sensor is an `id`, metadata and a configuration:
 | Field | Rules |
 | --- | --- |
 | `id` | Letters, digits and `_`, not starting with a digit. Unique, and its 32-bit hash must be unique too (readings, logging and clients refer to sensors by the hash). |
-| `metadata.name`, `metadata.unit` | At most 32 characters. |
-| `metadata.description` | At most 128 characters. |
+| `metadata.name`, `metadata.unit` | At most 32 bytes (UTF-8). |
+| `metadata.description` | At most 128 bytes. |
 | `configuration.type` | One of the types below. |
 | `configuration.channel` | Global ADC channel or GPIO channel index; only for types that take one. |
-| `configuration.connection_string` | CAN source, `bus_channel/frame_id[/signal_name]`; only for CAN types. |
+| `configuration.connection_string` | CAN source, `bus_channel/frame_id[/signal_name]`; only for CAN types. Each number is decimal (a leading `0` too) or hexadecimal after `0x`, the bus channel at most 255 and the frame ID at most `0x1FFFFFFF`; the signal name is the rest of the text. Written in decimal. |
 | `configuration.sampling_rate_ms` | Polling period; see the table. |
-| `configuration.interpolation_method`, `calibration_table` | `LINEAR` (1) or `CUBIC_SPLINE` (2) over 2 to 50 points `{voltage, value}`; only for `PHYSICAL_ANALOG`, where both are required. |
-| `configuration.expression` | Formula over `x` and other sensor IDs; see [scripting.md](scripting.md). |
+| `configuration.interpolation_method`, `calibration_table` | `LINEAR` (1) or `CUBIC_SPLINE` (2) over 2 to 50 points `{voltage, value}` of finite numbers with distinct voltages; only for `PHYSICAL_ANALOG`, where both are required. |
+| `configuration.expression` | Formula over `x`, for the types that have an input, and other sensor IDs; see [scripting.md](scripting.md). |
 | `configuration.script_path` | Lua script on the SD card; see [scripting.md](scripting.md). |
 
 ### Types
@@ -37,13 +37,23 @@ A sensor is an `id`, metadata and a configuration:
 | `USER_INDICATOR` | 9 | Lua | no | no | no | optional | required | polled; value 0/1 |
 
 A virtual sensor without a sampling rate must reference at least one sensor, otherwise it would
-never update. A CAN signal sensor's `bus/frame/signal` must name a signal defined in the CAN bus
-configuration of that bus (see [canbus.md](canbus.md)); a raw sensor only needs the bus and
-frame ID. Values and channels are checked against the unit: an ADC or GPIO channel must exist,
-and with an SD card present a `script_path` must exist.
+never update; its expression cannot use `x`, which it does not have. A `USER_ANALOG` or
+`USER_INDICATOR` sensor needs no script: without `create_sensor_value` its readings have no value
+of their own, and other scripts set it with `update_sensor_value()`. Values and channels are
+checked against the unit: an ADC or GPIO channel must exist (the error names the channels the
+unit has), and with an SD card present a `script_path` must exist.
+
+When a client applies a configuration (the SMP `config` group), each CAN sensor's bus must also be
+configured in the CAN bus configuration the unit runs, and a signal sensor's frame and signal must
+be defined on it (see [canbus.md](canbus.md)); a raw sensor reads every frame with its ID, so it
+needs only the bus. A stored configuration is not checked against it again: after a CAN bus
+change it still loads, and a sensor whose signal is gone logs so when the pipeline is built and
+stays silent.
 
 The traits behind this table are in `models/sensor_type_traits.h`; the rules are enforced by
-`configuration/parsers/sensor_validator.cpp`.
+`configuration/parsers/sensor_validator.cpp`, the CAN bus check by
+`SensorValidator::ValidateCanbusSources()`, which `SensorsConfigurationManager` runs on a
+client's configuration.
 
 ## Processing
 
@@ -155,8 +165,10 @@ CborSensorConfig = [ id: tstr, metadata: CborSensorMetadataConfig, configuration
 CborSensorsConfig = [ sensors: [*CborSensorConfig] ]
 ```
 
-`sampling_rate_ms` ≤ 0 means none. `interpolation_method` 0 means none. The stored order is
-not significant: sensors are re-sorted into processing order on load. The default configuration
+`sampling_rate_ms` ≤ 0 means none. `interpolation_method` 0 means none. The decoder takes any
+number of calibration points and repeated voltages; the validator holds the table to 2 to 50
+points with distinct voltages, and only then is it ordered by voltage. The stored order is not
+significant: sensors are re-sorted into processing order on load. The default configuration
 is an empty list. File: `config/sensors_config.cbor`, type 4 in the `config` group.
 
 Example through the API (the application's test setup, trimmed):
@@ -201,9 +213,12 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6});
 internal filesystem, the configuration work queue, the configuration service, the time service,
 the shared `SensorReadingsFrame`, the CAN service, the GPIO, and optionally the ADC manager, the
 ADC configuration manager and the SD service. It creates the configuration manager (validating
-channels against the GPIO and ADC channel counts), the reader factories and the processing
-service, registers type 4, and wires the restart handlers. `Start()` starts processing;
-`RegisterDependentService()` adds a service to stop and start around a restart (see above). The
+channels against the GPIO and ADC channel counts, and a client's CAN sensors against the CAN
+service's configuration), the reader factories and the processing service, registers type 4, and
+wires the restart handlers. `Start()` starts processing; `RegisterDependentService()` adds a
+service to stop and start around a restart (see above). `GetCapabilities()` gives the channel
+counts and `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT`, which rt_daq passes to the `ManagementController`
+for the device `INFO` (see [smp.md](smp.md)). The
 application also registers the processing service with the ADC controller (to be paused during
 calibration) and the CAN controller (to be restarted on CAN reconfiguration).
 

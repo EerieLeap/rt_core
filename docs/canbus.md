@@ -133,7 +133,8 @@ every configured channel whose device exists (a missing `can<N>` alias is logged
 reconfigures and restarts the ones that already existed, and discards buses that are no longer
 configured. Reset and updated handlers run before and after, which is how the COM service and
 the CAN sensors follow a reconfiguration. It also answers `GetMessageConfiguration(bus, frame)`
-for the sensor domain's signal lookup and persists a detected bitrate.
+for the sensor domain's signal lookup and `GetConfiguration()` for the check of a client's CAN
+sensors (see [sensors.md](sensors.md)), and persists a detected bitrate.
 
 **`CanbusSchedulerService`** sends the messages. For every message with `send_interval_ms` it
 creates one periodic task on its own work queue (stack 8 KiB, priority 6). Each run:

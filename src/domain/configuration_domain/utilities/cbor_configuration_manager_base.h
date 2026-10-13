@@ -41,6 +41,11 @@ private:
     virtual bool CreateDefaultConfiguration() = 0;
     virtual void OnConfigurationChanged(const std::shared_ptr<TConfiguration>&) {}
 
+    // Checks a configuration a client applies against the rest of the unit before it is stored, and
+    // throws std::invalid_argument with the reason to refuse it. Neither loading nor Update() calls
+    // it, so a stored configuration still loads after what it was checked against has changed.
+    virtual void ValidateApply(const TConfiguration&) {}
+
     // Takes over the parsed allocation instead of moving it into a new one.
     static std::shared_ptr<TConfiguration> Share(eerie_memory::pmr_unique_ptr<TConfiguration> configuration) {
         auto deleter = configuration.get_deleter();
@@ -214,6 +219,7 @@ public:
 
         try {
             configuration = Share(Deserialize(*cbor_config));
+            ValidateApply(*configuration);
 
             // Stored as received, so its CRC stays the one the sender computed.
             if(!cbor_configuration_service_->Save(cbor_data)) {
