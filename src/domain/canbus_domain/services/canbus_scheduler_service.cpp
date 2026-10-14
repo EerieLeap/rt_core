@@ -80,7 +80,7 @@ std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(uint8_t bus_chann
         return nullptr;
     }
 
-    if(!message_configuration->send_interval_ms.has_value())
+    if(!message_configuration->is_enabled || !message_configuration->send_interval_ms.has_value())
         return nullptr;
 
     InitializeScript(*message_configuration);

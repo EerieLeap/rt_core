@@ -429,6 +429,7 @@ ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_save
     std::string script_path = "";
     CborCanMessageConfig message_config(std::allocator_arg, Mrm::GetDefaultPmr());
     message_config.frame_id = 0x123;
+    message_config.is_enabled = false;
     message_config.send_interval_ms = 100;
     message_config.script_path = CborHelpers::ToZcborString(script_path);
     message_config.name = CborHelpers::ToZcborString(message_name);
@@ -465,6 +466,9 @@ ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_save
     zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].bitrate, 500000);
     zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m.size(), 1);
     zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].frame_id, 0x123);
+    zassert_false(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].is_enabled);
+    zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].send_interval_ms, 100,
+        "A disabled message keeps its send interval");
 
     zassert_equal(loaded_canbus_config.com_config.bus_channel, -1, "An unset COM channel is stored as -1");
     zassert_equal(loaded_canbus_config.com_config.cdmp_base_can_id, 0x600);

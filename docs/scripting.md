@@ -56,8 +56,8 @@ card is mounted every non-empty `script_path` is rejected; a unit without an SD 
   its own globals keep their values between calls. The entry points are looked up once, when the
   pipeline is built; a script that fails to compile or run is logged and the sensor runs without
   it.
-- **One state per CAN message.** A message with a script gets its own state, loaded when the CAN
-  configuration is parsed.
+- **One state per CAN message.** An enabled message with a script gets its own state, loaded when
+  the CAN configuration is parsed.
 - **Memory.** A state is allocated on the external heap and every allocation is counted against
   `EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB`. Past the limit the allocation fails inside the Lua call
   that needed it, which reports a memory error; the other scripts are not affected.

@@ -16,6 +16,7 @@ struct CanMessageConfiguration {
     using allocator_type = std::pmr::polymorphic_allocator<>;
 
     uint32_t frame_id = 0;
+    bool is_enabled = true;
     std::optional<int> send_interval_ms = std::nullopt;
     std::pmr::string script_path;
 
@@ -38,6 +39,7 @@ struct CanMessageConfiguration {
 
     CanMessageConfiguration(CanMessageConfiguration&& other, allocator_type alloc)
         : frame_id(other.frame_id),
+        is_enabled(other.is_enabled),
         send_interval_ms(other.send_interval_ms),
         script_path(std::move(other.script_path), alloc),
         name(std::move(other.name), alloc),

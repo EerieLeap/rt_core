@@ -189,3 +189,54 @@ ZTEST(canbus_configuration_validator, test_messages_give_frame_ids_in_hex) {
     zassert_str_equal(RejectionOf(configuration).c_str(),
         "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x18FFAB12. Invalid send interval.");
 }
+
+// Disabling a message keeps it validated, so switching it back on is a one-field change that cannot fail.
+ZTEST(canbus_configuration_validator, test_a_disabled_message_passes_validation) {
+    auto configuration = MakeConfigurationWithSignalUnit("km/h");
+    configuration.channel_configurations.at(0).message_configurations.front()->is_enabled = false;
+
+    zassert_true(Validates(configuration));
+}
+
+ZTEST(canbus_configuration_validator, test_a_disabled_message_is_validated_like_an_enabled_one) {
+    auto configuration = MakeConfigurationWithSignalUnit("km/h");
+    auto& message = *configuration.channel_configurations.at(0).message_configurations.front();
+    message.is_enabled = false;
+
+    message.send_interval_ms = 0;
+    zassert_str_equal(RejectionOf(configuration).c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Invalid send interval.");
+
+    message.send_interval_ms = 100;
+    message.name = "1_FRAME";
+    zassert_str_equal(RejectionOf(configuration).c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Name must start with a letter or an underscore.");
+
+    message.name = "EL_FRAME_0";
+    message.signal_configurations.front().factor = 0.0F;
+    zassert_str_equal(RejectionOf(configuration).c_str(),
+        "Invalid CAN Signal configuration. Channel: 0, Frame ID: 0x123, Signal: sensor_0. Factor cannot be zero.");
+
+    message.signal_configurations.front().factor = 1.0F;
+    message.frame_id = 0x18FF1234;
+    zassert_false(Validates(configuration), "A disabled message must still fit the channel's identifier width");
+}
+
+ZTEST(canbus_configuration_validator, test_a_disabled_message_cannot_share_a_frame_id) {
+    for(const bool is_first_disabled : {true, false}) {
+        auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+        auto& messages = configuration.channel_configurations.at(0).message_configurations;
+
+        auto duplicate = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+        duplicate->frame_id = 0x123;
+        duplicate->name = "EL_FRAME_1";
+        duplicate->message_size = 8;
+        messages.emplace_back(std::move(duplicate));
+
+        // Either copy may be the disabled one; enabling it later must not create a duplicate.
+        messages.at(is_first_disabled ? 0 : 1)->is_enabled = false;
+
+        zassert_str_equal(RejectionOf(configuration).c_str(),
+            "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. CAN channel cannot contain duplicate Frame IDs.");
+    }
+}

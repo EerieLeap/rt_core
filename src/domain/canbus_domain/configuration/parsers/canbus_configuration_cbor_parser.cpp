@@ -39,6 +39,7 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
             CborCanMessageConfig message_config(std::allocator_arg, Mrm::GetExtPmr());
 
             message_config.frame_id = message_configuration->frame_id;
+            message_config.is_enabled = message_configuration->is_enabled;
             message_config.send_interval_ms = message_configuration->send_interval_ms.has_value() && message_configuration->send_interval_ms.value() > 0
                 ? message_configuration->send_interval_ms.value()
                 : -1;
@@ -99,6 +100,7 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
             auto message_configuration = make_shared_pmr<CanMessageConfiguration>(mr);
 
             message_configuration->frame_id = message_config.frame_id;
+            message_configuration->is_enabled = message_config.is_enabled;
             message_configuration->send_interval_ms = message_config.send_interval_ms > 0
                 ? std::optional<int>(message_config.send_interval_ms)
                 : std::nullopt;
@@ -121,7 +123,9 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
                 message_configuration->signal_configurations.push_back(std::move(signal_configuration));
             }
 
-            if(sd_fs_service_ != nullptr
+            // A disabled message never sends, so its script would only take a Lua state.
+            if(message_configuration->is_enabled
+                && sd_fs_service_ != nullptr
                 && sd_fs_service_->IsAvailable()
                 && !message_configuration->script_path.empty()
                 && sd_fs_service_->Exists(message_configuration->script_path)) {

@@ -47,13 +47,16 @@ Schema (`canbus_config.cddl`), file `config/canbus_config.cbor`, type 3 in the `
 ```
 CborCanSignalConfig  = [ start_bit: uint, size_bits: uint, factor: float32, offset: float32,
                          byte_order: uint, is_signed: bool, name: tstr, unit: tstr ]
-CborCanMessageConfig = [ frame_id: uint, send_interval_ms: int, script_path: tstr,
+CborCanMessageConfig = [ frame_id: uint, is_enabled: bool, send_interval_ms: int, script_path: tstr,
                          name: tstr, message_size: uint, signal_configs: [*CborCanSignalConfig] ]
 CborCanChannelConfig = [ type: uint, is_extended_id: bool, bus_channel: uint, bitrate: uint,
                          data_bitrate: uint, message_configs: [*CborCanMessageConfig] ]
 CborCanbusComConfig  = [ bus_channel: int, cdmp_base_can_id: uint, smp_can_id_base: uint, smp_bus_share_percent: uint ]
 CborCanbusConfig     = [ channel_configs: [0*8 CborCanChannelConfig], com_config: CborCanbusComConfig ]
 ```
+
+`is_enabled` is required: a file stored before it existed does not decode, so it is kept and the
+unit runs on the default (see [configuration.md](configuration.md#configuration-managers)).
 
 **Channel** (one per bus, keyed by `bus_channel`, 0..255, matching a `can<N>` alias):
 
@@ -69,6 +72,7 @@ CborCanbusConfig     = [ channel_configs: [0*8 CborCanChannelConfig], com_config
 | Field | Rules |
 | --- | --- |
 | `frame_id` | Unique within the channel. |
+| `is_enabled` | false keeps the message stored but switched off: it is not sent, its script is not loaded, and its signals feed no sensor. Validated like an enabled message, so switching it on cannot fail. |
 | `send_interval_ms` | > 0: the unit sends the frame at this period. ≤ 0: receive-only. |
 | `name` | Identifier (letters, digits, `_`), 1 to 32 characters. |
 | `message_size` | Bytes, 1..8 on classical CAN, 1..64 on CAN FD. |
@@ -109,6 +113,7 @@ channel_0.bitrate = 1'000'000;
 
 auto message = make_shared_pmr<CanMessageConfiguration>(Mrm::GetExtPmr());
 message->frame_id = 100;
+message->is_enabled = true;          // the default
 message->name = "EL_FRAME_0";
 message->message_size = 8;
 message->send_interval_ms = 20;
@@ -136,8 +141,8 @@ the CAN sensors follow a reconfiguration. It also answers `GetMessageConfigurati
 for the sensor domain's signal lookup and `GetConfiguration()` for the check of a client's CAN
 sensors (see [sensors.md](sensors.md)), and persists a detected bitrate.
 
-**`CanbusSchedulerService`** sends the messages. For every message with `send_interval_ms` it
-creates one periodic task on its own work queue (stack 8 KiB, priority 6). Each run:
+**`CanbusSchedulerService`** sends the messages. For every enabled message with `send_interval_ms`
+it creates one periodic task on its own work queue (stack 8 KiB, priority 6). Each run:
 
 1. builds the payload: `message_size` zero bytes, then every signal encoded with the latest
    value of the sensor named by the signal (0 when there is no such sensor or value);
@@ -150,8 +155,9 @@ the whole payload. The service is pausable and restarted by the CAN controller a
 reconfiguration.
 
 **Receiving** is done by the sensor domain: `CANBUS_ANALOG` and `CANBUS_INDICATOR` sensors
-decode a signal of a configured message, `CANBUS_RAW` sensors take whole frames of any ID. The
-unit never processes a received frame for which no sensor is configured.
+decode a signal of a configured, enabled message, `CANBUS_RAW` sensors take whole frames of any
+ID whether or not a message defines it. The unit never processes a received frame for which no
+sensor is configured.
 
 ## Reconfiguration
 

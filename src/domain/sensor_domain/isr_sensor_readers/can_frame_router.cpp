@@ -38,8 +38,9 @@ size_t CanFrameRouter::Attach(const SensorGeneration& generation) {
     table_.Build(generation, [this](uint8_t bus_channel, uint32_t frame_id, uint32_t signal_name_hash)
         -> std::shared_ptr<const CanSignalConfiguration> {
 
+        // A disabled message decodes nothing, like one that was removed.
         auto message_configuration = canbus_service_->GetMessageConfiguration(bus_channel, frame_id);
-        if(message_configuration == nullptr)
+        if(message_configuration == nullptr || !message_configuration->is_enabled)
             return nullptr;
 
         const auto* signal_configuration = message_configuration->TryGetSignal(signal_name_hash);

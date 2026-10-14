@@ -54,6 +54,11 @@ static bool decode_CborCanMessageConfig(
         return false;
     }
 
+    if (!zcbor_bool_decode(state, &result->is_enabled)) {
+        zcbor_list_end_decode(state);
+        return false;
+    }
+
     if (!zcbor_int32_decode(state, &result->send_interval_ms)) {
         zcbor_list_end_decode(state);
         return false;

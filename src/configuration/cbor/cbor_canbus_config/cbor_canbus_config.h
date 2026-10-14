@@ -23,6 +23,7 @@ struct CborCanMessageConfig {
 	using allocator_type = std::pmr::polymorphic_allocator<>;
 
 	uint32_t frame_id{};
+	bool is_enabled = true;
 	int32_t send_interval_ms{};
 	struct zcbor_string script_path{};
 
@@ -41,6 +42,7 @@ struct CborCanMessageConfig {
 
 	CborCanMessageConfig(CborCanMessageConfig&& other, allocator_type alloc)
         : frame_id(other.frame_id),
+		is_enabled(other.is_enabled),
 		send_interval_ms(other.send_interval_ms),
 		script_path(other.script_path),
 		name(other.name),

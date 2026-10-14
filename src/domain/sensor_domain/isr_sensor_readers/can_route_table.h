@@ -37,7 +37,7 @@ struct CanRoute {
 
 class CanRouteTable {
 public:
-    // Looks a signal up by bus, frame ID and name hash; null when it is not configured.
+    // Looks a signal up by bus, frame ID and name hash; null when it is not configured or its message is disabled.
     using SignalResolver = std::function<std::shared_ptr<const CanSignalConfiguration>(uint8_t, uint32_t, uint32_t)>;
 
 private:
@@ -49,7 +49,7 @@ public:
     /**
      * @brief Groups the generation's event-driven CAN sensors by bus and frame ID.
      *
-     * A signal sensor whose signal is not configured is left out and logged.
+     * A signal sensor whose signal is not configured, or whose message is disabled, is left out and logged.
      */
     void Build(const SensorGeneration& generation, const SignalResolver& resolve_signal);
 

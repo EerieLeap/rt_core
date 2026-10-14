@@ -25,6 +25,7 @@ static size_t cbor_get_size_CborCanbusConfig(const CborCanbusConfig& config) {
             builder.AddIndefiniteArrayStart();
 
             builder.AddUint(message_configuration.frame_id)
+                .AddBool(message_configuration.is_enabled)
                 .AddInt(message_configuration.send_interval_ms)
                 .AddTstr(message_configuration.script_path)
                 .AddTstr(message_configuration.name)

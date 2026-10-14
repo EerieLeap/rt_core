@@ -67,7 +67,8 @@ bool SensorsConfigurationManager::CreateDefaultConfiguration() {
 
 // A sensor whose CAN signal is not configured would never read. Only a client's configuration is
 // refused for it: the CAN bus configuration may change after this one is stored, and the stored one
-// still loads then, its sensor logging that the signal is missing when the pipeline is built.
+// still loads then, its sensor logging that the signal is missing or its message disabled when the
+// pipeline is built.
 void SensorsConfigurationManager::ValidateApply(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     if(!canbus_configuration_provider_)
         return;

@@ -47,12 +47,13 @@ static bool encode_CborCanMessageConfig(
 
 	size_t CborCanSignalConfig_m_count = input->CborCanSignalConfig_m.size();
 
-	bool res = (((zcbor_list_start_encode(state, 6) && ((((zcbor_uint32_encode(state, (&(*input).frame_id))))
+	bool res = (((zcbor_list_start_encode(state, 7) && ((((zcbor_uint32_encode(state, (&(*input).frame_id))))
+	&& ((zcbor_bool_encode(state, (&(*input).is_enabled))))
 	&& ((zcbor_int32_encode(state, (&(*input).send_interval_ms))))
 	&& ((zcbor_tstr_encode(state, (&(*input).script_path))))
 	&& ((zcbor_tstr_encode(state, (&(*input).name))))
 	&& ((zcbor_uint32_encode(state, (&(*input).message_size))))
-	&& ((zcbor_list_start_encode(state, CborCanSignalConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborCanSignalConfig_m_count, &CborCanSignalConfig_m_count, (zcbor_encoder_t *)encode_CborCanSignalConfig, state, input->CborCanSignalConfig_m.data(), sizeof(struct CborCanSignalConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborCanSignalConfig_m_count)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 6))));
+	&& ((zcbor_list_start_encode(state, CborCanSignalConfig_m_count) && ((zcbor_multi_encode_minmax(0, CborCanSignalConfig_m_count, &CborCanSignalConfig_m_count, (zcbor_encoder_t *)encode_CborCanSignalConfig, state, input->CborCanSignalConfig_m.data(), sizeof(struct CborCanSignalConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, CborCanSignalConfig_m_count)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 7))));
 
 	log_result(state, res, __func__);
 	return res;

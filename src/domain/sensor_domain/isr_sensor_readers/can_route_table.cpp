@@ -41,7 +41,7 @@ void CanRouteTable::Build(const SensorGeneration& generation, const SignalResolv
             binding.signal = resolve_signal(source.bus_channel, source.frame_id, source.signal_name_hash);
 
             if(binding.signal == nullptr) {
-                LOG_ERR("Sensor %s: CAN signal %s is not configured on bus %u frame 0x%08X.",
+                LOG_ERR("Sensor %s: CAN signal %s on bus %u frame 0x%08X is not configured or its message is disabled.",
                     runtime.GetSensor().id.c_str(), source.signal_name.c_str(), source.bus_channel, source.frame_id);
                 continue;
             }

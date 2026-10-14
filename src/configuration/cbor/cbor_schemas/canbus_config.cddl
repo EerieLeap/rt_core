@@ -11,6 +11,7 @@ CborCanSignalConfig = [
 
 CborCanMessageConfig = [
   frame_id: uint,
+  is_enabled: bool,
   send_interval_ms: int,
   script_path: tstr,
 
