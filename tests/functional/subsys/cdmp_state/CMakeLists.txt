@@ -8,3 +8,6 @@ project(functional_subsys_cdmp_state)
 file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)
 
 target_sources(app PRIVATE ${TEST_SOURCES})
+
+# The loopback harness is shared with the COM domain suite.
+target_include_directories(app PRIVATE ${RT_CORE_DIR}/tests/common)

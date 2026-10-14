@@ -16,6 +16,7 @@
 
 #include "domain/canbus_domain/services/canbus_service.h"
 #include "domain/canbus_com_domain/commands/i_canbus_com_command.h"
+#include "domain/canbus_com_domain/services/i_network_state_transport.h"
 
 namespace eerie_leap::domain::canbus_com_domain::services {
 
@@ -42,14 +43,18 @@ using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandResultBas
 /**
  * @brief Runs CDMP and the SMP-CAN transport on the COM channel, across bus reconfigurations.
  *
- * As an ISmpForwarder it sends SMP packets to the other CDMP devices.
+ * As an ISmpForwarder it sends SMP packets to the other CDMP devices. As an INetworkStateTransport it
+ * shares state records with them through CDMP's state service, which keeps this unit's records across
+ * the stop and start of every reconfiguration and announces them when the node is back ONLINE.
  */
-class CanbusComService : public ServiceBase<>, public ISmpForwarder {
+class CanbusComService : public ServiceBase<>, public ISmpForwarder, public INetworkStateTransport {
 private:
     std::shared_ptr<CanbusService> canbus_service_;
     std::shared_ptr<CdmpService> cdmp_service_;
     std::shared_ptr<SmpCanTransport> smp_transport_;
     int cdmp_status_handler_id_ = -1;
+    int canbus_reset_handler_id_ = -1;
+    int canbus_updated_handler_id_ = -1;
 
     bool DoInitialize() override;
     bool DoStart() override;
@@ -85,6 +90,15 @@ public:
     [[nodiscard]] bool IsReachable(uint8_t target) const override;
     bool Forward(uint8_t target, SmpPacket packet) override;
     void SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink) override;
+
+    using INetworkStateTransport::SetLocalState;
+    /** @brief Also while stopped, or before Initialize(); the record is sent on the next ONLINE. */
+    bool SetLocalState(CanbusComStateType state_type, const CanbusComStateData& data) override;
+    void ClearLocalState(CanbusComStateType state_type) override;
+    /** @brief A handler registered before Initialize() gets its first call once the CDMP work queue runs. */
+    int RegisterStateHandler(CanbusComStateType state_type, StateHandler handler) override;
+    void UnregisterStateHandler(int handler_id) override;
+    size_t GetRemoteStates(CanbusComStateType state_type, std::span<RemoteStateRecord> records) const override;
 
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {

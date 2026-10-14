@@ -52,10 +52,11 @@ class CdmpStateService final : public CdmpCanbusServiceBase {
 public:
     /** @brief Called with a state type whose records of other units changed. */
     using StateHandler = std::function<void(uint8_t state_type)>;
+    /** @brief Copies of other units' records kept in all, and so the most GetRemoteStates() returns. */
+    static constexpr size_t MAX_REMOTE_RECORDS = CONFIG_EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS;
 
 private:
     static constexpr size_t MAX_LOCAL_RECORDS = CONFIG_EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS;
-    static constexpr size_t MAX_REMOTE_RECORDS = CONFIG_EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS;
     // A refresh lands at most LAG + 2 * records - 3 versions after the copy it replaces, since the
     // refreshes of one change follow each other; that has to stay within the window of 127.
     static_assert(CdmpConstants::STATE_VERSION_REFRESH_LAG + 2 * MAX_LOCAL_RECORDS - 3 <= 127,

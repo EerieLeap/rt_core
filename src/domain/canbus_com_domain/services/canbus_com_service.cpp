@@ -10,6 +10,7 @@
 namespace eerie_leap::domain::canbus_com_domain::services {
 
 using namespace eerie_leap::subsys::cdmp::models;
+using eerie_leap::subsys::cdmp::services::CdmpStateService;
 using eerie_leap::subsys::cdmp::utilities::CdmpUid;
 using eerie_leap::subsys::smp::can::SmpCanIdLayout;
 
@@ -32,14 +33,16 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
             OnCdmpStatusChanged(new_status);
         });
 
-    canbus_service_->RegisterConfigurationResetHandler(
+    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler(
         [this]() { Stop(); });
 
-    canbus_service_->RegisterConfigurationUpdatedHandler(
+    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler(
         [this]() { Start(); });
 }
 
 CanbusComService::~CanbusComService() {
+    canbus_service_->UnregisterConfigurationUpdatedHandler(canbus_updated_handler_id_);
+    canbus_service_->UnregisterConfigurationResetHandler(canbus_reset_handler_id_);
     cdmp_service_->UnregisterStatusChangedHandler(cdmp_status_handler_id_);
 }
 
@@ -95,6 +98,48 @@ bool CanbusComService::Forward(uint8_t target, SmpPacket packet) {
 
 void CanbusComService::SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink) {
     smp_transport_->SetResponseSink(std::move(response_sink));
+}
+
+bool CanbusComService::SetLocalState(CanbusComStateType state_type, const CanbusComStateData& data) {
+    if(!cdmp_service_)
+        return false;
+
+    return cdmp_service_->GetStateService()->SetLocalState(std::to_underlying(state_type), data.GetData());
+}
+
+void CanbusComService::ClearLocalState(CanbusComStateType state_type) {
+    if(!cdmp_service_)
+        return;
+
+    cdmp_service_->GetStateService()->ClearLocalState(std::to_underlying(state_type));
+}
+
+int CanbusComService::RegisterStateHandler(CanbusComStateType state_type, StateHandler handler) {
+    if(!cdmp_service_)
+        return -1;
+
+    return cdmp_service_->GetStateService()->RegisterStateHandler(
+        std::to_underlying(state_type),
+        [handler = std::move(handler)](uint8_t type) {
+            handler(static_cast<CanbusComStateType>(type));
+        });
+}
+
+void CanbusComService::UnregisterStateHandler(int handler_id) {
+    if(!cdmp_service_)
+        return;
+
+    cdmp_service_->GetStateService()->UnregisterStateHandler(handler_id);
+}
+
+// A span of the interface's capacity has to take every record the state service keeps.
+static_assert(INetworkStateTransport::MAX_REMOTE_RECORDS >= CdmpStateService::MAX_REMOTE_RECORDS);
+
+size_t CanbusComService::GetRemoteStates(CanbusComStateType state_type, std::span<RemoteStateRecord> records) const {
+    if(!cdmp_service_)
+        return 0;
+
+    return cdmp_service_->GetStateService()->GetRemoteStates(std::to_underlying(state_type), records);
 }
 
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {

@@ -22,6 +22,10 @@ struct CdmpConstants {
     static constexpr int USER_COMMAND_CODE_MAX = 0xFF;
     static constexpr int COMMAND_BROADCAST_ID = 0xFF;
 
+    // State types below are protocol-defined (§4.3).
+    static constexpr int USER_STATE_TYPE_MIN = 0x10;
+    static constexpr int USER_STATE_TYPE_MAX = 0xFF;
+
     // Peers a shared state change waits for; the heartbeat digest covers any others.
     static constexpr int STATE_ACK_PEERS_MAX = 8;
     // Receivers order a record's versions within a window of 127. A record that other changes leave

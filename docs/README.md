@@ -24,7 +24,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [adc.md](adc.md) | ADC hardware access, samples and calibration configuration, the calibration service |
 | [sensors.md](sensors.md) | Sensor types, the processing pipeline, rate groups, event-driven sensors, the readings frame |
 | [canbus.md](canbus.md) | CAN buses, messages and signals, sending, reconfiguration |
-| [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, SMP over CAN |
+| [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
 | [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`) and transports |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
 | [logging.md](logging.md) | Log writer, MDF4 and simple loggers, logging configuration |

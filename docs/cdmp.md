@@ -70,7 +70,9 @@ and the SMP-CAN transport on the channel named by the stored CAN configuration's
 - binds the SMP transport to the claimed device ID when the node is `ONLINE` or
   `VERSION_MISMATCH` (so a unit with another CDMP version can still be managed) and unbinds it
   otherwise;
-- implements `ISmpForwarder`, which the BLE access point uses to reach other units.
+- implements `ISmpForwarder`, which the BLE access point uses to reach other units;
+- implements `INetworkStateTransport`, which shares state records with the other units (see
+  [Shared state](#shared-state)).
 
 **Application commands.** Register a handler for a command code with a request type that is
 constructible from a byte span and returns success, or a result carrying up to 4 bytes:
@@ -117,6 +119,65 @@ never interprets them.
   `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` copies, in fixed arrays. Copies that do not fit are
   dropped with one warning, and their source's digest is not checked until room frees up.
 
+**State types.** `CanbusComStateType` (`states/canbus_com_state_type.h` in the COM domain) is the
+registry of the types units share, the counterpart of `CanbusComCommandCode`, in the application
+range 0x10..0xFF:
+
+| Type | Code | Data |
+| --- | --- | --- |
+| `LOGGING_STATUS` | 0x10 | Whether a unit logs, and why it stopped: flags (bit 0 active), then the `LoggingStatusReason` while inactive. |
+
+Codes and data layouts are part of the network contract: add types and append fields, but never
+renumber or reuse them. A state type implements `ICanbusComState` (`GetStateType()`, `GetData()`)
+and is constructible from a record's data bytes, which the `CanbusComState` concept checks: the
+counterpart of `ICanbusComCommand`. Its decoder ignores trailing bytes it does not know and gives
+missing trailing fields their defaults. `CanbusComStateData` holds the data bytes without
+allocation, and `RemoteStateRecord` is another unit's record, `{device_id, data}`.
+
+**`INetworkStateTransport`.** `CanbusComService` shares records through this interface
+(`services/i_network_state_transport.h` in the COM domain), so that code built on shared state can
+be tested with a fake:
+
+| Method | Effect |
+| --- | --- |
+| `SetLocalState(type, data)`, `SetLocalState(state)` | Shares this unit's record of the type. Setting the current value again sends nothing, and empty data withdraws the record. False when every record slot holds another type. |
+| `ClearLocalState(type)` | Withdraws this unit's record of the type. |
+| `RegisterStateHandler(type, handler)` | Reports that other units' records of the type changed: once right after registration, so that a late subscriber catches up, then whenever one is added, changed or removed, which includes every copy being dropped when this unit leaves `ONLINE`. Returns an ID. |
+| `UnregisterStateHandler(id)` | Once it returns, the handler is not running and is not called again. |
+| `GetRemoteStates(type, records)` | Copies the other units' records of the type, ordered by device ID, into a caller-owned span, and returns the number copied. A span of `INetworkStateTransport::MAX_REMOTE_RECORDS` (`EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS`) takes every unit's record; a shorter one takes those of the lowest IDs and gives no sign of the rest. |
+
+```cpp
+// A unit that logs shares its status...
+canbus_com_service_->SetLocalState(CanbusComStateType::LOGGING_STATUS, CanbusComStateData(status_bytes));
+
+// ...and a unit that shows it reads every unit's record whenever one changes.
+handler_id_ = canbus_com_service_->RegisterStateHandler(
+    CanbusComStateType::LOGGING_STATUS,
+    [this](CanbusComStateType state_type) {
+        // Room for every unit's record, so that the combined state misses none.
+        std::array<RemoteStateRecord, INetworkStateTransport::MAX_REMOTE_RECORDS> records{};
+        const size_t count = canbus_com_service_->GetRemoteStates(state_type, records);
+        // Combine std::span(records).first(count) and publish the result with PublishAsync().
+    });
+```
+
+The records live in the state service, which lives as long as the COM service. Calls made while
+the node is stopped, or before `Initialize()`, update this unit's records, which are announced on
+the next `ONLINE`, and the records and the handlers survive the stop and start of every CAN
+reconfiguration.
+
+**Threading.** No thread is added:
+
+- `SetLocalState()`, `ClearLocalState()` and `GetRemoteStates()` may be called from any thread.
+  Sending is handed over to the CDMP work queue.
+- Frames, resends and handlers run on the CDMP work queue, and receiving allocates nothing. A
+  handler must not block, so it reads the records and publishes with `PublishAsync()`; it must not
+  register or unregister handlers. A buffer of `MAX_REMOTE_RECORDS` records takes 7 bytes each on
+  the work queue's stack (224 bytes by default); with a much larger capacity, keep it as a member
+  that only the handler uses.
+- `GetRemoteStates()` copies the records under the state service's lock, so the copy is one
+  instant's records, and a handler that reads it sees at least the change it is called for.
+
 ## SMP over CAN
 
 `SmpCanTransport` is an MCUmgr transport (section 5 of the CDMP README):
@@ -149,7 +210,7 @@ never interprets them.
 | `EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE` | 4096 | |
 | `EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS` | 500 | Time to wait for a command response. |
 | `EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS` | 1..32, 8 | State types this unit can share at once. |
-| `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` | 1..1024, 32 | Records of other units kept, about 10 bytes each. |
+| `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` | 1..1024, 32 | Records of other units kept, about 10 bytes each. Also sizes a span that takes every unit's record of one type (`INetworkStateTransport::MAX_REMOTE_RECORDS`). |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM` | n | Builds the COM service; selects `EERIE_LEAP_SMP_CAN`. |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_*` | `NONE` | CDMP device type of this unit. |
 | `EERIE_LEAP_SMP_CAN` | n | SMP transport over CAN. Depends on `EERIE_LEAP_CANBUS`; selects `EERIE_LEAP_SMP`. |
