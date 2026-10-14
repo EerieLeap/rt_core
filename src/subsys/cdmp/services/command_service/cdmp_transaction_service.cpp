@@ -1,5 +1,9 @@
+#include <algorithm>
+
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/timeutil.h>
+
+#include "subsys/threading/scoped_mutex.h"
 
 #include "cdmp_transaction_service.h"
 
@@ -7,11 +11,16 @@ namespace eerie_leap::subsys::cdmp::services::command_service {
 
 LOG_MODULE_REGISTER(cdmp_transaction_service, LOG_LEVEL_INF);
 
+using eerie_leap::subsys::threading::ScopedMutex;
+
 CdmpTransactionService::CdmpTransactionService(
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CdmpDevice> device)
         : work_queue_thread_(std::move(work_queue_thread))
-        , device_(std::move(device)) {}
+        , device_(std::move(device)) {
+
+    k_mutex_init(&transactions_lock_);
+}
 
 void CdmpTransactionService::Initialize() {
     timeout_task_ = work_queue_thread_->CreateTask(
@@ -23,6 +32,8 @@ CdmpTransactionService::~CdmpTransactionService() {
 }
 
 void CdmpTransactionService::Start() {
+    ScopedMutex guard(transactions_lock_);
+
     if(!is_timeout_task_running_) {
         timeout_task_.value().Schedule();
         is_timeout_task_running_ = true;
@@ -32,13 +43,24 @@ void CdmpTransactionService::Start() {
 }
 
 void CdmpTransactionService::Stop() {
-    // Cancel all pending transactions
-    for(auto& [transaction_id, _] : pending_transactions_)
-        CancelTransaction(transaction_id);
+    {
+        ScopedMutex guard(transactions_lock_);
+        is_timeout_task_running_ = false;
+    }
 
-    is_timeout_task_running_ = false;
+    // A pass that rescheduled itself before the flag was cleared has its timer removed here, and a
+    // later pass does not reschedule.
     if(timeout_task_.has_value())
         timeout_task_.value().Cancel();
+
+    Transactions cancelled;
+    {
+        ScopedMutex guard(transactions_lock_);
+        cancelled.swap(pending_transactions_);
+    }
+
+    for(auto& [_, transaction] : cancelled)
+        InvokeCallback(transaction, CdmpResultCode::CANCELLED, {});
 
     LOG_INF("CDMP Transaction Service stopped");
 }
@@ -58,9 +80,12 @@ uint8_t CdmpTransactionService::GetNextTransactionId() {
 }
 
 uint8_t CdmpTransactionService::StartTransaction(
+    uint8_t target_device_id,
     uint8_t expected_command,
     int timeout,
     CdmpTransactionCallback callback) {
+
+    ScopedMutex guard(transactions_lock_);
 
     uint8_t transaction_id = GetNextTransactionId();
 
@@ -69,7 +94,8 @@ uint8_t CdmpTransactionService::StartTransaction(
         .start_time = static_cast<uint64_t>(k_uptime_get()),
         .timeout = static_cast<uint64_t>(timeout),
         .callback = std::move(callback),
-        .expected_command = expected_command
+        .expected_command = expected_command,
+        .target_device_id = target_device_id
     };
 
     pending_transactions_[transaction_id] = std::move(transaction);
@@ -79,62 +105,92 @@ uint8_t CdmpTransactionService::StartTransaction(
     return transaction_id;
 }
 
-void CdmpTransactionService::CompleteTransaction(const CdmpCommandResponseMessage& response) {
-    auto it = pending_transactions_.find(response.transaction_id);
-    if(it != pending_transactions_.end()) {
-        if(it->second.callback)
-            it->second.callback(response.transaction_id, response.result_code, response.data);
+bool CdmpTransactionService::IsResponseTo(
+    const PendingTransaction& transaction,
+    const CdmpCommandResponseMessage& response) {
 
-        pending_transactions_.erase(it);
-
-        LOG_DBG("Completed transaction %d", response.transaction_id);
-    }
+    return response.command_code == transaction.expected_command
+        && (transaction.target_device_id == CdmpDevice::DEVICE_ID_BROADCAST
+            || response.source_device_id == transaction.target_device_id);
 }
 
-void CdmpTransactionService::CancelTransaction(uint8_t transaction_id) {
-    auto it = pending_transactions_.find(transaction_id);
-    if(it != pending_transactions_.end()) {
-        if(it->second.callback)
-            it->second.callback(transaction_id, CdmpResultCode::CANCELLED, {});
+void CdmpTransactionService::CompleteTransaction(const CdmpCommandResponseMessage& response) {
+    Transactions::node_type completed;
+    {
+        ScopedMutex guard(transactions_lock_);
 
-        pending_transactions_.erase(it);
+        auto it = pending_transactions_.find(response.transaction_id);
+        if(it == pending_transactions_.end() || !IsResponseTo(it->second, response))
+            return;
 
-        LOG_DBG("Cancelled transaction %d", transaction_id);
+        completed = pending_transactions_.extract(it);
     }
+
+    InvokeCallback(completed.mapped(), response.result_code, response.data);
+
+    LOG_DBG("Completed transaction %d", response.transaction_id);
 }
 
 void CdmpTransactionService::CleanupExpiredTransactions() {
-    uint64_t current_time = k_uptime_get();
+    const uint64_t current_time = k_uptime_get();
 
-    std::vector<uint8_t> expired_transactions;
+    // One at a time, so that each callback runs outside the lock.
+    while(true) {
+        Transactions::node_type expired;
+        {
+            ScopedMutex guard(transactions_lock_);
 
-    for(auto& [transaction_id, transaction] : pending_transactions_) {
-        if(current_time - transaction.start_time >= transaction.timeout)
-            expired_transactions.push_back(transaction_id);
+            auto it = std::ranges::find_if(pending_transactions_, [current_time](const auto& entry) {
+                return current_time - entry.second.start_time >= entry.second.timeout; });
+            if(it == pending_transactions_.end())
+                return;
+
+            expired = pending_transactions_.extract(it);
+        }
+
+        InvokeCallback(expired.mapped(), CdmpResultCode::TIMEOUT, {});
+
+        LOG_DBG("Transaction %d timed out", expired.key());
     }
+}
 
-    for(auto transaction_id : expired_transactions) {
-        auto& transaction = pending_transactions_.at(transaction_id);
-        if(transaction.callback)
-            transaction.callback(transaction_id, CdmpResultCode::TIMEOUT, {});
+void CdmpTransactionService::InvokeCallback(
+    PendingTransaction& transaction,
+    CdmpResultCode result_code,
+    std::span<const uint8_t> data) {
 
-        pending_transactions_.erase(transaction_id);
-
-        LOG_DBG("Transaction %d timed out", transaction_id);
-    }
+    if(transaction.callback)
+        transaction.callback(transaction.transaction_id, result_code, data);
 }
 
 bool CdmpTransactionService::IsTransactionPending(uint8_t transaction_id) const {
+    ScopedMutex guard(transactions_lock_);
+
     return pending_transactions_.contains(transaction_id);
 }
 
+size_t CdmpTransactionService::GetPendingTransactionCount() const {
+    ScopedMutex guard(transactions_lock_);
+
+    return pending_transactions_.size();
+}
+
 WorkQueueTaskResult CdmpTransactionService::ProcessTransactionTimeouts(CdmpTransactionService* instance) {
+    {
+        // Rescheduled under the lock, before anything can throw, rather than through the task
+        // result: the dispatcher would reschedule after the pass and could arm the timer again
+        // while Stop() cancels it.
+        ScopedMutex guard(instance->transactions_lock_);
+
+        if(!instance->is_timeout_task_running_)
+            return {};
+
+        instance->timeout_task_.value().Reschedule(K_MSEC(CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS / 2));
+    }
+
     instance->CleanupExpiredTransactions();
 
-    return {
-        .reschedule = instance->is_timeout_task_running_,
-        .delay = K_MSEC(CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS / 2)
-    };
+    return {};
 }
 
 } // namespace eerie_leap::subsys::cdmp::services::command_service

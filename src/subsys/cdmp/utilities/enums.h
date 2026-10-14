@@ -56,6 +56,7 @@ enum class CdmpIdClaimResult : uint8_t {
 enum class CdmpServiceCommandCode : uint8_t {
     STATUS_REQUEST = 0x10,
     RESET_DEVICE = 0x11,
+    STATE_SYNC_REQUEST = 0x12, ///< Asks the target to replay its shared state records (§4.3).
     // Application-specific: 0x20-0xFF
 };
 

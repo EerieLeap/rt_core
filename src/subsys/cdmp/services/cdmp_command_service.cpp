@@ -245,6 +245,7 @@ uint8_t CdmpCommandService::SendCommand(
             throw std::runtime_error("Command code 0 is not allowed");
 
         uint8_t transaction_id = transaction_service_->StartTransaction(
+            target_device_id,
             command_code,
             CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS,
             callback);

@@ -375,6 +375,8 @@ Byte 3:    Result Code (0x00=Success, 0x01=Error, 0x02=Invalid, etc.)
 Byte 4-7:  Response Data or Error Details
 ```
 
+Every device numbers its own transactions, and every device sees every response. A requester therefore takes a response as the answer to its pending request only if the transaction ID and the command code match and, for a request addressed to one device, the response comes from that device.
+
 **Result Codes:**
 
 ```

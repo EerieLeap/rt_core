@@ -30,23 +30,31 @@ struct PendingTransaction {
     uint64_t timeout;
     CdmpTransactionCallback callback;
     uint8_t expected_command;
+    uint8_t target_device_id; ///< DEVICE_ID_BROADCAST accepts a response from any device.
 };
 
 class CdmpTransactionService {
 private:
+    using Transactions = std::unordered_map<uint8_t, PendingTransaction>;
+
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::shared_ptr<CdmpDevice> device_;
 
     std::optional<threading::WorkQueueTask<CdmpTransactionService>> timeout_task_;
-    bool is_timeout_task_running_ = false;
     static WorkQueueTaskResult ProcessTransactionTimeouts(CdmpTransactionService* instance);
 
+    // Transactions start on any thread and complete or expire on the CDMP work queue, while Stop()
+    // runs on the thread that changes the device status. Callbacks run outside the lock.
+    mutable k_mutex transactions_lock_;
+    // The timeout task reschedules itself under the lock while this is set.
+    bool is_timeout_task_running_ = false;
     uint8_t next_transaction_id_ = 1;
-    std::unordered_map<uint8_t, PendingTransaction> pending_transactions_;
+    Transactions pending_transactions_;
 
     void CleanupExpiredTransactions();
-    void CancelTransaction(uint8_t transaction_id);
     uint8_t GetNextTransactionId();
+    static bool IsResponseTo(const PendingTransaction& transaction, const CdmpCommandResponseMessage& response);
+    static void InvokeCallback(PendingTransaction& transaction, CdmpResultCode result_code, std::span<const uint8_t> data);
 
 public:
     CdmpTransactionService(
@@ -57,16 +65,25 @@ public:
 
     void Initialize();
     void Start();
+    /** @brief Stops the timeouts and cancels every pending transaction. */
     void Stop();
 
     uint8_t StartTransaction(
+        uint8_t target_device_id,
         uint8_t expected_command,
         int timeout = CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS,
         CdmpTransactionCallback callback = nullptr);
+    /**
+     * @brief Completes the transaction @p response answers, if any.
+     *
+     * Every unit numbers its own transactions and responses are broadcast, so a response completes a
+     * transaction only if it also echoes its command and comes from its target, or from any device
+     * when the request was broadcast.
+     */
     void CompleteTransaction(const CdmpCommandResponseMessage& response);
 
     bool IsTransactionPending(uint8_t transaction_id) const;
-    size_t GetPendingTransactionCount() const { return pending_transactions_.size(); }
+    size_t GetPendingTransactionCount() const;
 };
 
 } // namespace eerie_leap::subsys::cdmp::services::command_service

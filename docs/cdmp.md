@@ -47,7 +47,9 @@ transport run on:
 - **Command service**: request/response with transaction IDs, retries and a per-transaction
   timeout (`EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS`). Service commands `STATUS_REQUEST`
   (0x10) and `RESET_DEVICE` (0x11) are handled by the protocol; application commands use codes
-  0x20..0xFF.
+  0x20..0xFF. Responses are broadcast and every unit numbers its own transactions, so a response
+  completes a transaction only if its command code matches too and, for a request to one device,
+  it comes from that device.
 - State change notifications (Base + 4/5) are specified but not implemented.
 
 `CdmpService::Configure(canbus, base_can_id)` binds the services to a bus; the management IDs
