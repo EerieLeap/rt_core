@@ -290,6 +290,11 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         list(FILTER SRC EXCLUDE REGEX "/smp/")
     endif()
 
+    # The SD card service calls the disk access API, which only exists with DISK_ACCESS.
+    if(NOT CONFIG_DISK_ACCESS)
+        list(FILTER SRC EXCLUDE REGEX "/subsys/fs/services/sdmmc_service\\.cpp$")
+    endif()
+
     zephyr_library_sources(${SRC})
 
     add_subdirectory(libs/nameof)
