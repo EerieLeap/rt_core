@@ -53,7 +53,8 @@ Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `
 `Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack) and `logging_events`
 (`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued
 events, on `LoggingEventBus` with a 4 KiB stack when the application creates it; see
-[logging.md](logging.md#status-events-and-failures)).
+[logging.md](logging.md#status-events-and-failures), and
+[logging.md](logging.md#status-on-other-units) for the status of other units on it).
 
 ## Random (`EERIE_LEAP_RANDOM`)
 

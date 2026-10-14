@@ -125,7 +125,7 @@ range 0x10..0xFF:
 
 | Type | Code | Data |
 | --- | --- | --- |
-| `LOGGING_STATUS` | 0x10 | Whether a unit logs, and why it stopped: flags (bit 0 active), then the `LoggingStatusReason` while inactive. |
+| `LOGGING_STATUS` | 0x10 | Whether a unit logs, and why it stopped: flags (bit 0 active), then the `LoggingStatusReason` while inactive (`CanbusComLoggingState`, see [logging.md](logging.md#status-on-other-units)). |
 
 Codes and data layouts are part of the network contract: add types and append fields, but never
 renumber or reuse them. A state type implements `ICanbusComState` (`GetStateType()`, `GetData()`)
@@ -177,6 +177,38 @@ reconfiguration.
   that only the handler uses.
 - `GetRemoteStates()` copies the records under the state service's lock, so the copy is one
   instant's records, and a handler that reads it sees at least the change it is called for.
+
+**State bridge.** `state_bridge/` in the COM domain moves a record between an event channel and the
+network, so that a domain shares its state without knowing CDMP, and its consumers see other units'
+state as ordinary events. A descriptor in the domain that owns the state (the
+`NetworkStateDescriptor` concept, `state_bridge/network_state_descriptor.h`) names the channel, the
+event type, the state type and its record type `State` (a `CanbusComState` that is also default
+constructible and equality comparable), and maps between them:
+
+| Member | Returns |
+| --- | --- |
+| `Initial()` | A unit's record before its first event. |
+| `FromEvent(event, current)` | A unit's record after the event, given its current one, or nothing when the event does not change it. |
+| `Combine(states)` | The state consumers see, given every other unit's record ordered by device ID; an empty span when no unit reports one. |
+| `ToEvent(state)` | The event that carries a combined state. |
+
+- `NetworkStateExporter<Descriptor>`, on a unit that produces the state, shares `Initial()` on
+  construction, then the record each event maps to when it changes, and withdraws the record on
+  destruction. It handles events on the channel's bus thread. A record the transport refuses
+  (every record slot holds another state type) is offered again with each later event.
+- `NetworkStateImporter<Descriptor>`, on a unit that consumes the state, decodes and combines every
+  other unit's record from its state handler, once right after construction and then on each
+  change, and publishes `ToEvent()` of the result with `PublishAsync()` when it differs from the
+  state it published last. While no bus carries the channel it publishes nothing and counts
+  nothing as published, so its first call after a bus registers the channel publishes.
+- Imported events carry `IMPORTED_EVENT_SOURCE_ID`, and exporters skip events with it, so a unit
+  never shares back what it imported. A unit either exports or imports a descriptor, never both.
+
+Both are header-only, take the transport as `std::shared_ptr<INetworkStateTransport>`, and throw
+`std::runtime_error` when they cannot subscribe or register. A bus has to carry the channel before
+they are built. `LoggingNetworkState` is the first
+descriptor ([logging.md](logging.md#status-on-other-units)). Another shared state is a
+`CanbusComStateType`, a record type, a descriptor, and one exporter or importer per application.
 
 ## SMP over CAN
 

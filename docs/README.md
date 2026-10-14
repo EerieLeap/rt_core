@@ -27,7 +27,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
 | [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`) and transports |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
-| [logging.md](logging.md) | Log writer, MDF4 and simple loggers, logging configuration |
+| [logging.md](logging.md) | Log writer, MDF4 and simple loggers, logging configuration, logging status on other units |
 | [system.md](system.md) | Product identity and the system configuration |
 | [filesystem.md](filesystem.md) | Internal and SD filesystems, assets, directory layout |
 | [gpio.md](gpio.md) | Digital inputs |

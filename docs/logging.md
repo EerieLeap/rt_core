@@ -88,6 +88,9 @@ The writer publishes `StatusUpdated` on the `logging_events` channel (see
 | `NoSpace` | Less than `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` was free at a rotation. |
 | `RotationFailed` | The next file of a rotation could not be opened or its header written. |
 
+A fifth reason, `Unavailable`, comes only from other units' status (see
+[Status on other units](#status-on-other-units)).
+
 A failure ends the session on the writer thread: the error is counted in `write_errors` (not for
 `NoSpace`) and logged once, the failure is published, and no further tick is scheduled.
 `HasFailed()` reports it until the next `Start()`. The service stays `RUNNING` without a tick:
@@ -115,6 +118,87 @@ Starting and stopping is the application's business: rt_daq's `LoggingController
 the CDMP `LOGGING` command (so one broadcast starts every unit, see [cdmp.md](cdmp.md)), restarts
 the writer for a new logging configuration, stops a failed session and shows a `log` status on
 the display.
+
+## Status on other units
+
+A unit that logs shares its status with every other unit on the CDMP network, and a unit that
+shows the status, such as the gauge, receives it as ordinary `StatusUpdated` events on its own
+`logging_events` channel. Its consumers, a widget binding or a controller, cannot tell them from
+local events. The status travels as a shared state record (see [cdmp.md](cdmp.md#shared-state)),
+moved by the state bridge with the descriptor `LoggingNetworkState`
+(`event_bus/logging_network_state.h`):
+
+- **On the unit that logs**, `NetworkStateExporter<LoggingNetworkState>` shares the record from its
+  construction, inactive and `Stopped` until the first event, then follows the writer's events.
+  Its destruction withdraws the record.
+- **On a unit that shows the status**, `NetworkStateImporter<LoggingNetworkState>` combines every
+  other unit's record whenever one changes, and once right after its construction, and publishes
+  the result on `logging_events` when it differs from what it published last.
+
+```cpp
+// rt_daq, once a bus carries logging_events: shares the writer's status.
+logging_status_exporter_ = std::make_unique<NetworkStateExporter<LoggingNetworkState>>(canbus_com_service_);
+
+// rt_gauge, once a bus carries logging_events: shows the status of the units that log.
+logging_status_importer_ = std::make_unique<NetworkStateImporter<LoggingNetworkState>>(canbus_com_service_);
+```
+
+Both take the COM service as their `INetworkStateTransport` and throw `std::runtime_error` when
+they cannot subscribe to the channel or register with the transport. A unit either exports or
+imports the status, never both.
+
+A bus has to carry `logging_events` first, because the channel drops every event until one does.
+On an inert channel the exporter keeps sharing its initial record, and the importer publishes
+nothing. The importer does not count a state it could not publish, so the next change of a record
+after a bus registers the channel publishes the combined status, even if that status did not
+change. If the transport refuses the exporter's record because every record slot holds another
+state type, the exporter offers it again with each later event.
+
+**The record** is `LOGGING_STATUS` (0x10), `CanbusComLoggingState` in the COM domain:
+
+| Byte | Content |
+| --- | --- |
+| 0 | Flags. Bit 0: active. Bits 1-7: 0, ignored by the decoder. |
+| 1 | The `LoggingStatusReason` while inactive, 0 while active. A record of one byte is inactive for the reason `Stopped`. |
+
+Bytes after byte 1 are ignored, so fields can be appended.
+
+**A unit's record** follows its `StatusUpdated` events, with one exception: an inactive `Stopped`
+never replaces an inactive failure. The owner's stop that cleans up after a failure publishes
+`Stopped` milliseconds later (see [Status events and failures](#status-events-and-failures)), and
+the record keeps the failure until the next start. A stop of a writer that is already stopped
+publishes nothing, so that cleanup is the only `Stopped` that can follow a failure.
+
+**The combined status**, which the importer publishes, is:
+
+- active while any unit logs;
+- otherwise inactive, with the reason of the lowest device ID that reports a failure
+  (`WriteFailed`, `NoSpace` or `RotationFailed`), else `Stopped`;
+- inactive with the reason `Unavailable` when no unit reports a status: no logger is online, or
+  this unit's CDMP node is not, since a unit that leaves `ONLINE` drops every other unit's record.
+
+`Unavailable` (4) is only ever imported; the writer never publishes it. Code that switches over
+`LoggingStatusReason` handles it too.
+
+**Timing.** A change reaches the other units with one notification, or with a resend within
+350 ms when that is lost, and otherwise with the next heartbeat (3 s) and a replay. A logger that
+disappears (cable, power) leaves the combined status after the heartbeat timeout (9 s) plus up to
+one validation interval (5 s). A logger that reboots keeps its last status until it leaves the
+device table or sends its new record.
+
+**Threading.** No thread is added:
+
+- The exporter handles events on the thread of the bus that carries `logging_events`
+  (`LoggingEventBus` on rt_daq). Sharing hands the sending over to the CDMP work queue.
+- The importer runs on the CDMP work queue, never blocks, and publishes with `PublishAsync()`, so
+  consumers run on the importing unit's bus thread (the gauge's `AppEventBus`), as for local events.
+  It keeps its buffers of every unit's record as members, off the work queue's stack.
+- Imported events carry the bridge's `IMPORTED_EVENT_SOURCE_ID`, which exporters skip, so a unit
+  never shares back what it imported.
+
+The descriptor, the record and the bridge are header-only: a unit that only shows the status, such
+as the gauge, builds them without `EERIE_LEAP_DOMAIN_LOGGING`, with `EERIE_LEAP_DOMAIN_CANBUS_COM`,
+`EERIE_LEAP_EVENT_BUS` and a bus that carries `logging_events`.
 
 ## Loggers
 
@@ -239,5 +323,6 @@ before processing starts, or a wrapper that takes the lock of its own starts and
 restart does not bring back a writer that was stopped meanwhile. It makes sure a bus carries
 `logging_events` (`LoggingEventBus`), stops the service from another thread when a failure is
 published, restarts a running writer from the logging manager's updated handler, and starts and
-stops it as needed. rt_daq's
+stops it as needed. A unit that shares its status with other units also creates the exporter
+described under [Status on other units](#status-on-other-units). rt_daq's
 `app/src/controllers/logging_controller.cpp` is the reference.
