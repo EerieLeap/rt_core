@@ -3,10 +3,12 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "subsys/canbus/can_filter.h"
 #include "subsys/canbus/can_id.h"
 
 namespace eerie_leap::subsys::cdmp::utilities {
 
+using eerie_leap::subsys::canbus::CanFilter;
 using eerie_leap::subsys::canbus::CanId;
 
 /** @brief Maps CDMP message kinds to 11-bit CAN identifiers at fixed offsets from a base. */
@@ -27,6 +29,10 @@ public:
     static constexpr uint32_t CAPABILITY_OFFSET_END = 51;
     static constexpr uint32_t APPLICATION_OFFSET_START = 52;
     static constexpr uint32_t APPLICATION_OFFSET_END = 99;
+
+    /// Base+0..Base+7: every message ID the CDMP services receive, so one filter can cover them.
+    static constexpr uint32_t RECEIVE_BLOCK_SIZE = 8;
+    static_assert(STATE_CHANGE_RESPONSE_OFFSET < RECEIVE_BLOCK_SIZE);
 
     /** @brief True when Base+0..Base+99 fits into 11-bit identifiers. */
     static constexpr bool IsValidBaseCanId(uint32_t base_can_id) {
@@ -72,6 +78,21 @@ public:
         return CanId::Standard(base_can_id_ + CAPABILITY_OFFSET_START + capability_bit);
     }
     ///@}
+
+    /**
+     * @brief The filter a service registers to receive @p can_id, one of the Base+0..Base+5 IDs.
+     *
+     * With a base that is a multiple of RECEIVE_BLOCK_SIZE, every receive ID shares one mask filter
+     * on Base+0..Base+7, inside the CDMP range, so CDMP takes one controller filter rather than one
+     * per ID; handlers then check the identifier themselves. Any other base gets the exact filter,
+     * because an aligned block would reach below the base into application IDs.
+     */
+    CanFilter GetReceiveFilter(const CanId& can_id) const {
+        if(base_can_id_ % RECEIVE_BLOCK_SIZE != 0)
+            return CanFilter(can_id);
+
+        return CanFilter::Masked(CanId::Standard(base_can_id_), CAN_STD_ID_MASK & ~(RECEIVE_BLOCK_SIZE - 1));
+    }
 };
 
 } // namespace eerie_leap::subsys::cdmp::utilities

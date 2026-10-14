@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <deque>
@@ -222,14 +223,31 @@ private:
     std::vector<int> recorder_handler_ids_;
 
 protected:
-    /** @brief Records every CDMP frame on @p canbus, which the scripted peer sends on too. */
+    /**
+     * @brief Records every CDMP frame on @p canbus, which the scripted peer sends on too.
+     *
+     * The unit's services share one block filter for these IDs when the base allows it
+     * (CdmpCanIdManager::GetReceiveFilter), and a different filter over the same IDs would be
+     * rejected as an overlap, so the recorder registers the same filters and sorts frames by ID.
+     */
     void AttachBus(std::shared_ptr<CanbusProxy> canbus) {
         canbus_ = std::move(canbus);
 
+        std::vector<CanFilter> filters;
         for(uint32_t offset = MANAGEMENT; offset <= STATE_CHANGE_RESPONSE; offset++) {
+            const CanFilter filter = ids.GetReceiveFilter(CanId::Standard(ids.GetBaseCanId() + offset));
+            if(std::find(filters.begin(), filters.end(), filter) == filters.end())
+                filters.push_back(filter);
+        }
+
+        for(const CanFilter& filter : filters) {
             const int handler_id = (*canbus_)->RegisterFrameReceivedHandler(
-                CanId::Standard(ids.GetBaseCanId() + offset),
-                [this, offset](const CanFrame& frame) { bus.Add(offset, frame); });
+                filter,
+                [this](const CanFrame& frame) {
+                    const uint32_t offset = frame.id - ids.GetBaseCanId();
+                    if(frame.id >= ids.GetBaseCanId() && offset <= STATE_CHANGE_RESPONSE)
+                        bus.Add(offset, frame);
+                });
             zassert_true(handler_id > 0, "Frame handler rejected: %d", handler_id);
             recorder_handler_ids_.push_back(handler_id);
         }

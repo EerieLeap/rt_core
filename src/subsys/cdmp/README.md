@@ -74,7 +74,7 @@ A lightweight management protocol operating on CAN bus alongside standard DBC-de
 
 ### 2.2 CAN ID Allocation
 
-**Base CAN ID:** Configurable (default 0x700), set during system configuration. Base + 99 must be a valid 11-bit identifier, so the base is at most 0x79C.
+**Base CAN ID:** Configurable (default 0x700), set during system configuration. Base + 99 must be a valid 11-bit identifier, so the base is at most 0x79C. A base that is a multiple of 8 lets a device receive Base + 0 to Base + 5 through one CAN filter on Base + 0 to Base + 7, which matters on controllers with few filters.
 
 **Management Protocol (Fixed Offsets from Base):**
 

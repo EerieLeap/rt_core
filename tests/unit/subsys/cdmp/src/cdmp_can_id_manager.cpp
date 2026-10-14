@@ -4,6 +4,7 @@
 
 #include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
 
+using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
 
 ZTEST_SUITE(cdmp_can_id_manager, NULL, NULL, NULL, NULL, NULL);
@@ -61,4 +62,34 @@ ZTEST(cdmp_can_id_manager, test_capability_bit_out_of_range_is_rejected) {
     }
 
     zassert_true(threw);
+}
+
+ZTEST(cdmp_can_id_manager, test_receive_ids_share_one_filter_at_an_aligned_base) {
+    CdmpCanIdManager manager;
+
+    const auto filter = manager.GetReceiveFilter(manager.GetManagementCanId());
+    zassert_equal(filter.id, 0x700);
+    zassert_equal(filter.mask, 0x7F8);
+    zassert_false(filter.is_extended);
+
+    for(const auto& id : {
+        manager.GetHeartbeatCanId(), manager.GetCommandRequestCanId(), manager.GetCommandResponseCanId(),
+        manager.GetStateChangeRequestCanId(), manager.GetStateChangeResponseCanId()}) {
+
+        zassert_true(manager.GetReceiveFilter(id) == filter, "0x%03X shares the block filter", id.id);
+        zassert_true(filter.Matches(id));
+    }
+
+    zassert_false(filter.Matches(CanId::Standard(0x6FF)), "The block stays inside the CDMP range");
+    zassert_false(filter.Matches(CanId::Standard(0x708)));
+}
+
+ZTEST(cdmp_can_id_manager, test_receive_ids_use_exact_filters_at_an_unaligned_base) {
+    CdmpCanIdManager manager(0x604);
+
+    for(const auto& id : {manager.GetManagementCanId(), manager.GetStateChangeResponseCanId()}) {
+        const auto filter = manager.GetReceiveFilter(id);
+        zassert_true(filter.IsExact(), "An aligned block would reach below the base");
+        zassert_equal(filter.id, id.id);
+    }
 }

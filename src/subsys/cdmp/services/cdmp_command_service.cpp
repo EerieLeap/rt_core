@@ -54,12 +54,12 @@ void CdmpCommandService::RegisterCanHandlers() {
         return;
     }
 
-    canbus_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
+    canbus_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetCommandRequestCanId(),
         [this](const CanFrame& frame) {
             work_queue_thread_->Run([this, frame]() { ProcessRequestFrame(frame.data); }); });
 
-    canbus_response_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
+    canbus_response_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetCommandResponseCanId(),
         [this](const CanFrame& frame) {
             work_queue_thread_->Run([this, frame]() { ProcessResponseFrame(frame.data); }); });

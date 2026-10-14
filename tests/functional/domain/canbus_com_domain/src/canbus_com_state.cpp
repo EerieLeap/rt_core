@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
@@ -337,4 +338,38 @@ ZTEST_F(canbus_com_state, test_stop_drops_remote_states_and_keeps_handlers) {
     zassert_equal(again->size(), 1);
     zassert_equal(again->at(0).device_id, PEER_ID);
     zassert_true(probe.CallsWereAsRegistered());
+}
+
+namespace {
+
+// Fills the controller's free filter slots with a filter no test frame matches, then frees them.
+size_t CountFreeControllerFilters() {
+    const can_filter unused{.id = 0x0F0, .mask = CAN_STD_ID_MASK, .flags = 0};
+    std::vector<int> filter_ids;
+
+    int filter_id = 0;
+    while((filter_id = can_add_rx_filter(
+        LoopbackDevice(), [](const device*, can_frame*, void*) {}, nullptr, &unused)) >= 0) {
+
+        filter_ids.push_back(filter_id);
+    }
+
+    for(int id : filter_ids)
+        can_remove_rx_filter(LoopbackDevice(), id);
+
+    return filter_ids.size();
+}
+
+} // namespace
+
+// The CDMP IDs share one filter at the default base, so an online unit with SMP bound leaves the
+// rest of the controller's filters to the sensors' CAN routes.
+ZTEST_F(canbus_com_state, test_online_unit_takes_two_controller_filters) {
+    Harness& harness = *fixture->harness;
+    harness.BringOnline();
+    harness.Settle();
+    zassert_not_equal(harness.com->GetAddress(), 0, "SMP is bound to the claimed ID");
+
+    const size_t used = CONFIG_CAN_LOOPBACK_MAX_FILTERS - CountFreeControllerFilters();
+    zassert_equal(used, 2, "CDMP and SMP take %zu controller filters, expected 2", used);
 }

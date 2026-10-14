@@ -14,6 +14,8 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
+using eerie_leap::subsys::canbus::CanFrameHandler;
+using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::subsys::threading::ServiceBase;
 using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::cdmp::models::CdmpDevice;
@@ -30,6 +32,18 @@ protected:
     std::shared_ptr<CdmpDevice> device_;
 
     virtual void OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status);
+
+    /**
+     * @brief Registers @p handler for the frames with @p can_id, one of the Base+0..Base+5 IDs.
+     *
+     * The services share the CDMP block filter when the base allows it
+     * (CdmpCanIdManager::GetReceiveFilter), so CDMP takes one controller filter. When another
+     * registration overlaps the block, the exact filter is used instead. The handler only sees
+     * frames with @p can_id either way.
+     *
+     * @return The handler ID, or a negative Canbus error.
+     */
+    int RegisterReceiveHandler(const CanId& can_id, CanFrameHandler handler);
 
 public:
     CdmpCanbusServiceBase(

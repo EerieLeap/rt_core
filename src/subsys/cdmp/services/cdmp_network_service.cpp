@@ -103,7 +103,7 @@ void CdmpNetworkService::RegisterCanHandlers() {
         return;
     }
 
-    canbus_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
+    canbus_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetManagementCanId(),
         [this](const CanFrame& frame) {
             RunInSession([this, frame]() { ProcessFrame(frame.data); }); });

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <deque>
 #include <initializer_list>
@@ -184,14 +185,29 @@ struct StateFixture {
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
 
-        for(uint32_t offset : {
+        // The services may share one block filter for their IDs, which a different filter over the
+        // same IDs would overlap, so the recorder registers the same filters and sorts by ID.
+        constexpr std::array recorded_offsets{
             CdmpCanIdManager::COMMAND_OFFSET,
             CdmpCanIdManager::STATE_CHANGE_OFFSET,
-            CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET}) {
+            CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET};
 
+        std::vector<CanFilter> filters;
+        for(uint32_t offset : recorded_offsets) {
+            const CanFilter filter = can_id_manager->GetReceiveFilter(
+                CanId::Standard(can_id_manager->GetBaseCanId() + offset));
+            if(std::find(filters.begin(), filters.end(), filter) == filters.end())
+                filters.push_back(filter);
+        }
+
+        for(const CanFilter& filter : filters) {
             const int handler_id = (*canbus)->RegisterFrameReceivedHandler(
-                CanId::Standard(can_id_manager->GetBaseCanId() + offset),
-                [this, offset](const CanFrame& frame) { bus_frames.Add(offset, frame); });
+                filter,
+                [this, recorded_offsets](const CanFrame& frame) {
+                    const uint32_t offset = frame.id - can_id_manager->GetBaseCanId();
+                    if(std::find(recorded_offsets.begin(), recorded_offsets.end(), offset) != recorded_offsets.end())
+                        bus_frames.Add(offset, frame);
+                });
             zassert_true(handler_id > 0, "Frame handler rejected: %d", handler_id);
             bus_handler_ids.push_back(handler_id);
         }

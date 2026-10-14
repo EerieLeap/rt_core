@@ -146,11 +146,11 @@ void CdmpStateService::RegisterCanHandlers() {
         return;
     }
 
-    state_change_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
+    state_change_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetStateChangeRequestCanId(),
         [this](const CanFrame& frame) { QueueFrame(frame.data, false); });
 
-    state_change_response_handler_id_ = (*canbus_)->RegisterFrameReceivedHandler(
+    state_change_response_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetStateChangeResponseCanId(),
         [this](const CanFrame& frame) { QueueFrame(frame.data, true); });
 

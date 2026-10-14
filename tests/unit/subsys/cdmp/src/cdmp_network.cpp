@@ -187,9 +187,14 @@ struct NetworkFixture {
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
 
+        // The same filter the service registers, so it is shared rather than an overlap.
+        const CanId management_id = can_id_manager->GetManagementCanId();
         bus_handler_id = (*canbus)->RegisterFrameReceivedHandler(
-            can_id_manager->GetManagementCanId(),
-            [this](const CanFrame& frame) { bus_frames.Add(frame); });
+            can_id_manager->GetReceiveFilter(management_id),
+            [this, management_id](const CanFrame& frame) {
+                if(frame.id == management_id.id)
+                    bus_frames.Add(frame);
+            });
         zassert_true(bus_handler_id > 0, "Frame handler rejected: %d", bus_handler_id);
 
         service.Configure(canbus);

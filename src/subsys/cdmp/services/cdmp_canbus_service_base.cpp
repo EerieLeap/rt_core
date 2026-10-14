@@ -1,6 +1,14 @@
+#include <zephyr/logging/log.h>
+
 #include "cdmp_canbus_service_base.h"
 
+LOG_MODULE_REGISTER(cdmp_canbus_service, LOG_LEVEL_INF);
+
 namespace eerie_leap::subsys::cdmp::services {
+
+using eerie_leap::subsys::canbus::Canbus;
+using eerie_leap::subsys::canbus::CanFilter;
+using eerie_leap::subsys::canbus::CanFrame;
 
 CdmpCanbusServiceBase::CdmpCanbusServiceBase(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
@@ -27,5 +35,23 @@ void CdmpCanbusServiceBase::Configure(std::shared_ptr<CanbusProxy> canbus) {
 }
 
 void CdmpCanbusServiceBase::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {}
+
+int CdmpCanbusServiceBase::RegisterReceiveHandler(const CanId& can_id, CanFrameHandler handler) {
+    auto for_id = [id = can_id.id, handler = std::move(handler)](const CanFrame& frame) {
+        if(frame.id == id)
+            handler(frame);
+    };
+
+    const CanFilter filter = can_id_manager_->GetReceiveFilter(can_id);
+    int handler_id = (*canbus_)->RegisterFrameReceivedHandler(filter, for_id);
+
+    if(handler_id == Canbus::ERR_FILTER_OVERLAP && !filter.IsExact()) {
+        LOG_WRN("Another CAN filter overlaps the CDMP IDs 0x%03X-0x%03X; CDMP ID 0x%03X uses its own filter.",
+            filter.id, filter.id + CdmpCanIdManager::RECEIVE_BLOCK_SIZE - 1, can_id.id);
+        handler_id = (*canbus_)->RegisterFrameReceivedHandler(CanFilter(can_id), for_id);
+    }
+
+    return handler_id;
+}
 
 } // namespace eerie_leap::subsys::cdmp::services

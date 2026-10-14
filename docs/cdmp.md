@@ -57,6 +57,12 @@ transport run on:
 `CdmpService::Configure(canbus, base_can_id)` binds the services to a bus; the management IDs
 are `base + 0..5`, capability streams `base + 20..51`, application IDs `base + 52..99`.
 
+With a base that is a multiple of 8 (the default 0x700 is), the services share one CAN filter on
+`base + 0..7`, so CDMP takes one controller filter and SMP over CAN one more; the rest are left to
+the sensors' CAN routes. Any other base takes one filter per management ID, six in all. A route
+inside `base + 0..7` overlaps the shared filter: it is refused if CDMP registered first, and
+otherwise CDMP falls back to the six exact filters.
+
 ## COM service
 
 `CanbusComService` (`EERIE_LEAP_DOMAIN_CANBUS_COM`, selects `EERIE_LEAP_SMP_CAN`) runs CDMP
