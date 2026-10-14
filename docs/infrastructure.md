@@ -49,6 +49,52 @@ Code: `src/subsys/event_bus/`. A typed publish/subscribe transport:
   handler so unwanted events cost nothing. `SubscribeErased()` lets configuration-driven code
   subscribe without knowing the enums.
 
+**Bindings.** Stored configuration names an event by value: a channel id and the raw values of
+the channel's enums, so it resolves without the code knowing those enums. Widget bindings use this.
+
+- `EventBinding` (`event_binding.h`) holds the channel id, the event type, the payload key and an
+  optional selector (`selector_key`, `selector_value`) that narrows the events to one sensor or one
+  setting.
+- `EventChannelId` (`event_channel_id.h`) names the channel. The ids are persisted and append only;
+  one enum serves every application, so a stored id names the same channel on every unit.
+
+  | Id | Value | Channel |
+  | --- | --- | --- |
+  | `None` | 0 | None; a binding to it is inert |
+  | `Sensors` | 1 | `sensor_events` |
+  | `Logging` | 2 | `logging_events` |
+  | `Navigation` | 3 | `navigation_events`, rt_gauge only |
+  | `Settings` | 4 | `settings_events`, rt_gauge only |
+
+- `EventChannelRegistry` (`event_channel_registry.h`) maps an id onto the channel. Each
+  application registers the channels it carries while it composes, before anything resolves a
+  binding; `Find()` takes no lock. `Find()` returns null for an id nobody registered, so a stale
+  binding is inert. `Register()` refuses `None` and any id `IsValidEventChannelId()` does not name
+  (`-EINVAL`), and a second channel under a taken id (`-EEXIST`). Appending an id means moving
+  `k_last_event_channel_id` to it; `IsValidEventChannelId()` and the registry's table follow.
+- A selector is text, an integer or a bool (`IsSelectorValue()`). Text is compared by its hash,
+  because payloads carry ids hashed (`ToSelectorValue()`, `SelectorMatches()`). An integer matches
+  an `int` or `uint32_t` entry, a bool a `bool` entry.
+- `SubscribeEventBinding(binding, handler)` (`event_binding_subscription.h`) resolves and
+  subscribes in one step. The selector becomes the channel filter, run under the subscriber lock.
+  The handler receives the value under the payload key, on the dispatching thread. It returns null
+  for `None`, an unregistered channel, a selector that cannot select, an empty handler or a refused
+  subscription; the caller logs it.
+- `DispatchGuard` (`dispatch_guard.h`). Dispatch snapshots the matching handlers under the
+  subscriber lock and calls them outside it, so destroying a subscription does not stop a delivery
+  already under way. A handler that can outlive its owner holds a shared guard and runs its body
+  through `Dispatch()`. The owner calls `Detach()` before it tears down; it waits for a delivery
+  under way on another thread and makes later ones no-ops. The lock is recursive, so never call
+  `Detach()` from inside the guard's own `Dispatch()` body (it would not wait), nor while holding a
+  lock a body takes inside the guard (it would deadlock). Detaching from another subscriber's
+  handler is safe, and so is holding a lock the handlers take before `Dispatch()`: UI owners take
+  the LVGL lock, then the guard, and detach under the LVGL lock.
+- `ConfigValue` (`src/utilities/type/config_value.h`) is the loosely typed value of stored
+  configuration, and the type of a selector.
+
+`EventBinding`, `IsSelectorValue()` and `IsValidEventChannelId()` are header only, so
+configuration parsers and validators use them in builds without `EERIE_LEAP_EVENT_BUS`.
+
 Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `SensorId`,
 `Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack) and `logging_events`
 (`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued

@@ -32,7 +32,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [filesystem.md](filesystem.md) | Internal and SD filesystems, assets, directory layout |
 | [gpio.md](gpio.md) | Digital inputs |
 | [scripting.md](scripting.md) | Expressions and Lua scripts |
-| [infrastructure.md](infrastructure.md) | Services and threads, time, event bus, random, CFB, thread priorities |
+| [infrastructure.md](infrastructure.md) | Services and threads, time, event bus and bindings, random, CFB, thread priorities |
 
 In-tree references: the CDMP protocol specification
 ([`src/subsys/cdmp/README.md`](../src/subsys/cdmp/README.md)) and the expression language
