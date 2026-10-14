@@ -12,7 +12,11 @@ LOG_MODULE_REGISTER(dev_tools_logger);
 
 // Set CONFIG_THREAD_ANALYZER_ISR_STACK_USAGE for ISR stack usage info
 void SystemInfo::PrintThreadInfo(int cpu) {
+#ifdef CONFIG_THREAD_ANALYZER
     thread_analyzer_print(cpu);
+#else
+    LOG_ERR("Thread analyzer is not supprted.");
+#endif
 }
 
 static const char* stack_info_thread_name_filter = nullptr;
@@ -97,6 +101,11 @@ void SystemInfo::PrintCpuInfo(int cpu, const char *thread_name) {
 #endif
 }
 
+// The heap list and its statistics exist only with CONFIG_SYS_HEAP_ARRAY_SIZE > 0 and
+// CONFIG_SYS_HEAP_RUNTIME_STATS.
+#if defined(CONFIG_SYS_HEAP_RUNTIME_STATS) && CONFIG_SYS_HEAP_ARRAY_SIZE > 0
+#define EERIE_LEAP_HEAP_INFO_SUPPORTED
+
 static void PrintHeapStats(sys_heap *heap) {
     sys_memory_stats stats;
     sys_heap_runtime_stats_get(heap, &stats);
@@ -111,8 +120,10 @@ static void PrintHeapStats(sys_heap *heap) {
         used_percent,
         stats.max_allocated_bytes);
 }
+#endif
 
 void SystemInfo::PrintHeapInfo() {
+#ifdef EERIE_LEAP_HEAP_INFO_SUPPORTED
     sys_heap **heap_p;
 
     int heaps_count = sys_heap_array_get(&heap_p);
@@ -120,6 +131,9 @@ void SystemInfo::PrintHeapInfo() {
 
     for(int i = 0; i < heaps_count; ++i)
         PrintHeapStats(heap_p[i]);
+#else
+    LOG_ERR("Heap statistics are not supported.");
+#endif
 }
 
 } // namespace eerie_leap::utilities::dev_tools
