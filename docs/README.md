@@ -22,7 +22,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [configuration.md](configuration.md) | How stored configurations are loaded, validated, saved and exposed; the shared manager behaviour |
 | [device-tree.md](device-tree.md) | The aliases and chosen nodes rt_core reads, ADC channel properties, simulators |
 | [adc.md](adc.md) | ADC hardware access, samples and calibration configuration, the calibration service |
-| [sensors.md](sensors.md) | Sensor types, the processing pipeline, rate groups, event-driven sensors, the readings frame, sensor events |
+| [sensors.md](sensors.md) | Sensor types, the processing pipeline, indicator conditioning, rate groups, event-driven sensors, the readings frame, sensor events |
 | [canbus.md](canbus.md) | CAN buses, messages and signals, sending, reconfiguration |
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
 | [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`) and transports |

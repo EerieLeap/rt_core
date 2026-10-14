@@ -235,7 +235,7 @@ struct ProcessingRig {
 
 // The sensors configuration is validated against @p adc_channel_count rather than the ADC, so a
 // unit without one (null adc_manager and adc_configuration_manager) can still be given analog
-// sensors. GPIO sensors get ISR readers only when @p gpio is given.
+// sensors. GPIO sensors get readers, on edges or polled, only when @p gpio is given.
 inline ProcessingRig MakeProcessingRig(
     std::shared_ptr<FsService> fs_service,
     std::shared_ptr<IAdcManager> adc_manager,
@@ -260,7 +260,7 @@ inline ProcessingRig MakeProcessingRig(
         rig.frame,
         rig.time_service,
         gpio != nullptr ? std::make_shared<IsrSensorReaderFactory>(rig.time_service, gpio) : nullptr,
-        std::make_shared<SensorReaderFactory>(rig.time_service, nullptr, std::move(adc_manager)),
+        std::make_shared<SensorReaderFactory>(rig.time_service, gpio, std::move(adc_manager)),
         std::move(adc_configuration_manager));
     zassert_true(rig.processing_service->Initialize());
 

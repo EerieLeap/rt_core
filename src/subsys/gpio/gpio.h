@@ -10,17 +10,10 @@
 
 #include "i_gpio.h"
 
-// The header is pulled in by domains that can be built without the subsystem.
-#ifndef CONFIG_EERIE_LEAP_GPIO_DEBOUNCE_MS
-#define CONFIG_EERIE_LEAP_GPIO_DEBOUNCE_MS 50
-#endif
-
 namespace eerie_leap::subsys::gpio {
 
 class Gpio : public IGpio {
 protected:
-    static constexpr int64_t DEBOUNCE_MS = CONFIG_EERIE_LEAP_GPIO_DEBOUNCE_MS;
-
     struct ChannelHandler {
         int id;
         GpioEdge edge;
@@ -36,7 +29,6 @@ protected:
         k_work work{};
         Gpio* owner = nullptr;
         int channel = -1;
-        int64_t last_event_time = 0;
         atomic_t pending_state = ATOMIC_INIT(0);
         bool is_interrupt_attached = false;
         std::vector<ChannelHandler> handlers;

@@ -22,6 +22,8 @@ A sensor is an `id`, an `is_enabled` flag, metadata and a configuration:
 | `configuration.interpolation_method`, `calibration_table` | `LINEAR` (1) or `CUBIC_SPLINE` (2) over 2 to 50 points `{voltage, value}` of finite numbers with distinct voltages; only for `PHYSICAL_ANALOG`, where both are required. |
 | `configuration.expression` | Formula over `x`, for the types that have an input, and other sensor IDs; see [scripting.md](scripting.md). |
 | `configuration.script_path` | Lua script on the SD card; see [scripting.md](scripting.md). |
+| `configuration.debounce_ms` | 0 to 60000, default 0: a change of the input counts at once. Indicator types only; see [Indicator conditioning](#indicator-conditioning). |
+| `configuration.input_mode` | `Level` (0, default): the value follows the input. `Toggle` (1): each press flips the value, which holds. Indicator types only. |
 
 ### Types
 
@@ -36,6 +38,8 @@ A sensor is an `id`, an `is_enabled` flag, metadata and a configuration:
 | `CANBUS_INDICATOR` | 7 | CAN signal | no | `bus/frame/signal` | no | optional | not allowed | on every frame; value 0/1 |
 | `USER_ANALOG` | 8 | Lua `create_sensor_value` | no | no | no | optional, `x` = script value | required | polled |
 | `USER_INDICATOR` | 9 | Lua | no | no | no | optional | required | polled; value 0/1 |
+
+Only the indicator types take a `debounce_ms` other than 0 or the `Toggle` mode.
 
 A virtual sensor without a sampling rate must reference at least one sensor, otherwise it would
 never update; its expression cannot use `x`, which it does not have. An enabled sensor's
@@ -65,7 +69,7 @@ Every reading, whatever its source, goes through the same `ReadingPipeline`:
 
 ```
 reader / CAN route / GPIO edge
-   └─► ExpressionProcessor ─► ScriptProcessor ─► commit to SensorReadingsFrame ─► dependents
+   └─► ExpressionProcessor ─► ScriptProcessor ─► IndicatorConditioner ─► commit to SensorReadingsFrame ─► dependents
 ```
 
 1. **Reader** produces a reading with `status = RAW` (or `INTERPOLATED` for analog) and the tick's
@@ -76,14 +80,75 @@ reader / CAN route / GPIO edge
    to 0 or 1. Status becomes `EXPRESSION_EVALUATED`.
 3. **ScriptProcessor** calls `post_process_sensor_value(sensor_id, value)` when the sensor has a
    script that defines it; a number replaces the value.
-4. **Commit.** The reading is copied into the frame and marked `PROCESSED`. A failed reading is
+4. **IndicatorConditioner**, for an indicator with conditioning: passes the reading on with the
+   conditioned value, or holds a change until it settles (see
+   [Indicator conditioning](#indicator-conditioning)).
+5. **Commit.** The reading is copied into the frame and marked `PROCESSED`. A failed reading is
    committed with its error and `status = ERROR`; consumers see the error, and its dependents keep
    their previous values.
-5. **Dependents.** Every `DEPENDENT` sensor whose expression reads this one, directly or
-   transitively, is evaluated once, in processing order, with the same timestamp.
+6. **Dependents.** Every `DEPENDENT` sensor whose expression reads this one, directly or
+   transitively, is evaluated once, in processing order, with the same timestamp, through steps 2
+   to 5.
 
 Processing order is the topological order of expression references, computed when the
 configuration is parsed (`SensorsOrderResolver`); a cycle is a validation error.
+
+### Indicator conditioning
+
+An indicator of any source (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_INDICATOR`,
+`USER_INDICATOR`) can be debounced and can act as a switch. `IndicatorConditioner`
+(`processors/indicator_conditioner.h`) does both. The builder gives one only to an indicator whose
+`debounce_ms` or `input_mode` is not the default, so the defaults cost nothing.
+
+- **Input.** The processed value: 0 is off, any other number is on, a `post_process_sensor_value`
+  result included. The committed value is 0 or 1; `raw_value` keeps what the source read.
+- **Debounce settles, it does not drop.** A change of the input counts once the input has held it
+  for `debounce_ms`. An input back at the committed one before then cancels the change, and
+  further readings of the new value do not restart the window. The value therefore ends on the
+  real level, a bounce never shows, and a pulse shorter than the window is ignored. With
+  `debounce_ms` 0 a change counts at once.
+- **When.** The conditioner's work item on the processing work queue commits the change at the
+  end of the window, so an edge source that sends nothing after the edge settles too. A polled
+  sample after the end commits it as well. The commit carries the time the change settled and goes
+  through the commit step of any reading, dependents included.
+- **Held readings are not committed.** The frame only shows conditioned values, and a sensor that
+  reads a conditioned indicator sees only settled ones. A `VIRTUAL_INDICATOR` with conditioning
+  holds its own changes; until one settles, the sensors that read it are evaluated with its old
+  value.
+- **Errors.** A reading with an error, or without a value, is committed as it is and leaves the
+  window and the switch alone.
+- **First value.** The first reading of a generation is committed at once: there is nothing to
+  settle against. In `Toggle` mode it sets the input without a flip, so a button held while
+  processing starts is not a press.
+- **Toggle.** Each settled 0 → 1 flips the value, which holds. A settled 1 → 0 is committed with
+  the value unchanged: every reading the conditioner does not hold is committed, so the reading's
+  timestamp and `raw_value` follow the input, and a polled switch refreshes its reading on every
+  sample. The log writes `raw_value` only as `<id>.raw`, with `log_raw_value` on a
+  `PHYSICAL_INDICATOR` that has an expression (see [logging.md](logging.md)). The frame, the log,
+  the publisher, widgets and expressions all see the switch.
+- **A switch across restarts.** When processing starts, the value of every `Toggle` sensor is
+  committed before its input has a reading, with its dependents. A restart (a sensors, ADC or CAN
+  apply) keeps the switch of a sensor whose id, type, `debounce_ms` and `input_mode` are
+  unchanged. A change to any of these four starts it off. A change to the channel, connection
+  string, sampling rate, expression or script keeps it. The switch comes from the last generation
+  that ran: a sensor missing from it, or not a `Toggle` in it, starts off, and a failed start
+  changes nothing. A reboot starts every switch off. A change held when processing stops is
+  dropped.
+- **Pause.** A pause (ADC calibration, BLE pairing) stops the window of a held change with the
+  sources, since none can confirm or cancel it until `Resume()`, and `Resume()` runs what was left
+  of it. The first reading after `Resume()` confirms or cancels the change as any reading does: a
+  GPIO input is read again at `Resume()`, so a press released during the pause is ignored, and a
+  polled sensor has its next sample. A source that sends nothing more, such as a CAN signal,
+  settles at the end of the window. A switch keeps its value.
+- **Lua.** `update_sensor_value()` writes the frame directly (`UpdateReadingValue`), past the
+  debounce and the switch; the sensor's next commit replaces what it wrote.
+- **Latency and cost.** A window delays every consumer of the sensor by its length: keep a
+  button's short (20–30 ms) and CAN signals at 0. A conditioner is a delayable work item and a copy
+  of the held reading, built with the generation on the default heap, since the timer walks it; a
+  reading allocates nothing.
+- **GPIO.** The GPIO subsystem does not debounce. No time window drops edges. Edges are coalesced
+  to the newest level, so the sensor always ends on the real level, and its `debounce_ms` settles
+  a bouncing contact (see [gpio.md](gpio.md)).
 
 ### Polled sensors: rate groups
 
@@ -115,7 +180,8 @@ configuration is parsed (`SensorsOrderResolver`); a cycle is a validation error.
   allocated per frame. The work item decodes every route with a pending frame: one reading per
   bound sensor, a signal decoded per the CAN configuration, or the frame itself for `CANBUS_RAW`.
 - **GPIO.** One `GpioSensorReader` per sensor subscribes to both edges, coalesces to the newest
-  level, and seeds the frame with the current level at start.
+  level, and seeds the frame with the current level at start. No time window drops edges, so the
+  sensor always ends on the real level, and its `debounce_ms` settles a bouncing contact.
 
 ### Readings frame
 
@@ -129,7 +195,7 @@ under one mutex and never allocate; value slots have stable addresses, which exp
 | `SnapshotProcessedReadings(span)`, `TakeProcessedReadings(span)` | All processed readings; `Take` also clears the "updated" mark. Buffers are sized with `SensorLimits::kMaxCount`. |
 | `TryGetCanFrame(hash, frame)` | Latest frame of a `CANBUS_RAW` sensor. |
 | `TakeRawCanFrames(readings, frames)` | Every raw frame since the last take, oldest first, from a queue of `kRawCanQueueSize` entries; overflow is counted. For the log writer. |
-| `UpdateReadingValue(hash, value)` | What `update_sensor_value()` in Lua calls. |
+| `UpdateReadingValue(hash, value)` | What `update_sensor_value()` in Lua calls; it bypasses indicator conditioning. |
 | `MarkProcessedReadingsUpdated()` | Marks every processed reading as not yet taken, so the next `Take` returns each once more. Behind `SensorEventsPublisher::Replay()`. |
 
 ### Generations and restarts
@@ -138,14 +204,18 @@ under one mutex and never allocate; value slots have stable addresses, which exp
 configuration and a snapshot of the ADC configuration: the frame's slots, one `SensorRuntime` per
 sensor (interpolator, compiled expression bound to the frame, loaded script, dependents; none of
 them, and update method `NONE`, for a disabled sensor), then the rate groups and event sources.
-Everything a sample needs is allocated here, once.
-`Stop()` tears the sources down, clears the frame and drops the generation.
+Everything a sample needs is allocated here, once. The switches of the `Toggle` indicators are
+committed before the sources start.
+`Stop()` tears the sources down, cancels held indicator changes, keeps every switch for the next
+`Start()`, clears the frame and drops the generation.
 
 A new sensors or ADC configuration takes effect through a restart: the `SensorsController`
 registers update handlers on both managers that queue `Stop(); Start();` on the configuration
 work queue. A restart that fails (a script that no longer loads, a channel that disappeared)
 leaves the service stopped and logged; the next valid configuration starts it again. The service
-is pausable: the calibration service and BLE pairing pause it and resume it.
+is pausable: the calibration service and BLE pairing pause it and resume it. A pause tears the
+sources down and stops the windows of held indicator changes until `Resume()`; the generation and
+its switches stay.
 
 Services that read the frame or the sensors of the running generation register with
 `SensorsController::RegisterDependentService()` before `Start()`. A restart stops the registered
@@ -201,13 +271,17 @@ CborSensorMetadataConfig = [ name: tstr, unit: tstr, description: tstr ]
 CborSensorCalibrationDataMap = { 2*50(float32 => float32) }
 CborSensorConfigurationConfig = [
   type: uint, sampling_rate_ms: int, interpolation_method: uint, ? channel: uint,
-  connection_string: tstr, script_path: tstr, ? calibration_table: CborSensorCalibrationDataMap, ? expression: tstr ]
+  connection_string: tstr, script_path: tstr, ? calibration_table: CborSensorCalibrationDataMap, ? expression: tstr,
+  debounce_ms: uint, input_mode: uint ]
 CborSensorConfig = [ id: tstr, is_enabled: bool, metadata: CborSensorMetadataConfig, configuration: CborSensorConfigurationConfig ]
 CborSensorsConfig = [ sensors: [*CborSensorConfig] ]
 ```
 
-`is_enabled` is required: a file stored before it existed does not decode, so it is kept and the
-unit runs on the default (see [configuration.md](configuration.md#configuration-managers)).
+`is_enabled`, `debounce_ms` and `input_mode` are required: a file stored before any of them existed
+does not decode, so it is kept and the unit runs on the default (see
+[configuration.md](configuration.md#configuration-managers)) until the configuration is written
+again. The encoder always writes them; their defaults (0 and `Level`) are in the model, so a sensor
+built in code gets them. An unknown `input_mode` is a validation error.
 `sampling_rate_ms` ≤ 0 means none. `interpolation_method` 0 means none. The decoder takes any
 number of calibration points and repeated voltages; the validator holds the table to 2 to 50
 points with distinct voltages, and only then is it ordered by voltage. The stored order is not
@@ -234,7 +308,13 @@ auto sensor_6 = make_shared_pmr<Sensor>(Mrm::GetExtPmr(), "sensor_6");
 sensor_6->configuration.type = SensorType::CANBUS_ANALOG;
 sensor_6->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetExtPmr(), 1, 790, "RPM");
 
-sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6});
+auto sensor_7 = make_shared_pmr<Sensor>(Mrm::GetExtPmr(), "sensor_7");
+sensor_7->configuration.type = SensorType::PHYSICAL_INDICATOR;
+sensor_7->configuration.channel = 0;                                // no rate: every edge
+sensor_7->configuration.debounce_ms = 30;
+sensor_7->configuration.input_mode = IndicatorInputMode::Toggle;    // each press flips it
+
+sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6, sensor_7});
 ```
 
 ## Kconfig

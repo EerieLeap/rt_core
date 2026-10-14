@@ -82,6 +82,9 @@ pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
             sensor_config.configuration.expression_present = false;
         }
 
+        sensor_config.configuration.debounce_ms = sensor->configuration.debounce_ms;
+        sensor_config.configuration.input_mode = std::to_underlying(sensor->configuration.input_mode);
+
         sensor_config.metadata.unit = CborHelpers::ToZcborString(sensor->metadata.unit);
         sensor_config.metadata.name = CborHelpers::ToZcborString(sensor->metadata.name);
 
@@ -147,6 +150,10 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
 
         if(sensor_config.configuration.expression_present)
             sensor->configuration.expression = CborHelpers::ToPmrString(mr, sensor_config.configuration.expression);
+
+        // An unknown mode is refused by the validator below.
+        sensor->configuration.debounce_ms = sensor_config.configuration.debounce_ms;
+        sensor->configuration.input_mode = static_cast<IndicatorInputMode>(sensor_config.configuration.input_mode);
 
         sensor->metadata.unit = CborHelpers::ToPmrString(mr, sensor_config.metadata.unit);
         sensor->metadata.name = CborHelpers::ToPmrString(mr, sensor_config.metadata.name);

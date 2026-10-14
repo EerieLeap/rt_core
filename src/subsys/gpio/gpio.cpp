@@ -180,13 +180,10 @@ void Gpio::ChannelChangedCallback(const device* dev, gpio_callback* callback, ui
     auto* channel_callback = CONTAINER_OF(callback, ChannelCallback, callback);
     auto* owner = channel_callback->owner;
 
-    int64_t now = k_uptime_get();
-    if(now - channel_callback->last_event_time < DEBOUNCE_MS)
-        return;
-
-    channel_callback->last_event_time = now;
-
-    // Latched here because the level can settle back before the bottom half runs.
+    // Every edge latches the level, which can settle back before the bottom half runs, and
+    // submits the bottom half; a submit while it is queued changes nothing, so a burst of edges
+    // costs one run, with the newest level. No edge is dropped: a sensor conditions its own
+    // input (debounce_ms).
     atomic_set(
         &channel_callback->pending_state,
         gpio_pin_get_dt(&owner->gpio_specs_[channel_callback->channel]) > 0 ? 1 : 0);

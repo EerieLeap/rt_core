@@ -36,11 +36,14 @@ private:
     static void ValidateSamplingRateMs(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateInterpolationMethod(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateCalibrationTable(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
+    static void ValidateConditioning(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateExpression(const Sensor& sensor, const std::vector<std::shared_ptr<Sensor>>& sensors);
 
 public:
     /// The most points a calibration table holds, the schema's 2*50 (sensors_config.cddl); the decoder does not count them.
     static constexpr size_t MAX_CALIBRATION_POINTS = 50;
+    /// The longest indicator debounce, 60 s.
+    static constexpr uint32_t MAX_DEBOUNCE_MS = 60000;
 
     static void Validate(const std::vector<std::shared_ptr<Sensor>>& sensors, IFsService* sd_fs_service, uint32_t gpio_channel_count, uint32_t adc_channel_count);
 

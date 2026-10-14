@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <ranges>
 #include <vector>
 #include <eerie_memory.hpp>
 
@@ -10,6 +12,7 @@
 #include "subsys/lua_script/lua_script.h"
 #include "domain/adc_domain/models/adc_configuration.h"
 #include "domain/sensor_domain/runtime/sensor_script.h"
+#include "domain/sensor_domain/processors/indicator_conditioner.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_slot.h"
 #include "domain/sensor_domain/models/sensor_reading_update_method.h"
@@ -23,6 +26,8 @@ using eerie_leap::domain::adc_domain::models::AdcConfiguration;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::sensor_domain::models::SensorSlot;
 using eerie_leap::domain::sensor_domain::models::SensorReadingUpdateMethod;
+using eerie_leap::domain::sensor_domain::processors::IndicatorConditioner;
+using eerie_leap::domain::sensor_domain::processors::IndicatorSwitchState;
 
 // Everything executable that a sensor needs, built from its configuration for one generation.
 // Owned by SensorGeneration; readers and tasks refer to it for as long as the generation runs.
@@ -41,6 +46,11 @@ struct SensorRuntime {
     // DEPENDENT sensors that read this one, directly or through other dependents, in processing
     // order. Evaluated right after a reading of this sensor is committed.
     std::vector<const SensorRuntime*> dependents;
+
+    // Indicators with a debounce or Toggle only. Its state changes as readings arrive, on the
+    // processing work queue. On the default heap rather than PSRAM: it holds a kernel timeout, as
+    // the readers' work items do.
+    std::unique_ptr<IndicatorConditioner> conditioner = nullptr;
 
     [[nodiscard]] const Sensor& GetSensor() const { return *sensor; }
 };
@@ -64,6 +74,62 @@ struct SensorGeneration {
         }
 
         return nullptr;
+    }
+
+    /** @return Whether any indicator is a Toggle switch. */
+    [[nodiscard]] bool HasSwitches() const {
+        return std::ranges::any_of(runtimes, [](const SensorRuntime& runtime) {
+            return runtime.conditioner != nullptr && runtime.conditioner->IsSwitch();
+        });
+    }
+
+    // Drops every held indicator change and waits for a settle in progress. A settle commits into
+    // the sensors after it, which may schedule theirs, so going in processing order leaves none
+    // scheduled. Only while the sources are stopped; never from the processing work queue.
+    void CancelSettles() {
+        for(auto& runtime : runtimes) {
+            if(runtime.conditioner != nullptr)
+                runtime.conditioner->CancelSettle();
+        }
+    }
+
+    // Stops the window of every held indicator change for a pause, keeping what is left of it; in
+    // processing order, as CancelSettles(). Only while the sources are paused.
+    void SuspendSettles() {
+        for(auto& runtime : runtimes) {
+            if(runtime.conditioner != nullptr)
+                runtime.conditioner->SuspendSettle();
+        }
+    }
+
+    // Runs what was left of every suspended window, before the sources resume. In reverse
+    // processing order: a settle that runs at once reaches only the sensors after it, which are
+    // done by then.
+    void ResumeSettles() {
+        for(auto& runtime : std::views::reverse(runtimes)) {
+            if(runtime.conditioner != nullptr)
+                runtime.conditioner->ResumeSettle();
+        }
+    }
+
+    // The switch of every Toggle indicator, for the next generation. Once the settles are cancelled.
+    [[nodiscard]] std::vector<IndicatorSwitchState> GetSwitchStates() const {
+        std::vector<IndicatorSwitchState> switch_states;
+
+        for(const auto& runtime : runtimes) {
+            if(runtime.conditioner == nullptr || !runtime.conditioner->IsSwitch())
+                continue;
+
+            const auto& configuration = runtime.sensor->configuration;
+            switch_states.push_back({
+                .sensor_id_hash = runtime.sensor->id_hash,
+                .type = configuration.type,
+                .debounce_ms = configuration.debounce_ms,
+                .input_mode = configuration.input_mode,
+                .is_on = runtime.conditioner->IsSwitchOn()});
+        }
+
+        return switch_states;
     }
 };
 

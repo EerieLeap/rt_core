@@ -79,7 +79,7 @@ Available to sensor and CAN message scripts.
 | Function | Returns | Meaning |
 | --- | --- | --- |
 | `get_sensor_value(sensor_id)` | `number` or `nil` | The latest processed value of the sensor with that ID; `nil` when it has no value yet or does not exist. |
-| `update_sensor_value(sensor_id, value)` | `boolean` | Overwrites the latest value of another sensor; `false` when the sensor does not exist. To change the sensor the script belongs to, return the new value from `post_process_sensor_value` instead. |
+| `update_sensor_value(sensor_id, value)` | `boolean` | Overwrites the latest value of another sensor; `false` when the sensor does not exist. It writes the frame directly, past an indicator's debounce and switch ([sensors.md](sensors.md#indicator-conditioning)). To change the sensor the script belongs to, return the new value from `post_process_sensor_value` instead. |
 | `print(message)` | | Writes one string to the console. |
 | `sleep_ms(ms)` | | Sleeps. Avoid it in sensor and CAN scripts, where it stalls the calling thread. |
 

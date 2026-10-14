@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -137,6 +138,8 @@ void sensors_parser_CompareSensors(
         zassert_true(deserialized_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method);
         zassert_true(deserialized_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size());
         zassert_true(deserialized_sensor->configuration.expression == sensors[i]->configuration.expression);
+        zassert_equal(deserialized_sensor->configuration.debounce_ms, sensors[i]->configuration.debounce_ms, "%s", sensors[i]->id.c_str());
+        zassert_equal(deserialized_sensor->configuration.input_mode, sensors[i]->configuration.input_mode, "%s", sensors[i]->id.c_str());
     }
 }
 
@@ -372,5 +375,137 @@ ZTEST(sensors_parser, test_Deserialize_refuses_an_expression_that_reads_a_disabl
     const auto error = DeserializeRejection(parser, *serialized_sensors);
     zassert_true(
         error == "Invalid Sensor configuration. Sensor ID: sensor_1. Expression references disabled sensor sensor_2.",
+        "%s", error.c_str());
+}
+
+namespace {
+
+// A debounced switch with neither of the optional fields before the conditioning, so the decoder
+// goes from script_path straight to debounce_ms, and a debounced derived indicator.
+std::vector<std::shared_ptr<Sensor>> sensors_parser_GetConditionedSensors() {
+    auto sensors = sensors_parser_GetTestSensors();
+
+    auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "button");
+    button->configuration.type = SensorType::PHYSICAL_INDICATOR;
+    button->configuration.channel = 3;
+    button->configuration.debounce_ms = 30;
+    button->configuration.input_mode = IndicatorInputMode::Toggle;
+
+    auto moving = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "moving");
+    moving->configuration.type = SensorType::VIRTUAL_INDICATOR;
+    moving->configuration.expression = "sensor_1 > 50";
+    moving->configuration.debounce_ms = 2000;
+
+    sensors.push_back(std::move(button));
+    sensors.push_back(std::move(moving));
+
+    return sensors;
+}
+
+const CborSensorConfig& FindSensorConfig(const CborSensorsConfig& sensors_config, std::string_view sensor_id) {
+    const auto& sensor_configs = sensors_config.CborSensorConfig_m;
+    const auto sensor_config = std::ranges::find_if(sensor_configs, [sensor_id](const CborSensorConfig& candidate) {
+        return std::string_view(reinterpret_cast<const char*>(candidate.id.value), candidate.id.len) == sensor_id;
+    });
+    zassert_true(sensor_config != sensor_configs.end(), "%s is not serialized", std::string(sensor_id).c_str());
+
+    return *sensor_config;
+}
+
+} // namespace
+
+ZTEST(sensors_parser, test_conditioning_survives_Serialize_and_Deserialize) {
+    SensorsCborParser parser(nullptr);
+    auto sensors = sensors_parser_GetConditionedSensors();
+
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    const auto& button = FindSensorConfig(*serialized_sensors, "button").configuration;
+    zassert_equal(button.debounce_ms, 30);
+    zassert_equal(button.input_mode, 1);
+
+    const auto& moving = FindSensorConfig(*serialized_sensors, "moving").configuration;
+    zassert_equal(moving.debounce_ms, 2000);
+    zassert_equal(moving.input_mode, 0);
+
+    const auto& analog = FindSensorConfig(*serialized_sensors, "sensor_1").configuration;
+    zassert_equal(analog.debounce_ms, 0);
+    zassert_equal(analog.input_mode, 0);
+
+    auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
+    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+}
+
+ZTEST(sensors_parser, test_conditioning_survives_a_round_trip_through_cbor_bytes) {
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto sensors = sensors_parser_GetConditionedSensors();
+
+    const auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
+    zassert_false(bytes.empty(), "The size calculation must count the conditioning");
+
+    const auto decoded = serializer.Deserialize(bytes);
+    zassert_not_null(decoded.get());
+
+    auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded, 16, 16);
+    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+}
+
+ZTEST(sensors_parser, test_a_sensor_built_in_code_encodes_the_default_conditioning) {
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto sensors = sensors_parser_GetTestSensors();
+
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+    for(const auto& sensor_config : serialized_sensors->CborSensorConfig_m) {
+        zassert_equal(sensor_config.configuration.debounce_ms, 0);
+        zassert_equal(sensor_config.configuration.input_mode, 0);
+    }
+
+    const auto decoded = serializer.Deserialize(serializer.Serialize(*serialized_sensors));
+    zassert_not_null(decoded.get(), "The defaults are encoded, not left out");
+
+    for(const auto& sensor : parser.Deserialize(Mrm::GetDefaultPmr(), *decoded, 16, 16)) {
+        zassert_equal(sensor->configuration.debounce_ms, 0, "%s", sensor->id.c_str());
+        zassert_equal(sensor->configuration.input_mode, IndicatorInputMode::Level, "%s", sensor->id.c_str());
+    }
+}
+
+ZTEST(sensors_parser, test_conditioning_cannot_be_left_out) {
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto sensors = sensors_parser_GetConditionedSensors();
+
+    // A debounce that encodes to bytes found nowhere else.
+    const auto button = std::ranges::find_if(sensors, [](const auto& sensor) { return sensor->id == "button"; });
+    (*button)->configuration.debounce_ms = 0x1234;
+
+    auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
+    zassert_false(bytes.empty());
+
+    // debounce_ms (uint16 0x1234), input_mode 1, then the end of button's configuration list.
+    const std::array<uint8_t, 5> conditioning = { 0x19, 0x12, 0x34, 0x01, 0xFF };
+    const auto found = std::ranges::search(bytes, conditioning);
+    zassert_false(found.empty(), "button's conditioning is not encoded where expected");
+
+    // The layout from before the fields existed is refused rather than read with the defaults.
+    bytes.erase(found.begin(), found.begin() + 4);
+    zassert_is_null(serializer.Deserialize(bytes).get(), "A sensor without debounce_ms and input_mode must not decode");
+}
+
+ZTEST(sensors_parser, test_Deserialize_refuses_an_unknown_input_mode) {
+    SensorsCborParser parser(nullptr);
+    // The CBOR strings point into the sensors.
+    const auto sensors = sensors_parser_GetConditionedSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    for(auto& sensor_config : serialized_sensors->CborSensorConfig_m) {
+        if(std::string_view(reinterpret_cast<const char*>(sensor_config.id.value), sensor_config.id.len) == "button")
+            sensor_config.configuration.input_mode = 7;
+    }
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(
+        error == "Invalid Sensor configuration. Sensor ID: button. Invalid indicator input mode.",
         "%s", error.c_str());
 }

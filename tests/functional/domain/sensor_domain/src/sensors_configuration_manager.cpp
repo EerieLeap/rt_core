@@ -11,9 +11,11 @@
 #include "configuration/cbor/cbor_system_config/cbor_system_config.h"
 #include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/services/cbor_configuration_service.h"
+#include "configuration/cbor/cbor_serializer.h"
 
 #include "domain/canbus_domain/models/canbus_configuration.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
+#include "domain/sensor_domain/configuration/parsers/sensors_cbor_parser.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 
 #include "subsys/device_tree/dt_fs.h"
@@ -29,6 +31,8 @@ using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::utilities::voltage_interpolator;
 using namespace eerie_leap::configuration::services;
+using eerie_leap::configuration::cbor::CborSerializer;
+using eerie_leap::domain::sensor_domain::configuration::parsers::SensorsCborParser;
 using namespace eerie_leap::domain::canbus_domain::models;
 using namespace eerie_leap::domain::sensor_domain::configuration;
 using namespace eerie_leap::domain::sensor_domain::models;
@@ -395,6 +399,65 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_rejected_s
     zassert_true(sensors_configuration_manager->Update(sensors_configuration_manager_SetupTestSensors()));
     zassert_true(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
     zassert_not_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), stored.size());
+}
+
+// A sensors configuration stored before debounce_ms and input_mode existed ends where they are
+// required, so it does not decode: like a corrupt one, it is kept and the unit runs on the default.
+ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_stored_configuration_without_conditioning_is_kept) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "button");
+    button->configuration.type = SensorType::PHYSICAL_INDICATOR;
+    button->configuration.channel = 3;
+    button->configuration.debounce_ms = 0x1234;
+    button->configuration.input_mode = IndicatorInputMode::Toggle;
+    const std::vector<std::shared_ptr<Sensor>> sensors { button };
+
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
+    zassert_false(bytes.empty());
+
+    // debounce_ms (uint16 0x1234) and input_mode 1, before the end of the configuration list.
+    const std::array<uint8_t, 5> conditioning = { 0x19, 0x12, 0x34, 0x01, 0xFF };
+    const auto found = std::ranges::search(bytes, conditioning);
+    zassert_false(found.empty());
+    bytes.erase(found.begin(), found.begin() + 4);
+
+    zassert_true(fs_service->CreateDirectory("config"));
+    zassert_true(fs_service->WriteFile("config/sensors_config.cbor", bytes.data(), bytes.size()));
+
+    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service),
+        nullptr,
+        16,
+        16);
+
+    const auto loaded = sensors_configuration_manager->Get();
+    zassert_true(loaded != nullptr, "A default stands in for the old configuration");
+    zassert_true(loaded->empty());
+
+    zassert_true(sensors_configuration_manager->IsStoredConfigurationRejected());
+    zassert_false(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
+    zassert_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), bytes.size(), "The stored file is untouched");
+
+    // Writing the configuration again replaces it.
+    zassert_true(sensors_configuration_manager->Update(sensors));
+    zassert_true(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
+    zassert_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), bytes.size() + 4);
+
+    auto reloaded = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service),
+        nullptr,
+        16,
+        16);
+    zassert_false(reloaded->IsStoredConfigurationRejected());
+    zassert_equal(reloaded->Get()->size(), 1);
+    zassert_equal(reloaded->Get()->front()->configuration.debounce_ms, 0x1234);
+    zassert_equal(reloaded->Get()->front()->configuration.input_mode, IndicatorInputMode::Toggle);
 }
 
 namespace {

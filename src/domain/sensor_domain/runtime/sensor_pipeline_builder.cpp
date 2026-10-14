@@ -22,6 +22,7 @@ using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::voltage_interpolator;
 using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::domain::script_domain::utilities::GlobalFunctionsRegistry;
+using namespace eerie_leap::domain::sensor_domain::models;
 
 LOG_MODULE_REGISTER(sensor_pipeline_builder_logger);
 
@@ -133,6 +134,30 @@ void SensorPipelineBuilder::BuildScript(SensorGeneration& generation, SensorRunt
     script.post_process = script.host->FindFunction(script.environment, SensorScript::kPostProcessFunction);
 }
 
+// Only an indicator with a debounce or Toggle gets one, so the defaults cost nothing.
+void SensorPipelineBuilder::BuildConditioner(SensorRuntime& runtime, std::span<const IndicatorSwitchState> switch_states) const {
+    const auto& sensor = *runtime.sensor;
+    const auto& configuration = sensor.configuration;
+    if(configuration.GetTraits().value_kind != SensorValueKind::INDICATOR || !configuration.HasConditioning())
+        return;
+
+    // A switch survives a restart only as long as nothing that defines it changed.
+    bool is_switch_on = false;
+    if(configuration.input_mode == IndicatorInputMode::Toggle) {
+        const auto state = std::ranges::find_if(switch_states, [&](const IndicatorSwitchState& candidate) {
+            return candidate.sensor_id_hash == sensor.id_hash
+                && candidate.type == configuration.type
+                && candidate.debounce_ms == configuration.debounce_ms
+                && candidate.input_mode == configuration.input_mode;
+        });
+
+        is_switch_on = state != switch_states.end() && state->is_on;
+    }
+
+    runtime.conditioner = std::make_unique<IndicatorConditioner>(
+        configuration.debounce_ms, configuration.input_mode, is_switch_on);
+}
+
 // Slots follow the configuration order, so a slot index is also the runtime's index.
 void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
     auto& runtimes = generation.runtimes;
@@ -173,7 +198,8 @@ void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
 }
 
 std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
-    std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors) const {
+    std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors,
+    std::span<const IndicatorSwitchState> switch_states) const {
 
     auto generation = std::make_shared<SensorGeneration>();
     generation->sensors = std::move(sensors);
@@ -193,6 +219,7 @@ std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
             BuildInterpolator(runtime);
             BuildExpression(runtime);
             BuildScript(*generation, runtime);
+            BuildConditioner(runtime, switch_states);
         }
 
         generation->runtimes.push_back(std::move(runtime));

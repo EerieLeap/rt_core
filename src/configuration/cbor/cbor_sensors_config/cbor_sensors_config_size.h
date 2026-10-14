@@ -63,6 +63,9 @@ static size_t cbor_get_size_CborSensorsConfig(const CborSensorsConfig& config) {
 
             return CborSizeCalc::SizeOfTstr(value);
         });
+
+        builder.AddUint(sensor_config.configuration.debounce_ms)
+            .AddUint(sensor_config.configuration.input_mode);
     }
 
     return builder.Build();

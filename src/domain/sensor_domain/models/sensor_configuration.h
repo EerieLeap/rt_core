@@ -10,6 +10,7 @@
 #include "utilities/voltage_interpolator/interpolation_method.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 
+#include "indicator_input_mode.h"
 #include "sensor_type.h"
 #include "sensor_type_traits.h"
 #include "sensor_reading_update_method.h"
@@ -35,6 +36,10 @@ struct SensorConfiguration {
     InterpolationMethod interpolation_method = InterpolationMethod::NONE;
     std::pmr::vector<CalibrationData> calibration_table;   // Sorted by voltage.
     std::pmr::string expression;                           // Empty for none.
+
+    // Indicator types only. A change of the input counts once it has held this long; 0 = at once.
+    uint32_t debounce_ms = 0;
+    IndicatorInputMode input_mode = IndicatorInputMode::Level;
 
     // connection_string data source decomposition objects
     eerie_memory::pmr_unique_ptr<CanbusSource> canbus_source = nullptr;
@@ -62,6 +67,8 @@ struct SensorConfiguration {
         interpolation_method(other.interpolation_method),
         calibration_table(other.calibration_table, alloc),
         expression(other.expression, alloc),
+        debounce_ms(other.debounce_ms),
+        input_mode(other.input_mode),
         canbus_source(std::move(other.canbus_source)),
         alloc_(alloc) {}
 
@@ -70,6 +77,7 @@ struct SensorConfiguration {
     [[nodiscard]] bool HasExpression() const { return !expression.empty(); }
     [[nodiscard]] bool HasInterpolation() const { return interpolation_method != InterpolationMethod::NONE; }
     [[nodiscard]] bool HasScript() const { return !script_path.empty(); }
+    [[nodiscard]] bool HasConditioning() const { return debounce_ms != 0 || input_mode != IndicatorInputMode::Level; }
 
     SensorReadingUpdateMethod GetReadingUpdateMethod() const {
         const auto traits = GetTraits();

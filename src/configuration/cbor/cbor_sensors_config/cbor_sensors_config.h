@@ -51,6 +51,8 @@ struct CborSensorConfigurationConfig {
 	bool calibration_table_present{};
 	struct zcbor_string expression{};
 	bool expression_present{};
+	uint32_t debounce_ms{};
+	uint32_t input_mode{};
 
 	CborSensorConfigurationConfig(std::allocator_arg_t, allocator_type alloc)
         : calibration_table(std::allocator_arg, alloc) {}
@@ -72,7 +74,9 @@ struct CborSensorConfigurationConfig {
 		calibration_table(std::move(other.calibration_table), alloc),
 		calibration_table_present(other.calibration_table_present),
 		expression(other.expression),
-		expression_present(other.expression_present) {}
+		expression_present(other.expression_present),
+		debounce_ms(other.debounce_ms),
+		input_mode(other.input_mode) {}
 };
 
 struct CborSensorConfig {

@@ -147,6 +147,7 @@ void SensorValidator::ValidateSensorConfiguration(
         ValidateScriptPath(sensor->id, sensor->configuration, sd_fs_service);
         ValidateSamplingRateMs(sensor->id, sensor->configuration);
         ValidateInterpolationMethod(sensor->id, sensor->configuration);
+        ValidateConditioning(sensor->id, sensor->configuration);
         ValidateExpression(*sensor, sensors);
     }
 }
@@ -271,6 +272,23 @@ void SensorValidator::ValidateCalibrationTable(std::string_view sensor_id, const
                 InvalidSensorConfiguration(sensor_id, "Calibration voltages must be unique.");
         }
     }
+}
+
+// Conditioning works on a 0/1 value, so only indicators take it.
+void SensorValidator::ValidateConditioning(std::string_view sensor_id, const SensorConfiguration& sensor_configuration) {
+    if(!IsIndicatorInputModeValid(sensor_configuration.input_mode))
+        InvalidSensorConfiguration(sensor_id, "Invalid indicator input mode.");
+
+    if(sensor_configuration.GetTraits().value_kind != SensorValueKind::INDICATOR) {
+        if(sensor_configuration.debounce_ms != 0)
+            InvalidSensorConfiguration(sensor_id, "Debounce is only supported for indicator sensors.");
+
+        if(sensor_configuration.input_mode != IndicatorInputMode::Level)
+            InvalidSensorConfiguration(sensor_id, "Input mode is only supported for indicator sensors.");
+    }
+
+    if(sensor_configuration.debounce_ms > MAX_DEBOUNCE_MS)
+        InvalidSensorConfiguration(sensor_id, "Debounce must be at most " + std::to_string(MAX_DEBOUNCE_MS) + " ms.");
 }
 
 void SensorValidator::ValidateExpression(const Sensor& sensor, const std::vector<std::shared_ptr<Sensor>>& sensors) {

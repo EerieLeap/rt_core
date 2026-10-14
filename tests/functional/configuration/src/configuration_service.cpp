@@ -317,6 +317,8 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     configuration_config_1.calibration_table_present = false;
     configuration_config_1.expression = CborHelpers::ToZcborString(sensor_1_expression);
     configuration_config_1.expression_present = true;
+    configuration_config_1.debounce_ms = 30;
+    configuration_config_1.input_mode = 1;
 
     std::string sensor_1_id = "sensor_3";
     CborSensorConfig sensor_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -399,6 +401,8 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.interpolation_method, 1);
     zassert_true(loaded_sensors_config->CborSensorConfig_m[0].configuration.expression_present);
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].configuration.expression).c_str(), sensor_1_expression.c_str());
+    zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.debounce_ms, 30);
+    zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.input_mode, 1);
 
     // Verify second sensor
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].id).c_str(), sensor_2_id.c_str());
@@ -425,6 +429,8 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.interpolation_method, 1);
     zassert_true(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression_present);
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression).c_str(), sensor_2_expression.c_str());
+    zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.debounce_ms, 0);
+    zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.input_mode, 0);
 }
 
 ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_saved_and_loaded) {

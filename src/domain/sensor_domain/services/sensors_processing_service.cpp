@@ -1,3 +1,4 @@
+#include <exception>
 #include <stdexcept>
 
 #include "domain/sensor_domain/processors/expression_processor.h"
@@ -38,7 +39,10 @@ SensorsProcessingService::SensorsProcessingService(
     reading_processors_->push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
 
-    pipeline_ = std::make_shared<ReadingPipeline>(sensor_readings_frame_, reading_processors_, time_service);
+    pipeline_ = std::make_shared<ReadingPipeline>(sensor_readings_frame_, reading_processors_, time_service, work_queue_thread_);
+
+    switch_state_work_.service = this;
+    k_work_init(&switch_state_work_.work, SwitchStateWorkHandler);
 
     if(isr_sensor_reader_factory != nullptr || canbus_service != nullptr) {
         isr_service_ = std::make_shared<ProcessingIsrService>(
@@ -84,7 +88,7 @@ bool SensorsProcessingService::DoStart() {
     // Everything a sample needs is allocated here, once per configuration. The ADC configuration is
     // taken as it is now; an apply swaps the manager's pointer and restarts, never touching this one.
     try {
-        generation_ = pipeline_builder_.Build(sensors);
+        generation_ = pipeline_builder_.Build(sensors, switch_states_);
         generation_->adc_configuration = adc_configuration_manager_ != nullptr
             ? adc_configuration_manager_->Get()
             : nullptr;
@@ -102,10 +106,17 @@ bool SensorsProcessingService::DoStart() {
     // Nothing may keep running on a generation that is being dropped. The child that threw has
     // cleaned up after itself; DoStop() stops the ones that started before it.
     try {
+        // A switch is known before its input: the frame, the log and the publisher see it at once.
+        // On the processing work queue, ahead of every source started below.
+        CommitSwitchStates();
+
         for(const auto& processing_service : processing_services_)
             processing_service->Start();
     } catch(...) {
+        // The generation never ran, so the next start takes the switches of the last one that did.
+        auto switch_states = std::move(switch_states_);
         DoStop();
+        switch_states_ = std::move(switch_states);
 
         if(isr_service_ != nullptr)
             isr_service_->SetGeneration(nullptr);
@@ -124,7 +135,14 @@ bool SensorsProcessingService::DoStop() {
     for(const auto& processing_service : processing_services_)
         processing_service->Stop();
 
-    // Sources are gone, so nothing refers to the generation any more.
+    // The sources are gone, but a held indicator change could still settle into the generation.
+    // The switches go to the next one.
+    if(generation_ != nullptr) {
+        generation_->CancelSettles();
+        switch_states_ = generation_->GetSwitchStates();
+    }
+
+    // Nothing refers to the generation any more.
     sensor_readings_frame_->ClearReadings();
     generation_ = nullptr;
 
@@ -137,18 +155,54 @@ bool SensorsProcessingService::DoPause() {
     for(const auto& processing_service : processing_services_)
         processing_service->Pause();
 
+    // No source can confirm or cancel a held indicator change until Resume(), so its window stops
+    // with them: a bounce or a short press in flight must not settle unobserved.
+    if(generation_ != nullptr)
+        generation_->SuspendSettles();
+
     LOG_INF("Processing Service paused.");
 
     return true;
 }
 
 bool SensorsProcessingService::DoResume() {
+    // Ahead of the sources, so their first readings, a GPIO level read again or the next sample,
+    // confirm or cancel a held change; one that sends nothing more settles at the window's end.
+    if(generation_ != nullptr)
+        generation_->ResumeSettles();
+
     for(const auto& processing_service : processing_services_)
         processing_service->Resume();
 
     LOG_INF("Processing Service resumed.");
 
     return true;
+}
+
+void SensorsProcessingService::CommitSwitchStates() {
+    if(!generation_->HasSwitches())
+        return;
+
+    // The starting thread waits; it is never the processing work queue, and nothing that queue
+    // runs takes the transition lock the starter holds.
+    if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &switch_state_work_.work) < 0)
+        throw std::runtime_error("The processing work queue refused the indicator switches.");
+
+    k_work_flush(&switch_state_work_.work, &switch_state_sync_);
+}
+
+// Exceptions must not unwind into the work queue's C dispatch.
+void SensorsProcessingService::SwitchStateWorkHandler(k_work* work) {
+    auto* switch_state_work = CONTAINER_OF(work, SwitchStateWork, work);
+    auto* service = switch_state_work->service;
+
+    try {
+        service->pipeline_->CommitSwitchStates(*service->generation_);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to commit the indicator switches: %s", e.what());
+    } catch(...) {
+        LOG_ERR("Failed to commit the indicator switches.");
+    }
 }
 
 bool SensorsProcessingService::RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor) {

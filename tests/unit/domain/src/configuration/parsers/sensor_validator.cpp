@@ -581,3 +581,68 @@ ZTEST(sensor_validator, test_a_disabled_can_signal_sensor_may_read_a_disabled_me
         CanbusSourcesRejection({ Disabled(MakeCanSensor(SensorType::CANBUS_INDICATOR, 1, 0x7E0, "rpm")) }, canbus_configuration),
         Rejected("can_1", "CAN bus 1 is not configured."));
 }
+
+namespace {
+
+// A sensor of @p type that validates on its own, with a sampling rate only where the type allows one.
+std::shared_ptr<Sensor> MakeValidSensor(SensorType type) {
+    return MakeSensor("sensor_1", type,
+        SensorTypeTraits::Of(type).allows_sampling_rate ? std::optional<int>(100) : std::nullopt);
+}
+
+std::shared_ptr<Sensor> Conditioned(std::shared_ptr<Sensor> sensor, uint32_t debounce_ms, IndicatorInputMode input_mode) {
+    sensor->configuration.debounce_ms = debounce_ms;
+    sensor->configuration.input_mode = input_mode;
+
+    return sensor;
+}
+
+} // namespace
+
+ZTEST(sensor_validator, test_conditioning_is_accepted_on_every_indicator_type) {
+    for(auto type : { SensorType::PHYSICAL_INDICATOR, SensorType::VIRTUAL_INDICATOR,
+                      SensorType::CANBUS_INDICATOR, SensorType::USER_INDICATOR }) {
+        const auto error = Validate({ Conditioned(MakeValidSensor(type), 30, IndicatorInputMode::Toggle) });
+        zassert_false(error.has_value(), "Type %u: %s", static_cast<unsigned>(type), error.value_or("").c_str());
+    }
+}
+
+ZTEST(sensor_validator, test_conditioning_on_a_type_that_is_not_an_indicator_is_rejected) {
+    for(auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::CANBUS_RAW,
+                      SensorType::CANBUS_ANALOG, SensorType::USER_ANALOG }) {
+        const auto debounced = Conditioned(MakeValidSensor(type), 1, IndicatorInputMode::Level);
+        AssertRejection(Validate({ debounced }), Rejected("sensor_1", "Debounce is only supported for indicator sensors."));
+
+        const auto toggled = Conditioned(MakeValidSensor(type), 0, IndicatorInputMode::Toggle);
+        AssertRejection(Validate({ toggled }), Rejected("sensor_1", "Input mode is only supported for indicator sensors."));
+
+        // A disabled sensor is validated like an enabled one.
+        AssertRejection(Validate({ Disabled(Conditioned(MakeValidSensor(type), 1, IndicatorInputMode::Level)) }),
+            Rejected("sensor_1", "Debounce is only supported for indicator sensors."));
+        AssertRejection(Validate({ Disabled(Conditioned(MakeValidSensor(type), 0, IndicatorInputMode::Toggle)) }),
+            Rejected("sensor_1", "Input mode is only supported for indicator sensors."));
+
+        zassert_false(Validate({ MakeValidSensor(type) }).has_value(), "The defaults are valid on type %u", static_cast<unsigned>(type));
+    }
+}
+
+ZTEST(sensor_validator, test_debounce_is_capped_at_60_seconds) {
+    zassert_equal(SensorValidator::MAX_DEBOUNCE_MS, 60000);
+
+    const auto at_cap = Conditioned(MakeValidSensor(SensorType::PHYSICAL_INDICATOR), 60000, IndicatorInputMode::Level);
+    zassert_false(Validate({ at_cap }).has_value(), "60 s is allowed");
+
+    const auto over_cap = Conditioned(MakeValidSensor(SensorType::PHYSICAL_INDICATOR), 60001, IndicatorInputMode::Toggle);
+    AssertRejection(Validate({ over_cap }), Rejected("sensor_1", "Debounce must be at most 60000 ms."));
+}
+
+ZTEST(sensor_validator, test_unknown_input_mode_is_rejected) {
+    for(auto input_mode : { IndicatorInputMode::Count, static_cast<IndicatorInputMode>(UINT32_MAX) }) {
+        AssertRejection(Validate({ Conditioned(MakeValidSensor(SensorType::PHYSICAL_INDICATOR), 0, input_mode) }),
+            Rejected("sensor_1", "Invalid indicator input mode."));
+
+        // Named as unknown before the type is held against it.
+        AssertRejection(Validate({ Conditioned(MakeValidSensor(SensorType::PHYSICAL_ANALOG), 0, input_mode) }),
+            Rejected("sensor_1", "Invalid indicator input mode."));
+    }
+}

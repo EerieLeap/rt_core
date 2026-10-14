@@ -66,14 +66,16 @@ static bool encode_CborSensorConfigurationConfig(
 {
 	zcbor_log("%s\r\n", __func__);
 
-	bool res = (((zcbor_list_start_encode(state, 7) && ((((zcbor_uint32_encode(state, (&(*input).type))))
+	bool res = (((zcbor_list_start_encode(state, 10) && ((((zcbor_uint32_encode(state, (&(*input).type))))
 	&& ((zcbor_int32_encode(state, (&(*input).sampling_rate_ms))))
 	&& ((zcbor_uint32_encode(state, (&(*input).interpolation_method))))
 	&& (!(*input).channel_present || zcbor_uint32_encode(state, (&(*input).channel)))
 	&& ((zcbor_tstr_encode(state, (&(*input).connection_string))))
 	&& ((zcbor_tstr_encode(state, (&(*input).script_path))))
 	&& (!(*input).calibration_table_present || encode_CborSensorCalibrationDataMap(state, (&(*input).calibration_table)))
-	&& (!(*input).expression_present || zcbor_tstr_encode(state, (&(*input).expression)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 7))));
+	&& (!(*input).expression_present || zcbor_tstr_encode(state, (&(*input).expression)))
+	&& ((zcbor_uint32_encode(state, (&(*input).debounce_ms))))
+	&& ((zcbor_uint32_encode(state, (&(*input).input_mode))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 10))));
 
 	log_result(state, res, __func__);
 	return res;

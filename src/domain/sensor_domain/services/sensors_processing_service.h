@@ -38,6 +38,7 @@ using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
 using eerie_leap::domain::sensor_domain::processors::IReadingProcessor;
 using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
+using eerie_leap::domain::sensor_domain::processors::IndicatorSwitchState;
 
 class ProcessingIsrService;
 class ProcessingSchedulerService;
@@ -60,6 +61,22 @@ private:
     std::vector<std::shared_ptr<IService>> processing_services_;
 
     std::shared_ptr<SensorGeneration> generation_;
+
+    // The switch of every Toggle indicator of the last generation that ran, for the next start.
+    // A failed start keeps them; a reboot loses them.
+    std::vector<IndicatorSwitchState> switch_states_;
+
+    struct SwitchStateWork {
+        k_work work;
+        SensorsProcessingService* service;
+    };
+
+    // Commits the generation's switches on the processing work queue, where their conditioners run.
+    SwitchStateWork switch_state_work_{};
+    k_work_sync switch_state_sync_{};
+
+    static void SwitchStateWorkHandler(k_work* work);
+    void CommitSwitchStates();
 
     bool DoInitialize() override;
     bool DoStart() override;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "subsys/fs/services/i_fs_service.h"
@@ -25,6 +26,7 @@ private:
     void BuildInterpolator(SensorRuntime& runtime) const;
     void BuildExpression(SensorRuntime& runtime) const;
     void BuildScript(SensorGeneration& generation, SensorRuntime& runtime) const;
+    void BuildConditioner(SensorRuntime& runtime, std::span<const IndicatorSwitchState> switch_states) const;
     void LinkDependents(SensorGeneration& generation) const;
 
 public:
@@ -34,9 +36,13 @@ public:
 
     /**
      * @brief Builds the generation for @p sensors, which must be validated and in processing order.
+     *        A Toggle indicator whose id, type and conditioning match one of @p switch_states
+     *        starts with that switch; every other one starts off.
      * @throws std::invalid_argument when an expression references a sensor that is not configured.
      */
-    std::shared_ptr<SensorGeneration> Build(std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors) const;
+    std::shared_ptr<SensorGeneration> Build(
+        std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors,
+        std::span<const IndicatorSwitchState> switch_states = {}) const;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::runtime

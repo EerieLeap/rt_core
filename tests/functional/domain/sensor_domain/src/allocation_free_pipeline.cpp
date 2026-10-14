@@ -1,7 +1,8 @@
 // Guards the rule the sensor pipeline is built on: allocate when the configuration changes,
 // never when a sample arrives. Counts every heap allocation in the process while a sample goes
-// from the ADC and a reader through the processors into the frame and out to a consumer, and
-// while the sensor events publisher takes it and the bus delivers it to a binding.
+// from the ADC and a reader through the processors into the frame and out to a consumer, while a
+// conditioned indicator holds a change and settles it from its work item, and while the sensor
+// events publisher takes it and the bus delivers it to a binding.
 
 #include <array>
 #include <memory>
@@ -15,6 +16,7 @@
 #include "subsys/time/rtc_provider.h"
 #include "subsys/time/boot_elapsed_time_provider.h"
 #include "subsys/time/time_service.h"
+#include "subsys/threading/work_queue_thread.h"
 #include "subsys/gpio/gpio_simulator.h"
 #include "subsys/canbus/can_frame.h"
 #include "subsys/expression_engine/expression_evaluator.h"
@@ -37,6 +39,7 @@
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::time;
+using namespace eerie_leap::subsys::threading;
 using namespace eerie_leap::subsys::adc;
 using namespace eerie_leap::subsys::gpio;
 using namespace eerie_leap::subsys::canbus;
@@ -294,4 +297,127 @@ ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) 
     zassert_equal(a_recorder->At(k_rounds), static_cast<float>(k_rounds));
     zassert_equal(b_recorder->Count(), 1);
     zassert_equal(b_recorder->At(0), 100.0F);
+}
+
+namespace {
+
+// Hands one reading to the pipeline on the work queue, as an edge source does, and waits for it.
+// A plain work item: WorkQueueThread::Run() allocates.
+struct Feed {
+    k_work work;
+    k_sem done;
+    ReadingPipeline* pipeline;
+    const SensorRuntime* runtime;
+    float value;
+
+    static void Handler(k_work* work) {
+        auto* feed = CONTAINER_OF(work, Feed, work);
+
+        SensorReading reading(feed->runtime->sensor.get());
+        reading.source = ReadingSource::ISR;
+        reading.status = ReadingStatus::RAW;
+        reading.value = feed->value;
+        reading.raw_value = feed->value;
+
+        feed->pipeline->Process(*feed->runtime, reading);
+        k_sem_give(&feed->done);
+    }
+
+    void Run(k_work_q* work_queue, float input) {
+        value = input;
+        zassert_true(k_work_submit_to_queue(work_queue, &work) >= 0);
+        zassert_ok(k_sem_take(&done, K_SECONDS(1)));
+    }
+};
+
+} // namespace
+
+// Every input change is held, then committed by the conditioner's work item with the switch and
+// the dependent evaluated. Only the counts are asserted off native_sim, whose simulated clock
+// makes the values exact.
+ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
+    constexpr int kDebounceMs = 20;
+    constexpr int kSettleMs = 50;
+    constexpr size_t k_rounds = 10;
+
+    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+        "conditioning_alloc",
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
+    zassert_true(work_queue_thread->Initialize());
+
+    auto time_service = std::make_shared<TimeService>(
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+    auto frame = std::make_shared<SensorReadingsFrame>();
+
+    auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_button");
+    button->configuration.type = SensorType::PHYSICAL_INDICATOR;
+    button->configuration.channel = 0;
+    button->configuration.debounce_ms = kDebounceMs;
+    button->configuration.input_mode = IndicatorInputMode::Toggle;
+
+    auto probe = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_probe");
+    probe->configuration.type = SensorType::VIRTUAL_ANALOG;
+    probe->configuration.expression = "cond_alloc_button";
+
+    const std::vector<std::shared_ptr<Sensor>> sensors { button, probe };
+    auto generation = SensorPipelineBuilder(nullptr, frame).Build(
+        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    zassert_not_null(generation->runtimes[0].conditioner.get());
+
+    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    processors->push_back(std::make_shared<ExpressionProcessor>(frame));
+    processors->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
+    auto pipeline = std::make_shared<ReadingPipeline>(frame, processors, time_service, work_queue_thread);
+
+    Feed feed{};
+    k_work_init(&feed.work, Feed::Handler);
+    k_sem_init(&feed.done, 0, 1);
+    feed.pipeline = pipeline.get();
+    feed.runtime = &generation->runtimes[0];
+
+    k_work_q* work_queue = work_queue_thread->GetWorkQueue();
+
+    // Outside the window: the first value, then one press settled by the timer.
+    feed.Run(work_queue, 0.0F);
+    feed.Run(work_queue, 1.0F);
+    k_msleep(kSettleMs);
+    feed.Run(work_queue, 0.0F);
+    k_msleep(kSettleMs);
+
+    std::array<float, k_rounds> held {};
+    std::array<float, k_rounds> pressed {};
+    std::array<float, k_rounds> released {};
+
+    const size_t allocations_before = GetAllocationCount();
+
+    for(size_t i = 0; i < k_rounds; i++) {
+        feed.Run(work_queue, 1.0F);
+        held[i] = frame->TryGetReadingValue("cond_alloc_button").value_or(-1.0F);
+        k_msleep(kSettleMs);
+        pressed[i] = frame->TryGetReadingValue("cond_alloc_probe").value_or(-1.0F);
+
+        feed.Run(work_queue, 0.0F);
+        k_msleep(kSettleMs);
+        released[i] = frame->TryGetReadingValue("cond_alloc_probe").value_or(-1.0F);
+    }
+
+    const size_t allocations = GetAllocationCount() - allocations_before;
+
+    // Nothing may settle into the generation once it goes.
+    generation->CancelSettles();
+
+    zassert_equal(allocations, 0, "%zu allocations during %zu conditioned presses", allocations, k_rounds);
+
+    if(IS_ENABLED(CONFIG_BOARD_NATIVE_SIM)) {
+        // The switch was on after the warm-up press, so the presses turn it off, on, off, ...
+        for(size_t i = 0; i < k_rounds; i++) {
+            const float before = (i % 2 == 0) ? 1.0F : 0.0F;
+            const float after = 1.0F - before;
+
+            zassert_equal(held[i], before, "Round %zu: the press is held", i);
+            zassert_equal(pressed[i], after, "Round %zu: the timer settled the press, the dependent followed", i);
+            zassert_equal(released[i], after, "Round %zu: the release leaves the switch", i);
+        }
+    }
 }

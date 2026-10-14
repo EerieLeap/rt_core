@@ -14,7 +14,9 @@ CborSensorConfigurationConfig = [
   connection_string: tstr,
   script_path: tstr,
   ? calibration_table: CborSensorCalibrationDataMap,
-  ? expression: tstr
+  ? expression: tstr,
+  debounce_ms: uint,
+  input_mode: uint
 ]
 
 CborSensorConfig = [
