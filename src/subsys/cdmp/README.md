@@ -159,11 +159,11 @@ The protocol does not predefine specific capabilities or their CAN ID assignment
    - If responses received: Select lowest available ID (1-254), filling gaps
    - If no responses after 3 retries: Assign ID = 1 (first device on network)
 1. **ID claim**: Broadcast on Base + 0 with UID (32-bit)
-1. **Conflict detection**: Wait 50ms for objections
+1. **Conflict detection**: Wait 50ms for objections; on a Reject (0x01), claim the next available ID
 1. **Confirmation**: Begin normal operation
 
 **ID Selection Algorithm:**
-- Build list of used IDs from Discovery Responses
+- Build list of used IDs from Discovery Responses and pending ID claims (§3.2.4)
 - Select smallest unused ID starting from 1
 - Example: If IDs 1, 2, 5, 7 are in use → select ID 3
 - If no devices respond (empty network): Default to ID 1
@@ -238,6 +238,17 @@ If new device receives 0x02 response:
 - For version incompatibility (0x02): Device with lowest ID sends response
 - For ID conflicts (0x01): Device whose ID is being claimed sends response
 
+**Device Table:**
+
+Every device, not only the responders, tracks claims so that it learns every other device:
+
+- An ID_CLAIM for an unknown ID is recorded as pending (UID and device type). The claimant joins the device table with its first heartbeat, which proves the claim went through. A pending claim without a heartbeat expires after the heartbeat timeout (§4.1), and a device's newer claim replaces its pending one.
+- An ID_CLAIM for a known ID with the same UID means that device restarted. It stays in the table.
+- An ID_CLAIM for a known ID with a different UID is a conflict, which the owner rejects. The table does not change.
+- An ID_CLAIM whose UID is in the table under another ID removes that old entry. So does a Discovery Response.
+- An ID_CLAIM with an incompatible major protocol version, and an ID_CLAIM or Discovery Response for ID 0, ID 255 or the receiver's own ID, is not recorded.
+- An online device that receives a heartbeat from a device that is neither in its table nor pending, for example one removed after the heartbeat timeout while its cable was unplugged, sends a Discovery Request, at most once per heartbeat interval. The Discovery Response adds the device again.
+
 ### 3.3 Device Discovery
 
 Any device can request network enumeration:
@@ -275,8 +286,10 @@ Byte 0:    Device ID
 Byte 1:    Health Status (0x00=OK, 0x01=Warning, 0x02=Error)
 Byte 2:    Uptime Counter (rolls over at 255)
 Byte 3-6:  Capability Flags (32 bits, LSB first)
-Byte 7:    Reserved
+Byte 7:    State Digest (CRC-8 over the sender's state records, 0x00 without records)
 ```
+
+A heartbeat is always 8 bytes, and a receiver drops a shorter one as malformed. A heartbeat from a device that is neither in the receiver's table nor pending makes an online receiver request discovery (§3.2.4).
 
 **Note:** See section 14 for details on capability flags.
 
@@ -962,8 +975,11 @@ New Device (selects ID=3, fills gap):
   Wait 50ms for objections...
   
 New Device:
-  → Heartbeat (Base + 1): [0x03][0x00][Uptime][Caps...]
+  → Heartbeat (Base + 1): [0x03][0x00][Uptime][Caps...][Digest]
   Begin normal operation
+
+Existing Devices:
+  Add ID 3 to the device table on this first heartbeat
 ```
 
 ### B.2 Command Request/Response

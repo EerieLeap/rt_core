@@ -27,7 +27,23 @@ transport run on:
   table of other devices (updated from heartbeats, validated every 5 s, a device is dropped after
   3 missed heartbeats). Exposed read-only as `ICdmpNetworkInfo` for the SMP `device` and
   `network` groups.
-- **Heartbeat service**: sends a heartbeat every 3 s while online.
+  - Every unit records an ID claim as pending and adds the claimant on its first heartbeat, so a
+    unit that does not hold the lowest ID also learns later joiners. A pending claim expires after
+    the heartbeat timeout. Answering claims stays with the lowest ID and the claimed ID's owner.
+  - An online unit that hears a heartbeat from a device it does not know, such as one removed
+    while its cable was unplugged, sends a discovery request, at most once per heartbeat interval,
+    and adds the device again from its response.
+  - Discovery and the ID claim send one request per step of a work queue task, so the responses
+    are processed while they wait: a discovery response ends discovery, a reject moves the claim to
+    the next free ID, and a version-incompatible answer ends in `VERSION_MISMATCH`. The claim skips
+    IDs that are in the table or have a pending claim.
+  - A stop drops the frames still queued for the service, and a start begins with an empty table.
+  - `RegisterDeviceEventHandler()` reports devices that join, restart (a claim of their ID with
+    the same UID) or leave the table, and `RegisterHeartbeatHandler()` passes on every heartbeat
+    of a device in the table. Both run on the CDMP work queue and must not block.
+- **Heartbeat service**: sends a heartbeat every 3 s while online. Every heartbeat is 8 bytes,
+  with byte 7 carrying a digest of the unit's state records (0 without records), and a shorter
+  frame is dropped as malformed.
 - **Command service**: request/response with transaction IDs, retries and a per-transaction
   timeout (`EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS`). Service commands `STATUS_REQUEST`
   (0x10) and `RESET_DEVICE` (0x11) are handled by the protocol; application commands use codes

@@ -121,7 +121,8 @@ void CdmpHeartbeatService::SendHeartbeat() {
             .device_id = device_->GetDeviceId(),
             .health_status = device_->GetHealthStatus(),
             .sequence_number = heartbeat_sequence_number_,
-            .capability_flags = device_->GetCapabilityFlags()
+            .capability_flags = device_->GetCapabilityFlags(),
+            .state_digest = 0
         };
 
         auto frame_data = heartbeat.ToCanFrame();

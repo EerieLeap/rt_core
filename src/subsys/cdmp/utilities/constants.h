@@ -9,6 +9,8 @@ struct CdmpConstants {
     static constexpr int DISCOVERY_MAX_BACKOFF_RESETS = 10;
     static constexpr int ID_CLAIM_RESPONSE_TIMEOUT_MS = 50;
     static constexpr int ID_CLAIM_MAX_ATTEMPTS = 10;
+    // Claims a unit tracks until their first heartbeat; a full table replaces the oldest.
+    static constexpr int PENDING_ID_CLAIMS_MAX = 8;
 
     static constexpr int HEARTBEAT_INTERVAL_MS = 3000;
     static constexpr int HEARTBEAT_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;
