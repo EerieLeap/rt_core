@@ -52,6 +52,7 @@ EventChannel<TEventType, TPayloadType>::Subscribe(TEventType type, FilterType fi
         auto subscription = std::make_shared<Subscription<TEventType, TPayloadType>>(id, type, filter, std::move(handler));
 
         subscribers_[type].push_back(std::move(subscription));
+        subscription_generation_.fetch_add(1, std::memory_order_release);
 
         return SubscriptionHandle<TEventType>{id, type};
     } catch (const std::exception& e) {
@@ -78,6 +79,7 @@ bool EventChannel<TEventType, TPayloadType>::Unsubscribe(SubscriptionHandle<TEve
 
     if(subscription_it != subscribers.end()) {
         subscribers.erase(subscription_it);
+        subscription_generation_.fetch_add(1, std::memory_order_release);
         handle.Invalidate();
 
         return true;
@@ -121,6 +123,36 @@ void EventChannel<TEventType, TPayloadType>::PublishErasedAsync(
         event.payload.emplace(static_cast<TPayloadType>(key), value);
 
     PublishAsync(event);
+}
+
+template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
+bool EventChannel<TEventType, TPayloadType>::Accepts(const EventMessage& event) const {
+    // The filters Dispatch() would run, under the same lock, so they never run concurrently. A
+    // filter that throws propagates, as it does out of Dispatch().
+    ScopedMutex guard(subscribers_mutex_);
+
+    auto it = subscribers_.find(event.type);
+    if(it == subscribers_.end())
+        return false;
+
+    return std::ranges::any_of(it->second,
+        [&event](const auto& subscription) { return subscription->filter(event); });
+}
+
+template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
+bool EventChannel<TEventType, TPayloadType>::Accepts(
+    uint32_t event_type, uint32_t source_id, ErasedPayload payload) const {
+
+    // Built as PublishErasedAsync() builds it, so the answer is about that exact publish.
+    EventMessage event {
+        .source_id = source_id,
+        .type = static_cast<TEventType>(event_type)
+    };
+
+    for(const auto& [key, value] : payload)
+        event.payload.emplace(static_cast<TPayloadType>(key), value);
+
+    return Accepts(event);
 }
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>

@@ -332,6 +332,32 @@ ZTEST(sensor_readings_frame, test_TakeProcessedReadings_keeps_what_does_not_fit_
     zassert_equal(sensor_readings_frame->TakeProcessedReadings(taken), 0);
 }
 
+ZTEST(sensor_readings_frame, test_MarkProcessedReadingsUpdated_makes_every_processed_reading_pending_again) {
+    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensor_readings_frame = MakeFrame(sensors);
+
+    sensor_readings_frame->AddOrUpdateReading(MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 2.0F));
+    sensor_readings_frame->AddOrUpdateReading(MakeReading(sensors[2], ReadingSource::PROCESSING, ReadingStatus::RAW, 1.0F));
+
+    std::array<SensorReading, 4> taken;
+    zassert_equal(sensor_readings_frame->TakeProcessedReadings(taken), 1);
+
+    // A later error replaces the latest reading but not the processed one, which is what is re-marked.
+    SensorReading failed = MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::PROCESSED);
+    failed.SetError(ReadingError::READER_FAILED);
+    sensor_readings_frame->AddOrUpdateReading(failed);
+
+    sensor_readings_frame->MarkProcessedReadingsUpdated();
+
+    // sensors[0] was never read and sensors[2] has no processed reading, so neither is marked.
+    zassert_equal(sensor_readings_frame->TakeProcessedReadings(taken), 1);
+    zassert_equal(taken[0].sensor_id_hash, sensors[1]->id_hash);
+    zassert_equal(taken[0].status, ReadingStatus::PROCESSED);
+    zassert_equal(taken[0].value.value(), 2.0F);
+
+    zassert_equal(sensor_readings_frame->TakeProcessedReadings(taken), 0);
+}
+
 ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
     auto sensors = sensor_readings_frame_GetTestSensors();
     auto sensor_readings_frame = MakeFrame(sensors);

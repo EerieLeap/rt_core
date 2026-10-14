@@ -41,6 +41,34 @@ menu "EerieLeap Sensor Domain config"
         range 1 3600
         default 10
 
+    config EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS
+        int "Sensor events publisher period in ms"
+        depends on EERIE_LEAP_EVENT_BUS
+        range 1 10000
+        default 30
+        help
+          Delay between two ticks of SensorEventsPublisher. A tick publishes
+          the readings processed since the previous one on sensor_events; a
+          sensor committed several times within one period is published once,
+          with its latest value, so a pulse shorter than the period can be
+          missed.
+
+    config EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE
+        int "Sensor events publisher stack size"
+        depends on EERIE_LEAP_EVENT_BUS
+        default 4096
+        help
+          Stack of the publisher's work queue. A tick also runs the filters of
+          the sensor_events subscribers (Accepts()), once per sensor and
+          subscription change. A filter that throws is caught there, but
+          unwinding needs more stack than a tick: 4096 overflowed on
+          qemu_cortex_a53.
+
+    config EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY
+        int "Sensor events publisher priority"
+        depends on EERIE_LEAP_EVENT_BUS
+        default 6
+
     config EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT
         int "Maximum number of configured sensors"
         range 1 65535

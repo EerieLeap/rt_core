@@ -3,7 +3,7 @@
 The sensor domain (`src/domain/sensor_domain/`) turns a list of sensor definitions into
 readings: it samples ADC and GPIO channels, decodes CAN frames, evaluates expressions, runs
 scripts, and keeps the latest value of every sensor in a frame that logging, CAN sending, BLE
-live data and expressions read from.
+live data, expressions and the sensor events publisher read from.
 
 ## Sensor model
 
@@ -130,6 +130,7 @@ under one mutex and never allocate; value slots have stable addresses, which exp
 | `TryGetCanFrame(hash, frame)` | Latest frame of a `CANBUS_RAW` sensor. |
 | `TakeRawCanFrames(readings, frames)` | Every raw frame since the last take, oldest first, from a queue of `kRawCanQueueSize` entries; overflow is counted. For the log writer. |
 | `UpdateReadingValue(hash, value)` | What `update_sensor_value()` in Lua calls. |
+| `MarkProcessedReadingsUpdated()` | Marks every processed reading as not yet taken, so the next `Take` returns each once more. Behind `SensorEventsPublisher::Replay()`. |
 
 ### Generations and restarts
 
@@ -153,6 +154,43 @@ processing has been started, whether or not that start succeeded; a dependent th
 or does not come back is logged and does not fail the restart. rt_daq registers its log writer
 this way, so a sensors apply while logging finalizes the file and opens the next one for the new
 sensors (see [logging.md](logging.md#restarts)).
+
+## Sensor events
+
+`SensorEventsPublisher` (`services/sensor_events_publisher.h`, built with `EERIE_LEAP_EVENT_BUS`)
+turns the frame into events. Every `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS`, on a work
+queue thread of its own, it takes the readings processed since its last tick
+(`TakeProcessedReadings`) and publishes `SensorEventType::DataUpdated` on `sensor_events` for each
+one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`float`).
+
+- **One per unit.** Taking clears the marks, so a second publisher would split the readings. Each
+  application constructs one with the shared frame and starts it after the subscribers it serves
+  exist and before `SensorsController::Start()`.
+- **The latest value per tick.** A sensor committed several times within one period is published
+  once, with its latest value; changes across ticks arrive in order. A pulse shorter than the
+  period can be missed; a switch (a held value) cannot.
+- **Only what someone listens to.** A reading is published only if a subscriber accepts it
+  (`EventChannel::Accepts(event)`, see [infrastructure.md](infrastructure.md#event-bus-eerie_leap_event_bus));
+  others are taken and dropped. The answer is cached per sensor until the channel's subscriptions
+  change, so the filters run once per sensor and change, not once per reading. A filter on this
+  channel must therefore decide by `SensorId`, as binding selectors do. A subscriber without a
+  filter receives every sensor.
+- **A filter must not throw.** One that throws withholds its sensor from every subscriber. When
+  the publisher asks it, the throw counts as a rejection until the subscriptions change and is
+  logged once. When a subscriber that accepts is asked first, the throw happens on the bus thread
+  at every dispatch. The publisher catches the throw only if its stack can unwind it (the 4 KiB
+  default overflowed on qemu_cortex_a53).
+- **Replay.** `Replay()` marks every processed reading as updated (`MarkProcessedReadingsUpdated()`),
+  so the next tick publishes the latest value of every accepted sensor once. Safe from any thread;
+  a consumer that has just subscribed calls it to see the current state rather than wait for the
+  next change. Every subscriber receives the replay. It is reliable because a tick reads the
+  subscription generation after each take: a subscription made before the call to `Replay()` has
+  moved the generation by then, so a sensor cached as rejected is asked again.
+- **Lifecycle.** A `ServiceBase`: `Initialize()` creates the thread, `Start()` the ticks; it is
+  pausable, and `Stop()` (also run by the destructor) waits for a tick in progress.
+- **Memory.** The readings buffer (`kMaxCount` readings) and the acceptance cache (`kMaxCount`
+  answers, 8 bytes each) are part of the object, so they come with its owner's allocation.
+  `Initialize()` allocates the thread's stack. A tick never allocates.
 
 ## Stored configuration
 
@@ -208,6 +246,9 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6});
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY` | 6 | Its priority. rt_daq uses 5, above the display and CAN scheduler threads. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS` | n | Periodic rate group statistics log; a measurement aid, off in production. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S` | 1..3600, 10 | Seconds between statistics lines. |
+| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS` | 1..10000, 30 | Delay between two publisher ticks. This and the next two need `EERIE_LEAP_EVENT_BUS`. |
+| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE` | 4096 | Stack of its work queue, where the subscribers' filters also run. rt_gauge's ESP32-S3 board uses 2560. |
+| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY` | 6 | Its priority. |
 | `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` | 1..65535, 64 | Most sensors a configuration may hold; sizes every snapshot buffer. |
 | `EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE` | 1..1024, 32 | Raw CAN frames queued for the log writer; about 90 bytes each, allocated only while an enabled `CANBUS_RAW` sensor exists. |
 
@@ -225,7 +266,9 @@ service to stop and start around a restart (see above). `GetCapabilities()` give
 counts and `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT`, which rt_daq passes to the `ManagementController`
 for the device `INFO` (see [smp.md](smp.md)). The
 application also registers the processing service with the ADC controller (to be paused during
-calibration) and the CAN controller (to be restarted on CAN reconfiguration).
+calibration) and the CAN controller (to be restarted on CAN reconfiguration). The application
+constructs the `SensorEventsPublisher` itself, with the same frame (see
+[Sensor events](#sensor-events)).
 
 Measured on the ESP32-S3 (application notes): an ADC reading with 40 samples takes about
 1.2 ms, 3.3 ms with an expression; a GPIO reading 130 µs, 1.9 ms with an expression.

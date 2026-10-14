@@ -48,6 +48,19 @@ Code: `src/subsys/event_bus/`. A typed publish/subscribe transport:
 - `PublishAsync()` queues; `Publish()` dispatches on the caller's thread. Filters run before the
   handler so unwanted events cost nothing. `SubscribeErased()` lets configuration-driven code
   subscribe without knowing the enums.
+- `Accepts(event)` (typed) and `Accepts(event_type, source_id, payload)` (erased) ask whether a
+  subscriber of that event type would take the event: they run the filters under the subscriber
+  lock, queue nothing and call no handler. Because `Accepts()` runs them, filters also run on the
+  asking thread, and more than once per event, so they must be pure; binding selectors are. False
+  when nobody subscribes to the type; a subscriber without a filter takes everything. The bus is
+  not consulted, so an inert channel can accept what it would drop. A filter that throws
+  propagates, as in dispatch.
+- `GetSubscriptionGeneration()` moves on every subscribe and unsubscribe, inside the subscriber
+  lock with release order. A publisher that caches `Accepts()` keys its answers by it:
+  `AcceptanceCache<N>` (`acceptance_cache.h`, header only) holds up to N answers by key (a sensor
+  id hash) and forgets them all when the generation moves, or when it is full and a new key
+  arrives. Read the generation after taking the events to judge, never before, so a change that
+  happened before they were taken is seen (see `SensorEventsPublisher`).
 
 **Bindings.** Stored configuration names an event by value: a channel id and the raw values of
 the channel's enums, so it resolves without the code knowing those enums. Widget bindings use this.
@@ -96,7 +109,8 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
 configuration parsers and validators use them in builds without `EERIE_LEAP_EVENT_BUS`.
 
 Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `SensorId`,
-`Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack) and `logging_events`
+`Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack; published by
+`SensorEventsPublisher`, see [sensors.md](sensors.md#sensor-events)) and `logging_events`
 (`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued
 events, on `LoggingEventBus` with a 4 KiB stack when the application creates it; see
 [logging.md](logging.md#status-events-and-failures), and
@@ -134,6 +148,7 @@ ones.
 | CDMP service thread and work queue | 5 | 4096 | `EERIE_LEAP_CDMP_*` |
 | Configuration work queue | application | application | the application creates it (6144 / 5 in rt_daq) |
 | Sensor processing | 6 | 8192 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_*` (rt_daq uses 5) |
+| Sensor events publisher | 6 | 4096 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_*` |
 | Calibration sampling | 6 | 4096 | fixed |
 | CAN scheduler (frame sending) | 6 | 8192 | fixed |
 | CFB animation | 6 | 2048 | fixed |

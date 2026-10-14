@@ -41,8 +41,12 @@ private:
     size_t max_queued_events_;
 
     SubscriberMap<TEventType, TPayloadType> subscribers_;
-    k_mutex subscribers_mutex_;
+    // Mutable for Accepts(), which runs the filters under it.
+    mutable k_mutex subscribers_mutex_;
     size_t next_id_ = 1;
+    // Bumped under subscribers_mutex_ once a subscription is added or removed, with release order,
+    // so a reader that loads it with acquire after seeing the change's effects sees the new value.
+    std::atomic<uint32_t> subscription_generation_{0};
 
     // A ring of max_queued_events_ slots, allocated once when the first bus registers the channel
     // (an inert channel owns nothing). Publishing and draining move events in and out of the
@@ -110,6 +114,15 @@ public:
         uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) override;
 
     void PublishErasedAsync(uint32_t event_type, uint32_t source_id, ErasedPayload payload) override;
+
+    // The typed form, for a publisher that knows the channel's enums and has the event at hand.
+    bool Accepts(const EventMessage& event) const;
+
+    bool Accepts(uint32_t event_type, uint32_t source_id, ErasedPayload payload) const override;
+
+    uint32_t GetSubscriptionGeneration() const override {
+        return subscription_generation_.load(std::memory_order_acquire);
+    }
 
     void Publish(const EventMessage& event);
     void PublishAsync(const EventMessage& event);

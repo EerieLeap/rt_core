@@ -25,3 +25,14 @@ tests:
     extra_configs:
       - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS=y
       - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S=1
+  # The suite on qemu_cortex_a53 with a raised publisher stack, for the throwing filter case: it
+  # unwinds on the publisher thread, which overflowed the 4096 default here. Below 8192 the case
+  # runs only on native_sim, which does not enforce thread stacks.
+  functional.sensor_domain.raised_publisher_stack:
+    platform_exclude:
+      - native_sim
+      - qemu_cortex_a9
+      - qemu_riscv64
+      - qemu_malta
+    extra_configs:
+      - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE=8192

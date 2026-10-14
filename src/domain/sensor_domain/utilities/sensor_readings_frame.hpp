@@ -555,6 +555,20 @@ public:
         return count;
     }
 
+    /**
+     * @brief Marks every sensor's latest processed reading as not yet taken, so the next
+     *        TakeProcessedReadings() returns each of them once more. For a consumer that has to
+     *        resend the current state. A sensor without a processed reading is not marked.
+     */
+    void MarkProcessedReadingsUpdated() {
+        ScopedMutex guard(lock_);
+
+        for(auto& slot : slots_) {
+            if(slot.has_processed)
+                slot.is_updated = true;
+        }
+    }
+
     bool HasReading(const uint32_t sensor_id_hash) const {
         ScopedMutex guard(lock_);
 

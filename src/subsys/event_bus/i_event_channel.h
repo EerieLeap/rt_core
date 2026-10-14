@@ -37,6 +37,16 @@ public:
         uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) = 0;
 
     virtual void PublishErasedAsync(uint32_t event_type, uint32_t source_id, ErasedPayload payload) = 0;
+
+    // Whether a subscriber of event_type would take this event: runs their filters under the
+    // subscriber lock, queues nothing and calls no handler. False when nobody subscribes to the
+    // type; a subscriber without a filter takes everything. It does not look at the bus, so an
+    // inert channel can accept what it would then drop. The answer may be stale once it returns.
+    virtual bool Accepts(uint32_t event_type, uint32_t source_id, ErasedPayload payload) const = 0;
+
+    // Moves on every subscribe and unsubscribe, so a caller that caches Accepts() knows when to
+    // ask again. Read without the subscriber lock.
+    virtual uint32_t GetSubscriptionGeneration() const = 0;
 };
 
 // Channels are singletons that outlive every bus, so the slots observe rather than

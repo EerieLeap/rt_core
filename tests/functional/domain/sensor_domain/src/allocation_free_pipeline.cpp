@@ -1,6 +1,7 @@
 // Guards the rule the sensor pipeline is built on: allocate when the configuration changes,
 // never when a sample arrives. Counts every heap allocation in the process while a sample goes
-// from the ADC and a reader through the processors into the frame and out to a consumer.
+// from the ADC and a reader through the processors into the frame and out to a consumer, and
+// while the sensor events publisher takes it and the bus delivers it to a binding.
 
 #include <array>
 #include <memory>
@@ -31,6 +32,7 @@
 
 #include "allocation_counter.h"
 #include "processing_test_support.h"
+#include "sensor_events_test_support.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -231,4 +233,65 @@ ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
     CanFrame can_frame;
     zassert_true(pipeline.frame->TryGetCanFrame(pipeline.sensors[2]->id_hash, can_frame));
     zassert_equal(can_frame.id, 0x100 + 102);
+}
+
+ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) {
+    namespace events = sensor_events_test_support;
+
+    events::RegisterSensorEvents();
+
+    // The sentinel is in the last slot; see sensor_events_test_support.h.
+    auto a = events::MakeSensor("alloc_a");
+    auto b = events::MakeSensor("alloc_b");
+    auto sentinel = events::MakeSensor("alloc_sentinel");
+    const std::vector<std::shared_ptr<Sensor>> sensors { a, b, sentinel };
+
+    auto frame = std::make_shared<SensorReadingsFrame>();
+    frame->Configure(sensors);
+
+    auto a_recorder = std::make_shared<events::Recorder>();
+    auto b_recorder = std::make_shared<events::Recorder>();
+    auto sentinel_recorder = std::make_shared<events::Recorder>();
+    auto a_binding = events::Bind(*a, a_recorder);
+    auto b_binding = events::Bind(*b, b_recorder);
+    auto sentinel_binding = events::Bind(*sentinel, sentinel_recorder);
+    zassert_not_null(a_binding.get());
+    zassert_not_null(b_binding.get());
+    zassert_not_null(sentinel_binding.get());
+
+    auto publisher = std::make_unique<SensorEventsPublisher>(frame);
+    zassert_true(publisher->Initialize());
+    zassert_true(publisher->Start());
+
+    // Outside the window: the bus thread starts and the first tick caches a and the sentinel.
+    zassert_true(events::Round(*publisher, *frame, { { a.get(), 0.0F } }, *sentinel, *sentinel_recorder));
+
+    constexpr size_t k_rounds = 20;
+    size_t delivered_rounds = 0;
+
+    const size_t allocations_before = GetAllocationCount();
+
+    for(size_t i = 0; i < k_rounds; i++) {
+        const float value = static_cast<float>(i + 1);
+
+        // b goes out for the first time here, so the window also holds one miss: Accepts() and the
+        // cache's Store().
+        const bool is_delivered = i == 0
+            ? events::Round(*publisher, *frame, { { a.get(), value }, { b.get(), 100.0F } }, *sentinel, *sentinel_recorder)
+            : events::Round(*publisher, *frame, { { a.get(), value } }, *sentinel, *sentinel_recorder);
+
+        delivered_rounds += is_delivered ? 1 : 0;
+    }
+
+    const size_t allocations = GetAllocationCount() - allocations_before;
+
+    publisher->Stop();
+
+    zassert_equal(allocations, 0, "%zu allocations during %zu published rounds", allocations, k_rounds);
+    zassert_equal(delivered_rounds, k_rounds);
+    zassert_equal(sentinel_recorder->Count(), 1 + k_rounds);
+    zassert_equal(a_recorder->Count(), 1 + k_rounds);
+    zassert_equal(a_recorder->At(k_rounds), static_cast<float>(k_rounds));
+    zassert_equal(b_recorder->Count(), 1);
+    zassert_equal(b_recorder->At(0), 100.0F);
 }

@@ -295,6 +295,11 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         list(FILTER SRC EXCLUDE REGEX "/subsys/fs/services/sdmmc_service\\.cpp$")
     endif()
 
+    # The sensor events publisher publishes on the event bus, which a unit may leave out.
+    if(NOT CONFIG_EERIE_LEAP_EVENT_BUS)
+        list(FILTER SRC EXCLUDE REGEX "/domain/sensor_domain/services/sensor_events_publisher\\.cpp$")
+    endif()
+
     zephyr_library_sources(${SRC})
 
     add_subdirectory(libs/nameof)
