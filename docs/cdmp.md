@@ -113,8 +113,8 @@ never interprets them.
 - Copies follow the device table. When a unit claims its ID again (it restarted), its copies turn
   stale: they keep their value, and its next record of each type replaces them whatever its
   version. A unit that leaves the table takes its copies along, and a unit that leaves `ONLINE`
-  drops every copy but keeps its own records. Notifications from a unit that is not in the table yet are not acknowledged, so the
-  sender resends them once its first heartbeat has added it.
+  drops every copy but keeps its own records. Notifications from a unit that is not in the table
+  yet are not acknowledged, so the sender resends them once its first heartbeat has added it.
 - A unit keeps up to `EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS` records of its own and
   `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` copies, in fixed arrays. Copies that do not fit are
   dropped with one warning, and their source's digest is not checked until room frees up.
