@@ -19,6 +19,7 @@ CborSensorConfigurationConfig = [
 
 CborSensorConfig = [
   id: tstr,
+  is_enabled: bool,
   metadata: CborSensorMetadataConfig,
   configuration: CborSensorConfigurationConfig
 ]

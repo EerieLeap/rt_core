@@ -357,6 +357,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     std::string sensor_2_id = "sensor_4";
     CborSensorConfig sensor_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
     sensor_config_2.id = CborHelpers::ToZcborString(sensor_2_id);
+    sensor_config_2.is_enabled = false;
     sensor_config_2.metadata = metadata_config_2;
     sensor_config_2.configuration = configuration_config_2;
 
@@ -385,6 +386,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
 
     // Verify first sensor
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].id).c_str(), sensor_1_id.c_str());
+    zassert_true(loaded_sensors_config->CborSensorConfig_m[0].is_enabled);
 
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].metadata.name).c_str(), sensor_1_name.c_str());
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].metadata.unit).c_str(), sensor_1_unit.c_str());
@@ -400,6 +402,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
 
     // Verify second sensor
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].id).c_str(), sensor_2_id.c_str());
+    zassert_false(loaded_sensors_config->CborSensorConfig_m[1].is_enabled);
 
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.name).c_str(), sensor_2_name.c_str());
     zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.unit).c_str(), sensor_2_unit.c_str());

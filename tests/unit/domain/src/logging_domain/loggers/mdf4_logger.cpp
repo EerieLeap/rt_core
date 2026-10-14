@@ -498,6 +498,69 @@ ZTEST(mdf4_logger, test_DisabledSensorIsNotWritten) {
     zassert_equal(logger.GetBytesWritten(), header_size, "nothing may be written for a disabled sensor");
 }
 
+// A disabled sensor never has a reading, so it gets no channel whatever its logging configuration says.
+ZTEST(mdf4_logger, test_DisabledSensorGetsNoChannelEvenWithLoggingEnabled) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{
+        MakeValueSensor("disabled_value"), MakeCanRawSensor("disabled_raw", 0), MakeValueSensor("enabled_value")};
+    sensors[0]->is_enabled = false;
+    sensors[1]->is_enabled = false;
+
+    // The logging configuration enables all three.
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    const uint64_t header_size = logger.GetBytesWritten();
+
+    const auto texts = CollectBlockTexts(stream.str(), "##TX");
+    zassert_true(ContainsText(texts, "enabled_value"), "an enabled sensor keeps its channel group");
+    zassert_false(ContainsText(texts, "disabled_value"), "a disabled sensor must not get a channel group");
+    zassert_false(ContainsText(texts, "disabled_raw"), "a disabled raw CAN sensor must not get a CAN group");
+
+    zassert_false(logger.LogReading(START_TIME, MakeValueReading(*sensors[0], 1.0F, START_TIME)),
+        "a reading of a disabled sensor must not be logged");
+
+    CanFrame frame;
+    frame.id = 0x100;
+    frame.data = {1, 2};
+
+    SensorReading frame_reading(sensors[1].get());
+    frame_reading.source = ReadingSource::ISR;
+    frame_reading.status = ReadingStatus::PROCESSED;
+    frame_reading.timestamp = START_TIME;
+    frame_reading.can_frame = &frame;
+    zassert_false(logger.LogReading(START_TIME, frame_reading), "a frame of a disabled raw CAN sensor must not be logged");
+    zassert_equal(logger.GetBytesWritten(), header_size, "nothing may be written for a disabled sensor");
+
+    zassert_true(logger.LogReading(START_TIME, MakeValueReading(*sensors[2], 2.0F, START_TIME)), "the enabled sensor is logged");
+
+    const auto records = RecordBytes(stream, header_size);
+    zassert_equal(records.size(), VALUE_RECORD_SIZE, "one value record (got %zu)", records.size());
+    zassert_equal(static_cast<uint8_t>(records[0]), 1, "disabled sensors take no record ids, so the enabled one has the first");
+}
+
+ZTEST(mdf4_logger, test_RecordIdSizeCountsOnlyEnabledSensors) {
+    std::vector<std::shared_ptr<Sensor>> sensors;
+    for(int i = 0; i < 130; i++)
+        sensors.push_back(MakeValueSensor("sensor_" + std::to_string(i)));
+
+    // 127 enabled sensors fit one byte record ids, as test_RecordIdSizeFollowsTheSensorCount shows.
+    for(int i = 0; i < 3; i++)
+        sensors[i]->is_enabled = false;
+
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    const uint64_t header_size = logger.GetBytesWritten();
+
+    zassert_true(logger.LogReading(START_TIME, MakeValueReading(*sensors[129], 5.0F, START_TIME)), "the last sensor is logged");
+
+    const auto records = RecordBytes(stream, header_size);
+    zassert_equal(records.size(), VALUE_RECORD_SIZE, "127 enabled sensors need a one byte record id (got %zu)", records.size());
+    zassert_equal(static_cast<uint8_t>(records[0]), 127, "the last of 127 groups has record id 127");
+}
+
 ZTEST(mdf4_logger, test_LogOnlyNewDataSkipsUnchangedTimestamp) {
     const std::vector<std::shared_ptr<Sensor>> sensors{MakeValueSensor("sensor_1")};
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, true), sensors, MakeMetadata());

@@ -18,6 +18,8 @@ struct Sensor {
 
     std::pmr::string id;
     uint32_t id_hash = 0;
+    // A disabled sensor keeps its configuration and its frame slot but is never read.
+    bool is_enabled = true;
     SensorMetadata metadata;
     SensorConfiguration configuration;
 
@@ -37,6 +39,7 @@ struct Sensor {
     Sensor(Sensor&& other, allocator_type alloc) noexcept
         : id(other.id, alloc),
         id_hash(other.id_hash),
+        is_enabled(other.is_enabled),
         metadata(std::move(other.metadata), alloc),
         configuration(std::move(other.configuration), alloc) {}
 };

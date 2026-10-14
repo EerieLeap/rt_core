@@ -36,10 +36,7 @@ private:
     static void ValidateSamplingRateMs(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateInterpolationMethod(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateCalibrationTable(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
-    static void ValidateExpression(
-        std::string_view sensor_id,
-        const SensorConfiguration& sensor_configuration,
-        const std::vector<std::shared_ptr<Sensor>>& sensors);
+    static void ValidateExpression(const Sensor& sensor, const std::vector<std::shared_ptr<Sensor>>& sensors);
 
 public:
     /// The most points a calibration table holds, the schema's 2*50 (sensors_config.cddl); the decoder does not count them.
@@ -49,8 +46,9 @@ public:
 
     /**
      * @brief Checks the CAN sensors against a CAN bus configuration: each one's bus must be configured,
-     *        and a signal sensor's frame and signal must be defined on it. A raw sensor reads every
-     *        frame with its ID, so it needs only the bus. Expects validated sensors (canbus_source set).
+     *        and a signal sensor's frame and signal must be defined on it, the frame enabled when the
+     *        sensor is. A raw sensor reads every frame with its ID, so it needs only the bus. Expects
+     *        validated sensors (canbus_source set).
      */
     static void ValidateCanbusSources(
         const std::vector<std::shared_ptr<Sensor>>& sensors,

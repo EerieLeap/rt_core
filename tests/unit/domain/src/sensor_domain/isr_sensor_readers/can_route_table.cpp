@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <initializer_list>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include <zephyr/ztest.h>
@@ -69,8 +72,9 @@ struct Fixture {
     }
 };
 
-// 16 unsigned nibbles across one 8-byte frame, plus one raw frame sensor on another ID.
-Fixture MakeFixture() {
+// 16 unsigned nibbles across one 8-byte frame, plus one raw frame sensor on another ID. The sensors
+// named in @p disabled_ids are disabled before the generation is built.
+Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
     Fixture fixture;
     auto* mr = Mrm::GetDefaultPmr();
 
@@ -100,6 +104,9 @@ Fixture MakeFixture() {
     raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(mr, kBus, kRawFrameId);
     raw->configuration.UpdateConnectionString();
     fixture.sensors.push_back(raw);
+
+    for(const auto& sensor : fixture.sensors)
+        sensor->is_enabled = std::ranges::find(disabled_ids, std::string_view(sensor->id)) == disabled_ids.end();
 
     fixture.frame = std::make_shared<SensorReadingsFrame>();
     fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame).Build(
@@ -147,6 +154,21 @@ ZTEST(can_route_table, test_Build_leaves_out_a_sensor_whose_signal_is_not_config
 
     zassert_equal(table.GetRoutes().size(), 1, "Only the raw sensor needs no signal");
     zassert_equal(table.GetRoutes()[0].frame_id, kRawFrameId);
+}
+
+ZTEST(can_route_table, test_Build_leaves_out_disabled_sensors) {
+    auto fixture = MakeFixture({ "can_3", "raw" });
+
+    CanRouteTable table;
+    table.Build(*fixture.generation, fixture.Resolver());
+
+    const auto routes = table.GetRoutes();
+    zassert_equal(routes.size(), 1, "A disabled raw sensor gets no route");
+    zassert_equal(routes[0].frame_id, kSignalsFrameId);
+    zassert_equal(routes[0].bindings.size(), kSignalCount - 1, "A disabled signal sensor is not decoded");
+
+    for(const auto& binding : routes[0].bindings)
+        zassert_true(binding.runtime->GetSensor().is_enabled, "%s is disabled", binding.runtime->GetSensor().id.c_str());
 }
 
 ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {

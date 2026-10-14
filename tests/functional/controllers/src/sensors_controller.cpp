@@ -205,3 +205,41 @@ ZTEST(sensors_controller, test_a_restart_stops_and_starts_again_the_dependents_t
     zassert_true(running->Stop());
     zassert_true(processing_service->Stop());
 }
+
+ZTEST(sensors_controller, test_a_disabled_sensor_gets_no_reading_from_processing_or_EmulateReadings) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    fs_service->Format();
+
+    auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_disabled_wq", 6144, 5);
+    zassert_true(work_queue->Initialize());
+
+    auto time_service = std::make_shared<TimeService>(
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+    auto frame = std::make_shared<SensorReadingsFrame>();
+
+    SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
+    zassert_equal(controller.Initialize([](auto manager) {
+        auto disabled = MakeVirtualSensor("disabled", "2 + 2");
+        disabled->is_enabled = false;
+
+        zassert_true(manager->Update({ MakeVirtualSensor("enabled", "1 + 1"), disabled }));
+    }), 0);
+
+    const auto processing_service = controller.GetProcessingService();
+
+    zassert_equal(controller.Start(), 0);
+    zassert_true(WaitForReading(*frame, "enabled"));
+    k_msleep(100);
+
+    zassert_true(frame->FindSlot(std::string_view("disabled")).has_value(), "A disabled sensor keeps its slot");
+    zassert_false(frame->TryGetReading("disabled").has_value(), "Processing read a disabled sensor");
+
+    // Stopping drops the readings and keeps the slots, so what follows comes from the emulation alone.
+    zassert_true(processing_service->Stop());
+    zassert_false(frame->TryGetReading("enabled").has_value());
+
+    controller.EmulateReadings();
+    zassert_true(frame->TryGetReading("enabled").has_value(), "The emulation skipped an enabled sensor");
+    zassert_false(frame->TryGetReading("disabled").has_value(), "The emulation wrote a disabled sensor");
+}

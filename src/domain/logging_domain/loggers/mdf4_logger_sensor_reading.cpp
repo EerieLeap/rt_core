@@ -269,7 +269,11 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     const LoggerMetadata& metadata)
         : stream_(nullptr) {
 
+    // A disabled sensor never has a reading, so it gets no channel whatever its logging configuration says.
     auto find_enabled = [&configuration](const Sensor& sensor) -> const SensorLoggingConfiguration* {
+        if(!sensor.is_enabled)
+            return nullptr;
+
         auto sensor_configuration = configuration.sensor_configurations.find(sensor.id_hash);
         if(sensor_configuration == configuration.sensor_configurations.end() || !sensor_configuration->second.is_enabled)
             return nullptr;

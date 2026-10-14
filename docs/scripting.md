@@ -50,8 +50,8 @@ card is mounted every non-empty `script_path` is rejected; a unit without an SD 
 
 ### Hosting
 
-- **One state per sensor generation.** All scripted sensors of a configuration generation share
-  one Lua state. Each script is loaded into its own environment table that falls back to the
+- **One state per sensor generation.** All enabled scripted sensors of a configuration generation
+  share one Lua state. Each script is loaded into its own environment table that falls back to the
   globals, so it sees the libraries and the functions below but not another script's globals, and
   its own globals keep their values between calls. The entry points are looked up once, when the
   pipeline is built; a script that fails to compile or run is logged and the sensor runs without

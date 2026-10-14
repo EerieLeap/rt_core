@@ -292,7 +292,7 @@ CborLoggingConfig = [ logging_interval_ms: uint, max_log_size_mb: uint, sensor_c
 | `logging_interval_ms` | 100 | ≥ 10. Period of the writer's tick. |
 | `max_log_size_mb` | 10 | ≤ 1024. A file that reaches this size is finalized and the next one opened (see [Rotation and free space](#rotation-and-free-space)); 0 never rotates. |
 | `sensor_configs[].sensor_id_hash` | | 32-bit hash of the sensor ID (see [smp.md](smp.md)). A sensor without an entry is not logged. |
-| `is_enabled` | false | Log this sensor. |
+| `is_enabled` | false | Log this sensor. A sensor disabled in the sensors configuration (see [sensors.md](sensors.md#sensor-model)) is not logged either way. |
 | `log_raw_value` | false | Also log the value before the expression (MDF4: the `<id>.raw` channel). |
 | `log_only_new_data` | false | Skip a tick when the reading's timestamp has not changed since the last record of this sensor; off, the held sample is written again at the tick time. A reading without a timestamp is always logged. Does not apply to `CANBUS_RAW` sensors, whose every frame is logged. |
 

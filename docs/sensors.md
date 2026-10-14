@@ -7,11 +7,12 @@ live data and expressions read from.
 
 ## Sensor model
 
-A sensor is an `id`, metadata and a configuration:
+A sensor is an `id`, an `is_enabled` flag, metadata and a configuration:
 
 | Field | Rules |
 | --- | --- |
 | `id` | Letters, digits and `_`, not starting with a digit. Unique, and its 32-bit hash must be unique too (readings, logging and clients refer to sensors by the hash). |
+| `is_enabled` | Default true. A disabled sensor keeps its configuration and its slot in the readings frame, but nothing reads it: it gets no reader, CAN route, expression or script, never has a reading, and is not logged. It is validated like an enabled sensor, except that it may reference a disabled sensor or CAN message. |
 | `metadata.name`, `metadata.unit` | At most 32 bytes (UTF-8). |
 | `metadata.description` | At most 128 bytes. |
 | `configuration.type` | One of the types below. |
@@ -37,7 +38,8 @@ A sensor is an `id`, metadata and a configuration:
 | `USER_INDICATOR` | 9 | Lua | no | no | no | optional | required | polled; value 0/1 |
 
 A virtual sensor without a sampling rate must reference at least one sensor, otherwise it would
-never update; its expression cannot use `x`, which it does not have. A `USER_ANALOG` or
+never update; its expression cannot use `x`, which it does not have. An enabled sensor's
+expression cannot reference a disabled sensor, which never has a value. A `USER_ANALOG` or
 `USER_INDICATOR` sensor needs no script: without `create_sensor_value` its readings have no value
 of their own, and other scripts set it with `update_sensor_value()`. Values and channels are
 checked against the unit: an ADC or GPIO channel must exist (the error names the channels the
@@ -45,10 +47,10 @@ unit has), and with an SD card present a `script_path` must exist.
 
 When a client applies a configuration (the SMP `config` group), each CAN sensor's bus must also be
 configured in the CAN bus configuration the unit runs, and a signal sensor's frame and signal must
-be defined on it (see [canbus.md](canbus.md)); a raw sensor reads every frame with its ID, so it
-needs only the bus. A stored configuration is not checked against it again: after a CAN bus
-change it still loads, and a sensor whose signal is gone logs so when the pipeline is built and
-stays silent.
+be defined on it, the message enabled when the sensor is (see [canbus.md](canbus.md)); a raw
+sensor reads every frame with its ID, so it needs only the bus. A stored configuration is not
+checked against it again: after a CAN bus change it still loads, and a sensor whose signal is
+gone or whose message is disabled logs so when the pipeline is built and stays silent.
 
 The traits behind this table are in `models/sensor_type_traits.h`; the rules are enforced by
 `configuration/parsers/sensor_validator.cpp`, the CAN bus check by
@@ -133,8 +135,9 @@ under one mutex and never allocate; value slots have stable addresses, which exp
 
 `SensorsProcessingService::Start()` builds a **generation** from the current sensors
 configuration and a snapshot of the ADC configuration: the frame's slots, one `SensorRuntime` per
-sensor (interpolator, compiled expression bound to the frame, loaded script, dependents), then
-the rate groups and event sources. Everything a sample needs is allocated here, once.
+sensor (interpolator, compiled expression bound to the frame, loaded script, dependents; none of
+them, and update method `NONE`, for a disabled sensor), then the rate groups and event sources.
+Everything a sample needs is allocated here, once.
 `Stop()` tears the sources down, clears the frame and drops the generation.
 
 A new sensors or ADC configuration takes effect through a restart: the `SensorsController`
@@ -161,10 +164,12 @@ CborSensorCalibrationDataMap = { 2*50(float32 => float32) }
 CborSensorConfigurationConfig = [
   type: uint, sampling_rate_ms: int, interpolation_method: uint, ? channel: uint,
   connection_string: tstr, script_path: tstr, ? calibration_table: CborSensorCalibrationDataMap, ? expression: tstr ]
-CborSensorConfig = [ id: tstr, metadata: CborSensorMetadataConfig, configuration: CborSensorConfigurationConfig ]
+CborSensorConfig = [ id: tstr, is_enabled: bool, metadata: CborSensorMetadataConfig, configuration: CborSensorConfigurationConfig ]
 CborSensorsConfig = [ sensors: [*CborSensorConfig] ]
 ```
 
+`is_enabled` is required: a file stored before it existed does not decode, so it is kept and the
+unit runs on the default (see [configuration.md](configuration.md#configuration-managers)).
 `sampling_rate_ms` ≤ 0 means none. `interpolation_method` 0 means none. The decoder takes any
 number of calibration points and repeated voltages; the validator holds the table to 2 to 50
 points with distinct voltages, and only then is it ordered by voltage. The stored order is not
@@ -204,7 +209,7 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6});
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS` | n | Periodic rate group statistics log; a measurement aid, off in production. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S` | 1..3600, 10 | Seconds between statistics lines. |
 | `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` | 1..65535, 64 | Most sensors a configuration may hold; sizes every snapshot buffer. |
-| `EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE` | 1..1024, 32 | Raw CAN frames queued for the log writer; about 90 bytes each, allocated only while a `CANBUS_RAW` sensor exists. |
+| `EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE` | 1..1024, 32 | Raw CAN frames queued for the log writer; about 90 bytes each, allocated only while an enabled `CANBUS_RAW` sensor exists. |
 
 ## Wiring
 

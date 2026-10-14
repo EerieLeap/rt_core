@@ -208,6 +208,9 @@ void SensorsController::EmulateReadings() {
         return;
 
     for(const auto& sensor : *sensors) {
+        if(!sensor->is_enabled)
+            continue;
+
         SensorReading reading(sensor.get());
         reading.source = ReadingSource::PROCESSING;
         reading.status = ReadingStatus::PROCESSED;

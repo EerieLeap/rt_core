@@ -419,6 +419,61 @@ ZTEST(sensor_readings_frame, test_can_frame_is_stored_apart_from_the_reading) {
     zassert_false(sensor_readings_frame->TryGetCanFrame(raw->id_hash, stored));
 }
 
+ZTEST(sensor_readings_frame, test_disabled_sensor_keeps_its_slot_without_a_value) {
+    auto sensors = sensor_readings_frame_GetTestSensors();
+    sensors[1]->is_enabled = false;
+    auto sensor_readings_frame = MakeFrame(sensors);
+
+    // Bindings, scripts and loggers still resolve the sensor; it simply never has a value.
+    zassert_equal(sensor_readings_frame->GetSlotCount(), sensors.size());
+    zassert_equal(sensor_readings_frame->FindSlot(sensors[1]->id_hash)->index, 1);
+
+    const float* value_ptr = sensor_readings_frame->GetReadingValuePtr("sensor_2");
+    zassert_not_null(value_ptr);
+    zassert_true(std::isnan(*value_ptr));
+    zassert_false(sensor_readings_frame->HasReading(sensors[1]->id_hash));
+    zassert_false(sensor_readings_frame->TryGetReadingValue(sensors[1]->id_hash).has_value());
+}
+
+ZTEST(sensor_readings_frame, test_disabled_raw_can_sensor_has_no_frame_store) {
+    auto disabled = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "disabled_raw");
+    disabled->configuration.type = SensorType::CANBUS_RAW;
+    disabled->is_enabled = false;
+
+    auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
+    raw->configuration.type = SensorType::CANBUS_RAW;
+    auto sensor_readings_frame = MakeFrame({ disabled, raw });
+
+    zassert_true(sensor_readings_frame->FindSlot(disabled->id_hash).has_value(), "A disabled sensor keeps its slot");
+
+    CanFrame can_frame;
+    can_frame.id = 0x123;
+    can_frame.data = { 1, 2 };
+
+    // No route feeds a disabled sensor; a frame handed to it anyway is neither stored nor queued.
+    SensorReading reading = MakeReading(disabled, ReadingSource::ISR, ReadingStatus::PROCESSED);
+    reading.can_frame = &can_frame;
+    sensor_readings_frame->AddOrUpdateReading(reading);
+
+    CanFrame stored;
+    zassert_false(sensor_readings_frame->TryGetCanFrame(disabled->id_hash, stored));
+
+    std::array<SensorReading, 4> readings;
+    std::array<CanFrame, 4> frames;
+    zassert_equal(sensor_readings_frame->TakeRawCanFrames(readings, frames), 0);
+    zassert_equal(sensor_readings_frame->GetDroppedRawCanFrameCount(), 0);
+
+    // The enabled raw sensor still has its store and queue.
+    SensorReading enabled_reading = MakeReading(raw, ReadingSource::ISR, ReadingStatus::PROCESSED);
+    enabled_reading.can_frame = &can_frame;
+    sensor_readings_frame->AddOrUpdateReading(enabled_reading);
+
+    zassert_true(sensor_readings_frame->TryGetCanFrame(raw->id_hash, stored));
+    zassert_equal(stored.id, 0x123);
+    zassert_equal(sensor_readings_frame->TakeRawCanFrames(readings, frames), 1);
+    zassert_equal(readings[0].sensor_id_hash, raw->id_hash);
+}
+
 ZTEST(sensor_readings_frame, test_ClearReadings) {
     auto sensors = sensor_readings_frame_GetTestSensors();
     auto sensor_readings_frame = MakeFrame(sensors);

@@ -184,11 +184,16 @@ std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
         SensorRuntime runtime;
         runtime.sensor = sensor;
         runtime.slot = sensor_readings_frame_->FindSlot(sensor->id_hash).value();
-        runtime.update_method = sensor->configuration.GetReadingUpdateMethod();
 
-        BuildInterpolator(runtime);
-        BuildExpression(runtime);
-        BuildScript(*generation, runtime);
+        // A disabled sensor keeps its slot, so lookups by its ID still resolve, but with NONE no
+        // source reads it and nothing executable is built for it.
+        if(sensor->is_enabled) {
+            runtime.update_method = sensor->configuration.GetReadingUpdateMethod();
+
+            BuildInterpolator(runtime);
+            BuildExpression(runtime);
+            BuildScript(*generation, runtime);
+        }
 
         generation->runtimes.push_back(std::move(runtime));
     }

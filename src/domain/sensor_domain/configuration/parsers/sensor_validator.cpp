@@ -147,7 +147,7 @@ void SensorValidator::ValidateSensorConfiguration(
         ValidateScriptPath(sensor->id, sensor->configuration, sd_fs_service);
         ValidateSamplingRateMs(sensor->id, sensor->configuration);
         ValidateInterpolationMethod(sensor->id, sensor->configuration);
-        ValidateExpression(sensor->id, sensor->configuration, sensors);
+        ValidateExpression(*sensor, sensors);
     }
 }
 
@@ -273,11 +273,9 @@ void SensorValidator::ValidateCalibrationTable(std::string_view sensor_id, const
     }
 }
 
-void SensorValidator::ValidateExpression(
-    std::string_view sensor_id,
-    const SensorConfiguration& sensor_configuration,
-    const std::vector<std::shared_ptr<Sensor>>& sensors) {
-
+void SensorValidator::ValidateExpression(const Sensor& sensor, const std::vector<std::shared_ptr<Sensor>>& sensors) {
+    const std::string_view sensor_id = sensor.id;
+    const auto& sensor_configuration = sensor.configuration;
     const auto traits = sensor_configuration.GetTraits();
 
     if(!traits.allows_expression && sensor_configuration.HasExpression())
@@ -301,11 +299,15 @@ void SensorValidator::ValidateExpression(
 
     size_t input_count = 0;
     for(const std::string_view name : evaluator->GetVariableNames()) {
-        const bool known = std::any_of(sensors.begin(), sensors.end(),
-            [name](const auto& sensor) { return std::string_view(sensor->id) == name; });
+        const auto input = std::ranges::find_if(sensors,
+            [name](const auto& candidate) { return std::string_view(candidate->id) == name; });
 
-        if(!known)
+        if(input == sensors.end())
             InvalidSensorConfiguration(sensor_id, "Expression references unknown sensor " + std::string(name) + ".");
+
+        // A disabled input never gets a value, so the expression would never evaluate.
+        if(sensor.is_enabled && !(*input)->is_enabled)
+            InvalidSensorConfiguration(sensor_id, "Expression references disabled sensor " + std::string(name) + ".");
 
         input_count++;
     }
@@ -345,6 +347,12 @@ void SensorValidator::ValidateCanbusSources(
         if(message == messages.end()) {
             InvalidSensorConfiguration(sensor->id,
                 "CAN bus " + bus + " has no message with frame ID " + FrameIdText(source.frame_id) + ".");
+        }
+
+        // The frame router treats a disabled message as absent.
+        if(sensor->is_enabled && !(*message)->is_enabled) {
+            InvalidSensorConfiguration(sensor->id,
+                "CAN message " + FrameIdText(source.frame_id) + " on bus " + bus + " is disabled.");
         }
 
         if((*message)->TryGetSignal(source.signal_name_hash) == nullptr) {

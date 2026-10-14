@@ -160,6 +160,12 @@ std::optional<std::string> CanbusSourcesRejection(
     return std::nullopt;
 }
 
+std::shared_ptr<Sensor> Disabled(std::shared_ptr<Sensor> sensor) {
+    sensor->is_enabled = false;
+
+    return sensor;
+}
+
 } // namespace
 
 ZTEST(sensor_validator, test_user_sensor_types_are_valid) {
@@ -451,4 +457,127 @@ ZTEST(sensor_validator, test_interpolation_rules_follow_the_type) {
     indicator->configuration.interpolation_method = InterpolationMethod::LINEAR;
     indicator->configuration.calibration_table = { {0.0F, 0.0F}, {1.0F, 1.0F} };
     zassert_true(Contains(Validate({ indicator }), "does not support interpolation"));
+}
+
+ZTEST(sensor_validator, test_expression_of_an_enabled_sensor_cannot_read_a_disabled_sensor) {
+    auto input = Disabled(MakeSensor("input", SensorType::USER_ANALOG, 100));
+
+    auto derived = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
+    derived->configuration.expression = "input * 2";
+
+    // A disabled input never gets a value, so the expression would never be evaluated.
+    const auto expected = Rejected("derived", "Expression references disabled sensor input.");
+    AssertRejection(Validate({ input, derived }), expected);
+    AssertRejection(Validate({ derived, input }), expected);
+
+    derived->configuration.sampling_rate_ms = 100;
+    AssertRejection(Validate({ input, derived }), expected);
+
+    // Also next to the sensor's own input value.
+    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    analog->configuration.expression = "x * 2 + input";
+    AssertRejection(Validate({ input, analog }), Rejected("analog", "Expression references disabled sensor input."));
+}
+
+ZTEST(sensor_validator, test_a_disabled_sensor_may_read_any_sensor) {
+    auto input = MakeSensor("input", SensorType::USER_ANALOG, 100);
+    auto derived = Disabled(MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt));
+    derived->configuration.expression = "input * 2";
+
+    zassert_false(Validate({ input, derived }).has_value(), "A disabled sensor reading an enabled one was rejected");
+
+    input->is_enabled = false;
+    zassert_false(Validate({ input, derived }).has_value(), "A disabled sensor reading a disabled one was rejected");
+
+    input->is_enabled = true;
+    derived->is_enabled = true;
+    zassert_false(Validate({ input, derived }).has_value(), "An enabled sensor reading an enabled one was rejected");
+}
+
+// A disabled sensor gets every check an enabled one gets, so switching it on can fail only on what
+// it references: a disabled sensor or CAN message.
+ZTEST(sensor_validator, test_a_disabled_sensor_is_validated_like_an_enabled_one) {
+    zassert_true(Contains(Validate({ Disabled(MakeSensor("sensor_1", SensorType::PHYSICAL_ANALOG, std::nullopt)) }),
+        "must have a sampling rate"));
+    zassert_true(Contains(Validate({ Disabled(MakeSensor("sensor_1", SensorType::PHYSICAL_INDICATOR, 0)) }),
+        "Invalid sampling rate"));
+    zassert_true(Contains(Validate({ Disabled(MakeSensor("sensor_1", SensorType::NONE, 100)) }), "Invalid sensor type"));
+
+    auto analog = Disabled(MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100));
+    analog->configuration.channel = 4;
+    AssertRejection(ValidateOn({ analog }, 8, 4),
+        Rejected("analog", "Channel value is out of range. This unit has ADC channels 0 to 3."));
+
+    analog->configuration.channel = 0;
+    analog->configuration.calibration_table = { {0.0F, 0.0F}, {0.0F, 1.0F} };
+    AssertRejection(Validate({ analog }), Rejected("analog", "Calibration voltages must be unique."));
+
+    auto unfinished = Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100));
+    unfinished->configuration.expression = "x +";
+    zassert_true(Contains(Validate({ unfinished }), "Invalid expression"));
+
+    auto unknown = Disabled(MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt));
+    unknown->configuration.expression = "other_sensor * 2";
+    AssertRejection(Validate({ unknown }), Rejected("derived", "Expression references unknown sensor other_sensor."));
+
+    AssertRejection(Validate({ Disabled(MakeCanSensor(SensorType::CANBUS_ANALOG, "1/100")) }),
+        Rejected("can_1", "Sensor must have CAN bus signal name."));
+
+    auto long_name = Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100));
+    long_name->metadata.name.assign(33, 'n');
+    zassert_true(Contains(Validate({ long_name }), "Sensor name must be at most 32 bytes"));
+
+    zassert_true(Contains(Validate({
+        MakeSensor("sensor_1", SensorType::USER_ANALOG, 100),
+        Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100)) }), "Duplicate sensor ID"));
+}
+
+// A disabled sensor keeps its slot in the readings frame.
+ZTEST(sensor_validator, test_disabled_sensors_count_toward_the_sensor_limit) {
+    std::vector<std::shared_ptr<Sensor>> sensors;
+    for(int i = 0; i < CONFIG_EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT; i++)
+        sensors.push_back(MakeSensor("sensor_" + std::to_string(i), SensorType::USER_ANALOG, 100));
+
+    sensors.push_back(Disabled(MakeSensor("one_too_many", SensorType::USER_ANALOG, 100)));
+
+    zassert_true(Contains(Validate(sensors), "at most"));
+}
+
+ZTEST(sensor_validator, test_an_enabled_can_signal_sensor_cannot_read_a_disabled_message) {
+    auto canbus_configuration = MakeCanbusConfiguration();
+    canbus_configuration.channel_configurations.at(0).message_configurations.front()->is_enabled = false;
+
+    // The frame router treats a disabled message as absent, so the sensor would never read.
+    for(auto type : { SensorType::CANBUS_ANALOG, SensorType::CANBUS_INDICATOR }) {
+        AssertRejection(CanbusSourcesRejection({ MakeCanSensor(type, 0, 0x7E0, "rpm") }, canbus_configuration),
+            Rejected("can_1", "CAN message 0x7E0 on bus 0 is disabled."));
+    }
+
+    // After the message is found and before its signals are.
+    AssertRejection(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E1, "rpm") }, canbus_configuration),
+        Rejected("can_1", "CAN bus 0 has no message with frame ID 0x7E1."));
+    AssertRejection(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E0, "speed") }, canbus_configuration),
+        Rejected("can_1", "CAN message 0x7E0 on bus 0 is disabled."));
+
+    zassert_false(CanbusSourcesRejection({ MakeCanSensor(SensorType::CANBUS_RAW, 0, 0x7E0, "") }, canbus_configuration).has_value(),
+        "A raw sensor reads frames by ID and needs no message definition");
+}
+
+ZTEST(sensor_validator, test_a_disabled_can_signal_sensor_may_read_a_disabled_message) {
+    auto canbus_configuration = MakeCanbusConfiguration();
+    canbus_configuration.channel_configurations.at(0).message_configurations.front()->is_enabled = false;
+
+    const auto sensor = Disabled(MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E0, "rpm"));
+    zassert_false(CanbusSourcesRejection({ sensor }, canbus_configuration).has_value());
+
+    // It still gets the checks an enabled sensor gets.
+    AssertRejection(
+        CanbusSourcesRejection({ Disabled(MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E0, "speed")) }, canbus_configuration),
+        Rejected("can_1", "CAN message 0x7E0 on bus 0 has no signal speed."));
+    AssertRejection(
+        CanbusSourcesRejection({ Disabled(MakeCanSensor(SensorType::CANBUS_ANALOG, 0, 0x7E1, "rpm")) }, canbus_configuration),
+        Rejected("can_1", "CAN bus 0 has no message with frame ID 0x7E1."));
+    AssertRejection(
+        CanbusSourcesRejection({ Disabled(MakeCanSensor(SensorType::CANBUS_INDICATOR, 1, 0x7E0, "rpm")) }, canbus_configuration),
+        Rejected("can_1", "CAN bus 1 is not configured."));
 }

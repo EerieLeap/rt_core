@@ -79,6 +79,7 @@ struct CborSensorConfig {
 	using allocator_type = std::pmr::polymorphic_allocator<>;
 
 	struct zcbor_string id{};
+	bool is_enabled = true;
 	struct CborSensorMetadataConfig metadata{};
 	struct CborSensorConfigurationConfig configuration;
 
@@ -93,6 +94,7 @@ struct CborSensorConfig {
 
 	CborSensorConfig(CborSensorConfig&& other, allocator_type alloc)
         : id(other.id),
+		is_enabled(other.is_enabled),
 		metadata(other.metadata),
 		configuration(std::move(other.configuration), alloc) {}
 };

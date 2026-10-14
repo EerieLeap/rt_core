@@ -72,7 +72,7 @@ unit runs on the default (see [configuration.md](configuration.md#configuration-
 | Field | Rules |
 | --- | --- |
 | `frame_id` | Unique within the channel. |
-| `is_enabled` | false keeps the message stored but switched off: it is not sent, its script is not loaded, and its signals feed no sensor. Validated like an enabled message, so switching it on cannot fail. |
+| `is_enabled` | false keeps the message stored but switched off: it is not sent, its script is not loaded, and its signals feed no sensor. A client's sensor configuration that binds an enabled signal sensor to it is refused (see [sensors.md](sensors.md)). Validated like an enabled message, so switching it on cannot fail. |
 | `send_interval_ms` | > 0: the unit sends the frame at this period. ≤ 0: receive-only. |
 | `name` | Identifier (letters, digits, `_`), 1 to 32 characters. |
 | `message_size` | Bytes, 1..8 on classical CAN, 1..64 on CAN FD. |

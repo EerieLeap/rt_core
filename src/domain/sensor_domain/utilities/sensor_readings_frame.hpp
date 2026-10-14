@@ -123,7 +123,7 @@ private:
     std::vector<const Sensor*> sensors_;     // By slot; owned by the generation that configured the frame.
     std::vector<float> values_;              // Latest processed value by slot, NaN for none. Addresses are stable.
     std::vector<IndexEntry> index_;          // Sorted by hash.
-    std::vector<CanFrame> can_frames_;       // Latest frame, one per CANBUS_RAW sensor.
+    std::vector<CanFrame> can_frames_;       // Latest frame, one per enabled CANBUS_RAW sensor.
     uint32_t generation_ = 0;
 
     // Every raw frame since the log writer last drained, oldest first; sized at Configure().
@@ -227,7 +227,8 @@ public:
             sensors_[i] = sensors[i].get();
             index_[i] = IndexEntry{sensors[i]->id_hash, static_cast<uint16_t>(i)};
 
-            if(sensors[i]->configuration.GetTraits().source == models::SensorSourceKind::CAN_FRAME)
+            // A disabled raw sensor never gets a frame, so it reserves no frame store or queue.
+            if(sensors[i]->is_enabled && sensors[i]->configuration.GetTraits().source == models::SensorSourceKind::CAN_FRAME)
                 slots_[i].can_frame_index = static_cast<uint16_t>(can_frame_count++);
         }
 

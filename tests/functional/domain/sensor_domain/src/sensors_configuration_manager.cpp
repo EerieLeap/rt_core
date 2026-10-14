@@ -173,7 +173,9 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
         16);
 
     auto sensors = sensors_configuration_manager_SetupTestSensors();
-    sensors_configuration_manager->Update(sensors);
+    // Nothing reads sensor_4.
+    sensors[3]->is_enabled = false;
+    zassert_true(sensors_configuration_manager->Update(sensors));
 
     cbor_sensors_configuration_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service);
     sensors_configuration_manager = nullptr;
@@ -196,6 +198,8 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
             }
         }
         zassert_true(saved_sensor != nullptr);
+
+        zassert_equal(saved_sensor->is_enabled, sensors[i]->is_enabled, "%s", sensors[i]->id.c_str());
 
         zassert_true(saved_sensor->metadata.name == sensors[i]->metadata.name);
         zassert_true(saved_sensor->metadata.unit == sensors[i]->metadata.unit);
@@ -404,7 +408,9 @@ std::shared_ptr<Sensor> sensors_configuration_manager_MakeCanSensor(std::string_
 }
 
 // Bus 0 with message 0x100, which has one signal.
-std::shared_ptr<const CanbusConfiguration> sensors_configuration_manager_MakeCanbusConfiguration(std::string_view signal_name) {
+std::shared_ptr<const CanbusConfiguration> sensors_configuration_manager_MakeCanbusConfiguration(
+    std::string_view signal_name, bool is_message_enabled = true) {
+
     auto configuration = std::make_shared<CanbusConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
 
     CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -412,6 +418,7 @@ std::shared_ptr<const CanbusConfiguration> sensors_configuration_manager_MakeCan
 
     auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
     message->frame_id = 0x100;
+    message->is_enabled = is_message_enabled;
 
     CanSignalConfiguration signal(std::allocator_arg, Mrm::GetDefaultPmr());
     signal.size_bits = 16;
@@ -467,4 +474,49 @@ ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_s
 
     // The unit's own updates are not checked against it either.
     zassert_true(reloaded->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
+}
+
+ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_signal_of_a_disabled_message) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+
+    fs_service->Format();
+
+    // What a client sends: the sensor enabled, then the same sensor disabled.
+    auto client = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config_client", fs_service), nullptr, 16, 16);
+    zassert_true(client->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
+    const auto enabled_cbor = client->GetCborConfiguration();
+
+    auto disabled_sensor = sensors_configuration_manager_MakeCanSensor("rpm");
+    disabled_sensor->is_enabled = false;
+    zassert_true(client->Update({ disabled_sensor }));
+    const auto disabled_cbor = client->GetCborConfiguration();
+
+    auto canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm", false);
+    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
+        [&canbus_configuration] { return canbus_configuration; });
+
+    std::array<char, 192> reason{};
+    zassert_false(sensors_configuration_manager->ApplyCborConfiguration(enabled_cbor, reason));
+    zassert_str_equal(reason.data(), "Invalid Sensor configuration. Sensor ID: engine_rpm. CAN message 0x100 on bus 0 is disabled.");
+    zassert_equal(sensors_configuration_manager->Get()->size(), 0, "The refused configuration is not applied");
+
+    zassert_true(sensors_configuration_manager->ApplyCborConfiguration(disabled_cbor, reason),
+        "A disabled sensor may stay bound to a disabled message");
+    zassert_equal(sensors_configuration_manager->Get()->size(), 1);
+    zassert_false(sensors_configuration_manager->Get()->front()->is_enabled);
+
+    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm");
+    zassert_true(sensors_configuration_manager->ApplyCborConfiguration(enabled_cbor, reason));
+
+    // The stored configuration still loads once the message is disabled.
+    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm", false);
+    auto reloaded = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
+        [&canbus_configuration] { return canbus_configuration; });
+    zassert_false(reloaded->IsStoredConfigurationRejected());
+    zassert_equal(reloaded->Get()->size(), 1);
+    zassert_true(reloaded->Get()->front()->is_enabled);
 }

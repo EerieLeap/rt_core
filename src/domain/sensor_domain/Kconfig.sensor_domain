@@ -58,6 +58,6 @@ menu "EerieLeap Sensor Domain config"
           Frames of CANBUS_RAW sensors are queued for the log writer so every
           frame is logged, not only the latest one at each logging tick. Frames
           arriving while the queue is full are dropped and counted. Each entry
-          takes about 90 bytes of internal RAM; the queue only exists while a
-          CANBUS_RAW sensor is configured.
+          takes about 90 bytes of internal RAM; the queue only exists while an
+          enabled CANBUS_RAW sensor is configured.
 endmenu

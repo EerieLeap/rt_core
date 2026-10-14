@@ -41,6 +41,7 @@ pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
         CborSensorConfig sensor_config(std::allocator_arg, Mrm::GetExtPmr());
 
         sensor_config.id = CborHelpers::ToZcborString(sensor->id);
+        sensor_config.is_enabled = sensor->is_enabled;
         sensor_config.configuration.type = std::to_underlying(sensor->configuration.type);
 
         if(sensor->configuration.channel.has_value()) {
@@ -110,6 +111,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
 
     for(const auto& sensor_config : sensors_config.CborSensorConfig_m) {
         auto sensor = make_shared_pmr<Sensor>(mr, CborHelpers::ToPmrString(mr, sensor_config.id));
+        sensor->is_enabled = sensor_config.is_enabled;
 
         sensor->configuration.type = static_cast<SensorType>(sensor_config.configuration.type);
 

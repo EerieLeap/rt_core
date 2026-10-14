@@ -15,7 +15,8 @@ static size_t cbor_get_size_CborSensorsConfig(const CborSensorsConfig& config) {
     for(const auto& sensor_config : config.CborSensorConfig_m) {
         builder.AddIndefiniteArrayStart();
 
-        builder.AddTstr(sensor_config.id);
+        builder.AddTstr(sensor_config.id)
+            .AddBool(sensor_config.is_enabled);
 
         builder.AddIndefiniteArrayStart()
             .AddTstr(sensor_config.metadata.name)

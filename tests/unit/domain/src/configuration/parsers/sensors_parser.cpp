@@ -1,7 +1,12 @@
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
@@ -11,6 +16,7 @@
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 #include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
 #include "subsys/expression_engine/expression_evaluator.h"
+#include "configuration/cbor/cbor_serializer.h"
 
 #include "domain/sensor_domain/configuration/parsers/sensors_cbor_parser.h"
 #include "domain/sensor_domain/models/sensor.h"
@@ -19,6 +25,7 @@ using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::subsys::expression_engine;
+using eerie_leap::configuration::cbor::CborSerializer;
 
 using namespace eerie_leap::domain::sensor_domain::configuration::parsers;
 using namespace eerie_leap::domain::sensor_domain::models;
@@ -113,6 +120,8 @@ void sensors_parser_CompareSensors(
             }
         }
         zassert_true(deserialized_sensor != nullptr);
+
+        zassert_equal(deserialized_sensor->is_enabled, sensors[i]->is_enabled, "%s", sensors[i]->id.c_str());
 
         zassert_true(deserialized_sensor->metadata.name == sensors[i]->metadata.name);
         zassert_true(deserialized_sensor->metadata.unit == sensors[i]->metadata.unit);
@@ -278,4 +287,90 @@ ZTEST(sensors_parser, test_Deserialize_names_the_sensor_whose_expression_is_wron
 
     error = DeserializeRejection(parser, *serialized_sensors);
     zassert_true(error.starts_with("Invalid Sensor configuration. Sensor ID: sensor_2. Invalid expression"), "%s", error.c_str());
+}
+
+namespace {
+
+constexpr uint8_t CBOR_FALSE = 0xF4;
+constexpr uint8_t CBOR_TRUE = 0xF5;
+
+// Offset of the byte after @p text, encoded as a text string shorter than 24 bytes.
+size_t OffsetAfterTstr(std::span<const uint8_t> bytes, std::string_view text) {
+    std::vector<uint8_t> encoded;
+    encoded.push_back(static_cast<uint8_t>(0x60 + text.size()));
+    encoded.insert(encoded.end(), text.begin(), text.end());
+
+    const auto found = std::search(bytes.begin(), bytes.end(), encoded.begin(), encoded.end());
+    zassert_true(found != bytes.end(), "%s is not encoded", std::string(text).c_str());
+
+    return static_cast<size_t>(found - bytes.begin()) + encoded.size();
+}
+
+} // namespace
+
+ZTEST(sensors_parser, test_is_enabled_survives_Serialize_and_Deserialize) {
+    SensorsCborParser parser(nullptr);
+    auto sensors = sensors_parser_GetTestSensors();
+
+    // sensor_3 reads the enabled sensor_1; nothing reads sensor_4.
+    sensors[2]->is_enabled = false;
+    sensors[3]->is_enabled = false;
+
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+    const auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
+    zassert_true(sensor_configs[0].is_enabled);
+    zassert_true(sensor_configs[1].is_enabled);
+    zassert_false(sensor_configs[2].is_enabled);
+    zassert_false(sensor_configs[3].is_enabled);
+
+    auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
+    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+}
+
+ZTEST(sensors_parser, test_is_enabled_survives_a_round_trip_through_cbor_bytes) {
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto sensors = sensors_parser_GetTestSensors();
+    sensors[3]->is_enabled = false;
+
+    const auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
+    zassert_false(bytes.empty(), "The size calculation must count the flag");
+
+    const auto decoded = serializer.Deserialize(bytes);
+    zassert_not_null(decoded.get());
+
+    auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded, 16, 16);
+    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+}
+
+ZTEST(sensors_parser, test_is_enabled_follows_the_id_and_cannot_be_left_out) {
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto sensors = sensors_parser_GetTestSensors();
+    sensors[3]->is_enabled = false;
+
+    auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
+    zassert_false(bytes.empty());
+
+    const size_t sensor_1_flag = OffsetAfterTstr(bytes, "sensor_1");
+    zassert_equal(bytes[sensor_1_flag], CBOR_TRUE, "An enabled sensor's id is followed by true");
+    zassert_equal(bytes[OffsetAfterTstr(bytes, "sensor_4")], CBOR_FALSE, "A disabled sensor's id is followed by false");
+
+    // The layout from before the flag existed is refused rather than read as enabled.
+    bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(sensor_1_flag));
+    zassert_is_null(serializer.Deserialize(bytes).get(), "A sensor without is_enabled must not decode");
+}
+
+ZTEST(sensors_parser, test_Deserialize_refuses_an_expression_that_reads_a_disabled_sensor) {
+    SensorsCborParser parser(nullptr);
+    const auto sensors = sensors_parser_GetTestSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    // sensor_1 reads sensor_2; the stored flag is read before the configuration is validated.
+    serialized_sensors->CborSensorConfig_m[1].is_enabled = false;
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(
+        error == "Invalid Sensor configuration. Sensor ID: sensor_1. Expression references disabled sensor sensor_2.",
+        "%s", error.c_str());
 }
