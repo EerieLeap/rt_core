@@ -6,7 +6,6 @@
 
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "cdmp_heartbeat_service.h"
-// #include "cdmp_state_service.h"
 
 #include "cdmp_service.h"
 
@@ -43,8 +42,9 @@ CdmpService::CdmpService(CdmpDeviceType device_type, uint32_t uid) {
         can_id_manager_, device_, work_queue_thread_);
     canbus_services_.push_back(command_service_);
 
-    // canbus_services_.emplace_back(std::make_shared<CdmpStateService>(
-    //     canbus_, can_id_manager_, device_));
+    state_service_ = std::make_shared<CdmpStateService>(
+        can_id_manager_, device_, work_queue_thread_, network_service_, command_service_);
+    canbus_services_.push_back(state_service_);
 }
 
 CdmpService::~CdmpService() {

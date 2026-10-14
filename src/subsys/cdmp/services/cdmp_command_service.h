@@ -31,6 +31,13 @@ struct CdmpCommandResult {
 class CdmpCommandService final : public CdmpCanbusServiceBase {
 public:
     using CommandHandler = std::function<CdmpCommandResult(uint8_t transaction_id, std::span<const uint8_t> data)>;
+    /**
+     * @brief Handles a service command on the CDMP work queue.
+     *
+     * The result answers a request addressed to this unit; a broadcast request gets no response
+     * (§4.2.1), and neither does one for which the handler returns nothing.
+     */
+    using ServiceCommandHandler = std::function<std::optional<CdmpCommandResult>(const CdmpCommandRequestMessage& request)>;
 
 private:
     int canbus_handler_id_;
@@ -40,6 +47,7 @@ private:
     std::unique_ptr<CdmpTransactionService> transaction_service_;
 
     std::unordered_map<uint8_t, CommandHandler> command_handlers_;
+    std::unordered_map<uint8_t, ServiceCommandHandler> service_command_handlers_;
 
     void RegisterCanHandlers();
     void UnregisterCanHandlers();
@@ -69,8 +77,10 @@ public:
 
     void RegisterCommandHandler(uint8_t command_code, CommandHandler handler);
     void RegisterUserCommandHandler(uint8_t command_code, CommandHandler handler);
-    void RegisterServiceCommandHandler(CdmpServiceCommandCode command_code, CommandHandler handler);
+    /** @brief Handles a service command other than STATUS_REQUEST, which the protocol answers itself. */
+    void RegisterServiceCommandHandler(CdmpServiceCommandCode command_code, ServiceCommandHandler handler);
     void UnregisterCommandHandler(uint8_t command_code);
+    void UnregisterServiceCommandHandler(CdmpServiceCommandCode command_code);
 
     uint8_t SendCommand(
         uint8_t target_device_id,

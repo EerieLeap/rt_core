@@ -105,6 +105,8 @@ void CdmpHeartbeatService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, Cd
 void CdmpHeartbeatService::ProcessFrame(std::span<const uint8_t> frame_data) {
     try {
         CdmpHeartbeatMessage heartbeat = CdmpHeartbeatMessage::FromCanFrame(frame_data);
+        // The network service updates its table and then passes the heartbeat to its observers,
+        // the state service among them.
         network_service_->UpdateDeviceFromHeartbeat(heartbeat);
         LOG_DBG("Processed heartbeat frame");
     } catch (const std::exception& e) {
@@ -122,7 +124,7 @@ void CdmpHeartbeatService::SendHeartbeat() {
             .health_status = device_->GetHealthStatus(),
             .sequence_number = heartbeat_sequence_number_,
             .capability_flags = device_->GetCapabilityFlags(),
-            .state_digest = 0
+            .state_digest = device_->GetStateDigest()
         };
 
         auto frame_data = heartbeat.ToCanFrame();

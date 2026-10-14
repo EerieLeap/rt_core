@@ -162,7 +162,26 @@ void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMess
         NotifyCommandHandler(command);
         SendCommandResponse(command.target_device_id, message);
     } else if(device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
-        NotifyCommandHandler(command);
+        auto handler = service_command_handlers_.find(command.command_code);
+        if(handler == service_command_handlers_.end()) {
+            NotifyCommandHandler(command);
+            return;
+        }
+
+        auto result = handler->second(command);
+        // A broadcast service command gets no response (§4.2.1).
+        if(!result.has_value() || command.target_device_id != device_->GetDeviceId())
+            return;
+
+        CdmpCommandResponseMessage response {
+            .source_device_id = device_->GetDeviceId(),
+            .command_code = command.command_code,
+            .transaction_id = command.transaction_id,
+            .result_code = result.value().result_code,
+            .data = std::move(result.value().data)
+        };
+
+        SendCommandResponse(command.target_device_id, response);
     }
 }
 
@@ -219,16 +238,24 @@ void CdmpCommandService::RegisterUserCommandHandler(uint8_t command_code, Comman
     RegisterCommandHandler(command_code, handler);
 }
 
-void CdmpCommandService::RegisterServiceCommandHandler(CdmpServiceCommandCode command_code, CommandHandler handler) {
-    if(!IsValidServiceCommandCode(std::to_underlying(command_code)))
-        throw std::runtime_error("Invalid service command code");
+void CdmpCommandService::RegisterServiceCommandHandler(CdmpServiceCommandCode command_code, ServiceCommandHandler handler) {
+    if(!IsValidServiceCommandCode(std::to_underlying(command_code))
+        || command_code == CdmpServiceCommandCode::STATUS_REQUEST) {
 
-    RegisterCommandHandler(std::to_underlying(command_code), handler);
+        throw std::runtime_error("Invalid service command code");
+    }
+
+    service_command_handlers_[std::to_underlying(command_code)] = std::move(handler);
+    LOG_DBG("Registered handler for service command %d", std::to_underlying(command_code));
 }
 
 void CdmpCommandService::UnregisterCommandHandler(uint8_t command_code) {
     command_handlers_.erase(command_code);
     LOG_DBG("Unregistered handler for command %d", command_code);
+}
+
+void CdmpCommandService::UnregisterServiceCommandHandler(CdmpServiceCommandCode command_code) {
+    service_command_handlers_.erase(std::to_underlying(command_code));
 }
 
 uint8_t CdmpCommandService::SendCommand(
@@ -284,7 +311,8 @@ bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
     auto service_command_code = static_cast<CdmpServiceCommandCode>(command_code);
 
     return service_command_code == CdmpServiceCommandCode::STATUS_REQUEST
-        || service_command_code == CdmpServiceCommandCode::RESET_DEVICE;
+        || service_command_code == CdmpServiceCommandCode::RESET_DEVICE
+        || service_command_code == CdmpServiceCommandCode::STATE_SYNC_REQUEST;
 }
 
 bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) const {

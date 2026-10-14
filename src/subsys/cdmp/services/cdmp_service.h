@@ -22,6 +22,7 @@
 #include "i_cdmp_network_info.h"
 #include "cdmp_command_service.h"
 #include "cdmp_network_service.h"
+#include "cdmp_state_service.h"
 
 namespace eerie_leap::subsys::cdmp::services {
 
@@ -36,7 +37,7 @@ using eerie_leap::subsys::cdmp::utilities::CdmpStatusMachine;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 
-/** @brief One CDMP node: discovery, heartbeat and commands on a shared work queue. */
+/** @brief One CDMP node: discovery, heartbeat, commands and shared state on a shared work queue. */
 class CdmpService : public IThread, public ServiceBase<>, public ICdmpNetworkInfo {
 public:
     /** @brief Called with the old and the new status of this unit. */
@@ -51,6 +52,7 @@ private:
     std::shared_ptr<CdmpCanIdManager> can_id_manager_;
     std::shared_ptr<CdmpNetworkService> network_service_;
     std::shared_ptr<CdmpCommandService> command_service_;
+    std::shared_ptr<CdmpStateService> state_service_;
 
     std::vector<std::shared_ptr<ICdmpCanbusService>> canbus_services_;
 
@@ -82,6 +84,8 @@ public:
 
     std::shared_ptr<CdmpDevice> GetDevice() const { return device_; }
     std::shared_ptr<CdmpCommandService> GetCommandService() const { return command_service_; }
+    /** @brief This unit's shared state records and its copies of the others'; kept across Stop() and Start(). */
+    std::shared_ptr<CdmpStateService> GetStateService() const { return state_service_; }
     /** @brief The CDMP work queue, shared with the SMP-CAN transport. */
     std::shared_ptr<WorkQueueThread> GetWorkQueueThread() const { return work_queue_thread_; }
 

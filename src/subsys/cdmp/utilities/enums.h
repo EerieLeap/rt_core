@@ -60,7 +60,7 @@ enum class CdmpServiceCommandCode : uint8_t {
     // Application-specific: 0x20-0xFF
 };
 
-// State types for State Change Notifications (Base + 4)
+// State types for State Change Notifications (Base + 4); 0x00 is invalid.
 enum class CdmpStateType : uint8_t {
     OPERATING_MODE_CHANGED = 0x01,
     FAULT_CONDITION_DETECTED = 0x02,

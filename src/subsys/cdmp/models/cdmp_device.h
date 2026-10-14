@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <chrono>
 #include <zephyr/kernel.h>
@@ -37,6 +38,8 @@ private:
     uint8_t uptime_counter_ = 0;
     bool is_lowest_id_on_network_ = false;
     uint32_t staggered_message_delay_ = 0;
+    // Written by the state service on any thread, read by the heartbeat service.
+    std::atomic<uint8_t> state_digest_ = 0;
 
     std::shared_ptr<CdmpStatusMachine> status_machine_;
 
@@ -70,7 +73,8 @@ public:
     [[nodiscard]] uint8_t GetUptimeCounter() const { return uptime_counter_; }
     [[nodiscard]] bool IsLowestIdOnNetwork() const { return is_lowest_id_on_network_; }
     [[nodiscard]] uint32_t GetStaggeredMessageDelay() const { return staggered_message_delay_; }
-
+    /** @brief CRC-8 over this unit's shared state records, sent in heartbeat byte 7. */
+    [[nodiscard]] uint8_t GetStateDigest() const { return state_digest_.load(std::memory_order_relaxed); }
 
     // Setters
     void SetDeviceId(uint8_t device_id) { device_id_ = device_id; }
@@ -84,6 +88,7 @@ public:
     void SetStaggeredMessageDelay(uint32_t staggered_message_delay) {
         staggered_message_delay_ = staggered_message_delay;
     }
+    void SetStateDigest(uint8_t state_digest) { state_digest_.store(state_digest, std::memory_order_relaxed); }
 
     // Utility methods
     bool IsOnline() const { return status_machine_->GetCurrentStatus() == CdmpDeviceStatus::ONLINE; }

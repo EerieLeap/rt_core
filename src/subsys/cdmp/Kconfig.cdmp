@@ -38,4 +38,22 @@ menu "EerieLeap CDMP config"
         default 500
         help
           Add EerieLeap CDMP Command Transaction Timeout.
+
+    config EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS
+        int "Shared state records of this unit"
+        default 8
+        range 1 32
+        help
+          State types this unit can share at once. A withdrawn record keeps its
+          slot until every online peer has acknowledged the withdrawal, unless a
+          new type needs the slot first.
+
+    config EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS
+        int "Shared state records of other units"
+        default 32
+        range 1 1024
+        help
+          Records of other units this unit keeps, about 10 bytes each. The
+          records of a source that do not fit are dropped, and that source's
+          heartbeat digest is not checked until room frees up.
 endmenu

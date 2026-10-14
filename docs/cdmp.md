@@ -46,11 +46,13 @@ transport run on:
   frame is dropped as malformed.
 - **Command service**: request/response with transaction IDs, retries and a per-transaction
   timeout (`EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS`). Service commands `STATUS_REQUEST`
-  (0x10) and `RESET_DEVICE` (0x11) are handled by the protocol; application commands use codes
-  0x20..0xFF. Responses are broadcast and every unit numbers its own transactions, so a response
-  completes a transaction only if its command code matches too and, for a request to one device,
-  it comes from that device.
-- State change notifications (Base + 4/5) are specified but not implemented.
+  (0x10), `RESET_DEVICE` (0x11) and `STATE_SYNC_REQUEST` (0x12) are handled by the protocol;
+  application commands use codes 0x20..0xFF. Responses are broadcast and every unit numbers its
+  own transactions, so a response completes a transaction only if its command code matches too
+  and, for a request to one device, it comes from that device.
+- **State service** (`CdmpStateService`, `GetStateService()`): shared state records on Base + 4/5
+  (section 4.3 of the spec), described under [Shared state](#shared-state). It lives as long as
+  the node, so this unit's records survive a stop.
 
 `CdmpService::Configure(canbus, base_can_id)` binds the services to a bus; the management IDs
 are `base + 0..5`, capability streams `base + 20..51`, application IDs `base + 52..99`.
@@ -86,6 +88,35 @@ canbus_com_service->SetCommandHandler<CanbusComLoggingCommand>(
 one command, `LOGGING` (0x20, one byte: 0x01 start, 0x00 stop), which rt_daq uses to start and
 stop logging on every unit at once.
 
+## Shared state
+
+A unit shares a few bytes of its state, such as whether it is logging, with every other unit on
+the network (section 4.3 of the spec). CDMP delivers the bytes and keeps the copies consistent, but
+never interprets them.
+
+**Records.**
+
+- A unit holds at most one record per state type: the type and 1 to 5 data bytes. The other units
+  keep only the latest value of each record, so a late joiner, a restart and a lost frame all
+  converge on the owner's current state. A record is state, not an event.
+- Every change of a unit's records, a new value or a withdrawal, increments the unit's 8-bit
+  version counter and goes out as a notification on Base + 4. Every other online unit acknowledges
+  it on Base + 5, and the change is resent after 50, 100 and 200 ms until the first 8 of them have;
+  the digest below covers the rest. A record that other changes leave 64 versions behind is sent
+  again under a new version, so that receivers never take its next change for an old one.
+- Byte 7 of the heartbeat is a CRC-8 digest of the sender's records. A receiver whose copies
+  differ marks them stale and asks the sender to replay its records with `STATE_SYNC_REQUEST`
+  (0x12), at most once per heartbeat, so a divergence lasts about one heartbeat interval.
+- A unit that enters `ONLINE` sends all its records and broadcasts `STATE_SYNC_REQUEST`.
+- Copies follow the device table. When a unit claims its ID again (it restarted), its copies turn
+  stale: they keep their value, and its next record of each type replaces them whatever its
+  version. A unit that leaves the table takes its copies along, and a unit that leaves `ONLINE`
+  drops every copy but keeps its own records. Notifications from a unit that is not in the table yet are not acknowledged, so the
+  sender resends them once its first heartbeat has added it.
+- A unit keeps up to `EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS` records of its own and
+  `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` copies, in fixed arrays. Copies that do not fit are
+  dropped with one warning, and their source's digest is not checked until room frees up.
+
 ## SMP over CAN
 
 `SmpCanTransport` is an MCUmgr transport (section 5 of the CDMP README):
@@ -117,6 +148,8 @@ stop logging on every unit at once.
 | `EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY` | 5 | Work queue of the sub-services and the SMP-CAN sender. |
 | `EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE` | 4096 | |
 | `EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS` | 500 | Time to wait for a command response. |
+| `EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS` | 1..32, 8 | State types this unit can share at once. |
+| `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` | 1..1024, 32 | Records of other units kept, about 10 bytes each. |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM` | n | Builds the COM service; selects `EERIE_LEAP_SMP_CAN`. |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_*` | `NONE` | CDMP device type of this unit. |
 | `EERIE_LEAP_SMP_CAN` | n | SMP transport over CAN. Depends on `EERIE_LEAP_CANBUS`; selects `EERIE_LEAP_SMP`. |
@@ -124,5 +157,5 @@ stop logging on every unit at once.
 | `EERIE_LEAP_SMP_CAN_RX_TIMEOUT_MS` | 100 | Inter-frame timeout of a partial packet. |
 | `EERIE_LEAP_SMP_CAN_TX_BURST_FRAMES` | 1..64, 8 | Frames sent back to back after an idle period; should cover a few system ticks at the paced rate. |
 
-Everything else (heartbeat interval, discovery backoffs, ID claim timeout, stagger offsets) is a
-protocol constant in `src/subsys/cdmp/utilities/constants.h`.
+Everything else (heartbeat interval, discovery backoffs, ID claim timeout, stagger offsets, state
+resend backoffs) is a protocol constant in `src/subsys/cdmp/utilities/constants.h`.

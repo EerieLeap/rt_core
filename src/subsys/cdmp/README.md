@@ -289,7 +289,7 @@ Byte 3-6:  Capability Flags (32 bits, LSB first)
 Byte 7:    State Digest (CRC-8 over the sender's state records, 0x00 without records)
 ```
 
-A heartbeat is always 8 bytes, and a receiver drops a shorter one as malformed. A heartbeat from a device that is neither in the receiver's table nor pending makes an online receiver request discovery (§3.2.4).
+A heartbeat is always 8 bytes, and a receiver drops a shorter one as malformed. A heartbeat from a device that is neither in the receiver's table nor pending makes an online receiver request discovery (§3.2.4). A receiver checks the State Digest against its copies of the sender's state records ([§4.3](#43-shared-state-can-id-base--4-and-base--5)).
 
 **Note:** See section 14 for details on capability flags.
 
@@ -297,7 +297,7 @@ A heartbeat is always 8 bytes, and a receiver drops a shorter one as malformed. 
 
 - **Interval**: 1-5 seconds (configurable per device)
 - **Timeout**: 3× heartbeat interval (missing 3 consecutive = presumed offline)
-- **Purpose**: Liveness indication and capability advertisement
+- **Purpose**: Liveness indication, capability advertisement and the consistency check of shared state
 
 ### 4.2 Command Messages
 
@@ -342,7 +342,20 @@ Byte 3:    Reset Type (0x00=Soft, 0x01=Hard, 0x02=Factory)
 Byte 4-7:  Reserved
 ```
 
-**0x12-0x1F: Reserved**
+**0x12: State Sync Request**
+
+```
+Byte 0:    Target Device ID (255 = all)
+Byte 1:    0x12 (STATE_SYNC_REQUEST)
+Byte 2:    Transaction ID
+Byte 3-7:  Reserved
+```
+
+**Purpose:** Ask a device, or every device, to replay its state records ([§4.3](#43-shared-state-can-id-base--4-and-base--5)). Only ONLINE devices act on it.
+
+The target sends every record it holds as a State Change Notification with the record's current version, after its stagger when the request was broadcast. A unicast request is answered with Success (0x00) and the number of records in response byte 4 once the records are queued; a broadcast request gets no response. Replayed records are not acknowledgement-tracked, because a requester that misses them asks again.
+
+**0x13-0x1F: Reserved**
 
 Configuration is read and written over SMP ([§5](#5-smp-over-can)), not with CDMP commands.
 
@@ -357,6 +370,8 @@ Applications define command codes in this range based on their registered capabi
 **Broadcast Command Handling:**
 
 Most broadcast commands (Target ID = 255) SHALL NOT generate responses to avoid bus flooding.
+
+A broadcast State Sync Request (0x12) generates no response either, but every ONLINE device replays its state records after its stagger.
 
 **Exception:** Status Request (0x10) broadcast SHALL generate responses:
 
@@ -427,45 +442,86 @@ Device Status Enumeration (Byte 3):
 - **Max retries**: 3 attempts
 - **On failure**: Log error, optionally notify application layer
 
-### 4.3 State Change Notifications (CAN ID Base + 4)
+### 4.3 Shared State (CAN ID Base + 4 and Base + 5)
 
-**Purpose**: Event-driven state updates requiring confirmation
+**Purpose**: A device shares a few bytes of its state, such as whether it is logging, with every other device. The protocol delivers each record to every online device, keeps the copies consistent and drops them when their owner leaves. It never interprets the data.
 
-**Notification Message:**
+**Records:**
+
+- A device holds at most one record per state type: the type and 1 to 5 data bytes. A notification without data withdraws the record.
+- Each device keeps one 8-bit version counter, which starts at 0 at boot. Every change of any of its records, a new value or a withdrawal, increments the counter and stamps the changed record with the new value, so a version identifies one change of one source. Setting a record to its current value is no change.
+- A receiver keeps only the latest record per source and type. It orders records of the same source and type by serial-number comparison: version `v` is newer than the copy's version `c` when `(int8_t)(v - c) > 0`. The counter may therefore wrap, and a late retransmission cannot replace a newer value.
+- The comparison holds only while a record's next version is less than 128 ahead of its current one. A device therefore stamps an unchanged record again, with its current value, once its other records' changes have left it 64 or more versions behind the counter.
+- Records live in RAM and are rebuilt after every boot.
+
+**State Types:**
+
+```
+0x00:      Invalid
+0x01:      Operating mode changed (IDLE/ACTIVE/SLEEP/ERROR)
+0x02:      Fault condition detected
+0x03:      Calibration status changed
+0x04:      Connection status changed
+0x05:      Threshold event (sensor crossed limit)
+0x06-0x0F: Reserved
+0x10-0xFF: Application-specific
+```
+
+Application state types and their data layouts are part of the network contract: add types and append fields, but never renumber or reuse them. A decoder ignores trailing bytes it does not know and gives missing trailing fields their defaults.
+
+**State Change Notification (Base + 4)**: 3 to 8 bytes.
 
 ```
 Byte 0:    Source Device ID
-Byte 1:    State Version Number (increments with each change)
-Byte 2:    State Type/Category
-Byte 3-7:  State Data
+Byte 1:    Record Version (one counter per source)
+Byte 2:    State Type
+Byte 3-7:  State Data, 0-5 bytes (frame length - 3); no data withdraws the record
 ```
 
-**State Type/Category Examples:**
+**State Change Response (Base + 5)**: 4 bytes.
 
 ```
-0x01: Operating mode changed (IDLE/ACTIVE/SLEEP/ERROR)
-0x02: Fault condition detected
-0x03: Calibration status changed
-0x04: Connection status changed
-0x05: Threshold event (sensor crossed limit)
-0x10-0xFF: Application-specific state changes
+Byte 0:    Responding Device ID
+Byte 1:    Source Device ID of the acknowledged notification
+Byte 2:    Record Version (echo)
+Byte 3:    Result Code (0x00 = received)
 ```
 
-**State Change Response (CAN ID Base + 5):**
+**State Digest (heartbeat byte 7, [§4.1](#41-heartbeat-broadcast-can-id-base--1)):** CRC-8 over the sender's records in ascending type order, each as `type, version, length, data...`. The CRC uses the polynomial 0x07 with initial value 0x00, no reflection and no final XOR (check value 0xF4 for the ASCII string "123456789"). A device without records sends 0x00.
 
-```
-Byte 0:    Source Device ID
-Byte 1:    Target Device ID, device that is being acknowledged
-Byte 2:    State Version Number (echo)
-Byte 3:    Result Code (0x00=Success, 0x01=Error, 0x02=Invalid, etc.)
-Byte 4-7:  Response Data or Error Details
-```
+**Sending:**
 
-**Behavior:**
+A device sends notifications, responses and sync requests only while it is ONLINE ([§6.1](#61-device-statuses)). Changes made in any other status are kept and sent on its next ONLINE.
 
-- Sender retransmits if no ACK within 50ms
-- Receivers discard duplicate state versions
-- If device detects version gap, requests full state resync
+| Trigger | Action |
+| --- | --- |
+| A record set to a new value, or withdrawn | Increment the counter, stamp the record and update the digest. Send a notification and start an acknowledgement set of the online devices in the device table. |
+| A record set to its current value | Nothing. |
+| A change leaves another record 64 or more versions behind the counter | Stamp that record again and send it like a change, with its current value. |
+| 50, 100 and 200 ms with devices missing from the set | Resend the record's current value. Stop after the third resend, or when a newer change of the record replaces the set ([§7.2](#72-retry-strategy)). |
+| Response from device P for version `v` | Remove P from the set of the record stamped `v`, if that record still has version `v`. |
+| STATE_SYNC_REQUEST addressed to the device or broadcast | Replay every record it holds ([§4.2.1](#421-command-request-can-id-base--2)). |
+| Entering ONLINE | Send every record, then broadcast STATE_SYNC_REQUEST. |
+
+**Receiving:**
+
+| Trigger | Action |
+| --- | --- |
+| Notification with the receiver's own ID as source (a loopback controller) | Ignore. |
+| Notification from a device that is not in the device table ([§3.2.4](#324-id-claim-response-can-id-base--0)) | Ignore without a response. The source resends, and by then its first heartbeat has added it to the table. |
+| Notification from source S | Apply it if there is no copy of (S, type), the copy is stale, or the version is newer than the copy's. A withdrawal removes the copy. Respond on Base + 5, to duplicates and older versions too. |
+| Heartbeat from S whose digest matches the CRC over the copies of S | Clear any stale marks. |
+| Heartbeat from S with stale copies, whose digest matches the CRC over the fresh copies of S | Drop the stale copies: S has withdrawn them, and its replay is complete. |
+| Heartbeat from S with any other digest | Mark the copies of S stale, and send STATE_SYNC_REQUEST to S: at most one request per heartbeat of S, at least half a heartbeat interval apart, so that a heartbeat that arrives early still gets one. |
+| ID_CLAIM for the ID of S with the same UID (S restarted) | Mark the copies of S stale. |
+| ID_CLAIM for the ID of S with another UID | Nothing: it is a conflicting claim, which S rejects. |
+| S leaves the device table (heartbeat timeout) | Drop the copies of S. |
+| The receiver leaves ONLINE (stop, VERSION_MISMATCH, ERROR) | Drop every copy and stop resending. The receiver's own records are kept. |
+| The records of S would exceed the receiver's capacity | Keep what fits, skip the digest check of S until room frees up, and log a warning once. |
+
+A stale copy keeps its value, so consumers go on seeing it while its owner restarts, but it accepts the next record of its type whatever the version.
+
+**Rationale:** Responses are the fast path, and the digest is the safety net. One digest check catches a notification lost together with its resends, a restart the receiver did not observe, a withdrawn record and a lost replay, so a divergence lasts about one heartbeat interval plus a replay. Detecting gaps between versions would also fire on every notification overtaken by a resend. A change costs one notification plus one response per online device, and a replay one frame per record.
 
 -----
 
@@ -539,6 +595,11 @@ VERSION_MISMATCH → Incompatible protocol version detected (network-wide condit
 ERROR            → Fault detected, limited functionality
 ```
 
+**Shared state ([§4.3](#43-shared-state-can-id-base--4-and-base--5)) exists only in ONLINE:**
+
+- A device sends state change notifications, responses and State Sync Requests only while ONLINE, and ignores state frames in any other status.
+- A device that leaves ONLINE drops its copies of other devices' records and stops resending. It keeps its own records, and sends them all on its next ONLINE.
+
 **VERSION_MISMATCH Status Behavior:**
 
 - All protocol transmissions disabled:
@@ -576,7 +637,7 @@ VERSION_MISMATCH → OFFLINE:    Device reboot required (no automatic recovery)
 
 - **Sequence numbers**: Status messages include rolling counter
 - **Transaction IDs**: Command/response matching
-- **State versions**: Detect missed state changes
+- **State digests**: The heartbeat digest detects any difference between a device's state records and a receiver's copies, and the receiver requests a replay ([§4.3](#43-shared-state-can-id-base--4-and-base--5)). Versions only order the records of one source; a gap between them is not a loss
 - **Timeouts**: All request/response pairs have defined timeouts
 
 ### 7.2 Retry Strategy
@@ -585,7 +646,7 @@ VERSION_MISMATCH → OFFLINE:    Device reboot required (no automatic recovery)
 |-------------------|-------|-------|----------------------|
 |Discovery Request  |200ms  |3      |100ms, 200ms, 500ms   |
 |Command Request    |100ms  |3      |100ms, 200ms, 500ms   |
-|State Change       |50ms   |3      |50ms, 100ms, 200ms    |
+|State Change       |50ms   |3      |50ms, 100ms, 200ms; then the heartbeat digest|
 |SMP Request        |Client |Client |Resent by the SMP client|
 |Heartbeat          |N/A    |N/A    |Not retransmitted     |
 
@@ -629,6 +690,7 @@ A target validates a written configuration completely before it commits it to pe
 - Heartbeat transmission
 - Status broadcast (if applicable)
 - Command request/response handling
+- Shared state reception: responses to state change notifications, the state digest in heartbeats, and replies to State Sync Requests ([§4.3](#43-shared-state-can-id-base--4-and-base--5)), since every online device is in the senders' acknowledgement sets
 - Basic error handling and retries
 - Capability registration system (if device has capabilities)
 - Config type registration system (if device has configurable parameters)
@@ -636,7 +698,7 @@ A target validates a written configuration completely before it commits it to pe
 ### 9.2 Optional Features
 
 - SMP over CAN (required for remote configuration)
-- State change notifications (if device has state to share)
+- Sharing state records (if the device has state to share)
 - Discovery response (helpful but not critical)
 - Advanced error recovery
 - Capability implementations (application-specific)
@@ -943,8 +1005,25 @@ Applications can define capability-specific commands using the standard command 
 |--------------|-------------|
 | 0x10 | Status Request |
 | 0x11 | Reset Device |
-| 0x12-0x1F | Reserved |
+| 0x12 | State Sync Request |
+| 0x13-0x1F | Reserved |
 | 0x20-0xFF | Application-Specific Commands |
+
+### Shared State Messages (Base + 4, Base + 5)
+
+| Message | CAN ID | Length | Description |
+|---------|--------|--------|-------------|
+| State Change Notification | Base + 4 | 3-8 bytes | A record of the source, or its withdrawal (no data) |
+| State Change Response | Base + 5 | 4 bytes | Acknowledges one notification, by source and version |
+
+### State Types (Base + 4, byte 2)
+
+| Type | Description |
+|------|-------------|
+| 0x00 | Invalid |
+| 0x01-0x05 | Protocol-defined examples (§4.3) |
+| 0x06-0x0F | Reserved |
+| 0x10-0xFF | Application-specific |
 
 ### Device Status Enumeration (for Status Request response)
 
@@ -1055,4 +1134,41 @@ All devices respond:
   ← t=10ms:  [0x02][0x10][0x42][0x04][0x10][0x00]... (Device 2: VERSION_MISMATCH, v1.0)
   ← t=20ms:  [0x03][0x10][0x42][0x04][0x10][0x00]... (Device 3: VERSION_MISMATCH, v1.0)
   ← t=30ms:  [0x04][0x10][0x42][0x04][0x20][0x00]... (Device 4: VERSION_MISMATCH, v2.0)
+```
+
+### B.6 Shared State
+
+```
+Devices 1, 2 and 3 are ONLINE. Device 2 sets its record of type 0x10 to [0x01][0x00], its 7th change:
+  → Notification (Base + 4): [0x02][0x07][0x10][0x01][0x00]
+  ← Response (Base + 5):     [0x01][0x02][0x07][0x00]           (device 1)
+    Device 3's response is lost
+  → Notification (Base + 4): [0x02][0x07][0x10][0x01][0x00]     (resent after 50 ms)
+  ← Response (Base + 5):     [0x03][0x02][0x07][0x00]           (device 3; every device has it)
+
+Device 2 withdraws the record, its 8th change, and every frame to device 3 is lost:
+  → Notification (Base + 4): [0x02][0x08][0x10]                 (no data: withdrawn)
+  ← Response (Base + 5):     [0x01][0x02][0x08][0x00]           (device 1)
+  → Notification resent after 50, 100 and 200 ms, then given up
+
+Device 2's next heartbeat:
+  → Heartbeat (Base + 1): [0x02][0x00][Uptime][Caps...][0x00]   (no records left, digest 0x00)
+
+Device 3 (the CRC over its copy of type 0x10 is not 0x00):
+  Marks its copies of device 2 stale
+  → Command Request (Base + 2): [0x02][0x12][TxID]              (STATE_SYNC_REQUEST)
+
+Device 2 has no records to replay:
+  ← Command Response (Base + 3): [0x02][0x12][TxID][0x00][0x00] (Success, 0 records)
+
+Device 3, at device 2's next heartbeat (digest 0x00):
+  The CRC over its fresh copies of device 2 (none) is 0x00, so it drops the stale copy
+
+Device 4 goes ONLINE:
+  → Heartbeat (Base + 1): [0x04][0x00][Uptime][Caps...][Digest]
+  → Command Request (Base + 2): [0xFF][0x12][TxID]              (STATE_SYNC_REQUEST to all)
+
+Devices 1, 2 and 3 replay their records, each after its stagger, without a Command Response:
+  ← Notification (Base + 4): [Source][Version][Type][Data...]   (one per record)
+  → Response (Base + 5): [0x04][Source][Version][0x00]          (device 4 acknowledges each)
 ```
