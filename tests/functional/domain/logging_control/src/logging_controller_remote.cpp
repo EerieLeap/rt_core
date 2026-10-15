@@ -142,6 +142,23 @@ ZTEST(logging_controller_remote, test_AWantedStartIsSentAgainWhenALoggingUnitApp
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "so the start that nobody received is sent again");
 }
 
+// The remote role wires the restart monitor: a logging unit that reboots within the heartbeat
+// timeout, with its record in its first heartbeat, goes from logging straight to Stopped, which only
+// the monitor sees.
+ZTEST(logging_controller_remote, test_AQuickRestartOfTheLoggingUnitIsReasserted) {
+    F().Start();
+
+    F().controller->GetControl()->RequestStart();
+    zassert_true(IsStart(F().peer.WaitForBroadcast()), "The start goes out");
+
+    F().peer.ShareStatus({0x01});
+
+    F().peer.Restart({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
+    F().peer.ShareStatus({0x00, 0x00});
+    zassert_true(IsStart(F().peer.WaitForBroadcast()), "The restarted unit lost the start: it is sent again");
+    zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+}
+
 ZTEST(logging_controller_remote, test_WithoutAComServiceInitializeFails) {
     Parts parts;
     const auto configuration_service = parts.configuration_service;

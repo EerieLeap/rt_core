@@ -84,6 +84,8 @@ public:
 
     std::shared_ptr<CdmpDevice> GetDevice() const { return device_; }
     std::shared_ptr<CdmpCommandService> GetCommandService() const { return command_service_; }
+    /** @brief Discovery and the table of other devices: their device events and heartbeats. */
+    std::shared_ptr<CdmpNetworkService> GetNetworkService() const { return network_service_; }
     /** @brief This unit's shared state records and its copies of the others'; kept across Stop() and Start(). */
     std::shared_ptr<CdmpStateService> GetStateService() const { return state_service_; }
     /** @brief The CDMP work queue, shared with the SMP-CAN transport. */

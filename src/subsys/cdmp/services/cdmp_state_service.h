@@ -237,6 +237,8 @@ public:
     /**
      * @brief Copies other units' records of @p state_type, stale ones included, ordered by device ID.
      *
+     * A stale copy is marked (CdmpRemoteState::is_stale): its owner restarted or its digest differed,
+     * and it keeps its last value until the owner sends the record again or a heartbeat digest matches.
      * A span of MAX_REMOTE_RECORDS takes every record. A shorter one takes those of the lowest device
      * IDs and gives no sign of the rest.
      *

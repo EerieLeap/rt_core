@@ -239,24 +239,95 @@ writer.
   [Status on other units](#status-on-other-units)), and `IsActive()` follows it. A start that
   fails on the logging unit leaves the status as it was: the failure is logged on that unit only,
   and the response does not report it.
-- **A wanted start is sent again once.** A start sent while no unit logs is lost: the gauge's
-  switch is turned on before the logging unit has booted, a trigger is already on at boot (a
-  `Level` switch or the ignition), or the logging unit is away, and a switch does not change again.
+- **A wanted start is sent again.** A start sent while no unit logs is lost: the gauge's switch is
+  turned on before the logging unit has booted, a trigger is already on at boot (a `Level` switch
+  or the ignition), or the logging unit is away or rebooting, and a switch does not change again.
   So the control remembers that a start is wanted, from `RequestStart()` until `RequestStop()`, and
-  sends it again when the status goes from inactive `Unavailable` to inactive `Stopped`. It never
-  sends again on any other transition: a stop from the logging unit's shell, or a failure such as
-  `NoSpace`, stands until the switch moves.
+  sends it again on two signals and on no other:
+  - **The status.** It goes from inactive `Unavailable` to inactive `Stopped`: a logging unit
+    appears.
+  - **The restart monitor** (below) reports a logging unit that restarted or joined and shares an
+    inactive `Stopped` status again.
 
-The importer shows that transition in these cases only:
+  A stop from the logging unit's shell, or a failure such as `NoSpace`, stands until the switch
+  moves, except where one of these follows it. Causes that meet in one run of the task send one
+  start.
 
-| Case | Status |
+| Case | What sends it again |
 | --- | --- |
-| A logging unit was away longer than the heartbeat timeout (3 x 3 s) and returns | `Unavailable`, then `Stopped`: sent again. |
-| A logging unit restarts and announces its record after its first heartbeat | `Unavailable`, then `Stopped`: sent again. |
-| This unit's own COM service restarts, as a CAN reconfiguration does, which drops every other unit's record (its own records survive) | `Unavailable`, then `Stopped`: sent again, over a stop made on the logging unit's shell. |
-| A logging unit restarts within the heartbeat timeout and already holds its record in its first heartbeat | From logging straight to `Stopped`: **not** sent again. |
+| A logging unit was away longer than the heartbeat timeout (3 x 3 s) and returns, or joins | The status: `Unavailable`, then `Stopped`. When another unit reports, the status never passes through `Unavailable`, and the monitor sends it once the record is current. |
+| A logging unit restarts and announces its record after its first heartbeat | The status: `Unavailable`, then `Stopped`. When another unit still reports, the monitor sends it once the record is back. |
+| A logging unit restarts within the heartbeat timeout and already holds its record in its first heartbeat | The monitor, once the unit's record is current and `Stopped`: at once when it logged before, and at its next heartbeat (up to 3 s) when it was idle and its record is unchanged. A stop made on its shell before the restart is overridden. |
+| A logging unit restarts while another unit logs | The monitor, as above. The combined status stays active, so no status event follows. |
+| Several logging units restart or join together | The status, for the first unit to be back; the monitor, once for each of the others when its record is current. |
+| A logging unit that had failed (`NoSpace`) restarts | The monitor: it comes back `Stopped`, and the wanted start is sent again. |
+| A logging unit restarts and the monitor first finds its record active (it started by itself) or a failure | Nothing: the monitor consumes the restart. |
+| A logging unit's own COM service restarts (a CAN configuration applied on it) | The monitor, at the unit's first heartbeat after its claim, since its records survive. A stop made on its shell is overridden here too: see below. |
+| This unit's own COM service restarts, as a CAN reconfiguration does, which drops every other unit's record (its own records survive) | The status: `Unavailable`, then `Stopped`, over a stop made on the logging unit's shell. |
 
-The last row is a known limit. A start that the reboot cost stays lost until the switch moves.
+A log writer shares `Stopped` when its exporter is built, before its own triggers, autostart or a
+failed start can say more, so a restarted `rt_daq` gets at most one start, and normally one. That
+start is redundant when its own trigger starts logging, and fails again when what failed before
+fails still. A restart is consumed without a start only when the monitor first finds the unit's
+record already active or a failure, which happens when the writer's own trigger starts it before
+that.
+
+**A COM restart is not told from a reboot.** A logging unit whose COM service restarts claims its ID
+again with its UID, as a reboot does, and CDMP reports both as `RESTARTED`. The record versions
+would tell them apart: a COM restart keeps the unit's versions, and a reboot usually starts them at
+1 again. They do not always: a status record that was not stamped again since boot (the unit shared
+`Stopped` at boot, and nothing changed since, for example after a start that failed, which publishes
+nothing) has version 1 either way. So the monitor reports both, and a stop made on the logging
+unit's shell before a CAN configuration was applied on it is overridden by the wanted start.
+
+**The restart monitor.** `CanbusComLoggingRestartMonitor`
+(`control/canbus_com_logging_restart_monitor.h`) tells the control that a logging unit is back. The
+status cannot: a unit that restarts within the heartbeat timeout keeps its copies, stale, and the
+importer publishes only a change of the combined status. A unit that was idle shows no change at
+all, one that logged goes from active straight to `Stopped`, and with another unit reporting nothing
+passes through `Unavailable`. So the monitor follows the unit on its own `LOGGING_STATUS` copy. The
+control takes it as `ILoggingRestartMonitor`, so tests give it a fake. It registers a device event,
+a heartbeat and a state handler with the COM service (`RegisterDeviceEventHandler()`,
+`RegisterHeartbeatHandler()`, `RegisterStateHandler()`), all on the CDMP work queue.
+
+- **Armed** when a unit joins (`CdmpDeviceEvent::JOINED`) or claims its ID again with its UID
+  (`CdmpDeviceEvent::RESTARTED`), and it is a `LOGGER`, which may share a status, or this unit holds
+  a `LOGGING_STATUS` copy of it: the record is what makes a unit a logging unit, whatever its type.
+  A unit that joined has no copy yet, so its type is all there is to go by. Two claims before the
+  unit is current are one restart. A `LOGGER` that never shares a status stays armed until it leaves
+  the table, which costs a bit. With no copy of another unit, the status passes through
+  `Unavailable` when the unit reports, which the status rule covers; with one, the monitor is the
+  only signal.
+- **Resolved** at the first check that finds the unit's copy current again
+  (`RemoteStateRecord::is_stale` false). A state handler call finds it when the new record changed
+  the copy's value, such as a unit that logged and is `Stopped` now: at once. A record equal to the
+  stale copy renews it without a state handler call, so the unit's next heartbeat finds it, as it
+  does when the copy was confirmed by the unit's digest: at most one heartbeat interval (3 s) after
+  the record. Inactive `Stopped` is reported once. An active status or a failure consumes the
+  restart without a report. What a unit shares before that check is seen only if it changes the
+  value: a unit that started by itself with a record equal to the stale copy, and stopped again
+  before its next heartbeat, is reported, and the wanted start overrides that stop.
+- **Ready.** A current copy means the unit can take the `LOGGING` command: the writer role builds
+  the command handler before the exporter that shares the record. A command that reaches a unit
+  without the handler is dropped, so the monitor never reports on the claim alone.
+- **Forgotten** when the unit leaves the table (`LEFT`). While no unit has a copy at all, the
+  combined status is `Unavailable`, and the status rule sends the start when it returns to
+  `Stopped`. The monitor keeps its units armed through that spell and sends nothing for the
+  records that end it, since the rule's one broadcast reaches every unit that has a copy. The units
+  that have no copy yet stay armed, and are reported when their own records are current: the rule
+  sends once, and a unit that is still booting has no `LOGGING` handler yet. A heartbeat resolves
+  nothing during the spell, since a record can be applied and its heartbeat handled before the state
+  handlers run for it. When a unit that is back shares an active status or a failure, the combined
+  status that ends the spell is not `Stopped`, the rule does not send, and the units that are back
+  and `Stopped` are reported instead. This unit's own COM restart drops every copy and the device
+  table without an event, so it ends in the same way: the units stay armed, and the records that
+  return are covered by the rule.
+- **A stable CDMP UID.** The monitor relies on it (`hwinfo`, the eFuse MAC on the ESP32 units). A
+  unit without a hardware ID gets a random UID per boot, so its reboot is a new unit that claims
+  another ID, not a `RESTARTED`, and the monitor never reports it.
+- **A handler that throws** is caught and logged: a report runs inside the network service's
+  heartbeat round, which would skip the handlers after the monitor's. The monitor's own handlers
+  throw nothing: the network service's loops catch nothing, and the state service's catch and log.
 
 ### The `LOGGING` command
 
@@ -336,7 +407,7 @@ controller brings. The remote role brings none.
 | Trigger handlers | The bus thread of the bound channel (the sensors' bus for a sensor), or the caller of `Publish()`. |
 | The supervisor's task, `RemoteLoggingControl`'s send | The configuration work queue. |
 | Status handlers (supervisor, remote control, exporter) | The bus thread that carries `logging_events`. |
-| `LoggingCommandHandler`, the importer | The CDMP work queue. |
+| `LoggingCommandHandler`, the importer, `CanbusComLoggingRestartMonitor`'s handlers and its report into `RemoteLoggingControl` | The CDMP work queue. |
 
 ### Stored triggers
 
@@ -424,8 +495,9 @@ publishes nothing, so that cleanup is the only `Stopped` that can follow a failu
 **Timing.** A change reaches the other units with one notification, or with a resend within
 350 ms when that is lost, and otherwise with the next heartbeat (3 s) and a replay. A logger that
 disappears (cable, power) leaves the combined status after the heartbeat timeout (9 s) plus up to
-one validation interval (5 s). A logger that reboots keeps its last status until it leaves the
-device table or sends its new record.
+one validation interval (5 s). A logger that reboots keeps its last status, stale, until it leaves
+the device table or sends its new record; `RemoteStateRecord::is_stale` marks such a copy, and the
+[restart monitor](#remote-control) uses it.
 
 **Threading.** No thread is added:
 
@@ -608,7 +680,7 @@ builds, in this order:
 | --- | --- | --- |
 | 1 | The triggers' configuration manager (`config/logging_control_config.cbor`). | Same. |
 | 2 | The test hook, `Initialize(setup)`, may store triggers: before the set exists, so it rebuilds nothing. | Same. |
-| 3 | The logging configuration manager (`config/logging_config.cbor`), `LogWriterService` (initialized), `LogWriterSupervisor` (initialized), then, with a COM service, `LoggingCommandHandler` and the exporter. A failed exporter is logged and not fatal. | `RemoteLoggingControl` (initialized), then the importer, which fails `Initialize()` when the transport refuses it. |
+| 3 | The logging configuration manager (`config/logging_config.cbor`), `LogWriterService` (initialized), `LogWriterSupervisor` (initialized), then, with a COM service, `LoggingCommandHandler` and the exporter. A failed exporter is logged and not fatal. | `CanbusComLoggingRestartMonitor`, then `RemoteLoggingControl` (initialized), then the importer. The monitor and the importer fail `Initialize()` when the COM service refuses a handler. |
 | 4 | The rebuild task. | Same. |
 | 5 | The trigger set, then a replay if any trigger subscribed. | Same. |
 | 6 | The triggers' updated handler. | Same. |
@@ -641,7 +713,8 @@ failed or skipped `Initialize()`.
    withdraws the record, so the other units see `Unavailable`; they may never see the `Stopped`,
    which is published asynchronously.
 4. Destroys the control and what it drives. Remote role: the importer first, then the control,
-   which waits for a send in progress.
+   which waits for a send in progress, clears the restart monitor's handler and drops the monitor,
+   which unregisters from the COM service and waits for a handler in progress.
 
 Destroy it on the thread that built it. It waits for the configuration work queue, the bus threads
 and the CDMP work queue, so it must not run on any of them. On the configuration work queue it logs

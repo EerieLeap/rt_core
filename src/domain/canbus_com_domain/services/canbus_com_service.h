@@ -28,8 +28,12 @@ using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
 using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
 using eerie_leap::subsys::cdmp::services::CdmpService;
 using eerie_leap::subsys::cdmp::services::CdmpCommandResult;
+using eerie_leap::subsys::cdmp::services::CdmpDeviceEvent;
+using eerie_leap::subsys::cdmp::services::CdmpNetworkService;
 using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
 using eerie_leap::subsys::smp::ISmpForwarder;
 using eerie_leap::subsys::smp::ISmpResponseSink;
 using eerie_leap::subsys::smp::SmpPacket;
@@ -78,6 +82,9 @@ public:
     template<concepts::SpanConstructible TRequest>
     using CommandDataRequestWithResponseCallback = std::function<std::optional<CanbusComCommandResultBase>(std::optional<TRequest> request)>;
 
+    using DeviceEventHandler = CdmpNetworkService::DeviceEventHandler;
+    using HeartbeatHandler = CdmpNetworkService::HeartbeatHandler;
+
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
     ~CanbusComService() override;
 
@@ -99,6 +106,35 @@ public:
     int RegisterStateHandler(CanbusComStateType state_type, StateHandler handler) override;
     void UnregisterStateHandler(int handler_id) override;
     size_t GetRemoteStates(CanbusComStateType state_type, std::span<RemoteStateRecord> records) const override;
+
+    /**
+     * @brief Reports other devices joining, restarting and leaving the device table, as
+     * CdmpNetworkService::RegisterDeviceEventHandler() does.
+     *
+     * The handler runs on the CDMP work queue, under the network service's handler lock, so it must
+     * not block, throw, or register or unregister handlers. It stays registered across the restarts
+     * of this node (a CAN reconfiguration), which report no event of their own: they drop the table.
+     * CDMP cannot tell a unit that rebooted from one whose COM service restarted, so both are
+     * CdmpDeviceEvent::RESTARTED.
+     *
+     * @return A handler ID for UnregisterDeviceEventHandler(), or -1 without a CDMP service.
+     */
+    int RegisterDeviceEventHandler(DeviceEventHandler handler);
+    /** @brief Once this returns, the handler is not running and is not called again; not from a handler. */
+    void UnregisterDeviceEventHandler(int handler_id);
+
+    /**
+     * @brief Passes on each heartbeat of a device in the table, after the state service has checked its
+     * digest against the copies of that device's records.
+     *
+     * Runs under the rules of RegisterDeviceEventHandler(). A copy that a matching digest confirms is
+     * current again by the time the handler is called.
+     *
+     * @return A handler ID for UnregisterHeartbeatHandler(), or -1 without a CDMP service.
+     */
+    int RegisterHeartbeatHandler(HeartbeatHandler handler);
+    /** @brief Once this returns, the handler is not running and is not called again; not from a handler. */
+    void UnregisterHeartbeatHandler(int handler_id);
 
     // NOTE: A handler runs on the CDMP work queue and must not block, in both overloads. For a usage
     // example, see LoggingCommandHandler (domain/logging_domain/control/logging_command_handler.cpp),

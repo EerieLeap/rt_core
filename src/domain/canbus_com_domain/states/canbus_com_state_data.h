@@ -11,7 +11,7 @@ namespace eerie_leap::domain::canbus_com_domain::states {
  */
 using CanbusComStateData = eerie_leap::subsys::cdmp::models::CdmpStateData;
 
-/** @brief Another unit's record of one state type: `{device_id, data}`. */
+/** @brief Another unit's record of one state type: `{device_id, data, is_stale}`. */
 using RemoteStateRecord = eerie_leap::subsys::cdmp::models::CdmpRemoteState;
 
 } // namespace eerie_leap::domain::canbus_com_domain::states

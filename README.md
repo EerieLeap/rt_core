@@ -61,3 +61,10 @@ throwing-filter case needs an 8192-byte sensor events publisher stack: at the
 4096 default it skips (it overflowed on `qemu_cortex_a53` while unwinding). The
 `functional.sensor_domain.raised_publisher_stack` scenario runs the suite on
 `qemu_cortex_a53` at 8192.
+
+`functional.logging_control` runs on every board. Off `native_sim`, the restart
+monitor's throwing-handler case (`test_AHandlerThatThrowsDoesNotSkipTheHandlersAfterIt`)
+needs an 8192-byte CDMP work queue stack: at the 4096 default it skips (it
+overflowed on `qemu_cortex_a53`, `qemu_riscv64` and `qemu_malta` while
+unwinding). The `functional.logging_control.raised_cdmp_stack` scenario runs the
+suite at 8192 on every QEMU board.

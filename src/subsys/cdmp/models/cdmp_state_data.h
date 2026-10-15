@@ -46,6 +46,9 @@ public:
 struct CdmpRemoteState {
     uint8_t device_id = CdmpDevice::DEVICE_ID_UNASSIGNED; ///< The unit that owns the record.
     CdmpStateData data;
+    /// Not confirmed since its owner restarted or its digest differed: it keeps its last value until
+    /// the owner sends the record again or a heartbeat digest matches.
+    bool is_stale = false;
 };
 
 } // namespace eerie_leap::subsys::cdmp::models

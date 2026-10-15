@@ -47,6 +47,7 @@
 
 #include "canbus_com_loopback_harness.h"
 #include "logging_control_test_support.h"
+#include "logging_restart_test_support.h"
 
 // The rig of the logging controller suites. Like logging_control_test_support.h, everything has
 // external linkage, so the controller suite shares the one bus and configuration queue with the other
@@ -89,7 +90,6 @@ using eerie_leap::configuration::services::CborConfigurationService;
 
 inline constexpr uint8_t LOGGING_CODE = std::to_underlying(CanbusComCommandCode::LOGGING);
 inline constexpr uint8_t LOGGING_STATUS_CODE = std::to_underlying(CanbusComStateType::LOGGING_STATUS);
-inline constexpr uint8_t BROADCAST = CdmpDevice::DEVICE_ID_BROADCAST;
 
 inline constexpr const char* kControllerToolId = "rt_core_controller";
 
@@ -475,9 +475,21 @@ public:
         next_version_++;
     }
 
+    // The peer reboots: its ID claim again with its UID, which the unit reports as a restart, and its
+    // first heartbeat with the digest of @p records. Its next record is version 1. Returns once the
+    // unit has taken both; no LOGGING broadcast may come meanwhile, since nothing is sent before the
+    // restarted unit can accept it. See logging_restart_test::WaitForRestartTaken() for when the
+    // unit's replay request is @p is_sync_request_due.
+    void Restart(std::initializer_list<Record> records, bool is_sync_request_due) {
+        logging_restart_test::SendRestart(harness_, PEER_ID, PEER_UID, records);
+        next_version_ = 1;
+        zassert_false(logging_restart_test::WaitForRestartTaken(harness_, PEER_ID, is_sync_request_due),
+            "Nothing is sent before the restarted unit can accept it");
+    }
+
     // The unit's next LOGGING broadcast (from its remote control), or nothing in time.
     std::optional<RecordedFrame> WaitForBroadcast(int timeout_ms = k_wait_ms) {
-        return harness_.bus.Wait(COMMAND, IsLoggingBroadcast, timeout_ms);
+        return harness_.bus.Wait(COMMAND, logging_restart_test::IsLoggingBroadcastFrame, timeout_ms);
     }
 
     // The unit's next notification of its LOGGING_STATUS record that carries @p data, skipping
@@ -523,11 +535,6 @@ public:
             return std::nullopt;
 
         return CdmpCommandResponseMessage::FromCanFrame(frame->data).result_code;
-    }
-
-    // A LOGGING command on the bus: the broadcast, the code, the transaction, then start or stop.
-    static bool IsLoggingBroadcast(const Bytes& frame) {
-        return frame.size() == 4 && frame[0] == BROADCAST && frame[1] == LOGGING_CODE;
     }
 };
 

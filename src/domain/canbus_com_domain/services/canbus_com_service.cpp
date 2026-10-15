@@ -142,6 +142,34 @@ size_t CanbusComService::GetRemoteStates(CanbusComStateType state_type, std::spa
     return cdmp_service_->GetStateService()->GetRemoteStates(std::to_underlying(state_type), records);
 }
 
+int CanbusComService::RegisterDeviceEventHandler(DeviceEventHandler handler) {
+    if(!cdmp_service_)
+        return -1;
+
+    return cdmp_service_->GetNetworkService()->RegisterDeviceEventHandler(std::move(handler));
+}
+
+void CanbusComService::UnregisterDeviceEventHandler(int handler_id) {
+    if(!cdmp_service_)
+        return;
+
+    cdmp_service_->GetNetworkService()->UnregisterDeviceEventHandler(handler_id);
+}
+
+int CanbusComService::RegisterHeartbeatHandler(HeartbeatHandler handler) {
+    if(!cdmp_service_)
+        return -1;
+
+    return cdmp_service_->GetNetworkService()->RegisterHeartbeatHandler(std::move(handler));
+}
+
+void CanbusComService::UnregisterHeartbeatHandler(int handler_id) {
+    if(!cdmp_service_)
+        return;
+
+    cdmp_service_->GetNetworkService()->UnregisterHeartbeatHandler(handler_id);
+}
+
 void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {
     if(!cdmp_service_)
         return;

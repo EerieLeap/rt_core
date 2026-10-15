@@ -23,6 +23,7 @@
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #else
 #include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
+#include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
 #endif
 
 #include "logging_controller.h"
@@ -38,6 +39,7 @@ using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 #ifndef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
+using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
 #endif
 
 namespace config_services = eerie_leap::configuration::services;
@@ -303,9 +305,13 @@ std::shared_ptr<IService> LoggingController::GetDependentService() const {
 #else
 
 bool LoggingController::BuildRole() {
+    // The control owns the monitor. The monitor's constructor throws when the COM service refuses a
+    // handler, which fails Initialize(): the control would miss a restart that the status does not
+    // show.
     remote_logging_control_ = std::make_shared<RemoteLoggingControl>(
         config_work_queue_thread_,
-        std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_));
+        std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
+        std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_));
     if(!remote_logging_control_->Initialize()) {
         LOG_ERR("Failed to initialize the remote logging control.");
         return false;
@@ -452,7 +458,9 @@ void LoggingController::Teardown() {
     // 4. No more statuses; one already queued reaches the control's detached guard or its live handler.
     logging_status_importer_.reset();
 
-    // 5. Waits for a send in progress. The CDMP transaction's callback holds only a flag.
+    // 5. Waits for a send in progress. The CDMP transaction's callback holds only a flag. The control
+    //    clears the restart monitor's handler, and the monitor, which it owns, unregisters from the
+    //    COM service and waits for a handler in progress: not on the CDMP work queue.
     logging_control_.reset();
     remote_logging_control_.reset();
 #endif

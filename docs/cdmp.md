@@ -23,10 +23,10 @@ Code: `src/subsys/cdmp/` (protocol), `src/subsys/smp/can/` (SMP over CAN),
 starts the sub-services and a work queue (`EERIE_LEAP_CDMP_WORK_QUEUE_*`) they and the SMP
 transport run on:
 
-- **Network service**: discovery requests and responses, ID claim and conflict handling, the
-  table of other devices (updated from heartbeats, validated every 5 s, a device is dropped after
-  3 missed heartbeats). Exposed read-only as `ICdmpNetworkInfo` for the SMP `device` and
-  `network` groups.
+- **Network service** (`CdmpNetworkService`, `GetNetworkService()`): discovery requests and
+  responses, ID claim and conflict handling, the table of other devices (updated from heartbeats,
+  validated every 5 s, a device is dropped after 3 missed heartbeats). Exposed read-only as
+  `ICdmpNetworkInfo` for the SMP `device` and `network` groups.
   - Every unit records an ID claim as pending and adds the claimant on its first heartbeat, so a
     unit that does not hold the lowest ID also learns later joiners. A pending claim expires after
     the heartbeat timeout. Answering claims stays with the lowest ID and the claimed ID's owner.
@@ -77,6 +77,14 @@ and the SMP-CAN transport on the channel named by the stored CAN configuration's
   `VERSION_MISMATCH` (so a unit with another CDMP version can still be managed) and unbinds it
   otherwise;
 - implements `ISmpForwarder`, which the BLE access point uses to reach other units;
+- passes on the network service's device events and heartbeats (`RegisterDeviceEventHandler()`,
+  `RegisterHeartbeatHandler()`): other units joining, restarting and leaving the table, and each
+  heartbeat of a unit in it, after the state service has checked the unit's digest. The handlers run
+  on the CDMP work queue, must not block, throw, or register or unregister handlers, and are kept
+  across restarts of the node, which report no event of their own: they drop the table. A unit
+  whose COM service restarts claims its ID again just as one that rebooted does, and CDMP reports
+  both as `RESTARTED`. `CanbusComLoggingRestartMonitor` uses them (see
+  [logging.md](logging.md#remote-control));
 - implements `INetworkStateTransport`, which shares state records with the other units (see
   [Shared state](#shared-state)).
 
@@ -141,9 +149,12 @@ never interprets them.
 - A unit that enters `ONLINE` sends all its records and broadcasts `STATE_SYNC_REQUEST`.
 - Copies follow the device table. When a unit claims its ID again (it restarted), its copies turn
   stale: they keep their value, and its next record of each type replaces them whatever its
-  version. A unit that leaves the table takes its copies along, and a unit that leaves `ONLINE`
-  drops every copy but keeps its own records. Notifications from a unit that is not in the table
-  yet are not acknowledged, so the sender resends them once its first heartbeat has added it.
+  version. A copy is stale until its owner sends the record again or a heartbeat digest matches,
+  and a digest that differs marks it too. A record renewed with its old value raises no state
+  handler, so `GetRemoteStates()` marks stale copies (`is_stale`) for code that needs to know. A
+  unit that leaves the table takes its copies along, and a unit that leaves `ONLINE` drops every
+  copy but keeps its own records. Notifications from a unit that is not in the table yet are not
+  acknowledged, so the sender resends them once its first heartbeat has added it.
 - A unit keeps up to `EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS` records of its own and
   `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` copies, in fixed arrays. Copies that do not fit are
   dropped with one warning, and their source's digest is not checked until room frees up.
@@ -161,7 +172,7 @@ renumber or reuse them. A state type implements `ICanbusComState` (`GetStateType
 and is constructible from a record's data bytes, which the `CanbusComState` concept checks: the
 counterpart of `ICanbusComCommand`. Its decoder ignores trailing bytes it does not know and gives
 missing trailing fields their defaults. `CanbusComStateData` holds the data bytes without
-allocation, and `RemoteStateRecord` is another unit's record, `{device_id, data}`.
+allocation, and `RemoteStateRecord` is another unit's record, `{device_id, data, is_stale}`.
 
 **`INetworkStateTransport`.** `CanbusComService` shares records through this interface
 (`services/i_network_state_transport.h` in the COM domain), so that code built on shared state can
@@ -173,7 +184,7 @@ be tested with a fake:
 | `ClearLocalState(type)` | Withdraws this unit's record of the type. |
 | `RegisterStateHandler(type, handler)` | Reports that other units' records of the type changed: once right after registration, so that a late subscriber catches up, then whenever one is added, changed or removed, which includes every copy being dropped when this unit leaves `ONLINE`. Returns an ID. |
 | `UnregisterStateHandler(id)` | Once it returns, the handler is not running and is not called again. |
-| `GetRemoteStates(type, records)` | Copies the other units' records of the type, ordered by device ID, into a caller-owned span, and returns the number copied. A span of `INetworkStateTransport::MAX_REMOTE_RECORDS` (`EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS`) takes every unit's record; a shorter one takes those of the lowest IDs and gives no sign of the rest. |
+| `GetRemoteStates(type, records)` | Copies the other units' records of the type, stale copies included and marked (`is_stale`), ordered by device ID, into a caller-owned span, and returns the number copied. A span of `INetworkStateTransport::MAX_REMOTE_RECORDS` (`EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS`) takes every unit's record; a shorter one takes those of the lowest IDs and gives no sign of the rest. |
 
 ```cpp
 // A unit that logs shares its status...
@@ -201,8 +212,8 @@ reconfiguration.
   Sending is handed over to the CDMP work queue.
 - Frames, resends and handlers run on the CDMP work queue, and receiving allocates nothing. A
   handler must not block, so it reads the records and publishes with `PublishAsync()`; it must not
-  register or unregister handlers. A buffer of `MAX_REMOTE_RECORDS` records takes 7 bytes each on
-  the work queue's stack (224 bytes by default); with a much larger capacity, keep it as a member
+  register or unregister handlers. A buffer of `MAX_REMOTE_RECORDS` records takes 8 bytes each on
+  the work queue's stack (256 bytes by default); with a much larger capacity, keep it as a member
   that only the handler uses.
 - `GetRemoteStates()` copies the records under the state service's lock, so the copy is one
   instant's records, and a handler that reads it sees at least the change it is called for.

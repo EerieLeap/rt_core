@@ -3,7 +3,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,6 +28,7 @@
 
 #include "domain/logging_domain/control/i_logging_command_sender.h"
 #include "domain/logging_domain/control/i_logging_control.h"
+#include "domain/logging_domain/control/i_logging_restart_monitor.h"
 #include "domain/logging_domain/control/models/logging_trigger.h"
 #include "domain/logging_domain/event_bus/logging_event_type.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
@@ -56,6 +59,7 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
+using eerie_leap::domain::logging_domain::control::ILoggingRestartMonitor;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
@@ -385,6 +389,65 @@ public:
         }
 
         return true;
+    }
+};
+
+// A restart monitor that reports when a case says so. Report() runs the handler on the caller's
+// thread, as the CDMP work queue does for the real one. CopyHandler() is "a report already under
+// way": it holds the handler as the monitor's report would, so a case can call it after the control
+// is gone. FailNextSet() makes the next non-null SetRestartHandler() throw std::bad_alloc, after it
+// ran the hook of OnSet(), which stands for whatever happens on other threads meanwhile.
+class FakeRestartMonitor final : public ILoggingRestartMonitor {
+private:
+    struct Context {
+        k_mutex lock;
+        std::shared_ptr<const RestartHandler> handler;
+        std::function<void()> on_set;
+        std::atomic<bool> is_failing = false;
+
+        Context() {
+            k_mutex_init(&lock);
+        }
+    };
+
+    std::shared_ptr<Context> context_ = std::make_shared<Context>();
+
+public:
+    void SetRestartHandler(RestartHandler handler) override {
+        if(handler && context_->on_set)
+            context_->on_set();
+
+        if(handler && context_->is_failing.exchange(false))
+            throw std::bad_alloc();
+
+        auto slot = handler ? std::make_shared<const RestartHandler>(std::move(handler)) : nullptr;
+
+        ScopedMutex guard(context_->lock);
+        context_->handler = std::move(slot);
+    }
+
+    void FailNextSet() { context_->is_failing = true; }
+
+    // Runs before every non-null SetRestartHandler(), on its caller's thread. Null removes it.
+    void OnSet(std::function<void()> hook) { context_->on_set = std::move(hook); }
+
+    [[nodiscard]] bool HasHandler() const {
+        ScopedMutex guard(context_->lock);
+
+        return context_->handler != nullptr;
+    }
+
+    [[nodiscard]] std::shared_ptr<const RestartHandler> CopyHandler() const {
+        ScopedMutex guard(context_->lock);
+
+        return context_->handler;
+    }
+
+    // A logging unit restarted and is idle: runs the handler, if there is one.
+    void Report(uint8_t device_id) const {
+        const auto handler = CopyHandler();
+        if(handler != nullptr)
+            (*handler)(device_id);
     }
 };
 

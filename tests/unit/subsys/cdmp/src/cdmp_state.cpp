@@ -588,6 +588,40 @@ ZTEST(cdmp_state, test_matching_digest_clears_stale_marks) {
     zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}), "Fresh again, so an older version is ignored");
 }
 
+// The mark is what a consumer of the copies cannot see otherwise: a record renewed with its old value
+// raises no state handler, so only the mark tells that the unit restarted and is current again.
+ZTEST(cdmp_state, test_remote_states_mark_stale_copies) {
+    StateFixture fixture;
+    fixture.GoOnline();
+    fixture.AddPeer(PEER_ID, PEER_UID);
+
+    fixture.Receive(PEER_ID, 5, TYPE_A, {0x01});
+    zassert_false(fixture.Remote(TYPE_A)[0].is_stale, "A record just received is current");
+
+    fixture.ClaimAgain(PEER_ID, PEER_UID);
+    auto remote = fixture.Remote(TYPE_A);
+    zassert_equal(remote.size(), 1);
+    zassert_true(remote[0].is_stale, "The restart marks it");
+    zassert_true(remote[0].data == CdmpStateData(Bytes{0x01}), "and leaves its value");
+
+    fixture.Heartbeat(PEER_ID, Digest({{TYPE_A, 5, {0x01}}}));
+    zassert_false(fixture.Remote(TYPE_A)[0].is_stale, "A matching digest confirms the copy");
+
+    fixture.ClaimAgain(PEER_ID, PEER_UID);
+    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    remote = fixture.Remote(TYPE_A);
+    zassert_false(remote[0].is_stale, "The same value sent again renews it");
+    zassert_true(remote[0].data == CdmpStateData(Bytes{0x01}));
+
+    fixture.Heartbeat(PEER_ID, Digest({{TYPE_A, 7, {0x09}}}));
+    zassert_true(fixture.Remote(TYPE_A)[0].is_stale, "A digest that differs marks it");
+
+    fixture.Receive(PEER_ID, 2, TYPE_A, {0x02});
+    remote = fixture.Remote(TYPE_A);
+    zassert_false(remote[0].is_stale, "and the next record renews it");
+    zassert_true(remote[0].data == CdmpStateData(Bytes{0x02}));
+}
+
 ZTEST(cdmp_state, test_digest_mismatch_marks_stale_and_requests_one_sync_per_interval) {
     StateFixture fixture;
     fixture.GoOnline();

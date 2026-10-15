@@ -16,14 +16,15 @@ namespace {
 
 using Starts = std::vector<bool>;
 
-// The control under test on the binary's configuration queue, with a fake in place of the COM service.
+// The control under test on the binary's configuration queue, with fakes in place of the COM service.
 struct Fixture {
     std::shared_ptr<WorkQueueThread> queue = TestConfigQueue();
     std::shared_ptr<FakeCommandSender> sender = std::make_shared<FakeCommandSender>();
+    std::shared_ptr<FakeRestartMonitor> monitor = std::make_shared<FakeRestartMonitor>();
     std::unique_ptr<RemoteLoggingControl> control;
 
     void Build() {
-        control = std::make_unique<RemoteLoggingControl>(queue, sender);
+        control = std::make_unique<RemoteLoggingControl>(queue, sender, monitor);
         zassert_true(control->Initialize(), "The control did not initialize.");
     }
 
@@ -251,6 +252,207 @@ ZTEST(remote_logging_control, test_IsActiveFollowsTheStatus) {
 
     PublishStatus(false, LoggingStatusReason::Stopped);
     zassert_false(F().control->IsActive());
+}
+
+// The restart monitor's report, from the CDMP work queue in the real wiring: the logging unit
+// restarted and shares an idle status again.
+ZTEST(remote_logging_control, test_ARestartedLoggingUnitGetsTheWantedStartAgain) {
+    F().Build();
+
+    F().control->RequestStart();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}));
+
+    F().monitor->Report(1);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true}), "The restarted unit lost the start: it is sent again");
+
+    const auto sends = F().sender->Sends();
+    zassert_equal(sends[1].thread, QueueThread(*F().queue), "from the configuration work queue");
+    zassert_not_equal(sends[1].thread, k_current_get(), "and not on the reporting thread");
+}
+
+ZTEST(remote_logging_control, test_ARestartWithoutAWantedStartSendsNothing) {
+    F().Build();
+
+    F().monitor->Report(1);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0, "Nothing was wanted");
+
+    F().control->RequestStart();
+    F().Flush();
+    F().control->RequestStop();
+    F().Flush();
+    F().monitor->Report(1);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, false}), "A stop ends what was wanted");
+}
+
+ZTEST(remote_logging_control, test_EachRestartIsReassertedOnce) {
+    F().Build();
+
+    F().control->RequestStart();
+    F().Flush();
+
+    F().monitor->Report(1);
+    F().Flush();
+    F().monitor->Report(1);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true, true}), "Each restart is one re-assertion");
+
+    // Reports taken in one run, whichever units they name, send one start.
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    F().monitor->Report(1);
+    F().monitor->Report(3);
+    Gate().Open();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true, true, true}), "Two reports before the task runs: one start");
+}
+
+// A request and a restart taken in one run: the request's send is the re-assertion.
+ZTEST(remote_logging_control, test_ARestartInTheRunOfARequestIsThatRequest) {
+    F().Build();
+
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    F().control->RequestStart();
+    F().monitor->Report(1);
+    Gate().Open();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "One start for the request and the restart");
+
+    // A stop requested in the run that sees the restart is the only thing sent.
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    F().monitor->Report(1);
+    F().control->RequestStop();
+    Gate().Open();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, false}), "The stop is sent and no start follows it");
+}
+
+// Both signals for one cause, as a restarted unit that announces its record late produces when
+// another unit still reports: one start.
+ZTEST(remote_logging_control, test_ARestartAndAnAppearanceInOneRunSendOneStart) {
+    F().Build();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}));
+
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().monitor->Report(1);
+    Gate().Open();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true}), "One start for the appearance and the restart");
+}
+
+ZTEST(remote_logging_control, test_TheRestartHandlerIsSetByInitializeAndClearedOnDestruction) {
+    F().control = std::make_unique<RemoteLoggingControl>(F().queue, F().sender, F().monitor);
+    zassert_false(F().monitor->HasHandler(), "Nothing listens before Initialize()");
+    zassert_true(F().control->Initialize());
+    zassert_true(F().monitor->HasHandler(), "Initialize() sets the handler");
+
+    F().control.reset();
+    zassert_false(F().monitor->HasHandler(), "and the destructor clears it");
+
+    // A control that does not initialize leaves no handler either.
+    const auto idle_queue = std::make_shared<WorkQueueThread>("idle_queue", 2048, 5);
+    auto failed = std::make_unique<RemoteLoggingControl>(idle_queue, F().sender, F().monitor);
+    zassert_false(failed->Initialize(), "Initialize() must fail without a running queue");
+    zassert_false(F().monitor->HasHandler());
+    failed.reset();
+    zassert_false(F().monitor->HasHandler());
+}
+
+// A report the monitor had already copied when the control went: it reaches a detached guard.
+ZTEST(remote_logging_control, test_ARestartReportInFlightDuringDestructionDoesNothing) {
+    F().Build();
+
+    F().control->RequestStart();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}));
+
+    const auto handler = F().monitor->CopyHandler();
+    zassert_not_null(handler.get(), "The control set its handler");
+
+    F().control.reset();
+
+    (*handler)(1);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "A detached handler sends nothing");
+}
+
+// The monitor allocates when it takes the handler, so it can refuse. Nothing is left behind, and
+// the control can initialize again. The status subscription is live meanwhile, so what a status
+// does before the refusal is part of "nothing".
+ZTEST(remote_logging_control, test_AMonitorThatCannotTakeItsHandlerFailsInitialize) {
+    F().control = std::make_unique<RemoteLoggingControl>(F().queue, F().sender, F().monitor);
+
+    // A logging unit logs while the control initializes.
+    F().monitor->FailNextSet();
+    F().monitor->OnSet([] { PublishStatus(true); });
+    zassert_false(F().control->Initialize(), "Initialize() must fail when the monitor refuses");
+    zassert_false(F().monitor->HasHandler());
+    zassert_false(F().control->IsActive(), "what the failed attempt saw is forgotten");
+
+    // No logging unit is online meanwhile.
+    F().monitor->FailNextSet();
+    F().monitor->OnSet([] { PublishStatus(false, LoggingStatusReason::Unavailable); });
+    zassert_false(F().control->Initialize());
+    F().monitor->OnSet(nullptr);
+
+    // No subscription is left to see a status, and no task to send from.
+    PublishStatus(true);
+    zassert_false(F().control->IsActive(), "The status subscription was withdrawn");
+    F().control->RequestStart();
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0, "A control that is not initialized sends nothing");
+
+    zassert_true(F().control->Initialize(), "A later attempt starts clean");
+    F().control->RequestStart();
+    F().Flush();
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "The Unavailable of the failed attempt is forgotten: no predecessor");
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true}), "and it sees the status");
+
+    F().monitor->Report(1);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true, true}), "and the restarts");
+}
+
+// A logging unit appears while the monitor refuses its handler: the status handler schedules the task,
+// and a queue held by another job keeps that run pending. The failed Initialize() cancels the run
+// before the task goes, because the queue still lists the work item inside the dropped task, and the
+// next Initialize() makes a new task over it. The case pins that sequence. Without the cancel it still
+// passes on a build without a sanitizer: the dropped task still answers, and the flush job relinks
+// the queue's list.
+ZTEST(remote_logging_control, test_AFailedInitializeCancelsTheRunItScheduled) {
+    F().control = std::make_unique<RemoteLoggingControl>(F().queue, F().sender, F().monitor);
+
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    F().monitor->FailNextSet();
+    F().monitor->OnSet([] {
+        PublishStatus(false, LoggingStatusReason::Unavailable);
+        PublishStatus(false, LoggingStatusReason::Stopped);
+    });
+    zassert_false(F().control->Initialize(), "Initialize() must fail when the monitor refuses");
+    F().monitor->OnSet(nullptr);
+
+    // The queue is still held, so the run of the task that was dropped is not over.
+    zassert_true(F().control->Initialize(), "A later attempt succeeds");
+    F().control->RequestStart();
+
+    Gate().Open();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "The request is sent once, and the dropped run left nothing behind");
 }
 
 ZTEST(remote_logging_control, test_ARequestBeforeInitializeSendsNothing) {

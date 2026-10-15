@@ -36,7 +36,7 @@ using eerie_leap::subsys::cdmp::models::CdmpIdClaimRequestMessage;
 /** @brief A change in the table of other devices. */
 enum class CdmpDeviceEvent : uint8_t {
     JOINED,    ///< Added to the table: a discovery response, or the first heartbeat after its ID claim.
-    RESTARTED, ///< Claimed its ID again with the same UID, so it rebooted. It stays in the table.
+    RESTARTED, ///< Claimed its ID again with its UID: it rebooted, or its COM service restarted. It stays in the table.
     LEFT,      ///< Removed from the table, normally after the heartbeat timeout.
 };
 

@@ -23,9 +23,11 @@ LOG_MODULE_REGISTER(remote_logging_control_logger);
 
 RemoteLoggingControl::RemoteLoggingControl(
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
-    std::shared_ptr<ILoggingCommandSender> command_sender)
+    std::shared_ptr<ILoggingCommandSender> command_sender,
+    std::shared_ptr<ILoggingRestartMonitor> restart_monitor)
         : config_work_queue_thread_(std::move(config_work_queue_thread)),
         command_sender_(std::move(command_sender)),
+        restart_monitor_(std::move(restart_monitor)),
         guard_(std::make_shared<DispatchGuard>(this)) {
 
     if(config_work_queue_thread_ == nullptr || command_sender_ == nullptr)
@@ -33,9 +35,14 @@ RemoteLoggingControl::RemoteLoggingControl(
 }
 
 RemoteLoggingControl::~RemoteLoggingControl() {
-    // A status the channel already handed to a bus thread becomes a no-op, and one in its body is
-    // waited for; neither reschedules the task afterwards.
+    // A status the channel already handed to a bus thread, or a restart report the monitor already
+    // copied, becomes a no-op, and one in its body is waited for; neither reschedules the task
+    // afterwards.
     guard_->Detach();
+
+    // Nothing is set after a failed Initialize(), and removing a handler does not throw.
+    if(restart_monitor_ != nullptr)
+        restart_monitor_->SetRestartHandler(nullptr);
 
     status_subscription_.reset();
 
@@ -82,6 +89,34 @@ bool RemoteLoggingControl::Initialize() {
         task_.reset();
 
         return false;
+    }
+
+    // Last: nothing can fail after it. Setting the handler allocates, so it can throw.
+    if(restart_monitor_ != nullptr) {
+        try {
+            restart_monitor_->SetRestartHandler([guard = guard_, this](uint8_t device_id) {
+                guard->Dispatch([&] { OnLoggingUnitRestarted(device_id); });
+            });
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to listen for restarts of the logging units: %s", e.what());
+
+            // The subscription is live, so a status may be on its way to it: Detach() waits for one
+            // in its body and turns the rest into no-ops. One that went before may have scheduled the
+            // task (Unavailable, then Stopped), so it is cancelled before it goes: a queued run would
+            // otherwise outlive it. Nothing schedules it any more, and no request reaches a control
+            // that is not initialized. The guard is replaced, so that a later Initialize() starts with
+            // a live one and a clean state.
+            guard_->Detach();
+            status_subscription_.reset();
+            task_->Cancel();
+            task_.reset();
+            guard_ = std::make_shared<DispatchGuard>(this);
+            is_active_ = false;
+            is_unavailable_ = false;
+            is_reassert_due_ = false;
+
+            return false;
+        }
     }
 
     is_initialized_ = true;
@@ -149,14 +184,24 @@ void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMess
     }
 
     // Exactly this transition: no logging unit was reporting, and now one does and is idle. The first
-    // status has no predecessor, and active -> Stopped or a failure -> Stopped is the unit's own
-    // doing, which stands.
+    // status has no predecessor. Active -> Stopped or a failure -> Stopped is the unit's own doing,
+    // which stands, unless the unit restarted: that is the restart monitor's case, and it reports it
+    // by OnLoggingUnitRestarted().
     if(!is_active && reason == LoggingStatusReason::Stopped && is_unavailable_) {
         is_reassert_due_ = true;
         task_->Reschedule(K_NO_WAIT);
     }
 
     is_unavailable_ = !is_active && reason == LoggingStatusReason::Unavailable;
+}
+
+void RemoteLoggingControl::OnLoggingUnitRestarted(uint8_t device_id) {
+    LOG_DBG("Logging unit %u restarted and is idle.", static_cast<unsigned>(device_id));
+
+    // The same flag as the status rule: a send already due covers it, nothing wanted sends nothing,
+    // and one run sends one start for any number of reports.
+    is_reassert_due_ = true;
+    task_->Reschedule(K_NO_WAIT);
 }
 
 } // namespace eerie_leap::domain::logging_domain::control

@@ -12,6 +12,14 @@ common:
 tests:
   # The remote role, as the gauge builds it: logging_controller_remote.cpp.
   functional.logging_control: {}
+  # The suite with a raised CDMP work queue stack, for the restart monitor's throwing handler case:
+  # it unwinds on that queue, which overflowed the 4096 B default on the 64 bit QEMU targets and on
+  # MIPS. Below 8192 the case runs only on native_sim, which does not enforce thread stacks.
+  functional.logging_control.raised_cdmp_stack:
+    platform_exclude:
+      - native_sim
+    extra_configs:
+      - CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE=8192
   # The writer role, as rt_daq builds it: the logging domain next to the controller, so rt_core's
   # CMakeLists.txt globs control/ twice and de-duplicates it. logging_controller_writer.cpp replaces
   # logging_controller_remote.cpp, and the other cases run where the domain and the controller both

@@ -606,7 +606,7 @@ size_t CdmpStateService::GetRemoteStates(uint8_t state_type, std::span<CdmpRemot
             break;
 
         if(record.state_type == state_type)
-            states[count++] = {.device_id = record.source, .data = record.data};
+            states[count++] = {.device_id = record.source, .data = record.data, .is_stale = record.is_stale};
     }
 
     return count;

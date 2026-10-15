@@ -73,7 +73,8 @@ public:
      * @brief Copies other units' records of @p state_type, ordered by device ID, from any thread.
      *
      * The copy is taken at one instant, so a handler that reads it sees at least the change it is
-     * called for. A unit that is restarting keeps its records until it sends new ones.
+     * called for. A unit that is restarting keeps its records until it sends new ones, and a record
+     * of it that its owner has not confirmed since is marked `is_stale`.
      *
      * A span shorter than MAX_REMOTE_RECORDS takes the records of the lowest device IDs and gives no
      * sign of the rest, so code that combines every unit's record passes one of MAX_REMOTE_RECORDS.
