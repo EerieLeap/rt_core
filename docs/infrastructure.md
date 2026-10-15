@@ -112,7 +112,7 @@ Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `
 `Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack; published by
 `SensorEventsPublisher`, see [sensors.md](sensors.md#sensor-events)) and `logging_events`
 (`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued
-events, on `LoggingEventBus` with a 4 KiB stack when the application creates it; see
+events, on the bus the composition root registers it with; see
 [logging.md](logging.md#status-events-and-failures), and
 [logging.md](logging.md#status-on-other-units) for the status of other units on it).
 
@@ -146,7 +146,7 @@ ones.
 | CAN RX bottom half (per bus) | highest, cooperative | 2048 | fixed; give it a MetaIRQ level with `CONFIG_NUM_METAIRQ_PRIORITIES` |
 | SD card monitor | 2 | `EERIE_LEAP_FS_SD_THREAD_STACK_SIZE` | fixed |
 | CDMP service thread and work queue | 5 | 4096 | `EERIE_LEAP_CDMP_*` |
-| Configuration work queue | application | application | the application creates it (6144 / 5 in rt_daq) |
+| Configuration work queue | application | application | the application creates it (8192 / 5 in rt_daq); log writer starts and stops run on it ([logging.md](logging.md#supervision)) |
 | Sensor processing | 6 | 8192 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_*` (rt_daq uses 5) |
 | Sensor events publisher | 6 | 4096 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_*` |
 | Calibration sampling | 6 | 4096 | fixed |

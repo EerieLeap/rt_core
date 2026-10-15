@@ -16,4 +16,24 @@ enum class LoggingStatusReason : std::uint32_t {
     Unavailable       // Only imported: no unit reports a status (no logger is online, or this unit is not).
 };
 
+// The reason as log and shell text. No default case, so a new value is a -Wswitch warning until it
+// is named here; "unknown" is for a value this build does not know, which a newer unit's record
+// can carry.
+constexpr const char* GetReasonName(LoggingStatusReason reason) {
+    switch(reason) {
+        case LoggingStatusReason::Stopped:
+            return "stopped";
+        case LoggingStatusReason::WriteFailed:
+            return "write failed";
+        case LoggingStatusReason::NoSpace:
+            return "no space";
+        case LoggingStatusReason::RotationFailed:
+            return "rotation failed";
+        case LoggingStatusReason::Unavailable:
+            return "unavailable";
+    }
+
+    return "unknown";
+}
+
 } // namespace eerie_leap::domain::logging_domain::event_bus

@@ -10,6 +10,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -19,6 +20,7 @@
 
 #include "subsys/canbus/can_frame.h"
 #include "subsys/device_tree/dt_fs.h"
+#include "subsys/event_bus/event_bus.h"
 #include "subsys/event_bus/event_channel.h"
 #include "subsys/fs/services/fs_service.h"
 #include "subsys/threading/scoped_mutex.h"
@@ -29,21 +31,24 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
+#include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 
+#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
-#include "domain/logging_domain/event_bus/logging_event_bus.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "domain/logging_domain/loggers/logger_metadata.h"
 #include "domain/logging_domain/loggers/mdf4_logger_sensor_reading.h"
 #include "domain/logging_domain/services/log_writer_service.h"
+#include "domain/logging_domain/services/log_writer_supervisor.h"
 
-// The log writer wired the way rt_daq's LoggingController wires it, over a formatted FAT volume
-// standing in for the SD card. Without sensors the files it produces hold a header and nothing else.
+// The log writer over a formatted FAT volume standing in for the SD card, supervised by the
+// LogWriterSupervisor that ships. Without sensors the files it produces hold a header and nothing
+// else.
 namespace logging_test_support {
 
 using eerie_memory::make_unique_pmr;
@@ -53,14 +58,14 @@ using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
+using eerie_leap::subsys::event_bus::EventBus;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::subsys::threading::WorkQueueTask;
-using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::BootElapsedTimeProvider;
 using eerie_leap::subsys::time::RtcProvider;
 using eerie_leap::subsys::time::TimeService;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::models::ReadingSource;
 using eerie_leap::domain::sensor_domain::models::ReadingError;
 using eerie_leap::domain::sensor_domain::models::ReadingStatus;
@@ -70,7 +75,6 @@ using eerie_leap::domain::sensor_domain::models::SensorType;
 using eerie_leap::domain::sensor_domain::models::sources::CanbusSource;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
-using eerie_leap::domain::logging_domain::event_bus::LoggingEventBus;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
@@ -81,6 +85,7 @@ using eerie_leap::domain::logging_domain::loggers::ILogger;
 using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
 using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
 using eerie_leap::domain::logging_domain::services::LogWriterService;
+using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
 
 // MDF layout the tests read back: identifier(8) at 0, ID block 64 bytes, then ##XX blocks whose
 // length sits 8 bytes into their header.
@@ -183,6 +188,11 @@ inline bool IsUnfinalized(const std::vector<uint8_t>& content) {
 
 inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view text) {
     return std::search(content.begin(), content.end(), text.begin(), text.end()) != content.end();
+}
+
+// A property of the header comment, as the logger writes LoggerMetadata.
+inline std::string Property(const char* name, const std::string& value) {
+    return std::string("<e name=\"") + name + "\">" + value + "</e>";
 }
 
 // A finalized file ends exactly where its DT block says it ends.
@@ -366,7 +376,7 @@ inline LoggerMetadata MakeTestLoggerMetadata() {
     return metadata;
 }
 
-// What rt_daq's factory does at every start: a logger for the stored logging configuration's
+// What the supervisor's factory does at every start: a logger for the stored logging configuration's
 // interval and size limit over @p sensors, here with every sensor enabled and its raw value logged.
 // The logger takes a snapshot, so the sensors are enabled there without storing a configuration.
 inline LogWriterService::LoggerFactory MakeLoggerFactory(
@@ -392,10 +402,33 @@ inline LogWriterService::LoggerFactory MakeLoggerFactory(
     };
 }
 
-// The service of the last rig. A test that fails an assertion is aborted without unwinding, and its
-// writer would go on writing into the next test's directory.
-inline std::weak_ptr<LogWriterService>& LastRigService() {
-    static std::weak_ptr<LogWriterService> service;
+// The tool ID the supervisor is given here: not MakeTestLoggerMetadata()'s, so a header written by
+// the rig's own factory cannot pass for one written by the supervisor's.
+inline constexpr const char* kTestToolId = "rt_core_supervisor";
+
+// Carries logging_events in this binary. The channel drops every publish until a bus registers it,
+// and stays with the first one, so every rig shares this bus.
+class LoggingTestBus : public EventBus {
+private:
+    static constexpr int k_stack_size = 4096;
+
+    LoggingTestBus() : EventBus("logging_test_bus", k_stack_size) {
+        RegisterChannel(LoggingEventsChannel::GetInstance());
+    }
+
+public:
+    static LoggingTestBus& Get() {
+        static LoggingTestBus bus;
+
+        return bus;
+    }
+};
+
+// The service of the last rig, held until ResetAfterTest() has stopped it. A writer destroyed while
+// it runs leaves its tick armed on freed memory, and one left by a test that an assertion aborted
+// would go on writing into the next test's directory.
+inline std::shared_ptr<LogWriterService>& LastRigService() {
+    static std::shared_ptr<LogWriterService> service;
 
     return service;
 }
@@ -408,12 +441,16 @@ struct LogWriterRig {
     std::shared_ptr<SensorReadingsFrame> frame;
     LogWriterService::LoggerFactory logger_factory;
     std::shared_ptr<LogWriterService> log_writer_service;
+    // The one the supervisor builds its loggers from; see AttachSupervisor().
+    std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager;
 };
 
 // Default logging configuration (100 ms), initialized, not started. The frame is laid out for
 // @p sensors, and the logger logs every one of them with its raw value.
 inline LogWriterRig MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> sensors = {}, bool log_only_new_data = true) {
     LogWriterRig rig;
+
+    LoggingTestBus::Get();
 
     rig.fs_service = GetFormattedFsService();
 
@@ -444,12 +481,32 @@ inline LogWriterRig MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> se
     return rig;
 }
 
-// Stores a logging configuration with @p interval_ms and @p max_log_size_mb and no sensor entries;
-// the rig's factory enables its sensors itself.
-inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
+// For code off the test thread, which must not assert: an assertion there aborts that thread.
+inline bool TryStoreLoggingConfiguration(LoggingConfigurationManager& manager, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
     LoggingConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = interval_ms;
     configuration.max_log_size_mb = max_log_size_mb;
+
+    return manager.Update(configuration);
+}
+
+// Stores a logging configuration with @p interval_ms and @p max_log_size_mb and no sensor entries;
+// the rig's factory enables its sensors itself. Never while the queue is gated: the save runs there.
+inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
+    zassert_true(TryStoreLoggingConfiguration(*rig.logging_configuration_manager, interval_ms, max_log_size_mb),
+        "the logging configuration was not stored");
+}
+
+// Stores a logging configuration that logs @p sensors, for the supervisor's own factory.
+inline void EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> sensors, uint32_t interval_ms = 100) {
+    LoggingConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
+    configuration.logging_interval_ms = interval_ms;
+    configuration.max_log_size_mb = 0;
+    for(const auto& sensor : sensors) {
+        configuration.sensor_configurations.emplace(sensor->id_hash, SensorLoggingConfiguration {
+            .is_enabled = true
+        });
+    }
 
     zassert_true(rig.logging_configuration_manager->Update(configuration), "the logging configuration was not stored");
 }
@@ -489,37 +546,137 @@ inline std::chrono::system_clock::time_point PublishReadings(
     return now;
 }
 
+// The supervisor of the running test. It lives here rather than in the rig: a test that an
+// assertion aborts leaves its stack without unwinding, and ResetAfterTest() still withdraws it.
+inline std::shared_ptr<LogWriterSupervisor>& SupervisorSlot() {
+    static std::shared_ptr<LogWriterSupervisor> supervisor;
+
+    return supervisor;
+}
+
+/**
+ * Supervises the rig's writer, on the rig's configuration work queue, as a unit that logs does.
+ *
+ * @param sensors_configuration_manager What the supervisor's loggers describe; null builds one on
+ *        sensors_config with the default, no sensors.
+ * @param uses_own_logger_factory Keeps the supervisor's factory. Otherwise the rig's factory, which
+ *        logs every sensor of the frame, replaces it.
+ */
+inline LogWriterSupervisor& AttachSupervisor(
+    LogWriterRig& rig,
+    std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager = nullptr,
+    bool uses_own_logger_factory = false,
+    LogWriterSupervisor::DeviceIdProvider device_id_provider = nullptr) {
+
+    if(sensors_configuration_manager == nullptr) {
+        sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+            std::make_unique<CborConfigurationService<CborSensorsConfig>>(
+                "sensors_config", rig.fs_service, rig.config_work_queue),
+            nullptr, 0, 0);
+    }
+    rig.sensors_configuration_manager = sensors_configuration_manager;
+
+    auto supervisor = std::make_shared<LogWriterSupervisor>(
+        rig.config_work_queue,
+        rig.log_writer_service,
+        rig.logging_configuration_manager,
+        std::move(sensors_configuration_manager),
+        kTestToolId,
+        std::move(device_id_provider));
+    SupervisorSlot() = supervisor;
+    zassert_true(supervisor->Initialize(), "the log writer supervisor did not initialize");
+
+    if(!uses_own_logger_factory)
+        rig.log_writer_service->SetLoggerFactory(rig.logger_factory);
+
+    return *supervisor;
+}
+
+// Destroys the supervisor; references to it dangle afterwards.
+inline void ReleaseSupervisor() {
+    SupervisorSlot().reset();
+}
+
+// Holds a work queue in one job until Open(), so whatever is queued meanwhile runs after it, in
+// order. Each Close() has its own context, so an Open() never leaves a token for the next one.
+class ConfigQueueGate {
+private:
+    struct Context {
+        k_sem entered;
+        k_sem open;
+
+        Context() {
+            k_sem_init(&entered, 0, 1);
+            k_sem_init(&open, 0, 1);
+        }
+    };
+
+    std::shared_ptr<Context> context_;
+
+public:
+    // Returns once the queue runs the gate's job, so it is provably held. The job gives up after
+    // 5 s, so a test that never opens it cannot wedge the queue for good.
+    [[nodiscard]] bool Close(WorkQueueThread& work_queue) {
+        Open();
+
+        auto context = std::make_shared<Context>();
+        work_queue.Run([context] {
+            k_sem_give(&context->entered);
+            k_sem_take(&context->open, K_SECONDS(5));
+        });
+        context_ = context;
+
+        return k_sem_take(&context->entered, K_SECONDS(5)) == 0;
+    }
+
+    // Does nothing while no gate is closed.
+    void Open() {
+        if(context_ == nullptr)
+            return;
+
+        k_sem_give(&context_->open);
+        context_.reset();
+    }
+};
+
+inline ConfigQueueGate& Gate() {
+    static ConfigQueueGate gate;
+
+    return gate;
+}
+
+// Returns once everything queued on the rig's configuration work queue before the call has run.
+[[nodiscard]] inline bool FlushConfigQueue(LogWriterRig& rig) {
+    auto done = std::make_shared<k_sem>();
+    k_sem_init(done.get(), 0, 1);
+
+    rig.config_work_queue->Run([done] { k_sem_give(done.get()); });
+
+    return k_sem_take(done.get(), K_SECONDS(5)) == 0;
+}
+
+inline k_tid_t ConfigQueueThread(LogWriterRig& rig) {
+    return k_work_queue_thread_get(rig.config_work_queue->GetWorkQueue());
+}
+
 struct StatusEvent {
     bool is_active = false;
     std::optional<LoggingStatusReason> reason;
 };
 
-// What an application does with logging_events, as rt_daq's LoggingController does it: a session
-// that failed is stopped from the configuration work queue, never from the thread that published
-// the event. Records every StatusUpdated event and where the stop ran.
-class StatusMonitor {
+// Records every StatusUpdated on logging_events, from its construction on.
+class StatusRecorder {
 private:
-    std::shared_ptr<LogWriterService> service_;
-    std::shared_ptr<WorkQueueThread> work_queue_;
-    std::optional<WorkQueueTask<StatusMonitor>> stop_task_;
     AnySubscription subscription_;
 
     mutable k_mutex lock_;
     std::vector<StatusEvent> events_;
 
-    // The monitor of the running test; see ResetAfterTest().
-    static StatusMonitor*& Active() {
-        static StatusMonitor* monitor = nullptr;
+    // The recorder of the running test; see ResetAfterTest().
+    static StatusRecorder*& Active() {
+        static StatusRecorder* recorder = nullptr;
 
-        return monitor;
-    }
-
-    static WorkQueueTaskResult ProcessStop(StatusMonitor* monitor) {
-        monitor->stop_ran_on_work_queue = monitor->work_queue_->IsCurrentThread();
-        monitor->stop_result = monitor->service_->Stop();
-        monitor->stops++;
-
-        return {};
+        return recorder;
     }
 
     void OnStatusUpdated(const LoggingEventsChannel::EventMessage& event) {
@@ -533,29 +690,16 @@ private:
         if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
             status.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
 
-        {
-            ScopedMutex guard(lock_);
-            events_.push_back(status);
-        }
-
-        if(!status.is_active && status.reason.has_value() && status.reason.value() != LoggingStatusReason::Stopped)
-            stop_task_->Reschedule(K_NO_WAIT);
+        ScopedMutex guard(lock_);
+        events_.push_back(status);
     }
 
 public:
-    std::atomic<int> stops = 0;
-    std::atomic<bool> stop_ran_on_work_queue = false;
-    std::atomic<bool> stop_result = false;
-
-    StatusMonitor(std::shared_ptr<LogWriterService> service, std::shared_ptr<WorkQueueThread> work_queue)
-        : service_(std::move(service)), work_queue_(std::move(work_queue)) {
-
+    StatusRecorder() {
         k_mutex_init(&lock_);
 
-        // The channel drops publishes until a bus carries it.
-        LoggingEventBus::GetInstance();
+        LoggingTestBus::Get();
 
-        stop_task_ = work_queue_->CreateTask(ProcessStop, this);
         subscription_ = CreateScopedSubscription(
             LoggingEventsChannel::GetInstance(),
             LoggingEventType::StatusUpdated,
@@ -565,27 +709,26 @@ public:
         Active() = this;
     }
 
-    ~StatusMonitor() {
+    ~StatusRecorder() {
         Release();
     }
 
+    StatusRecorder(const StatusRecorder&) = delete;
+    StatusRecorder& operator=(const StatusRecorder&) = delete;
+
     void Release() {
         subscription_.reset();
-        stop_task_->Cancel();
 
         if(Active() == this)
             Active() = nullptr;
     }
 
-    // A monitor left behind by a test that was aborted: its stack is gone, so its subscription must
+    // A recorder left behind by a test that was aborted: its stack is gone, so its subscription must
     // go before the next event is dispatched to it.
     static void ReleaseLeftover() {
         if(Active() != nullptr)
             Active()->Release();
     }
-
-    StatusMonitor(const StatusMonitor&) = delete;
-    StatusMonitor& operator=(const StatusMonitor&) = delete;
 
     std::vector<StatusEvent> GetEvents() const {
         ScopedMutex guard(lock_);
@@ -598,12 +741,99 @@ public:
     }
 };
 
-// After each test. A test that passed has destroyed its rig and monitor already.
-inline void ResetAfterTest(void* = nullptr) {
-    StatusMonitor::ReleaseLeftover();
+// Once armed, holds the bus thread inside the dispatch of the next inactive StatusUpdated until
+// Unblock(), so a test can act while that dispatch is in flight. Subscribed before another
+// subscriber, it runs before that one's handler.
+class StatusBlocker {
+private:
+    // Owned by the handler, so a blocker on an aborted test's stack leaves nothing it could reach.
+    struct Context {
+        k_sem entered;
+        k_sem release;
+        std::atomic<bool> is_armed = false;
 
-    if(auto service = LastRigService().lock())
+        Context() {
+            k_sem_init(&entered, 0, 1);
+            k_sem_init(&release, 0, 1);
+        }
+    };
+
+    std::shared_ptr<Context> context_;
+    AnySubscription subscription_;
+
+    static StatusBlocker*& Active() {
+        static StatusBlocker* blocker = nullptr;
+
+        return blocker;
+    }
+
+public:
+    StatusBlocker() : context_(std::make_shared<Context>()) {
+        LoggingTestBus::Get();
+
+        subscription_ = CreateScopedSubscription(
+            LoggingEventsChannel::GetInstance(),
+            LoggingEventType::StatusUpdated,
+            [context = context_](const LoggingEventsChannel::EventMessage& event) {
+                const auto is_active = event.payload.find(LoggingPayloadType::IsActive);
+                if(is_active == event.payload.end() || !std::holds_alternative<bool>(is_active->second)
+                    || std::get<bool>(is_active->second)) {
+                    return;
+                }
+
+                if(!context->is_armed.exchange(false))
+                    return;
+
+                k_sem_give(&context->entered);
+                k_sem_take(&context->release, K_SECONDS(5));
+            });
+        zassert_not_null(subscription_.get(), "the logging_events subscription was refused");
+
+        Active() = this;
+    }
+
+    ~StatusBlocker() {
+        Release();
+    }
+
+    StatusBlocker(const StatusBlocker&) = delete;
+    StatusBlocker& operator=(const StatusBlocker&) = delete;
+
+    void Arm() { context_->is_armed = true; }
+
+    [[nodiscard]] bool WaitUntilBlocking(int32_t timeout_ms = 2000) {
+        return k_sem_take(&context_->entered, K_MSEC(timeout_ms)) == 0;
+    }
+
+    void Unblock() { k_sem_give(&context_->release); }
+
+    void Release() {
+        Unblock();
+        subscription_.reset();
+
+        if(Active() == this)
+            Active() = nullptr;
+    }
+
+    static void ReleaseLeftover() {
+        if(Active() != nullptr)
+            Active()->Release();
+    }
+};
+
+// After each test. A test that passed has destroyed its rig, recorder and blocker already; a test
+// that was aborted left them, and maybe a closed gate, behind.
+inline void ResetAfterTest(void* = nullptr) {
+    Gate().Open();
+    StatusBlocker::ReleaseLeftover();
+    StatusRecorder::ReleaseLeftover();
+    ReleaseSupervisor();
+
+    if(auto service = std::exchange(LastRigService(), nullptr); service != nullptr)
         service->Stop();
+
+    // The bus delivers what this test published before the next test subscribes.
+    k_msleep(20);
 
     RemoveDataDirectory();
 }

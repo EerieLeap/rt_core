@@ -221,9 +221,10 @@ Services that read the frame or the sensors of the running generation register w
 `SensorsController::RegisterDependentService()` before `Start()`. A restart stops the registered
 services that are running before processing stops, and starts exactly those again once
 processing has been started, whether or not that start succeeded; a dependent that does not stop
-or does not come back is logged and does not fail the restart. rt_daq registers its log writer
-this way, so a sensors apply while logging finalizes the file and opens the next one for the new
-sensors (see [logging.md](logging.md#restarts)).
+or does not come back is logged and does not fail the restart. The log writer joins through
+`LogWriterSupervisor::GetDependentService()`, so a sensors apply while logging finalizes the file
+and opens the next one for the new sensors (see [logging.md](logging.md#restarts) and
+[Supervision](logging.md#supervision)).
 
 ## Sensor events
 

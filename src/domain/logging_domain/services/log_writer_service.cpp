@@ -322,8 +322,8 @@ std::optional<LoggingStatusReason> LogWriterService::RotateFile(LogWriterTask& t
 WorkQueueTaskResult LogWriterService::EndSession(LoggingStatusReason reason) {
     has_failed_ = true;
 
-    // Stop() would wait for this very tick; the owner stops the service from another thread when
-    // the event arrives, which finalizes what it can and closes the file.
+    // Stop() would wait for this very tick; the supervisor stops the service from another thread
+    // when the event arrives, which finalizes what it can and closes the file.
     PublishStatus(false, reason);
 
     return { .reschedule = false };

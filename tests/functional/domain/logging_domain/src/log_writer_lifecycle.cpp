@@ -1,10 +1,9 @@
 // The log writer's session: status events, a volume that fills up, rotation at the size limit,
 // the free-space minimum, a restart for a new logging configuration, dropped raw frames and a stop
-// in the middle of a tick.
-#include <atomic>
+// in the middle of a tick. Starts and stops go through the LogWriterSupervisor where it decides
+// something; its own policy is in log_writer_supervisor.cpp.
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -66,76 +65,66 @@ bool PublishFramesUntil(LogWriterRig& rig, const Sensor& sensor, TCondition done
     }, timeout_ms);
 }
 
-// Owned by the updated handler, so a test aborted by an assertion leaves nothing on its stack that
-// the configuration work queue could still run.
-struct RestartContext {
-    std::shared_ptr<LogWriterService> service;
-    std::atomic<int> restarts = 0;
-    std::atomic<int> handler_calls = 0;
-    std::optional<WorkQueueTask<RestartContext>> task;
-};
-
-// What rt_daq's LoggingController does when the logging configuration is stored.
-WorkQueueTaskResult RestartRunningWriter(RestartContext* context) {
-    if(context->service->IsRunning()) {
-        context->service->Stop();
-        context->service->Start();
-        context->restarts++;
-    }
-
-    return {};
-}
-
 } // namespace
 
 ZTEST_SUITE(log_writer_lifecycle, NULL, NULL, ResetAfterTest, NULL, NULL);
 
 ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
     auto rig = MakeLogWriterRig();
-    StatusMonitor monitor(rig.log_writer_service, rig.config_work_queue);
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
 
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    zassert_true(monitor.WaitForEventCount(1), "Start must publish StatusUpdated");
-    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
-    zassert_true(monitor.WaitForEventCount(2), "Stop must publish StatusUpdated");
+    supervisor.RequestStart();
+    zassert_true(recorder.WaitForEventCount(1), "Start must publish StatusUpdated");
+    zassert_true(WaitFor([&] { return supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
 
-    const auto events = monitor.GetEvents();
-    zassert_equal(events.size(), 2, "one event per transition (got %zu)", events.size());
+    supervisor.RequestStop();
+    zassert_true(recorder.WaitForEventCount(2), "Stop must publish StatusUpdated");
+    zassert_true(WaitFor([&] { return !supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+    k_msleep(100);
+
+    const auto events = recorder.GetEvents();
+    zassert_equal(events.size(), 2, "one event per transition, and no stop after a clean one (got %zu)", events.size());
     zassert_true(events[0].is_active, "Start must publish IsActive = true");
     zassert_false(events[0].reason.has_value(), "an active status carries no reason");
     zassert_false(events[1].is_active, "Stop must publish IsActive = false");
     zassert_true(events[1].reason == LoggingStatusReason::Stopped, "a stop's reason is Stopped");
 
+    zassert_true(rig.log_writer_service->IsStopped(), "the requested stop must leave the service stopped");
     zassert_false(rig.log_writer_service->HasFailed(), "a clean session has not failed");
-    zassert_equal(monitor.stops.load(), 0, "nothing may be stopped for a clean stop");
 }
 
 // The volume fills up under a running session: the tick that fails publishes the failure and
-// schedules nothing more, the owner stops the service from another thread, the file is closed and
-// stays readable, and logging starts again once there is room.
+// schedules nothing more, the supervisor stops the service on the configuration work queue, the
+// file is closed and stays readable, and logging starts again once there is room.
 ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusMonitor monitor(rig.log_writer_service, rig.config_work_queue);
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
+    const auto probes = ProbeLoggerFactory::Make(rig.logger_factory);
+    rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
     const std::string filler_path = "session_fill.bin";
 
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+    supervisor.RequestStart();
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+    const auto first_probe = probes->Current();
     const auto file_path = std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/"
         + rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR).at(0);
 
     FillVolume(*rig.fs_service, filler_path);
 
-    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] { return monitor.stops.load() > 0; }, 5000),
-        "a session on a full volume must end and be stopped");
-    zassert_true(rig.log_writer_service->IsStopped(), "the owner's Stop() must leave the service stopped");
-    zassert_true(monitor.stop_result.load(), "the owner's Stop() must succeed");
-    zassert_true(monitor.stop_ran_on_work_queue.load(), "the stop must run on the owner's work queue, not the writer thread");
-    zassert_true(rig.log_writer_service->HasFailed(), "the service must report the failed session until the next Start");
+    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] {
+        return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
+    }, 5000), "a session on a full volume must end and be stopped");
+    zassert_equal(first_probe->stop_thread.load(), ConfigQueueThread(rig),
+        "the stop must run on the configuration work queue, not the writer thread");
 
-    zassert_true(monitor.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
-    const auto events = monitor.GetEvents();
+    zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
+    const auto events = recorder.GetEvents();
     zassert_true(events[1].reason == LoggingStatusReason::WriteFailed, "the failure must be published as WriteFailed");
-    zassert_true(events[2].reason == LoggingStatusReason::Stopped, "the owner's stop publishes Stopped");
+    zassert_true(events[2].reason == LoggingStatusReason::Stopped, "the supervisor's stop publishes Stopped");
 
     const auto stats = rig.log_writer_service->GetStats();
     zassert_true(stats.write_errors >= 1, "the failed write must be counted");
@@ -146,10 +135,13 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
 
     RemoveFiller(*rig.fs_service, filler_path);
 
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed once the volume has room again");
+    supervisor.RequestStart();
+    zassert_true(recorder.WaitForEventCount(4), "a start must succeed once the volume has room again");
     zassert_false(rig.log_writer_service->HasFailed(), "Start must clear the failure");
     k_msleep(250);
-    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+    supervisor.RequestStop();
+    zassert_true(recorder.WaitForEventCount(5), "the stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), 2, "the failed file and the new one (found %zu)", files.size());
@@ -157,24 +149,27 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
 }
 
 // A record the logger cannot write ends the session at that tick: the error is counted, the
-// failure published once, no tick follows, and the owner's stop finalizes the file, whose stream
-// is intact here.
+// failure published once, no tick follows, and the supervisor's stop finalizes the file, whose
+// stream is intact here.
 ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors, false);
-    StatusMonitor monitor(rig.log_writer_service, rig.config_work_queue);
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
 
     auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
     rig.log_writer_service->SetLoggerFactory([probe] { return probe; });
     probe->refuse_next_reading = true;
 
     PublishValue(rig, *sensors[0], 3, rig.time_service->GetCurrentTime());
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+    supervisor.RequestStart();
 
-    zassert_true(WaitFor([&] { return monitor.stops.load() > 0; }, 2000), "the failed session must be stopped by its owner");
-    zassert_true(monitor.stop_ran_on_work_queue.load(), "the stop must run on the owner's work queue, not the writer thread");
-    zassert_true(rig.log_writer_service->IsStopped(), "the owner's Stop() must leave the service stopped");
-    zassert_true(rig.log_writer_service->HasFailed(), "the service must report the failed session until the next Start");
+    zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
+    zassert_true(WaitFor([&] {
+        return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
+    }, 2000), "the failed session must be stopped by the supervisor");
+    zassert_equal(probe->stop_thread.load(), ConfigQueueThread(rig),
+        "the stop must run on the configuration work queue, not the writer thread");
 
     k_msleep(350);
     zassert_equal(probe->tick_times.size(), 1, "no tick may follow the one that failed (%zu ticks)", probe->tick_times.size());
@@ -182,8 +177,7 @@ ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
     const auto stats = rig.log_writer_service->GetStats();
     zassert_equal(stats.write_errors, 1, "the refused record is one error (got %u)", stats.write_errors);
 
-    zassert_true(monitor.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
-    const auto events = monitor.GetEvents();
+    const auto events = recorder.GetEvents();
     zassert_equal(events.size(), 3, "the failure is published once (%zu events)", events.size());
     zassert_true(events[1].reason == LoggingStatusReason::WriteFailed, "a refused record is published as WriteFailed");
 
@@ -213,24 +207,33 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
 
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusMonitor monitor(rig.log_writer_service, rig.config_work_queue);
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
 
     // About three ticks of the frames below per file.
     rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 1024, 0);
 
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+    supervisor.RequestStart();
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     for(uint8_t i = 0; i < published_frames; i++) {
         PublishReadings(rig, sensors, i);
         k_msleep(10);
     }
     k_msleep(250);
-    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+    supervisor.RequestStop();
+    zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+    zassert_true(rig.log_writer_service->IsStopped(), "the requested stop must leave the service stopped");
 
     const auto stats = rig.log_writer_service->GetStats();
     zassert_equal(stats.write_errors, 0, "nothing may fail on an empty volume");
     zassert_true(stats.rotations >= 2, "1.2 s of frames over a 1 KiB limit must rotate at least twice (got %u)", stats.rotations);
     zassert_equal(stats.frames, published_frames, "every frame is logged across the files (got %u)", stats.frames);
-    zassert_equal(monitor.stops.load(), 0, "a rotation is no failure");
+    zassert_false(rig.log_writer_service->HasFailed(), "a rotation is no failure");
+
+    const auto events = recorder.GetEvents();
+    zassert_equal(events.size(), 2, "a rotation publishes nothing (%zu events)", events.size());
+    zassert_true(events[1].reason == LoggingStatusReason::Stopped, "only the requested stop ends the session");
 
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), stats.rotations + 1, "one file per rotation and the first (found %zu)", files.size());
@@ -269,21 +272,26 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
 ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSpace) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusMonitor monitor(rig.log_writer_service, rig.config_work_queue);
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
+    const auto probes = ProbeLoggerFactory::Make(rig.logger_factory);
+    rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
     const std::string filler_path = "rotation_fill.bin";
 
     rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 512, 128 * 1024);
 
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a volume with the minimum free");
+    supervisor.RequestStart();
+    zassert_true(recorder.WaitForEventCount(1), "the start must succeed on a volume with the minimum free");
     FillVolume(*rig.fs_service, filler_path, 96 * 1024);
 
-    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] { return monitor.stops.load() > 0; }, 5000),
-        "a rotation without the minimum free must end the session");
-    zassert_true(rig.log_writer_service->IsStopped(), "the owner's Stop() must leave the service stopped");
-    zassert_true(monitor.stop_ran_on_work_queue.load(), "the stop must run on the owner's work queue");
+    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] {
+        return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
+    }, 5000), "a rotation without the minimum free must end the session, and the supervisor stop it");
+    zassert_equal(probes->Current()->stop_thread.load(), ConfigQueueThread(rig),
+        "the stop must run on the configuration work queue");
 
-    zassert_true(monitor.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
-    const auto events = monitor.GetEvents();
+    zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
+    const auto events = recorder.GetEvents();
     zassert_true(events[1].reason == LoggingStatusReason::NoSpace, "the failure must be published as NoSpace");
 
     const auto stats = rig.log_writer_service->GetStats();
@@ -296,41 +304,40 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
     RemoveFiller(*rig.fs_service, filler_path);
 }
 
-// A stored logging configuration restarts a running writer (on the configuration work queue, as
-// rt_daq's controller does it), and the next file is laid out for it: the factory runs at every
-// Start(). Update() and an SMP-style ApplyCborConfiguration() both call the handler.
+// A stored logging configuration restarts a running writer on the configuration work queue, and the
+// next file is laid out for it: the factory runs at every Start(). Update() and an SMP-style
+// ApplyCborConfiguration() both call the supervisor's handler.
 ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
 
-    auto context = std::make_shared<RestartContext>();
-    context->service = rig.log_writer_service;
-    context->task.emplace(rig.config_work_queue->CreateTask(RestartRunningWriter, context.get()));
-
-    rig.logging_configuration_manager->RegisterConfigurationUpdatedHandler([context] {
-        context->handler_calls++;
-        context->task->Reschedule(K_NO_WAIT);
-    });
-
-    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+    supervisor.RequestStart();
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     k_msleep(250);
 
     StoreLoggingConfiguration(rig, 50);
-    zassert_true(WaitFor([&] { return context->restarts.load() == 1; }, 2000), "storing a configuration must restart the writer");
+    zassert_true(recorder.WaitForEventCount(3), "storing a configuration must restart the writer");
     k_msleep(250);
 
     const auto stored_cbor = rig.logging_configuration_manager->GetCborConfiguration();
     zassert_true(rig.logging_configuration_manager->ApplyCborConfiguration(stored_cbor), "the stored CBOR must apply");
-    zassert_true(WaitFor([&] { return context->restarts.load() == 2; }, 2000), "applying a configuration must restart the writer");
+    zassert_true(recorder.WaitForEventCount(5), "applying a configuration must restart the writer");
     k_msleep(250);
 
-    rig.logging_configuration_manager->RegisterConfigurationUpdatedHandler(nullptr);
-    context->task->Cancel();
-
     zassert_true(rig.log_writer_service->IsRunning(), "the restarted writer must run");
-    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
-    zassert_equal(context->handler_calls.load(), 2, "one handler call per stored configuration (got %d)",
-        context->handler_calls.load());
+    supervisor.RequestStop();
+    zassert_true(recorder.WaitForEventCount(6), "the stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+
+    const auto events = recorder.GetEvents();
+    zassert_equal(events.size(), 6, "a stop and a start per stored configuration (%zu events)", events.size());
+    for(size_t i = 0; i < events.size(); i++) {
+        zassert_equal(events[i].is_active, i % 2 == 0, "event %zu must alternate between started and stopped", i);
+        if(!events[i].is_active)
+            zassert_true(events[i].reason == LoggingStatusReason::Stopped, "event %zu must be a clean stop", i);
+    }
 
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), 3, "one file per start (found %zu)", files.size());

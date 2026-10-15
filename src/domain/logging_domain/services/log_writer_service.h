@@ -43,8 +43,8 @@ using eerie_leap::domain::logging_domain::loggers::ILogger;
 
 // Writes the readings frame to a log file every logging_interval_ms on its own thread. Start() and
 // Stop() publish StatusUpdated on logging_events, and so does a session that fails: the writer
-// thread then stops writing and leaves the Stop() to its owner, from another thread (Stop() waits
-// for a running tick).
+// thread then stops writing and leaves the Stop() to whoever supervises it (LogWriterSupervisor),
+// which stops it from the configuration work queue (Stop() waits for a running tick).
 class LogWriterService final : public ServiceBase<> {
 public:
     // Called by every Start(), so each file is laid out for the configurations in effect then.
@@ -97,7 +97,7 @@ public:
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
     ~LogWriterService() override = default;
 
-    /** Only while stopped, and from the thread that starts the service: Start() reads it unguarded. */
+    /** Only while stopped, and before anything can start the service: Start() reads it unguarded. */
     void SetLoggerFactory(LoggerFactory logger_factory);
 
     /** Counters since the last Start(); zero before the first one. */

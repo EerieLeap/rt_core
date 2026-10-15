@@ -5,8 +5,9 @@
 
 namespace eerie_leap::domain::logging_domain::loggers {
 
-// Who wrote the log, supplied by the application so the logging domain stays independent of the
-// system domain. Written into the file header; versions use the system domain's packed layout.
+// Who wrote the log, written into the file header. LogWriterSupervisor fills it at every start: the
+// tool ID and the CDMP device ID from its owner, the rest from Kconfig and SystemConfiguration, whose
+// packed version layout it uses.
 struct LoggerMetadata {
     std::string device_name;
     std::string tool_id;

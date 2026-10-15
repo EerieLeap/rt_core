@@ -3,6 +3,8 @@
 #include <memory>
 #include <span>
 
+#include <zephyr/kernel.h>
+
 #include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #include "configuration/services/cbor_configuration_service.h"
@@ -26,7 +28,14 @@ class LoggingConfigurationManager
       public IConfigurationManager {
 private:
     LoggingConfigurationCborParser cbor_parser_;
-    ConfigurationUpdatedHandler configuration_updated_handler_;
+
+    // The writer's supervisor clears the handler when it goes, while a store on another thread may
+    // be calling it. A store copies the pointer under the lock and calls it outside, so a cleared
+    // handler finishes the call it started on its own reference, and a call allocates nothing.
+    k_mutex handler_mutex_;
+    std::shared_ptr<const ConfigurationUpdatedHandler> configuration_updated_handler_;
+
+    void NotifyUpdated();
 
     eerie_memory::pmr_unique_ptr<CborLoggingConfig> Serialize(const LoggingConfiguration& configuration) override;
     eerie_memory::pmr_unique_ptr<LoggingConfiguration> Deserialize(const CborLoggingConfig& cbor_config) override;
@@ -36,7 +45,8 @@ public:
     explicit LoggingConfigurationManager(
         std::unique_ptr<config_service::CborConfigurationService<CborLoggingConfig>> cbor_configuration_service);
 
-    // Called after a configuration has been stored through Update() or ApplyCborConfiguration(), not on load.
+    // Called after a configuration has been stored through Update() or ApplyCborConfiguration(), not
+    // on load, on the thread that stored it. Callable from any thread; nullptr clears it.
     void RegisterConfigurationUpdatedHandler(ConfigurationUpdatedHandler handler) override;
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;

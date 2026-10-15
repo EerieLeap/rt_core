@@ -89,35 +89,113 @@ The writer publishes `StatusUpdated` on the `logging_events` channel (see
 | `RotationFailed` | The next file of a rotation could not be opened or its header written. |
 
 A fifth reason, `Unavailable`, comes only from other units' status (see
-[Status on other units](#status-on-other-units)).
+[Status on other units](#status-on-other-units)). `GetReasonName()` (`event_bus/logging_status_reason.h`)
+names every reason for logs and the shell, `Unavailable` included, and gives `"unknown"` for a value
+from a newer unit.
 
 A failure ends the session on the writer thread: the error is counted in `write_errors` (not for
 `NoSpace`) and logged once, the failure is published, and no further tick is scheduled.
 `HasFailed()` reports it until the next `Start()`. The service stays `RUNNING` without a tick:
-the writer never stops its own service, because `Stop()` waits for the running tick. Its owner
-stops it from another thread when the event arrives; that stop finalizes what it can and closes
-the file (a file whose stream failed stays readable as unfinalized), then publishes `Stopped`.
-Events are published with `PublishAsync()`, so subscribers run on the bus thread, never on the
-writer thread or inside a transition of the service; the channel drops every publish until a bus
-carries it, and `LoggingEventBus` (one thread, 4 KiB) is that bus for an application that has no
-other. The active event goes out from inside `Start()`, before the service reports `RUNNING`.
+the writer never stops its own service, because `Stop()` waits for the running tick.
+`LogWriterSupervisor` stops it on the configuration work queue when the event arrives (see
+[Supervision](#supervision)); that stop finalizes what it can and closes the file (a file whose
+stream failed stays readable as unfinalized), then publishes `Stopped`. Events are published with
+`PublishAsync()`, so subscribers run on the bus thread, never on the writer thread or inside a
+transition of the service. The channel drops every publish until a bus carries it: the composition
+root registers it with one of its buses, and rt_core has no bus of its own for it. The active event
+goes out from inside `Start()`, before the service reports `RUNNING`.
 
 ### Restarts
 
 A new sensors or ADC configuration restarts sensor processing, which replaces the generation
-the frame's readings belong to. Registered with `SensorsController::RegisterDependentService()`
-(see [sensors.md](sensors.md)), the writer is stopped before that generation goes and started
-again on the new one: the file is finalized and the next one describes the new sensors. A CAN
-reconfiguration also restarts processing, without the writer; the configurations, and so the
-file layout, are the same, and the drop count goes on across the frame's reset.
-`LoggingConfigurationManager` calls its updated handler after `Update()` and
-`ApplyCborConfiguration()`, for the application to restart a running writer with the new
-interval, size limit and sensor selection.
+the frame's readings belong to. The supervisor's dependent (`GetDependentService()`), registered
+with `SensorsController::RegisterDependentService()` (see [sensors.md](sensors.md)), stops the
+writer before that generation goes and starts it again on the new one, while logging is still
+wanted: the file is finalized and the next one describes the new sensors. A CAN reconfiguration
+also restarts processing, without the writer; the configurations, and so the file layout, are the
+same, and the drop count goes on across the frame's reset. `LoggingConfigurationManager` calls its
+updated handler after `Update()` and `ApplyCborConfiguration()`, on the thread that stored the
+configuration; the supervisor's handler restarts a running writer with the new interval, size
+limit and sensor selection. The handler can be replaced or cleared from any thread while a store
+calls it.
 
-Starting and stopping is the application's business: rt_daq's `LoggingController` does it from
-the CDMP `LOGGING` command (so one broadcast starts every unit, see [cdmp.md](cdmp.md)), restarts
-the writer for a new logging configuration, stops a failed session and shows a `log` status on
-the display.
+### Supervision
+
+`LogWriterSupervisor` (`services/log_writer_supervisor.h`) runs the writer of a unit that logs.
+It implements `ILoggingControl` (`control/i_logging_control.h`), the interface the inputs use:
+
+| Method | Meaning |
+| --- | --- |
+| `RequestStart()`, `RequestStop()` | Record the wanted state and return, from any thread. The latest request wins; the outcome arrives as `StatusUpdated` on `logging_events`. |
+| `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. |
+
+A request stores the wanted state in an atomic and reschedules the supervisor's one task on the
+configuration work queue. It takes no lock, so it never waits for the writer, and a bus thread or
+the CDMP work queue can make it. Two requests before the task runs act once, as the later one.
+Each run of the task:
+
+1. stops a session that failed: the writer's `HasFailed()` decides, not the event, so a failure
+   event that arrives after a new start stops nothing;
+2. applies the pending request;
+3. restarts a running writer if a logging configuration was stored, unless step 2 opened a
+   session, which already uses it.
+
+The rules, from rt_daq's controller:
+
+- A start while running does nothing. A stop while stopped does nothing and publishes nothing.
+- A start of a failed session stops it and opens a new file. A start that cannot stop it starts
+  nothing.
+- A failed start publishes nothing and leaves logging stopped; nothing retries it.
+- A stored logging configuration restarts a running writer and leaves a stopped or failed one
+  alone.
+- A sensors restart starts the writer again only while logging is wanted: set by a successful
+  start, cleared by a stop or a failure. A stop requested during the restart is still pending
+  when the dependent is started, so the dependent does not start the writer.
+
+| Code | Thread |
+| --- | --- |
+| `RequestStart()`, `RequestStop()`, `IsActive()` | Any; no lock. |
+| Status handler | The bus thread that carries `logging_events`. Records the status; on a failure it reschedules the task. |
+| Updated handler | The thread that stored the logging configuration (the configuration work queue for an SMP apply). Reschedules the task. |
+| Every writer `Start()` and `Stop()`, the logger factory | The configuration work queue. |
+
+Every start therefore runs on the configuration work queue: the free-space check, which may scan
+the FAT of a large card, the logger's construction, the file open and the header write. Size that
+queue's stack for it; rt_daq gives it 8 KiB. The dependent works only on the queue that
+`SensorsController` restarts processing on, so both get the same one.
+
+**Logger metadata.** The supervisor sets the writer's logger factory. At every start it builds
+`Mdf4LoggerSensorReading` from the stored logging and sensors configurations, with:
+
+| Field | Source |
+| --- | --- |
+| `device_name` | `CONFIG_BOARD` |
+| `tool_id` | The supervisor's constructor (`"rt_daq"` on rt_daq). |
+| `tool_version` | `EERIE_LEAP_SW_VERSION_MAJOR.MINOR.PATCH` |
+| `product_id` | `EERIE_LEAP_PRODUCT_ID` |
+| `hw_version`, `sw_version` | `SystemConfiguration`, packed. |
+| `device_id` | The supervisor's `DeviceIdProvider` callback, 0 without one. |
+| `sensors_configuration_hash` | The CRC of the stored sensors configuration, 0 when it was rejected at boot. |
+
+The callback keeps the writer free of CDMP at compile time; a unit with a COM service returns its
+CDMP device ID. The factory, and the callback with it, lives as long as the writer, so the callback
+holds the COM service weakly:
+
+```cpp
+[weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] {
+    const auto com = weak_com.lock();
+    const auto network_info = com != nullptr ? com->GetNetworkInfo() : nullptr;
+
+    return network_info != nullptr ? network_info->GetDeviceInfo().device_id : uint8_t{0};
+}
+```
+
+**Teardown.** The destructor withdraws the status subscription, the updated handler and the task.
+A handler already dispatched to it does nothing (a `DispatchGuard`), and a run in progress is
+waited for. It leaves the writer as it is, for its owner to stop. The dependent and the factory
+hold the writer, the wanted state and the managers, not the supervisor, so they stay harmless
+after it. No request may come during or after the destructor: whoever requests keeps the
+supervisor alive or goes first.
 
 ## Status on other units
 
@@ -164,7 +242,7 @@ state type, the exporter offers it again with each later event.
 Bytes after byte 1 are ignored, so fields can be appended.
 
 **A unit's record** follows its `StatusUpdated` events, with one exception: an inactive `Stopped`
-never replaces an inactive failure. The owner's stop that cleans up after a failure publishes
+never replaces an inactive failure. The supervisor's stop that cleans up after a failure publishes
 `Stopped` milliseconds later (see [Status events and failures](#status-events-and-failures)), and
 the record keeps the failure until the next start. A stop of a writer that is already stopped
 publishes nothing, so that cleanup is the only `Stopped` that can follow a failure.
@@ -188,8 +266,8 @@ device table or sends its new record.
 
 **Threading.** No thread is added:
 
-- The exporter handles events on the thread of the bus that carries `logging_events`
-  (`LoggingEventBus` on rt_daq). Sharing hands the sending over to the CDMP work queue.
+- The exporter handles events on the thread of the bus that carries `logging_events` (the
+  application's bus). Sharing hands the sending over to the CDMP work queue.
 - The importer runs on the CDMP work queue, never blocks, and publishes with `PublishAsync()`, so
   consumers run on the importing unit's bus thread (the gauge's `AppEventBus`), as for local events.
   It keeps its buffers of every unit's record as members, off the work queue's stack.
@@ -302,7 +380,7 @@ The default configuration logs nothing.
 
 | Symbol | Default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_DOMAIN_LOGGING` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION`; selects `EERIE_LEAP_EVENT_BUS` and `EERIE_LEAP_MDF`. |
+| `EERIE_LEAP_DOMAIN_LOGGING` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION` and `EERIE_LEAP_DOMAIN_SENSOR` (the readings frame, the sensors configuration the loggers describe); selects `EERIE_LEAP_EVENT_BUS`, `EERIE_LEAP_MDF` and `EERIE_LEAP_DOMAIN_SYSTEM` (the product ID and versions in the log header). |
 | `EERIE_LEAP_LOG_WRITER_STACK_SIZE` | 8192 | Stack of the writer's work queue. A rotation finalizes a file and writes the next header on it (3648 bytes on the ESP32-S3), and a failed write unwinds an exception on it (rt_daq uses 6144). |
 | `EERIE_LEAP_LOG_SYNC_INTERVAL_MS` | 0..3600000, 1000 | How often a tick flushes and syncs the log file; bounds what a power loss can take. 0 syncs only when logging stops. |
 | `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` | 0..1048576, 16 | Free space needed to start logging and to rotate to the next file. 0 disables the check. |
@@ -314,15 +392,20 @@ The default configuration logs nothing.
 
 ## Wiring
 
-rt_core has no logging controller; an application creates `LoggingConfigurationManager` on
-`config/logging_config.cbor` with the configuration work queue, registers it as type 5, creates
-`LogWriterService(sd_fs, logging_manager, time_service, readings_frame)`, initializes it, sets a
-logger factory that builds a logger from the current configurations and its own
-`LoggerMetadata`, and registers the service with `SensorsController::RegisterDependentService()`
-before processing starts, or a wrapper that takes the lock of its own starts and stops, so a
-restart does not bring back a writer that was stopped meanwhile. It makes sure a bus carries
-`logging_events` (`LoggingEventBus`), stops the service from another thread when a failure is
-published, restarts a running writer from the logging manager's updated handler, and starts and
-stops it as needed. A unit that shares its status with other units also creates the exporter
-described under [Status on other units](#status-on-other-units). rt_daq's
-`app/src/controllers/logging_controller.cpp` is the reference.
+rt_core has no logging controller yet; a unit that logs builds the parts:
+
+1. A bus that carries `logging_events`, registered by the composition root before anything
+   publishes on it: the channel drops every publish until then.
+2. `LoggingConfigurationManager` on `config/logging_config.cbor` with the configuration work
+   queue, registered as type 5.
+3. `LogWriterService(sd_fs, logging_manager, time_service, readings_frame)`, initialized.
+4. `LogWriterSupervisor(config_work_queue, log_writer_service, logging_manager, sensors_manager,
+   tool_id, device_id_provider)`, after `SensorsController::Initialize()`, which builds the sensors
+   manager, and with the queue `SensorsController` was given; then its `Initialize()`, which warns
+   when no bus carries `logging_events` yet.
+5. Only if that succeeded, `SensorsController::RegisterDependentService(supervisor->GetDependentService())`,
+   before processing starts.
+6. The inputs (the CDMP command, the shell, an autostart) call `ILoggingControl`, and a display
+   subscribes to `logging_events`.
+7. A unit that shares its status with other units also creates the exporter described under
+   [Status on other units](#status-on-other-units).

@@ -27,8 +27,8 @@ using eerie_leap::domain::canbus_com_domain::states::CanbusComStateType;
  * without EERIE_LEAP_DOMAIN_LOGGING imports it too.
  *
  * - A unit's record follows its StatusUpdated events, except that an inactive Stopped never replaces
- *   an inactive failure: the owner's stop that cleans up after a failure publishes Stopped, and the
- *   record keeps the failure until the next start.
+ *   an inactive failure: the supervisor's stop that cleans up after a failure publishes Stopped,
+ *   and the record keeps the failure until the next start.
  * - The combined status is active while any unit logs. Otherwise it is inactive with the failure of
  *   the lowest device ID that reports one (WriteFailed, NoSpace or RotationFailed), else Stopped,
  *   and Unavailable when no unit reports a status.

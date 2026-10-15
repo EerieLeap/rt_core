@@ -1,11 +1,18 @@
 config EERIE_LEAP_DOMAIN_LOGGING
     depends on EERIE_LEAP_CONFIGURATION
+    depends on EERIE_LEAP_DOMAIN_SENSOR
     select EERIE_LEAP_EVENT_BUS
     select EERIE_LEAP_MDF
+    # The log header names the product and its versions, which are system domain options.
+    select EERIE_LEAP_DOMAIN_SYSTEM
     bool "EerieLeap Logging Domain"
     help
       Add EerieLeap Logging Domain. The log writer publishes its status on
       the logging_events channel, hence the event bus, and writes MDF 4.
+      It logs the sensor readings frame, and LogWriterSupervisor builds
+      each logger from the sensors configuration, hence the sensor domain;
+      the log header carries the product ID and versions of the system
+      domain.
 
 menu "EerieLeap Logging Domain config"
     depends on EERIE_LEAP_DOMAIN_LOGGING

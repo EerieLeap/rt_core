@@ -100,7 +100,7 @@ automatically.
 | `EERIE_LEAP_DOMAIN_SENSOR` | `CONFIGURATION`, `ADC` | `DOMAIN_SCRIPT`, `DOMAIN_ADC` |
 | `EERIE_LEAP_DOMAIN_CANBUS` | `CONFIGURATION`, `CANBUS` | |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM` | | `SMP_CAN` |
-| `EERIE_LEAP_DOMAIN_LOGGING` | `CONFIGURATION` | |
+| `EERIE_LEAP_DOMAIN_LOGGING` | `CONFIGURATION`, `DOMAIN_SENSOR` | `EVENT_BUS`, `MDF`, `DOMAIN_SYSTEM` |
 | `EERIE_LEAP_DOMAIN_SCRIPT` | | |
 | `EERIE_LEAP_DOMAIN_BLE` | `BLUETOOTH`, `DOMAIN_SENSOR`, `DOMAIN_SYSTEM` | `SMP_BLE` |
 | `EERIE_LEAP_CONTROLLER_SYSTEM` | `DOMAIN_SYSTEM`, `FS` | `THREADING` |
@@ -125,8 +125,9 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
 3. Filesystems: the SD service if a card slot exists, then the internal filesystem (fatal if it
    fails).
 4. `TimeService`.
-5. The **configuration work queue** (`WorkQueueThread`, 6144 bytes, priority 5): every
-   configuration load, save, SMP apply and service restart runs on it.
+5. The **configuration work queue** (`WorkQueueThread`, 8192 bytes, priority 5): every
+   configuration load, save, SMP apply and service restart runs on it, and so does every start and
+   stop of the log writer (see [logging.md](logging.md#supervision)).
 6. `SystemController`, then `ConfigurationService` with the system manager registered.
 7. `AdcController` (fatal if the ADC fails to initialize).
 8. GPIO through `GpioFactory`.
@@ -134,8 +135,9 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
 10. The shared `SensorReadingsFrame` and `SensorsController`. Register the processing service
     with the ADC controller (`RegisterPausedService`) and the CAN controller
     (`RegisterDependentService`).
-11. The application's logging controller when an SD card exists; its log writer is registered
-    with the sensors controller (`RegisterDependentService`).
+11. The logging controller when an SD card exists. The log writer joins the sensors controller's
+    dependents (`RegisterDependentService`) through `LogWriterSupervisor::GetDependentService()`,
+    once the supervisor initialized (see [logging.md](logging.md#wiring)).
 12. `ManagementController`, after every manager is registered, with the sensors' capabilities and
     the SD service.
 13. `CanbusSchedulerService`, registered as a CAN dependent service.
