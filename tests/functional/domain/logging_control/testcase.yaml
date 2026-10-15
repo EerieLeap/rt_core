@@ -1,0 +1,33 @@
+common:
+  tags:
+    - functional
+    - domain.logging_control
+  platform_allow:
+    - native_sim
+    - qemu_cortex_a9
+    - qemu_cortex_a53
+    - qemu_riscv64
+    - qemu_malta
+
+tests:
+  functional.logging_control: {}
+  # The writer role's build: the logging domain next to the controller, so rt_core's CMakeLists.txt
+  # globs control/ twice and de-duplicates it. The cases are the same; the build is the point, so one
+  # board is enough. A scenario's platform_allow adds to the common list, so the boards the common
+  # list allows are excluded instead.
+  functional.logging_control.writer_role:
+    platform_exclude:
+      - qemu_cortex_a9
+      - qemu_cortex_a53
+      - qemu_riscv64
+      - qemu_malta
+    extra_configs:
+      - CONFIG_EERIE_LEAP_DOMAIN_LOGGING=y
+      - CONFIG_EERIE_LEAP_MDF=y
+      - CONFIG_EERIE_LEAP_PRODUCT_ID=50178
+      - CONFIG_EERIE_LEAP_HW_VERSION_MAJOR=2
+      - CONFIG_EERIE_LEAP_HW_VERSION_MINOR=1
+      - CONFIG_EERIE_LEAP_SW_VERSION_MAJOR=1
+      - CONFIG_EERIE_LEAP_SW_VERSION_MINOR=2
+      - CONFIG_EERIE_LEAP_SW_VERSION_PATCH=3
+      - CONFIG_TIMING_FUNCTIONS=y

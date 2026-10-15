@@ -53,3 +53,15 @@ config EERIE_LEAP_CONTROLLER_BLE
     depends on EERIE_LEAP_DOMAIN_BLE
     help
       Add EerieLeap BLE Controller.
+
+config EERIE_LEAP_CONTROLLER_LOGGING
+    bool "EerieLeap Logging Controller"
+    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_EVENT_BUS
+    depends on EERIE_LEAP_DOMAIN_SENSOR && EERIE_LEAP_DOMAIN_CANBUS_COM
+    select EERIE_LEAP_THREADING
+    help
+      Add EerieLeap logging control: the remote ILoggingControl, the CDMP
+      LOGGING command handler, the logging triggers and their stored
+      configuration (LoggingControl). Built with or without the logging
+      domain, so a unit without a log writer can control one on another
+      unit.

@@ -91,6 +91,9 @@ canbus_com_service->SetCommandHandler<CanbusComLoggingCommand>(
     });
 ```
 
+Handlers can be set and unset from any thread while CDMP runs; a handler unset during its call
+finishes that call.
+
 `SendCommand(command, callback, device_id)` sends to one device or, by default, broadcasts
 (255); the callback receives the result code and up to 4 bytes of response data. rt_core defines
 one command, `LOGGING` (0x20, one byte: 0x01 start, 0x00 stop), which rt_daq uses to start and

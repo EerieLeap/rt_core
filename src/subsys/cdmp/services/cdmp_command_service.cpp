@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 
+#include "subsys/threading/scoped_mutex.h"
+
 #include "cdmp_command_service.h"
 
 LOG_MODULE_REGISTER(cdmp_command_service, LOG_LEVEL_INF);
@@ -9,6 +11,7 @@ namespace eerie_leap::subsys::cdmp::services {
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::utilities;
 using namespace eerie_leap::subsys::cdmp::models;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 CdmpCommandService::CdmpCommandService(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
@@ -18,6 +21,8 @@ CdmpCommandService::CdmpCommandService(
         , canbus_handler_id_(-1)
         , canbus_response_handler_id_(-1)
         , work_queue_thread_(std::move(work_queue_thread)) {
+
+    k_mutex_init(&command_handlers_mutex_);
 
     transaction_service_ = std::make_unique<CdmpTransactionService>(work_queue_thread_, device_);
 }
@@ -217,17 +222,33 @@ void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const Cdm
 }
 
 std::optional<CdmpCommandResult> CdmpCommandService::NotifyCommandHandler(const CdmpCommandRequestMessage& command) {
-    if(command_handlers_.contains(command.command_code))
-        return command_handlers_.at(command.command_code)(command.transaction_id, command.data);
+    std::shared_ptr<const CommandHandler> handler;
+    {
+        ScopedMutex guard(command_handlers_mutex_);
 
-    return std::nullopt;
+        const auto it = command_handlers_.find(command.command_code);
+        if(it != command_handlers_.end())
+            handler = it->second;
+    }
+
+    // Outside the lock: a handler may take its own time, and may unset itself.
+    if(handler == nullptr)
+        return std::nullopt;
+
+    return (*handler)(command.transaction_id, command.data);
 }
 
 void CdmpCommandService::RegisterCommandHandler(uint8_t command_code, CommandHandler handler) {
     if(command_code == 0)
         throw std::runtime_error("Command code 0 is not allowed");
 
-    command_handlers_[command_code] = std::move(handler);
+    auto shared_handler = std::make_shared<const CommandHandler>(std::move(handler));
+    {
+        ScopedMutex guard(command_handlers_mutex_);
+        command_handlers_[command_code].swap(shared_handler);
+    }
+
+    // The previous handler goes when this returns, outside the lock, unless a call still runs it.
     LOG_DBG("Registered handler for command %d", command_code);
 }
 
@@ -250,7 +271,18 @@ void CdmpCommandService::RegisterServiceCommandHandler(CdmpServiceCommandCode co
 }
 
 void CdmpCommandService::UnregisterCommandHandler(uint8_t command_code) {
-    command_handlers_.erase(command_code);
+    std::shared_ptr<const CommandHandler> removed;
+    {
+        ScopedMutex guard(command_handlers_mutex_);
+
+        const auto it = command_handlers_.find(command_code);
+        if(it != command_handlers_.end()) {
+            removed = std::move(it->second);
+            command_handlers_.erase(it);
+        }
+    }
+
+    // The removed handler goes when this returns, outside the lock, unless a call still runs it.
     LOG_DBG("Unregistered handler for command %d", command_code);
 }
 

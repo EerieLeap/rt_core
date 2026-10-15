@@ -28,6 +28,7 @@ public:
         Logging = 0x05,
         Ui = 0x06,
         Display = 0x07,
+        LoggingControl = 0x08,
     };
 
     /// Largest CBOR configuration accepted for a type unless it registers another cap.

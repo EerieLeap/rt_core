@@ -7,6 +7,8 @@
 #include <memory>
 #include <optional>
 
+#include <zephyr/kernel.h>
+
 #include "subsys/threading/work_queue_thread.h"
 
 #include "subsys/cdmp/models/cdmp_message.h"
@@ -46,7 +48,11 @@ private:
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<CdmpTransactionService> transaction_service_;
 
-    std::unordered_map<uint8_t, CommandHandler> command_handlers_;
+    // Set and removed on any thread while the CDMP work queue calls them. A call copies the handler's
+    // pointer under the lock and runs it outside, so a handler removed meanwhile finishes the call it
+    // started on its own reference, and the lock is never held across a handler.
+    k_mutex command_handlers_mutex_;
+    std::unordered_map<uint8_t, std::shared_ptr<const CommandHandler>> command_handlers_;
     std::unordered_map<uint8_t, ServiceCommandHandler> service_command_handlers_;
 
     void RegisterCanHandlers();

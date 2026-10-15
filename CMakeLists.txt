@@ -281,6 +281,17 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    # Logging control serves units with and without a log writer, so it builds with its controller
+    # rather than with the logging domain.
+    if(CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
+        list(APPEND SRC
+            "${SRC_DIR}/domain/logging_domain/control/*.c"
+            "${SRC_DIR}/domain/logging_domain/control/*.cpp"
+            "${SRC_DIR}/configuration/cbor/traits/logging_control_config_trait.cpp"
+            "${SRC_DIR}/configuration/cbor/cbor_logging_control_config/*.cpp"
+        )
+    endif()
+
     # ========================
 
     file(GLOB_RECURSE SRC ${SRC})
@@ -299,6 +310,15 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     if(NOT CONFIG_EERIE_LEAP_EVENT_BUS)
         list(FILTER SRC EXCLUDE REGEX "/domain/sensor_domain/services/sensor_events_publisher\\.cpp$")
     endif()
+
+    # The logging domain's glob also finds control/, which needs the CDMP domain; it is built only
+    # by the logging controller's branch above.
+    if(NOT CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
+        list(FILTER SRC EXCLUDE REGEX "/domain/logging_domain/control/")
+    endif()
+
+    # A unit with both the logging domain and its controller globs control/ twice.
+    list(REMOVE_DUPLICATES SRC)
 
     zephyr_library_sources(${SRC})
 
