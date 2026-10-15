@@ -24,6 +24,17 @@ using eerie_leap::domain::sensor_domain::models::SensorLimits;
 
 namespace {
 
+// The publisher stack the throwing filter case needs. With a throwing filter the publisher thread
+// peaked at 1.5 KiB on qemu_cortex_a9, 5.9 on qemu_malta, 6.4 on qemu_cortex_a53 and 7.8 on
+// qemu_riscv64, so 8192 would leave about 236 bytes there.
+constexpr int kThrowingFilterStackSize = 12288;
+
+// Stack the publisher thread must still have unused once a throw has been unwound. On every QEMU
+// board but qemu_riscv64 (which has a guard below the stack) only the stack sentinel checks the
+// stack, and it misses a frame that jumps past it, so a pass alone does not show that the stack
+// was enough.
+constexpr size_t kPublisherStackMargin = 512;
+
 // A frame of [a, b, c, d, sentinel] and a started publisher over it, stopped before anything goes.
 // The sensor ids are the case's own: a failed case ends without running its destructors, and the
 // bindings it leaves behind must not reach the sensors of the cases after it.
@@ -323,12 +334,24 @@ ZTEST(sensor_events_publisher, test_readings_without_a_value_are_not_published) 
 ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_spares_the_rest) {
     // Unwinding the throw needs more stack than a tick (see the _STACK_SIZE help); native_sim does
     // not enforce thread stacks, so elsewhere the case runs only with a raised publisher stack.
-    if(!IS_ENABLED(CONFIG_ARCH_POSIX) && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < 8192)
+#ifdef RT_CORE_TEST_RAISED_PUBLISHER_STACK
+    // The raised_publisher_stack scenario exists to run this case: a build that does not raise the
+    // stack, or does not fill the stacks for the measurement below, fails here instead of skipping.
+    static_assert(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= kThrowingFilterStackSize,
+        "the raised_publisher_stack scenario must raise the publisher stack");
+    static_assert(IS_ENABLED(CONFIG_INIT_STACKS) && IS_ENABLED(CONFIG_THREAD_STACK_INFO),
+        "the raised_publisher_stack scenario measures the stack the unwind leaves unused");
+#else
+    if(!IS_ENABLED(CONFIG_ARCH_POSIX)
+        && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < kThrowingFilterStackSize)
         ztest_test_skip();
+#endif
 
     Rig rig("throws");
 
     auto throws = std::make_shared<std::atomic<int>>(0);
+    auto least_unused = std::make_shared<std::atomic<size_t>>(SIZE_MAX);
+    auto thrower = std::make_shared<std::atomic<k_tid_t>>(nullptr);
     auto b_recorder = std::make_shared<Recorder>();
     auto sentinel_recorder = std::make_shared<Recorder>();
 
@@ -336,11 +359,24 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
     AnySubscription throwing = CreateScopedSubscription(
         SensorEventsChannel::GetInstance(),
         SensorEventType::DataUpdated,
-        [throws, a_hash](const SensorEventsChannel::EventMessage& event) {
-            if(std::get<uint32_t>(event.payload.at(SensorPayloadType::SensorId)) != a_hash)
+        [throws, least_unused, thrower, a_hash](const SensorEventsChannel::EventMessage& event) {
+            if(std::get<uint32_t>(event.payload.at(SensorPayloadType::SensorId)) != a_hash) {
+#if defined(CONFIG_INIT_STACKS) && defined(CONFIG_THREAD_STACK_INFO)
+                // On the thread that threw, the publisher's, after a's throw in the same tick: the
+                // bus thread runs the filters too, on its own stack. The unused space is the
+                // stack's high-water mark, so it covers the unwind.
+                size_t unused = 0;
+                if(k_current_get() == thrower->load() && k_thread_stack_space_get(k_current_get(), &unused) == 0) {
+                    size_t seen = least_unused->load();
+                    while(unused < seen && !least_unused->compare_exchange_weak(seen, unused)) {
+                    }
+                }
+#endif
                 return false;
+            }
 
             throws->fetch_add(1);
+            thrower->store(k_current_get());
             throw std::runtime_error("filter failed");
         },
         [](const SensorEventsChannel::EventMessage&) { });
@@ -357,6 +393,17 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
 
     // Cached as a rejection: asked once, until the subscriptions change.
     zassert_equal(throws->load(), 1);
+
+#if defined(CONFIG_INIT_STACKS) && defined(CONFIG_THREAD_STACK_INFO)
+    // The unwind stayed inside the publisher's stack, with room to spare. Where the stacks are not
+    // filled with a pattern (native_sim, which does not enforce them either) there is nothing to
+    // measure.
+    zassert_not_equal(least_unused->load(), SIZE_MAX, "the publisher's stack was not measured");
+    TC_PRINT("publisher stack: %zu of %d bytes unused after the unwind\n",
+        least_unused->load(), CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE);
+    zassert_true(least_unused->load() >= kPublisherStackMargin,
+        "the publisher stack is nearly used up by the unwind");
+#endif
 }
 
 ZTEST(sensor_events_publisher, test_a_paused_publisher_publishes_nothing_until_resumed) {

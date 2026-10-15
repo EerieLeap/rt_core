@@ -1,0 +1,12 @@
+/*
+ * Leaves out the third emulated ADC of qemu_adc.overlay, whose channel states no resolution, for
+ * a scenario that needs every ADC to initialize (RT_CORE_TEST_NO_FAILING_ADC).
+ */
+
+/ {
+	aliases {
+		/delete-property/ adc2;
+	};
+};
+
+/delete-node/ &adc_emul2;

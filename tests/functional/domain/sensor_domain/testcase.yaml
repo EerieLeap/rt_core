@@ -25,14 +25,19 @@ tests:
     extra_configs:
       - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS=y
       - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S=1
-  # The suite on qemu_cortex_a53 with a raised publisher stack, for the throwing filter case: it
-  # unwinds on the publisher thread, which overflowed the 4096 default here. Below 8192 the case
-  # runs only on native_sim, which does not enforce thread stacks.
+  # The suite on the QEMU boards with a raised publisher stack, for the throwing filter case: it
+  # unwinds on the publisher thread, which overflowed the 4096 default on qemu_cortex_a53 and would
+  # have 236 bytes of 8192 left on qemu_riscv64. Below 12288 the case runs only on native_sim, which
+  # does not enforce thread stacks. The case also checks the stack it leaves unused, so a pass shows
+  # the headroom, not only the absence of a trap; that measurement needs filled stacks
+  # (CONFIG_INIT_STACKS, which the suite's thread analyzer selects only off native_sim). The
+  # RT_CORE_TEST_RAISED_PUBLISHER_STACK flag makes the case fail to build, instead of skipping, if
+  # the stack is not raised or the stacks are not filled.
   functional.sensor_domain.raised_publisher_stack:
     platform_exclude:
       - native_sim
-      - qemu_cortex_a9
-      - qemu_riscv64
-      - qemu_malta
+    extra_args:
+      - RT_CORE_TEST_RAISED_PUBLISHER_STACK=ON
     extra_configs:
-      - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE=8192
+      - CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE=12288
+      - CONFIG_INIT_STACKS=y

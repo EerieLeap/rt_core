@@ -50,9 +50,14 @@ if(RT_CORE_TEST_FLASH_DISK AND BOARD MATCHES "^qemu_")
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_flash.conf")
 endif()
 
-# Likewise for suites that need emulated ADCs.
+# Likewise for suites that need emulated ADCs. qemu_adc.overlay adds a third ADC whose channel
+# states no resolution, which rt_core's ADC Initialize() rejects; a scenario that needs every ADC
+# accepted sets RT_CORE_TEST_NO_FAILING_ADC (extra_args) to leave it out.
 if(RT_CORE_TEST_ADC_EMUL AND BOARD MATCHES "^qemu_")
     list(APPEND EXTRA_DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_adc.overlay")
+    if(RT_CORE_TEST_NO_FAILING_ADC)
+        list(APPEND EXTRA_DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_adc_no_failing.overlay")
+    endif()
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/qemu_adc.conf")
 endif()
 

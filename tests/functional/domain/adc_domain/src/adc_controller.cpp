@@ -43,7 +43,8 @@ using calibration_test_support::RecordingService;
 namespace {
 
 // native_sim declares two emulated ADCs (four channels, then two). QEMU targets declare a third
-// one whose channel states no resolution, so there the controller must fail to initialize.
+// one whose channel states no resolution, which rt_core's ADC Initialize() rejects, so there the
+// controller must fail to initialize; the smp scenario leaves it out (RT_CORE_TEST_NO_FAILING_ADC).
 constexpr bool kDtHasFailingAdc = DT_NODE_EXISTS(DT_ALIAS(adc2));
 constexpr size_t kDtChannelCount = 6;
 
@@ -223,8 +224,9 @@ void AssertNotServed(SmpTestClient& client, const char* message) {
 // The controller serves calibration over SMP once the service to pause is known, with the unit's
 // channel count, and takes the group with it: a second controller registers it again.
 ZTEST(adc_controller, test_the_calibration_group_lives_with_the_controller) {
-    if constexpr(kDtHasFailingAdc)
-        ztest_test_skip();
+    // The smp scenario leaves the failing ADC out on every board (RT_CORE_TEST_NO_FAILING_ADC); a
+    // build that keeps it fails here, so the case cannot go missing as a skip.
+    static_assert(!kDtHasFailingAdc, "the smp scenario must build without the ADC that fails to initialize");
 
     auto fixture = MakeFixture();
     SmpTestClient client;

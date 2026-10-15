@@ -12,9 +12,14 @@ common:
 tests:
   functional.adc_domain: {}
   # AdcController's SMP calibration group: registered with the controller's channel count once the
-  # service to pause is known, unregistered before the calibration service goes.
+  # service to pause is known, unregistered before the calibration service goes. On the QEMU boards
+  # the scenario leaves out the third ADC, whose channel states no resolution and which rt_core's
+  # ADC Initialize() rejects, so the controller serves the group there too; the scenario above keeps
+  # it for the failure path.
   functional.adc_domain.smp:
     tags:
       - subsys.smp
+    extra_args:
+      - RT_CORE_TEST_NO_FAILING_ADC=ON
     extra_configs:
       - CONFIG_EERIE_LEAP_SMP=y

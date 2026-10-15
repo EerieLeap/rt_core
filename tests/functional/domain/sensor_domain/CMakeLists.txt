@@ -13,5 +13,10 @@ file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)
 
 target_sources(app PRIVATE ${TEST_SOURCES})
 
+# Set by the raised_publisher_stack scenario (testcase.yaml): the throwing filter case must run there.
+if(RT_CORE_TEST_RAISED_PUBLISHER_STACK)
+    target_compile_definitions(app PRIVATE RT_CORE_TEST_RAISED_PUBLISHER_STACK)
+endif()
+
 # allocation_counter.h
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../common)
