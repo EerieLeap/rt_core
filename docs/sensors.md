@@ -164,6 +164,12 @@ so the trigger itself has no mode:
   start, so a switch that is on at boot needs no new edge. A `Toggle` switch keeps its value across
   a sensors apply (see [Generations and restarts](#generations-and-restarts)), so the trigger sees
   no change and requests nothing, and logging continues (see [logging.md](logging.md#restarts)).
+- A change to a `Toggle` sensor's type, `debounce_ms` or `input_mode` starts its switch off, which
+  the trigger reads as 1 to 0 and stops logging (a change to `Level` waits for the sensor's first
+  reading). A change to its id stops nothing, and neither does removing or disabling it: a trigger
+  selects its sensor by id, so it hears nothing more and keeps its last state, and a trigger on the
+  new id reads the first 0 as no request. Logging goes on in a new file (see
+  [logging.md](logging.md#triggers)).
 
 | Example | Sensor | Trigger |
 | --- | --- | --- |

@@ -373,6 +373,12 @@ is the wanted logging state.
   with a `SensorId` selector the controller also checks the stored sensors: no enabled sensor with
   that id logs "selects nothing on this unit". That trigger stays subscribed, and acts as soon as a
   sensor with that id publishes.
+- **A sensor that goes away is not noticed.** The stored sensors are checked only when the set is
+  built. A sensors apply that removes, disables or renames the sensor leaves its trigger subscribed
+  to an id that publishes nothing: no log line, no request, and the trigger keeps its last state,
+  so logging goes on. If a sensor with that id comes back, its switch starts off, which a trigger
+  that last saw 1 reads as 1 to 0, and it stops whatever session runs then, one that the shell or
+  another unit started included. Storing the triggers again clears the state.
 - **A stored configuration rebuilds the set.** When the triggers are stored, the controller
   replaces the set on the configuration work queue and asks the sensor events publisher to replay
   (see [sensors.md](sensors.md#sensor-events)), so the new set sees the current value of its
