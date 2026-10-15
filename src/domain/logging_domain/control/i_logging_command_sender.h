@@ -8,8 +8,8 @@ class ILoggingCommandSender {
 public:
     virtual ~ILoggingCommandSender() = default;
 
-    // Broadcasts start or stop and returns without waiting for an answer; the outcome arrives as the
-    // logging status the units share.
+    // Broadcasts start or stop and returns without waiting for an answer; a change of state arrives as
+    // the logging status the units share.
     virtual void SendLoggingCommand(bool is_start) = 0;
 };
 

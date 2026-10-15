@@ -286,7 +286,7 @@ bool LoggingController::BuildRole() {
     // supervisor's Initialize(), which a request needs.
     logging_command_handler_ = std::make_unique<LoggingCommandHandler>(canbus_com_service_, logging_control_);
 
-    // Not fatal, as in rt_daq: the unit still logs and takes commands, the others just see no status.
+    // Not fatal: the unit still logs and takes commands; the other units just see no status from it.
     try {
         logging_status_exporter_ = std::make_unique<LoggingStatusExporter>(canbus_com_service_);
     } catch(const std::exception& e) {

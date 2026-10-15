@@ -63,7 +63,8 @@ Code: `src/subsys/event_bus/`. A typed publish/subscribe transport:
   happened before they were taken is seen (see `SensorEventsPublisher`).
 
 **Bindings.** Stored configuration names an event by value: a channel id and the raw values of
-the channel's enums, so it resolves without the code knowing those enums. Widget bindings use this.
+the channel's enums, so it resolves without the code knowing those enums. Widget bindings
+(rt_gauge) and logging triggers ([logging.md](logging.md#triggers)) use this.
 
 - `EventBinding` (`event_binding.h`) holds the channel id, the event type, the payload key and an
   optional selector (`selector_key`, `selector_value`) that narrows the events to one sensor or one
@@ -109,12 +110,16 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
 configuration parsers and validators use them in builds without `EERIE_LEAP_EVENT_BUS`.
 
 Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `SensorId`,
-`Value`; 128 queued events, on `SensorEventBus` with a 4 KiB stack; published by
+`Value`; 128 queued events, on the bus the composition root registers it with: rt_core's
+`SensorEventBus` (4 KiB stack, this channel only) on rt_gauge, the application bus that also
+carries `logging_events` on rt_daq, see [logging.md](logging.md#wiring); published by
 `SensorEventsPublisher`, see [sensors.md](sensors.md#sensor-events)) and `logging_events`
 (`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued
 events, on the bus the composition root registers it with; see
 [logging.md](logging.md#status-events-and-failures), and
-[logging.md](logging.md#status-on-other-units) for the status of other units on it).
+[logging.md](logging.md#status-on-other-units) for the status of other units on it). A channel stays
+with the first bus that registers it (`RegisterChannel()` returns `-EEXIST` on another), so a unit
+that puts `sensor_events` on its own bus does not create `SensorEventBus`.
 
 ## Random (`EERIE_LEAP_RANDOM`)
 

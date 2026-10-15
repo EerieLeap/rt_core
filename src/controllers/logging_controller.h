@@ -70,13 +70,13 @@ using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
 // role is the build's: with EERIE_LEAP_DOMAIN_LOGGING the unit writes logs (writer role), without it
 // the unit controls the units that do (remote role).
 //
-// Build it once a bus carries logging_events and sensor_events and the channel registry names them,
-// after CanbusController and SensorsController::Initialize() (it takes the sensors manager), before
-// ManagementController (it registers configuration managers) and before SensorsController::Start()
-// (its triggers subscribe first). Destroy it from the thread that built it, not from the
-// configuration work queue, a bus thread or the CDMP work queue: it waits for all of them. Build it
-// once per ConfigurationService: the service cannot unregister a manager, so Initialize() fails on
-// one that already holds the logging types.
+// Build it once logging_events and sensor_events each have a bus (one may carry both) and the channel
+// registry names them, after CanbusController and SensorsController::Initialize() (it takes the
+// sensors manager), before ManagementController (it registers configuration managers) and before
+// SensorsController::Start() (its triggers subscribe first). Destroy it from the thread that built
+// it, not from the configuration work queue, a bus thread or the CDMP work queue: it waits for all
+// of them. Build it once per ConfigurationService: the service cannot unregister a manager, so
+// Initialize() fails on one that already holds the logging types.
 class LoggingController {
 public:
     // TODO: For test purposes only

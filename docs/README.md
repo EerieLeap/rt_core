@@ -27,7 +27,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
 | [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`) and transports |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
-| [logging.md](logging.md) | Log writer, logging control, triggers and the logging controller, MDF4 and simple loggers, logging configuration, logging status on other units |
+| [logging.md](logging.md) | Log writer, logging control, triggers and the logging controller, the MDF4 logger, logging configuration, logging status on other units |
 | [system.md](system.md) | Product identity and the system configuration |
 | [filesystem.md](filesystem.md) | Internal and SD filesystems, assets, directory layout |
 | [gpio.md](gpio.md) | Digital inputs |
@@ -141,10 +141,15 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
     with the ADC controller (`RegisterPausedService`) and the CAN controller
     (`RegisterDependentService`).
 11. The `SensorEventsPublisher` on the shared frame, started, then `LoggingController` in the
-    writer role when an SD card exists. The log writer joins the sensors controller's dependents
-    (`RegisterDependentService`) through `GetDependentService()`, only if `Initialize()` returned 0
-    (see [logging.md](logging.md#wiring)). A unit without a log writer builds the controller in the
-    remote role at this point instead, after `CanbusController` and before `ManagementController`.
+    writer role when the SD service exists (a board with an SD file system, step 3; without a card
+    in it the controller is still built and every start fails). Only a controller whose
+    `Initialize()` returned 0 is kept, and its log writer joins the sensors controller's dependents
+    (`RegisterDependentService`) through `GetDependentService()` (see
+    [logging.md](logging.md#wiring)). A board without an SD file system builds no logging
+    controller. A unit built without `EERIE_LEAP_DOMAIN_LOGGING`, such as rt_gauge, builds the
+    controller in the remote role at this point instead: after `CanbusController` and
+    `SensorsController::Initialize()`, before `SensorsController::Start()` and
+    `ManagementController`.
 12. `ManagementController`, after every manager is registered, with the sensors' capabilities and
     the SD service.
 13. `CanbusSchedulerService`, registered as a CAN dependent service.

@@ -19,8 +19,10 @@ Two instances exist in the application:
 | Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor` |
 | SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts, `data_logs/` |
 
-The SD service is optional: the sensors, CAN and logging code accept a null SD service and then
-skip script validation and logging.
+The SD service is optional for the sensors and CAN code, which accept a null SD service and then
+skip script validation. The writer-role `LoggingController` requires one, and its `Initialize()`
+fails without it, so a composition root with no SD service does not build it (rt_daq skips it). The
+remote role ignores the SD service. See [logging.md](logging.md#wiring).
 
 Clients list a directory of the card, such as `scripts/`, with the SMP `files` group, which the
 `ManagementController` serves with the SD service it is given (see [smp.md](smp.md)).

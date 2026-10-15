@@ -140,7 +140,7 @@ Each run of the task:
 3. restarts a running writer if a logging configuration was stored, unless step 2 opened a
    session, which already uses it.
 
-The rules, from rt_daq's controller:
+The rules:
 
 - A start while running does nothing. A stop while stopped does nothing and publishes nothing.
 - A start of a failed session stops it and opens a new file. A start that cannot stop it starts
@@ -170,15 +170,15 @@ queue's stack for it; rt_daq gives it 8 KiB. The dependent works only on the que
 | Field | Source |
 | --- | --- |
 | `device_name` | `CONFIG_BOARD` |
-| `tool_id` | The supervisor's constructor (`"rt_daq"` on rt_daq). |
+| `tool_id` | `LoggingController`'s `tool_id` (`"rt_daq"` on rt_daq), passed on to the supervisor's constructor. |
 | `tool_version` | `EERIE_LEAP_SW_VERSION_MAJOR.MINOR.PATCH` |
 | `product_id` | `EERIE_LEAP_PRODUCT_ID` |
 | `hw_version`, `sw_version` | `SystemConfiguration`, packed. |
-| `device_id` | The supervisor's `DeviceIdProvider` callback, 0 without one. |
+| `device_id` | The supervisor's `DeviceIdProvider` callback. `LoggingController` gives it one that reads the COM service's CDMP device ID; 0 without a COM service. |
 | `sensors_configuration_hash` | The CRC of the stored sensors configuration, 0 when it was rejected at boot. |
 
-The callback keeps the writer free of CDMP at compile time; a unit with a COM service returns its
-CDMP device ID. The factory, and the callback with it, lives as long as the writer, so the callback
+The callback keeps the writer free of CDMP at compile time; `LoggingController` builds it from the
+COM service. The factory, and the callback with it, lives as long as the writer, so the callback
 holds the COM service weakly:
 
 ```cpp
@@ -203,7 +203,7 @@ the destructor: whoever requests keeps the supervisor alive or goes first.
 
 | Method | Meaning |
 | --- | --- |
-| `RequestStart()`, `RequestStop()` | Record the wanted state and return, from any thread. The latest request wins; the outcome arrives as `StatusUpdated` on `logging_events`. |
+| `RequestStart()`, `RequestStop()` | Record the wanted state and return, from any thread. The latest request wins. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
 | `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. For a shell's status and for tests: a trigger never reads it. |
 
 A request never waits for the writer or for the CAN bus. Both implementations store the wanted
@@ -234,14 +234,17 @@ writer.
   `CanbusComService::SendCommand()` starts the transaction and sends the CAN frame on the calling
   thread, so a send never runs on the thread of a request. Two requests before the task runs send
   one command, the later one.
-- **The result.** The response only logs a failure, also when no logging unit answers in time. The
-  outcome is the shared status, which the importer publishes (see
-  [Status on other units](#status-on-other-units)), and `IsActive()` follows it.
-- **A wanted start is sent again once.** A start sent while no unit logs is lost: the gauge boots
-  with its switch on, or the logging unit is away, and a switch does not change again. So the
-  control remembers that a start is wanted, from `RequestStart()` until `RequestStop()`, and sends
-  it again when the status goes from inactive `Unavailable` to inactive `Stopped`. It never sends
-  again on any other transition: a stop from the logging unit's shell, or a failure such as
+- **The result.** The response only logs a failure, also when no logging unit answers in time. A
+  change of state is the shared status, which the importer publishes (see
+  [Status on other units](#status-on-other-units)), and `IsActive()` follows it. A start that
+  fails on the logging unit leaves the status as it was: the failure is logged on that unit only,
+  and the response does not report it.
+- **A wanted start is sent again once.** A start sent while no unit logs is lost: the gauge's
+  switch is turned on before the logging unit has booted, a trigger is already on at boot (a
+  `Level` switch or the ignition), or the logging unit is away, and a switch does not change again.
+  So the control remembers that a start is wanted, from `RequestStart()` until `RequestStop()`, and
+  sends it again when the status goes from inactive `Unavailable` to inactive `Stopped`. It never
+  sends again on any other transition: a stop from the logging unit's shell, or a failure such as
   `NoSpace`, stands until the switch moves.
 
 The importer shows that transition in these cases only:
@@ -250,7 +253,7 @@ The importer shows that transition in these cases only:
 | --- | --- |
 | A logging unit was away longer than the heartbeat timeout (3 x 3 s) and returns | `Unavailable`, then `Stopped`: sent again. |
 | A logging unit restarts and announces its record after its first heartbeat | `Unavailable`, then `Stopped`: sent again. |
-| This unit's own COM service restarts, as a CAN reconfiguration does, which forgets every record | `Unavailable`, then `Stopped`: sent again, over a stop made on the logging unit's shell. |
+| This unit's own COM service restarts, as a CAN reconfiguration does, which drops every other unit's record (its own records survive) | `Unavailable`, then `Stopped`: sent again, over a stop made on the logging unit's shell. |
 | A logging unit restarts within the heartbeat timeout and already holds its record in its first heartbeat | From logging straight to `Stopped`: **not** sent again. |
 
 The last row is a known limit. A start that the reboot cost stays lost until the switch moves.
@@ -259,7 +262,8 @@ The last row is a known limit. A start that the reboot cost stays lost until the
 
 `LoggingCommandHandler` (`control/logging_command_handler.h`) serves the CDMP `LOGGING` command on
 a unit that logs. A start or stop becomes `RequestStart()` or `RequestStop()`, and the handler
-answers `SUCCESS` at once, which means accepted: the result arrives as the shared status. A request
+answers `SUCCESS` at once, which means accepted, not started: a change of state arrives as the
+shared status, and a start that fails leaves it as it was (logged on this unit only). A request
 without a payload is answered `FAILURE`, and so is one that arrives while the handler is being
 destroyed. It runs on the CDMP work queue and never waits for the writer, so a command cannot hold
 up heartbeats or SMP over CAN (see [cdmp.md](cdmp.md#com-service)).
@@ -319,7 +323,10 @@ logging control:  { triggers: [ { channel: Sensors, event_type: DataUpdated, pay
 
 ### Threading
 
-`LoggingController` adds no thread.
+Logging control adds no thread: its code runs on the threads below. In the writer role the
+controller builds the log writer, and the writer's own work queue (priority 8,
+`EERIE_LEAP_LOG_WRITER_STACK_SIZE`, see [How it works](#how-it-works)) is the only thread the
+controller brings. The remote role brings none.
 
 | Code | Thread |
 | --- | --- |
@@ -558,11 +565,12 @@ logging control for the role the build picks. The composition root builds it onc
 subscribes. The publisher, and `CanbusController` with `SensorsController::Initialize()`, come
 before the controller, in any order:
 
-1. A bus that carries `logging_events` and `sensor_events`, registered by the composition root
-   before anything publishes on them: a channel drops every publish until then. The root also
-   registers both channels with `EventChannelRegistry`, as `EventChannelId::Sensors` and
-   `EventChannelId::Logging`; without the entries every trigger logs that its channel is not
-   registered and does nothing.
+1. A bus for each of `logging_events` and `sensor_events`, registered by the composition root
+   before anything publishes on them (one bus may carry both, as rt_daq's `AppEventBus` does; the
+   gauge has `SensorEventBus` for `sensor_events` and its own `AppEventBus` for `logging_events`):
+   a channel drops every publish until then. The root also registers both channels with
+   `EventChannelRegistry`, as `EventChannelId::Sensors` and `EventChannelId::Logging`; without the
+   entries every trigger logs that its channel is not registered and does nothing.
 2. The `SensorEventsPublisher` on the shared readings frame, built and started (see
    [sensors.md](sensors.md#sensor-events)). It is a constructor parameter, and `Initialize()` replays
    through it, so it can be built at any point before the controller.

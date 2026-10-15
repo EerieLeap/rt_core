@@ -270,10 +270,10 @@ one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`fl
   (`EventChannel::Accepts(event)`, see [infrastructure.md](infrastructure.md#event-bus-eerie_leap_event_bus));
   others are taken and dropped. On a unit without widgets (rt_daq) that leaves only the sensors its
   logging triggers bind to, so a full sensor load never floods the channel, which sheds events
-  under load; on the gauge it leaves the sensors its widgets bind to. The answer is cached per
-  sensor until the channel's subscriptions change, so the filters run once per sensor and change,
-  not once per reading. A filter on this channel must therefore decide by `SensorId`, as binding
-  selectors do. A subscriber without a filter receives every sensor.
+  under load; on the gauge it leaves the sensors its widgets and its logging triggers bind to. The
+  answer is cached per sensor until the channel's subscriptions change, so the filters run once per
+  sensor and change, not once per reading. A filter on this channel must therefore decide by
+  `SensorId`, as binding selectors do. A subscriber without a filter receives every sensor.
 - **A filter must not throw.** One that throws withholds its sensor from every subscriber. When
   the publisher asks it, the throw counts as a rejection until the subscriptions change and is
   logged once. When a subscriber that accepts is asked first, the throw happens on the bus thread

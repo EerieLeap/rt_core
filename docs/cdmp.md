@@ -115,7 +115,8 @@ a `DispatchGuard` and not the object.
 one command, `LOGGING` (0x20, one byte: 0x01 start, 0x00 stop), to start and stop logging on every
 unit at once. `LoggingController` serves it on a unit that logs and sends it from one that does
 not (see [logging.md](logging.md#the-logging-command)). `SUCCESS` means accepted: the unit has
-queued the request, and the outcome is the shared `LOGGING_STATUS` (see below). A request without a
+queued the request, and a change of state shows in the shared `LOGGING_STATUS` (see below); a start
+that fails leaves the status as it was and is logged only on the unit that logs. A request without a
 payload is answered `FAILURE`.
 
 ## Shared state

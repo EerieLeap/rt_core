@@ -48,6 +48,16 @@ setting `RT_CORE_TEST_SIM_FLASH` or `RT_CORE_TEST_ADC_EMUL` before including
 all of them but `qemu_riscv64`, so an overflow names the thread instead of
 surfacing later as heap corruption.
 
-Known gaps: `qemu_malta` cannot fit the heavier suites in RAM, `qemu_cortex_a53`
-faults in the sensor and ADC emulation paths, and `unit.subsys.mdf` and
-`functional.sensor_domain` are `native_sim` only.
+Known gaps: three suites do not link on every QEMU board. `unit.domain` and
+`functional.system_domain` fail to link on `qemu_cortex_a53`, `qemu_riscv64`
+and `qemu_malta` (`unit.domain` is missing `CONFIG_CRC`;
+`functional.system_domain` leaves `CanbusService::GetMessageConfiguration`
+undefined), and `unit.subsys.mdf` fails to link on `qemu_riscv64`
+(`threading::Thread::Join()` undefined). The other suites build and pass on
+every board they allow.
+
+`functional.sensor_domain` runs on every board. Off `native_sim`, its
+throwing-filter case needs an 8192-byte sensor events publisher stack: at the
+4096 default it skips (it overflowed on `qemu_cortex_a53` while unwinding). The
+`functional.sensor_domain.raised_publisher_stack` scenario runs the suite on
+`qemu_cortex_a53` at 8192.

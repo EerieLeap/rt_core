@@ -167,7 +167,8 @@ void RunSamples(Pipeline& pipeline, uint32_t iteration) {
     pipeline.pipeline->Process(pipeline.generation->runtimes[2], raw_reading);
 }
 
-// What the renderer, the log writer, live data and the CAN frame builder do with the results.
+// What the sensor events publisher, the log writer, live data and the CAN frame builder do with the
+// results.
 void RunConsumers(Pipeline& pipeline) {
     (void)pipeline.frame->TakeProcessedReadings(pipeline.buffer);
     (void)pipeline.frame->SnapshotProcessedReadings(pipeline.buffer);

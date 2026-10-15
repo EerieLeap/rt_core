@@ -7,8 +7,10 @@ class ILoggingControl {
 public:
     virtual ~ILoggingControl() = default;
 
-    // Records the request and returns; callable from any thread. The latest request wins, and the
-    // outcome arrives as StatusUpdated on logging_events.
+    // Records the request and returns; callable from any thread. The latest request wins. A change of
+    // state arrives as StatusUpdated on logging_events. A request that changes nothing publishes
+    // nothing: a stop while stopped, or a start that fails (logged on the unit that logs). So a
+    // requester cannot tell a refusal from a request not yet served.
     virtual void RequestStart() = 0;
     virtual void RequestStop() = 0;
 
