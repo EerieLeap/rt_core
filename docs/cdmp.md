@@ -84,20 +84,39 @@ and the SMP-CAN transport on the channel named by the stored CAN configuration's
 constructible from a byte span and returns success, or a result carrying up to 4 bytes:
 
 ```cpp
+// LoggingCommandHandler: the command becomes a request, answered at once.
 canbus_com_service->SetCommandHandler<CanbusComLoggingCommand>(
     CanbusComCommandCode::LOGGING,                      // 0x20
-    [this](std::optional<CanbusComLoggingCommand> command) {
-        return command.has_value() && command->IsStart() ? LogWriterStart() : LogWriterStop();
+    [guard = guard_, control = logging_control_.get()](std::optional<CanbusComLoggingCommand> command) {
+        if(!command.has_value())
+            return false;
+
+        bool is_accepted = false;
+        guard->Dispatch([&] {
+            if(command->IsStart())
+                control->RequestStart();
+            else
+                control->RequestStop();
+
+            is_accepted = true;
+        });
+
+        return is_accepted;
     });
 ```
 
-Handlers can be set and unset from any thread while CDMP runs; a handler unset during its call
-finishes that call.
+A handler runs on the CDMP work queue, which also sends heartbeats and carries SMP over CAN, so it
+must not block: do the work elsewhere and answer. Handlers can be set and unset from any thread
+while CDMP runs; a handler unset during its call finishes that call, which is why the example holds
+a `DispatchGuard` and not the object.
 
 `SendCommand(command, callback, device_id)` sends to one device or, by default, broadcasts
 (255); the callback receives the result code and up to 4 bytes of response data. rt_core defines
-one command, `LOGGING` (0x20, one byte: 0x01 start, 0x00 stop), which rt_daq uses to start and
-stop logging on every unit at once.
+one command, `LOGGING` (0x20, one byte: 0x01 start, 0x00 stop), to start and stop logging on every
+unit at once. `LoggingController` serves it on a unit that logs and sends it from one that does
+not (see [logging.md](logging.md#the-logging-command)). `SUCCESS` means accepted: the unit has
+queued the request, and the outcome is the shared `LOGGING_STATUS` (see below). A request without a
+payload is answered `FAILURE`.
 
 ## Shared state
 

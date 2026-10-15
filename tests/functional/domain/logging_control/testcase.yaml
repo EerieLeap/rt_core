@@ -10,19 +10,16 @@ common:
     - qemu_malta
 
 tests:
+  # The remote role, as the gauge builds it: logging_controller_remote.cpp.
   functional.logging_control: {}
-  # The writer role's build: the logging domain next to the controller, so rt_core's CMakeLists.txt
-  # globs control/ twice and de-duplicates it. The cases are the same; the build is the point, so one
-  # board is enough. A scenario's platform_allow adds to the common list, so the boards the common
-  # list allows are excluded instead.
+  # The writer role, as rt_daq builds it: the logging domain next to the controller, so rt_core's
+  # CMakeLists.txt globs control/ twice and de-duplicates it. logging_controller_writer.cpp replaces
+  # logging_controller_remote.cpp, and the other cases run where the domain and the controller both
+  # build control/. The log volume is the 1 MiB test filesystem, below the 16 MiB default minimum.
   functional.logging_control.writer_role:
-    platform_exclude:
-      - qemu_cortex_a9
-      - qemu_cortex_a53
-      - qemu_riscv64
-      - qemu_malta
     extra_configs:
       - CONFIG_EERIE_LEAP_DOMAIN_LOGGING=y
+      - CONFIG_EERIE_LEAP_LOG_MIN_FREE_SPACE_MB=0
       - CONFIG_EERIE_LEAP_MDF=y
       - CONFIG_EERIE_LEAP_PRODUCT_ID=50178
       - CONFIG_EERIE_LEAP_HW_VERSION_MAJOR=2

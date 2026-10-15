@@ -1,9 +1,9 @@
 # Configuration system
 
-Every domain with user settings (system, ADC, CAN bus, sensors, logging) stores them the same
-way: one CBOR file per type on the internal filesystem, validated on every load and save, and
-exposed to clients through the SMP `config` group. This page describes the shared machinery;
-the per-domain pages describe the content of each configuration.
+Every domain with user settings (system, ADC, CAN bus, sensors, logging, the logging triggers)
+stores them the same way: one CBOR file per type on the internal filesystem, validated on every
+load and save, and exposed to clients through the SMP `config` group. This page describes the
+shared machinery; the per-domain pages describe the content of each configuration.
 
 Code: `src/configuration/`, `src/domain/configuration_domain/`.
 
@@ -13,7 +13,7 @@ Code: `src/configuration/`, `src/domain/configuration_domain/`.
 | --- | --- | --- |
 | Kconfig | `prj.conf`, board `.conf` | Build time: what is compiled, sizes, priorities, limits, product identity |
 | Device tree | Board `.dts` / overlay | Build time: which hardware exists (ADCs, CAN controllers, GPIO inputs, filesystems, display) |
-| Stored configuration | Firmware defaults, the C++ API, or an SMP client | Run time: calibrations, sensors, CAN messages, logging |
+| Stored configuration | Firmware defaults, the C++ API, or an SMP client | Run time: calibrations, sensors, CAN messages, logging and its triggers |
 
 ## Storage
 
@@ -35,8 +35,11 @@ and filesystem work. Calls from the queue thread itself run inline.
 | Sensors | 4 | `SensorsConfigurationManager` | `config/sensors_config.cbor` |
 | Logging | 5 | `LoggingConfigurationManager` | `config/logging_config.cbor` |
 | UI, Display | 6, 7 | Reserved for applications | |
+| Logging control | 8 | `LoggingControlConfigurationManager` | `config/logging_control_config.cbor` |
 
-The file names are set by the controllers that create the managers.
+The file names are set by the controllers that create the managers. `LoggingController` registers
+logging control (the logging triggers, see [logging.md](logging.md#stored-triggers)) on units with and
+without a log writer, and the logging configuration only on those with one.
 
 ## Configuration managers
 

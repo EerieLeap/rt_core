@@ -150,6 +150,31 @@ An indicator of any source (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_I
   to the newest level, so the sensor always ends on the real level, and its `debounce_ms` settles
   a bouncing contact (see [gpio.md](gpio.md)).
 
+### Indicators as logging triggers
+
+A logging trigger binds to an indicator's `DataUpdated` event on `sensor_events` (see
+[logging.md](logging.md#triggers)), and the indicator's conditioning decides what the trigger sees,
+so the trigger itself has no mode:
+
+- `Toggle` makes a momentary button a switch, and `debounce_ms` settles its contact. A widget bound
+  to the same sensor shows the same switch as the trigger acts on.
+- `Level` follows a switch, a CAN signal or an expression as it is. A debounce keeps a short dip
+  from stopping a session.
+- The trigger starts logging on 0 to 1 and stops it on 1 to 0, and reads a first value of 1 as a
+  start, so a switch that is on at boot needs no new edge. A `Toggle` switch keeps its value across
+  a sensors apply (see [Generations and restarts](#generations-and-restarts)), so the trigger sees
+  no change and requests nothing, and logging continues (see [logging.md](logging.md#restarts)).
+
+| Example | Sensor | Trigger |
+| --- | --- | --- |
+| The gauge's button | `PHYSICAL_INDICATOR` on GPIO 0, `debounce_ms` 30, `Toggle` | `Sensors` / `DataUpdated` / `Value`, selector `logging_button` |
+| A switch on a DAQ | `PHYSICAL_INDICATOR` on GPIO 1, `debounce_ms` 30, `Level` | the same, selector `logging_switch` |
+| Log while the ignition is on | `CANBUS_INDICATOR`, no debounce | the same, selector `ignition` |
+| Log while moving, ignoring a dip shorter than 2 s | `VIRTUAL_INDICATOR`, expression `speed > 5`, `debounce_ms` 2000 | the same, selector `moving` |
+
+The sensor and the trigger are two stored configurations that must agree: a trigger on a sensor
+that does not exist does nothing and is logged when the triggers are built.
+
 ### Polled sensors: rate groups
 
 `ProcessingSchedulerService` puts every polled sensor into the rate group of its
@@ -235,17 +260,20 @@ queue thread of its own, it takes the readings processed since its last tick
 one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`float`).
 
 - **One per unit.** Taking clears the marks, so a second publisher would split the readings. Each
-  application constructs one with the shared frame and starts it after the subscribers it serves
-  exist and before `SensorsController::Start()`.
+  application constructs one with the shared frame and starts it before `SensorsController::Start()`.
+  A subscriber that comes later calls `Replay()` to see the current state, as `LoggingController`
+  does.
 - **The latest value per tick.** A sensor committed several times within one period is published
   once, with its latest value; changes across ticks arrive in order. A pulse shorter than the
   period can be missed; a switch (a held value) cannot.
 - **Only what someone listens to.** A reading is published only if a subscriber accepts it
   (`EventChannel::Accepts(event)`, see [infrastructure.md](infrastructure.md#event-bus-eerie_leap_event_bus));
-  others are taken and dropped. The answer is cached per sensor until the channel's subscriptions
-  change, so the filters run once per sensor and change, not once per reading. A filter on this
-  channel must therefore decide by `SensorId`, as binding selectors do. A subscriber without a
-  filter receives every sensor.
+  others are taken and dropped. On a unit without widgets (rt_daq) that leaves only the sensors its
+  logging triggers bind to, so a full sensor load never floods the channel, which sheds events
+  under load; on the gauge it leaves the sensors its widgets bind to. The answer is cached per
+  sensor until the channel's subscriptions change, so the filters run once per sensor and change,
+  not once per reading. A filter on this channel must therefore decide by `SensorId`, as binding
+  selectors do. A subscriber without a filter receives every sensor.
 - **A filter must not throw.** One that throws withholds its sensor from every subscriber. When
   the publisher asks it, the throw counts as a rejection until the subscriptions change and is
   logged once. When a subscriber that accepts is asked first, the throw happens on the bus thread
@@ -254,7 +282,10 @@ one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`fl
 - **Replay.** `Replay()` marks every processed reading as updated (`MarkProcessedReadingsUpdated()`),
   so the next tick publishes the latest value of every accepted sensor once. Safe from any thread;
   a consumer that has just subscribed calls it to see the current state rather than wait for the
-  next change. Every subscriber receives the replay. It is reliable because a tick reads the
+  next change. `LoggingController` calls it after it builds its triggers, at `Initialize()` and
+  after each rebuild, when at least one trigger subscribed, so a trigger sees a switch that is
+  already on. Every subscriber receives the replay, widgets included, which re-apply their values.
+  It is reliable because a tick reads the
   subscription generation after each take: a subscription made before the call to `Replay()` has
   moved the generation by then, so a sensor cached as rejected is asked again.
 - **Lifecycle.** A `ServiceBase`: `Initialize()` creates the thread, `Start()` the ticks; it is
@@ -349,7 +380,8 @@ for the device `INFO` (see [smp.md](smp.md)). The
 application also registers the processing service with the ADC controller (to be paused during
 calibration) and the CAN controller (to be restarted on CAN reconfiguration). The application
 constructs the `SensorEventsPublisher` itself, with the same frame (see
-[Sensor events](#sensor-events)).
+[Sensor events](#sensor-events)), and passes it to `LoggingController`, which replays after it
+rebuilds its triggers (see [logging.md](logging.md#wiring)).
 
 Measured on the ESP32-S3 (application notes): an ADC reading with 40 samples takes about
 1.2 ms, 3.3 ms with an expression; a GPIO reading 130 µs, 1.9 ms with an expression.

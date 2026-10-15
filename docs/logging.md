@@ -4,6 +4,11 @@ The logging domain (`src/domain/logging_domain/`) writes sensor readings to a fi
 card at a fixed interval, in MDF 4.10 by default. The MDF writer itself is the MDF subsystem
 (`src/subsys/mdf/`).
 
+Logging control (`src/domain/logging_domain/control/`) starts and stops logging, on this unit or
+on the units that log: from triggers stored in the configuration, from the CDMP `LOGGING` command
+and from the application's shell. `LoggingController` (`EERIE_LEAP_CONTROLLER_LOGGING`) builds it
+on units with and without a log writer (see [Control](#control)).
+
 ## How it works
 
 `LogWriterService` is a service with its own work queue (priority 8, stack
@@ -122,12 +127,7 @@ calls it.
 ### Supervision
 
 `LogWriterSupervisor` (`services/log_writer_supervisor.h`) runs the writer of a unit that logs.
-It implements `ILoggingControl` (`control/i_logging_control.h`), the interface the inputs use:
-
-| Method | Meaning |
-| --- | --- |
-| `RequestStart()`, `RequestStop()` | Record the wanted state and return, from any thread. The latest request wins; the outcome arrives as `StatusUpdated` on `logging_events`. |
-| `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. |
+It implements `ILoggingControl`, the interface the inputs use (see [Control](#control)).
 
 A request stores the wanted state in an atomic and reschedules the supervisor's one task on the
 configuration work queue. It takes no lock, so it never waits for the writer, and a bus thread or
@@ -192,10 +192,166 @@ holds the COM service weakly:
 
 **Teardown.** The destructor withdraws the status subscription, the updated handler and the task.
 A handler already dispatched to it does nothing (a `DispatchGuard`), and a run in progress is
-waited for. It leaves the writer as it is, for its owner to stop. The dependent and the factory
-hold the writer, the wanted state and the managers, not the supervisor, so they stay harmless
-after it. No request may come during or after the destructor: whoever requests keeps the
-supervisor alive or goes first.
+waited for. It leaves the writer as it is, for its owner to stop (`LoggingController` does, see
+[Wiring](#wiring)). The dependent and the factory hold the writer, the wanted state and the
+managers, not the supervisor, so they stay harmless after it. No request may come during or after
+the destructor: whoever requests keeps the supervisor alive or goes first.
+
+## Control
+
+`ILoggingControl` (`control/i_logging_control.h`) is the seam between every input and the writer:
+
+| Method | Meaning |
+| --- | --- |
+| `RequestStart()`, `RequestStop()` | Record the wanted state and return, from any thread. The latest request wins; the outcome arrives as `StatusUpdated` on `logging_events`. |
+| `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. For a shell's status and for tests: a trigger never reads it. |
+
+A request never waits for the writer or for the CAN bus. Both implementations store the wanted
+state in an atomic and reschedule one task on the configuration work queue, so a trigger can call
+from a bus thread and the CDMP command from the CDMP work queue. The output needs no interface:
+the status is `StatusUpdated` on `logging_events`, which a display or a widget binds to.
+
+| Input | Source |
+| --- | --- |
+| [Triggers](#triggers) | Stored configuration: an event binding, typically an indicator sensor. |
+| [The `LOGGING` command](#the-logging-command) | CDMP, from another unit; only on a unit that logs. |
+| The application's shell or autostart | `LoggingController::GetControl()`. |
+
+The build picks the implementation (`EERIE_LEAP_DOMAIN_LOGGING`):
+
+| Role | Control | Unit |
+| --- | --- | --- |
+| Writer | `LogWriterSupervisor` (see [Supervision](#supervision)): a request starts or stops this unit's writer. | rt_daq |
+| Remote | `RemoteLoggingControl`: a request becomes the CDMP `LOGGING` broadcast. | rt_gauge |
+
+### Remote control
+
+`RemoteLoggingControl` (`control/remote_logging_control.h`) is the control of a unit without a log
+writer.
+
+- **The send.** A request stores the wanted state and reschedules its task on the configuration
+  work queue, which sends the `LOGGING` broadcast through `CanbusComLoggingCommandSender`.
+  `CanbusComService::SendCommand()` starts the transaction and sends the CAN frame on the calling
+  thread, so a send never runs on the thread of a request. Two requests before the task runs send
+  one command, the later one.
+- **The result.** The response only logs a failure, also when no logging unit answers in time. The
+  outcome is the shared status, which the importer publishes (see
+  [Status on other units](#status-on-other-units)), and `IsActive()` follows it.
+- **A wanted start is sent again once.** A start sent while no unit logs is lost: the gauge boots
+  with its switch on, or the logging unit is away, and a switch does not change again. So the
+  control remembers that a start is wanted, from `RequestStart()` until `RequestStop()`, and sends
+  it again when the status goes from inactive `Unavailable` to inactive `Stopped`. It never sends
+  again on any other transition: a stop from the logging unit's shell, or a failure such as
+  `NoSpace`, stands until the switch moves.
+
+The importer shows that transition in these cases only:
+
+| Case | Status |
+| --- | --- |
+| A logging unit was away longer than the heartbeat timeout (3 x 3 s) and returns | `Unavailable`, then `Stopped`: sent again. |
+| A logging unit restarts and announces its record after its first heartbeat | `Unavailable`, then `Stopped`: sent again. |
+| This unit's own COM service restarts, as a CAN reconfiguration does, which forgets every record | `Unavailable`, then `Stopped`: sent again, over a stop made on the logging unit's shell. |
+| A logging unit restarts within the heartbeat timeout and already holds its record in its first heartbeat | From logging straight to `Stopped`: **not** sent again. |
+
+The last row is a known limit. A start that the reboot cost stays lost until the switch moves.
+
+### The `LOGGING` command
+
+`LoggingCommandHandler` (`control/logging_command_handler.h`) serves the CDMP `LOGGING` command on
+a unit that logs. A start or stop becomes `RequestStart()` or `RequestStop()`, and the handler
+answers `SUCCESS` at once, which means accepted: the result arrives as the shared status. A request
+without a payload is answered `FAILURE`, and so is one that arrives while the handler is being
+destroyed. It runs on the CDMP work queue and never waits for the writer, so a command cannot hold
+up heartbeats or SMP over CAN (see [cdmp.md](cdmp.md#com-service)).
+
+Order matters on a unit that logs: the supervisor's `Initialize()`, then the handler, then the
+exporter. The exporter shares the first status as soon as it exists, and a command that arrives with
+no handler is dropped without an answer. A request passed to a supervisor that is not initialized is
+refused. The handler's destructor unsets whatever `LOGGING` handler the COM service holds, not only
+its own, so destroy an old handler before building its replacement.
+
+### Triggers
+
+`LoggingTriggerSet` (`control/logging_trigger_set.h`) subscribes the configured triggers. A trigger
+is an event binding (see [infrastructure.md](infrastructure.md#event-bus-eerie_leap_event_bus)): a
+channel, an event type, a payload key and an optional selector. The value it names, read as a bool,
+is the wanted logging state.
+
+- **One mode.** 0 to 1 requests a start and 1 to 0 a stop. A momentary button becomes a switch in
+  its sensor (`Toggle`, see [sensors.md](sensors.md#indicators-as-logging-triggers)), not in the
+  trigger, so a widget bound to the same sensor shows the same switch.
+- **Values.** A `bool`, or an `int`, `uint32_t` or `float` that equals exactly 0 or 1. Anything else
+  (NaN, another number, text) is ignored, the last state is kept, and it is logged once per
+  trigger.
+- **Changes only.** A trigger acts on changes of the value it saw last. The first value after it
+  subscribes counts only when it is 1: a switch that is already on starts logging at boot, and a
+  switch that is off asserts nothing, so a unit whose switch is off does not stop a session that
+  another trigger or another unit started.
+- **Requests only.** A trigger only requests, and the latest request from any source wins. A
+  switch left on does not prevent a stop from the shell or from another unit; its next change acts
+  again. There are two exceptions: the remote control's single send, above, and a store of the
+  triggers' configuration, whose replay (below) makes a switch that is on request a start again.
+- **Several triggers** coexist, such as a button and ignition. Each acts on its own changes. At most
+  16.
+- **A trigger that cannot act is logged when the set is built.** A channel this unit did not
+  register, `None`, or a selector that cannot select subscribes nothing. On the `Sensors` channel
+  with a `SensorId` selector the controller also checks the stored sensors: no enabled sensor with
+  that id logs "selects nothing on this unit". That trigger stays subscribed, and acts as soon as a
+  sensor with that id publishes.
+- **A stored configuration rebuilds the set.** When the triggers are stored, the controller
+  replaces the set on the configuration work queue and asks the sensor events publisher to replay
+  (see [sensors.md](sensors.md#sensor-events)), so the new set sees the current value of its
+  switch: a switch that is on starts logging. Stores that come before the rebuild runs rebuild
+  once. A rebuild that fails, such as one that runs out of memory, is logged and leaves no trigger
+  acting until the triggers are stored again or the unit restarts.
+- **Handlers hold a guard.** The bus calls handlers outside its subscriber lock, so a delivery
+  already under way survives an unsubscribe. The handlers hold the set's `DispatchGuard`, and the
+  destructor detaches it, waiting for a handler in its body, before it unsubscribes.
+
+The gauge's button as configuration: a debounced switch sensor, and a trigger on its value.
+
+```
+sensors:          { id: "logging_button", type: PHYSICAL_INDICATOR, channel: 0,
+                    debounce_ms: 30, input_mode: Toggle }
+logging control:  { triggers: [ { channel: Sensors, event_type: DataUpdated, payload_key: Value,
+                                  selector_key: SensorId, selector_value: "logging_button" } ] }
+```
+
+### Threading
+
+`LoggingController` adds no thread.
+
+| Code | Thread |
+| --- | --- |
+| The controller's constructor, `Initialize()`, getters and destructor | The composition root's. |
+| The updated handler of the triggers' configuration | The thread that stored it (the configuration work queue for an SMP apply). It only reschedules the rebuild. |
+| The rebuild of the triggers and the replay | The configuration work queue. |
+| Trigger handlers | The bus thread of the bound channel (the sensors' bus for a sensor), or the caller of `Publish()`. |
+| The supervisor's task, `RemoteLoggingControl`'s send | The configuration work queue. |
+| Status handlers (supervisor, remote control, exporter) | The bus thread that carries `logging_events`. |
+| `LoggingCommandHandler`, the importer | The CDMP work queue. |
+
+### Stored triggers
+
+The triggers are `ConfigurationService::Type::LoggingControl`, type 8. It is separate from the
+logging configuration, which only a unit with a log writer has. Schema
+(`logging_control_config.cddl`), file `config/logging_control_config.cbor`:
+
+```
+CborLoggingTriggerConfig = [ channel: uint, event_type: uint, payload_key: uint, has_selector: bool, selector_key: uint, selector_value: int / tstr / bool ]
+CborLoggingControlConfig = [ triggers: [0*16 CborLoggingTriggerConfig] ]
+```
+
+| Field | Rules and meaning |
+| --- | --- |
+| `channel` | An `EventChannelId` (1 sensors, 2 logging, ...). A channel the unit does not register makes the trigger do nothing. |
+| `event_type`, `payload_key` | The channel's enum values: for `Sensors`, `DataUpdated` (0) and `Value` (1). |
+| `has_selector` | Whether the selector applies. Without it `selector_key` and `selector_value` are ignored; `selector_value` is written as 0. |
+| `selector_key`, `selector_value` | The payload key the selector matches and its value: for a sensor, `SensorId` (0) and the sensor's text id (matched by its hash), an integer or a bool. |
+
+Every field is required, and a stored list of more than 16 triggers does not decode. The validator
+checks the count, that each channel is an `EventChannelId` and that a selector is text, an integer
+or a bool. It is structural: it does not resolve channels or sensors. The default is no triggers.
 
 ## Status on other units
 
@@ -214,10 +370,10 @@ moved by the state bridge with the descriptor `LoggingNetworkState`
   the result on `logging_events` when it differs from what it published last.
 
 ```cpp
-// rt_daq, once a bus carries logging_events: shares the writer's status.
+// LoggingController, writer role (rt_daq), once a bus carries logging_events: shares the writer's status.
 logging_status_exporter_ = std::make_unique<NetworkStateExporter<LoggingNetworkState>>(canbus_com_service_);
 
-// rt_gauge, once a bus carries logging_events: shows the status of the units that log.
+// LoggingController, remote role (rt_gauge), once a bus carries logging_events: shows the status of the units that log.
 logging_status_importer_ = std::make_unique<NetworkStateImporter<LoggingNetworkState>>(canbus_com_service_);
 ```
 
@@ -389,23 +545,100 @@ The default configuration logs nothing.
 | `EERIE_LEAP_LOG_DATA_FILES_DIR` | `"data_logs"` | Directory of the log files on the SD card. |
 | `EERIE_LEAP_LOG_DATA_FILE_PREFIX` | `"log_data"` | File name prefix; empty drops the prefix and the underscore. |
 | `EERIE_LEAP_MDF` | n | Builds the MDF 4 writer; selected by `EERIE_LEAP_DOMAIN_LOGGING`, and usable without it. |
+| `EERIE_LEAP_CONTROLLER_LOGGING` | n | Builds `LoggingController`, logging control and the triggers' configuration, with or without the logging domain, which picks the role. Depends on `EERIE_LEAP_CONFIGURATION`, `EERIE_LEAP_EVENT_BUS`, `EERIE_LEAP_DOMAIN_SENSOR` (the publisher, the trigger values) and `EERIE_LEAP_DOMAIN_CANBUS_COM` (the command handler, the importer, the remote role); selects `EERIE_LEAP_THREADING`. |
 
 ## Wiring
 
-rt_core has no logging controller yet; a unit that logs builds the parts:
+`LoggingController` (`controllers/logging_controller.h`, `EERIE_LEAP_CONTROLLER_LOGGING`) builds
+logging control for the role the build picks. The composition root builds it once, after
+`CanbusController` and `SensorsController::Initialize()`, before `ManagementController` and before
+`SensorsController::Start()`, so the triggers subscribe first.
 
-1. A bus that carries `logging_events`, registered by the composition root before anything
-   publishes on it: the channel drops every publish until then.
-2. `LoggingConfigurationManager` on `config/logging_config.cbor` with the configuration work
-   queue, registered as type 5.
-3. `LogWriterService(sd_fs, logging_manager, time_service, readings_frame)`, initialized.
-4. `LogWriterSupervisor(config_work_queue, log_writer_service, logging_manager, sensors_manager,
-   tool_id, device_id_provider)`, after `SensorsController::Initialize()`, which builds the sensors
-   manager, and with the queue `SensorsController` was given; then its `Initialize()`, which warns
-   when no bus carries `logging_events` yet.
-5. Only if that succeeded, `SensorsController::RegisterDependentService(supervisor->GetDependentService())`,
-   before processing starts.
-6. The inputs (the CDMP command, the shell, an autostart) call `ILoggingControl`, and a display
-   subscribes to `logging_events`.
-7. A unit that shares its status with other units also creates the exporter described under
-   [Status on other units](#status-on-other-units).
+**Before the controller.** The bus and the registry entries come before anything that publishes or
+subscribes. The publisher, and `CanbusController` with `SensorsController::Initialize()`, come
+before the controller, in any order:
+
+1. A bus that carries `logging_events` and `sensor_events`, registered by the composition root
+   before anything publishes on them: a channel drops every publish until then. The root also
+   registers both channels with `EventChannelRegistry`, as `EventChannelId::Sensors` and
+   `EventChannelId::Logging`; without the entries every trigger logs that its channel is not
+   registered and does nothing.
+2. The `SensorEventsPublisher` on the shared readings frame, built and started (see
+   [sensors.md](sensors.md#sensor-events)). It is a constructor parameter, and `Initialize()` replays
+   through it, so it can be built at any point before the controller.
+3. `CanbusController` and `SensorsController::Initialize()`, which builds the sensors manager the
+   controller reads.
+
+**Constructor.**
+
+```cpp
+auto logging_controller = std::make_shared<LoggingController>(
+    fs_service, config_work_queue_thread, configuration_service,
+    sensors_controller->GetConfigurationManager(), canbus_com_service, sensor_events_publisher,
+    // The writer role only:
+    sd_fs_service, time_service, sensor_readings_frame, "rt_daq");
+
+// The writer role: the composition root registers the dependent, before SensorsController::Start().
+if(logging_controller->Initialize() == 0)
+    sensors_controller->RegisterDependentService(logging_controller->GetDependentService());
+```
+
+| Parameter | Writer role | Remote role |
+| --- | --- | --- |
+| `fs_service`, `config_work_queue_thread` | Required. The queue is the one `SensorsController` has, running, so a sensors restart and the writer's transitions run in turn. | Same. |
+| `configuration_service` | Null: the managers are not registered. One that already holds type 5 or 8 fails `Initialize()`: build the controller once per service. | One that already holds type 8 fails `Initialize()`. |
+| `sensors_configuration_manager` | Required: the logger's sensors and metadata, and the check of a trigger's sensor. | Null: a trigger's sensor is not checked. |
+| `canbus_com_service` | Null: the unit logs on its own, without the `LOGGING` command or a shared status. | Required: `Initialize()` fails without it. |
+| `sensor_events_publisher` | Null: a rebuilt trigger waits for the next change of its value instead of a replay. | Same. |
+| `sd_fs_service`, `time_service`, `sensor_readings_frame` | Required. | Ignored. |
+| `tool_id` | The log header's tool ID. | Ignored. |
+
+**`Initialize()`** returns 0, or -1 with every getter null and nothing registered. It runs once. It
+builds, in this order:
+
+| Step | Writer role | Remote role |
+| --- | --- | --- |
+| 1 | The triggers' configuration manager (`config/logging_control_config.cbor`). | Same. |
+| 2 | The test hook, `Initialize(setup)`, may store triggers: before the set exists, so it rebuilds nothing. | Same. |
+| 3 | The logging configuration manager (`config/logging_config.cbor`), `LogWriterService` (initialized), `LogWriterSupervisor` (initialized), then, with a COM service, `LoggingCommandHandler` and the exporter. A failed exporter is logged and not fatal. | `RemoteLoggingControl` (initialized), then the importer, which fails `Initialize()` when the transport refuses it. |
+| 4 | The rebuild task. | Same. |
+| 5 | The trigger set, then a replay if any trigger subscribed. | Same. |
+| 6 | The triggers' updated handler. | Same. |
+| 7 | Registration with `ConfigurationService`: logging (type 5), then logging control (type 8). | Logging control (type 8). |
+
+Registration is last because `ConfigurationService` cannot unregister, so a failed `Initialize()`
+leaves nothing behind. For the same reason it keeps the first manager of a type, and a controller
+built on a service that holds one would work against a manager nothing reacts to: `Initialize()`
+refuses it before it builds anything. The replay at step 5 finds an empty frame when sensors are not started yet;
+it makes a controller built after `SensorsController::Start()` still see a switch that is already on.
+
+**Getters.** `GetControl()` is the role's `ILoggingControl`;
+`GetLoggingControlConfigurationManager()` serves both roles. The writer role adds
+`GetDependentService()`, `GetConfigurationManager()` (the logging manager) and
+`GetLogWriterService()`. After `Initialize()` returned 0, the composition root registers
+`GetDependentService()` with `SensorsController::RegisterDependentService()`, before
+`SensorsController::Start()`; the controller does not, as it never sees `SensorsController`. A
+failed controller registers nothing and the root skips what depends on it.
+
+**Teardown.** The destructor withdraws everything that refers to the controller, in an order that is
+safe while the bus threads and the configuration and CDMP work queues run. It also runs after a
+failed or skipped `Initialize()`.
+
+1. Detaches the updated handler's guard and clears the handler, then cancels a pending rebuild and
+   waits for one in progress.
+2. Destroys the trigger set, and in the writer role the command handler: nothing requests from here.
+3. Writer role: requests a stop through the supervisor and waits until the configuration work queue
+   has run it, so the wanted state is cleared and the dependent that `SensorsController` keeps
+   cannot start the writer again. A writer is never dropped while it runs. Then the exporter
+   withdraws the record, so the other units see `Unavailable`; they may never see the `Stopped`,
+   which is published asynchronously.
+4. Destroys the control and what it drives. Remote role: the importer first, then the control,
+   which waits for a send in progress.
+
+Destroy it on the thread that built it. It waits for the configuration work queue, the bus threads
+and the CDMP work queue, so it must not run on any of them. On the configuration work queue it logs
+an error and stops the writer directly instead of waiting for itself. Whoever kept `GetControl()`
+releases it before the controller goes, so no request comes in after the teardown.
+
+**Other inputs.** The shell and an autostart call `ILoggingControl`, and a display subscribes to
+`logging_events`.

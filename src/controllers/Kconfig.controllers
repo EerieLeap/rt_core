@@ -60,8 +60,10 @@ config EERIE_LEAP_CONTROLLER_LOGGING
     depends on EERIE_LEAP_DOMAIN_SENSOR && EERIE_LEAP_DOMAIN_CANBUS_COM
     select EERIE_LEAP_THREADING
     help
-      Add EerieLeap logging control: the remote ILoggingControl, the CDMP
-      LOGGING command handler, the logging triggers and their stored
-      configuration (LoggingControl). Built with or without the logging
-      domain, so a unit without a log writer can control one on another
-      unit.
+      Add EerieLeap Logging Controller: logging control, its triggers and
+      their stored configuration (LoggingControl). With
+      EERIE_LEAP_DOMAIN_LOGGING it takes the writer role: the logging
+      configuration, the log writer and its supervisor, and, with a CAN
+      COM service, the LOGGING command handler and the shared logging
+      status. Without it, the remote role: requests become the CDMP
+      LOGGING broadcast, and the status comes from the units that log.

@@ -285,6 +285,7 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     # rather than with the logging domain.
     if(CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
         list(APPEND SRC
+            "${SRC_DIR}/controllers/logging_controller.cpp"
             "${SRC_DIR}/domain/logging_domain/control/*.c"
             "${SRC_DIR}/domain/logging_domain/control/*.cpp"
             "${SRC_DIR}/configuration/cbor/traits/logging_control_config_trait.cpp"

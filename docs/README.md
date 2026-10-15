@@ -27,7 +27,7 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
 | [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`) and transports |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
-| [logging.md](logging.md) | Log writer, MDF4 and simple loggers, logging configuration, logging status on other units |
+| [logging.md](logging.md) | Log writer, logging control, triggers and the logging controller, MDF4 and simple loggers, logging configuration, logging status on other units |
 | [system.md](system.md) | Product identity and the system configuration |
 | [filesystem.md](filesystem.md) | Internal and SD filesystems, assets, directory layout |
 | [gpio.md](gpio.md) | Digital inputs |
@@ -109,6 +109,7 @@ automatically.
 | `EERIE_LEAP_CONTROLLER_CANBUS` | `DOMAIN_CANBUS`, `DOMAIN_CANBUS_COM`, `DEVICE_TREE`, `FS` | `THREADING` |
 | `EERIE_LEAP_CONTROLLER_SENSORS` | `DOMAIN_SENSOR`, `DOMAIN_CANBUS`, `GPIO`, `RANDOM`, `FS` | `THREADING` |
 | `EERIE_LEAP_CONTROLLER_BLE` | `DOMAIN_BLE` | |
+| `EERIE_LEAP_CONTROLLER_LOGGING` | `CONFIGURATION`, `EVENT_BUS`, `DOMAIN_SENSOR`, `DOMAIN_CANBUS_COM` | `THREADING` |
 
 The sensor domain needs `EERIE_LEAP_ADC` even on a unit without an ADC: the subsystem then
 provides a simulator, and the sensors controller accepts a null ADC manager.
@@ -120,6 +121,9 @@ and `EERIE_LEAP_LUA_LOG_LEVEL_*` for those two.
 
 The order rt_daq's `main()` uses; dependencies flow downwards.
 
+0. `InitializeEventChannels()`: the application bus that carries `logging_events` and
+   `sensor_events`, and the `EventChannelRegistry` entries for `Sensors` and `Logging`, before
+   anything publishes or subscribes (see [logging.md](logging.md#wiring)).
 1. `DtConfigurator::Initialize(features)` reads the device tree.
 2. Display (`Cfb`) and the application's display controller.
 3. Filesystems: the SD service if a card slot exists, then the internal filesystem (fatal if it
@@ -127,7 +131,8 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
 4. `TimeService`.
 5. The **configuration work queue** (`WorkQueueThread`, 8192 bytes, priority 5): every
    configuration load, save, SMP apply and service restart runs on it, and so does every start and
-   stop of the log writer (see [logging.md](logging.md#supervision)).
+   stop of the log writer, every rebuild of the logging triggers and the remote `LOGGING` send (see
+   [logging.md](logging.md#supervision) and [logging.md](logging.md#threading)).
 6. `SystemController`, then `ConfigurationService` with the system manager registered.
 7. `AdcController` (fatal if the ADC fails to initialize).
 8. GPIO through `GpioFactory`.
@@ -135,9 +140,11 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
 10. The shared `SensorReadingsFrame` and `SensorsController`. Register the processing service
     with the ADC controller (`RegisterPausedService`) and the CAN controller
     (`RegisterDependentService`).
-11. The logging controller when an SD card exists. The log writer joins the sensors controller's
-    dependents (`RegisterDependentService`) through `LogWriterSupervisor::GetDependentService()`,
-    once the supervisor initialized (see [logging.md](logging.md#wiring)).
+11. The `SensorEventsPublisher` on the shared frame, started, then `LoggingController` in the
+    writer role when an SD card exists. The log writer joins the sensors controller's dependents
+    (`RegisterDependentService`) through `GetDependentService()`, only if `Initialize()` returned 0
+    (see [logging.md](logging.md#wiring)). A unit without a log writer builds the controller in the
+    remote role at this point instead, after `CanbusController` and before `ManagementController`.
 12. `ManagementController`, after every manager is registered, with the sensors' capabilities and
     the SD service.
 13. `CanbusSchedulerService`, registered as a CAN dependent service.

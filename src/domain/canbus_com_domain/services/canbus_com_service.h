@@ -100,6 +100,10 @@ public:
     void UnregisterStateHandler(int handler_id) override;
     size_t GetRemoteStates(CanbusComStateType state_type, std::span<RemoteStateRecord> records) const override;
 
+    // NOTE: A handler runs on the CDMP work queue and must not block, in both overloads. For a usage
+    // example, see LoggingCommandHandler (domain/logging_domain/control/logging_command_handler.cpp),
+    // which returns whether it accepted the LOGGING command, as this overload takes it, and leaves
+    // the outcome to the shared status.
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {
         if(!cdmp_service_)
@@ -117,21 +121,7 @@ public:
             });
     }
 
-    // NOTE: Usage example:
-    // canbus_com_service_->SetCommandHandler<CanbusComLoggingCommand>(
-    //     CanbusComCommandCode::LOGGING,
-    //     [this](std::optional<CanbusComLoggingCommand> command) {
-    //         std::optional<CanbusComCommandResultBase> result = std::nullopt;
-    //         if(!command.has_value())
-    //             return result;
-
-    //         if(command.value().IsStart())
-    //             result = std::make_optional<CanbusComLoggingCommandResult>(LogWriterStart() == 0);
-    //         else
-    //             result = std::make_optional<CanbusComLoggingCommandResult>(LogWriterStop() == 0);
-
-    //         return result;
-    //     });
+    // NOTE: This overload answers with a result of its own; return std::nullopt to answer FAILURE.
     template<concepts::SpanConstructible TRequest>
     void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestWithResponseCallback<TRequest> callback) {
         if(!cdmp_service_)

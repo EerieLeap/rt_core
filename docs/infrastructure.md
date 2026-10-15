@@ -146,7 +146,7 @@ ones.
 | CAN RX bottom half (per bus) | highest, cooperative | 2048 | fixed; give it a MetaIRQ level with `CONFIG_NUM_METAIRQ_PRIORITIES` |
 | SD card monitor | 2 | `EERIE_LEAP_FS_SD_THREAD_STACK_SIZE` | fixed |
 | CDMP service thread and work queue | 5 | 4096 | `EERIE_LEAP_CDMP_*` |
-| Configuration work queue | application | application | the application creates it (8192 / 5 in rt_daq); log writer starts and stops run on it ([logging.md](logging.md#supervision)) |
+| Configuration work queue | application | application | the application creates it (8192 / 5 in rt_daq); log writer starts and stops, trigger rebuilds and the remote `LOGGING` send run on it ([logging.md](logging.md#supervision), [logging.md](logging.md#threading)) |
 | Sensor processing | 6 | 8192 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_*` (rt_daq uses 5) |
 | Sensor events publisher | 6 | 4096 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_*` |
 | Calibration sampling | 6 | 4096 | fixed |

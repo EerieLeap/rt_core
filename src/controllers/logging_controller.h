@@ -1,0 +1,209 @@
+#pragma once
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "subsys/event_bus/dispatch_guard.h"
+#include "subsys/fs/services/i_fs_service.h"
+#include "subsys/threading/work_queue_task.h"
+#include "subsys/threading/work_queue_thread.h"
+#include "subsys/time/i_time_service.h"
+
+#include "domain/configuration_domain/services/configuration_service.h"
+#include "domain/canbus_com_domain/services/canbus_com_service.h"
+#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
+#include "domain/sensor_domain/services/sensor_events_publisher.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "domain/logging_domain/event_bus/logging_network_state.h"
+#include "domain/logging_domain/control/i_logging_control.h"
+#include "domain/logging_domain/control/logging_trigger_set.h"
+#include "domain/logging_domain/control/configuration/logging_control_configuration_manager.h"
+
+// The role headers are conditional: the log writer's header reads logging domain options.
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+#include "subsys/threading/i_service.h"
+#include "domain/canbus_com_domain/state_bridge/network_state_exporter.h"
+#include "domain/logging_domain/configuration/logging_configuration_manager.h"
+#include "domain/logging_domain/control/logging_command_handler.h"
+#include "domain/logging_domain/services/log_writer_service.h"
+#include "domain/logging_domain/services/log_writer_supervisor.h"
+#else
+#include "domain/canbus_com_domain/state_bridge/network_state_importer.h"
+#include "domain/logging_domain/control/remote_logging_control.h"
+#endif
+
+namespace eerie_leap::controllers {
+
+using eerie_leap::subsys::event_bus::DispatchGuard;
+using eerie_leap::subsys::fs::services::IFsService;
+using eerie_leap::subsys::threading::WorkQueueTask;
+using eerie_leap::subsys::threading::WorkQueueTaskResult;
+using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::subsys::time::ITimeService;
+
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
+using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::logging_domain::control::ILoggingControl;
+using eerie_leap::domain::logging_domain::control::LoggingTriggerSet;
+using eerie_leap::domain::logging_domain::control::configuration::LoggingControlConfigurationManager;
+using eerie_leap::domain::logging_domain::event_bus::LoggingNetworkState;
+
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+using eerie_leap::subsys::threading::IService;
+
+using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateExporter;
+using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
+using eerie_leap::domain::logging_domain::control::LoggingCommandHandler;
+using eerie_leap::domain::logging_domain::services::LogWriterService;
+using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
+#else
+using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateImporter;
+using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
+#endif
+
+// Starts and stops logging, by triggers, by the CDMP LOGGING command and through GetControl(). The
+// role is the build's: with EERIE_LEAP_DOMAIN_LOGGING the unit writes logs (writer role), without it
+// the unit controls the units that do (remote role).
+//
+// Build it once a bus carries logging_events and sensor_events and the channel registry names them,
+// after CanbusController and SensorsController::Initialize() (it takes the sensors manager), before
+// ManagementController (it registers configuration managers) and before SensorsController::Start()
+// (its triggers subscribe first). Destroy it from the thread that built it, not from the
+// configuration work queue, a bus thread or the CDMP work queue: it waits for all of them. Build it
+// once per ConfigurationService: the service cannot unregister a manager, so Initialize() fails on
+// one that already holds the logging types.
+class LoggingController {
+public:
+    // TODO: For test purposes only
+    using ConfigurationSetup = std::function<void(std::shared_ptr<LoggingControlConfigurationManager>)>;
+
+    /**
+     * @param config_work_queue_thread Running; the queue SensorsController was given, so a sensors
+     *        restart and the writer's transitions run in turn.
+     * @param configuration_service Null: the managers are not registered. One that already holds
+     *        a logging type fails Initialize().
+     * @param sensors_configuration_manager The writer's logger metadata and sensors (writer role,
+     *        required) and the check that a trigger's sensor exists (null: not checked).
+     * @param canbus_com_service Remote role: required. Writer role: null logs on its own, without the
+     *        CDMP command and without sharing the status.
+     * @param sensor_events_publisher Replays the frame after the triggers are rebuilt; null: a rebuilt
+     *        trigger waits for the next change of its value.
+     * @param sd_fs_service The log volume; writer role only, required there.
+     * @param time_service, sensor_readings_frame The log writer's; writer role only, required there.
+     * @param tool_id The log header's tool ID, such as "rt_daq"; writer role only.
+     */
+    LoggingController(
+        std::shared_ptr<IFsService> fs_service,
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread,
+        std::shared_ptr<ConfigurationService> configuration_service,
+        std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
+        std::shared_ptr<CanbusComService> canbus_com_service,
+        std::shared_ptr<SensorEventsPublisher> sensor_events_publisher,
+        std::shared_ptr<IFsService> sd_fs_service = nullptr,
+        std::shared_ptr<ITimeService> time_service = nullptr,
+        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame = nullptr,
+        std::string tool_id = {});
+
+    // Withdraws everything that refers to it, in an order that is safe while the bus threads and
+    // the configuration and CDMP work queues run. The writer role stops logging first and waits for
+    // the stop. Safe after a failed or skipped Initialize().
+    ~LoggingController();
+
+    // The rebuild task and the updated handler refer to it.
+    LoggingController(const LoggingController&) = delete;
+    LoggingController& operator=(const LoggingController&) = delete;
+    LoggingController(LoggingController&&) = delete;
+    LoggingController& operator=(LoggingController&&) = delete;
+
+    // Once. 0 on success. -1 leaves every getter null and registers nothing; a second call repeats
+    // the first one's result.
+    int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
+
+    // The role's ILoggingControl: LogWriterSupervisor or RemoteLoggingControl. Whoever keeps it
+    // releases it before the controller goes, so no request comes in after the teardown.
+    [[nodiscard]] std::shared_ptr<ILoggingControl> GetControl() const { return logging_control_; }
+    [[nodiscard]] std::shared_ptr<LoggingControlConfigurationManager> GetLoggingControlConfigurationManager() const {
+        return logging_control_configuration_manager_;
+    }
+
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    // For SensorsController::RegisterDependentService(), only after Initialize() returned 0.
+    [[nodiscard]] std::shared_ptr<IService> GetDependentService() const;
+    [[nodiscard]] std::shared_ptr<LoggingConfigurationManager> GetConfigurationManager() const {
+        return logging_configuration_manager_;
+    }
+    [[nodiscard]] std::shared_ptr<LogWriterService> GetLogWriterService() const { return log_writer_service_; }
+#endif
+
+private:
+    static constexpr const char* LOGGING_CONTROL_CONFIGURATION_NAME = "logging_control_config";
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    // The file name rt_daq already uses, so its stored logging configuration still loads.
+    static constexpr const char* LOGGING_CONFIGURATION_NAME = "logging_config";
+    using LoggingStatusExporter = NetworkStateExporter<LoggingNetworkState>;
+#else
+    using LoggingStatusImporter = NetworkStateImporter<LoggingNetworkState>;
+#endif
+
+    // Given.
+    std::shared_ptr<IFsService> fs_service_;
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread_;   // Declared before rebuild_task_.
+    std::shared_ptr<ConfigurationService> configuration_service_;
+    std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
+    std::shared_ptr<CanbusComService> canbus_com_service_;
+    std::shared_ptr<SensorEventsPublisher> sensor_events_publisher_;
+    std::shared_ptr<IFsService> sd_fs_service_;
+    std::shared_ptr<ITimeService> time_service_;
+    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
+    std::string tool_id_;
+
+    // Built by Initialize(), dropped by Teardown().
+    std::shared_ptr<LoggingControlConfigurationManager> logging_control_configuration_manager_;
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager_;
+    std::shared_ptr<LogWriterService> log_writer_service_;
+    std::shared_ptr<LogWriterSupervisor> log_writer_supervisor_;
+    std::unique_ptr<LoggingCommandHandler> logging_command_handler_;
+    std::unique_ptr<LoggingStatusExporter> logging_status_exporter_;
+#else
+    std::shared_ptr<RemoteLoggingControl> remote_logging_control_;
+    std::unique_ptr<LoggingStatusImporter> logging_status_importer_;
+#endif
+    // The role's control, set once the role's own Initialize() succeeded.
+    std::shared_ptr<ILoggingControl> logging_control_;
+
+    // Replaced only by RebuildTriggers() on the configuration work queue, and by Initialize() and
+    // Teardown() while neither the task nor the handler can run.
+    std::unique_ptr<LoggingTriggerSet> logging_trigger_set_;
+    std::optional<WorkQueueTask<LoggingController>> rebuild_task_;
+    // The updated handler's way back to this; created with the controller so Teardown() can detach
+    // it from any state, and detached first.
+    std::shared_ptr<DispatchGuard> guard_;
+    bool is_handler_registered_ = false;
+    bool is_initialize_called_ = false;
+    bool is_initialized_ = false;
+
+    // Logs what is missing.
+    bool HasDependencies() const;
+    // Throws on a construction failure; Initialize() tears down after it.
+    bool Build(const ConfigurationSetup& setup_test_configuration);
+    // The writer's or the remote's pieces, and logging_control_.
+    bool BuildRole();
+    // Always a set: without a stored configuration it has no triggers.
+    std::unique_ptr<LoggingTriggerSet> BuildTriggerSet() const;
+    void ReplayFor(const LoggingTriggerSet& set) const;
+    // The rebuild task; configuration work queue only.
+    void RebuildTriggers();
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    // From Teardown(): stops logging through the supervisor and waits for it.
+    void StopLogWriter();
+#endif
+    void Teardown();
+};
+
+} // namespace eerie_leap::controllers
