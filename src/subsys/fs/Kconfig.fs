@@ -1,5 +1,7 @@
 config EERIE_LEAP_FS
     bool "EerieLeap FS"
+    # SdmmcService, built with DISK_ACCESS, polls the card on its own thread.
+    select EERIE_LEAP_THREADING if DISK_ACCESS
     help
       Add EerieLeap FS.
 

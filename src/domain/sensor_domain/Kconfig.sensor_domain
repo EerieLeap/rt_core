@@ -1,10 +1,13 @@
 config EERIE_LEAP_DOMAIN_SENSOR
-    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_ADC
+    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_ADC && EERIE_LEAP_CANBUS
     bool "EerieLeap Sensor Domain"
     # The pipeline builder registers the Lua sensor functions of the script domain.
     select EERIE_LEAP_DOMAIN_SCRIPT
     # Analog readers take their calibration from the ADC domain's configuration.
     select EERIE_LEAP_DOMAIN_ADC
+    # CAN sensors are fed by CanFrameRouter, which takes their messages from the CAN domain's
+    # CanbusService and decodes them with its CanSignalCodec.
+    select EERIE_LEAP_DOMAIN_CANBUS
     help
       Add EerieLeap Sensor Domain.
 
@@ -61,8 +64,12 @@ menu "EerieLeap Sensor Domain config"
           Stack of the publisher's work queue. A tick also runs the filters of
           the sensor_events subscribers (Accepts()), once per sensor and
           subscription change. A filter that throws is caught there, but
-          unwinding needs more stack than a tick: 4096 overflowed on
-          qemu_cortex_a53.
+          unwinding needs more stack than a tick: with a throwing filter the
+          publisher thread peaked at 1.5 KiB on qemu_cortex_a9, 5.9 on
+          qemu_malta, 6.4 on qemu_cortex_a53 and 7.8 on qemu_riscv64, so 4096
+          is too small on all but qemu_cortex_a9 (it overflowed on
+          qemu_cortex_a53). Raise it where a throwing filter must be
+          survived.
 
     config EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY
         int "Sensor events publisher priority"

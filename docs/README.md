@@ -83,7 +83,8 @@ automatically.
 | Symbol | Depends on | Selects |
 | --- | --- | --- |
 | `EERIE_LEAP_RT_CORE` | | |
-| `EERIE_LEAP_THREADING`, `_TIME`, `_RANDOM`, `_MDF`, `_CFB`, `_DEVICE_TREE`, `_FS`, `_GPIO`, `_ADC` | | |
+| `EERIE_LEAP_THREADING`, `_TIME`, `_RANDOM`, `_MDF`, `_CFB`, `_DEVICE_TREE`, `_GPIO`, `_ADC` | | |
+| `EERIE_LEAP_FS` | | `THREADING` with `DISK_ACCESS` (the SD card service) |
 | `EERIE_LEAP_EVENT_BUS` | | `THREADING` |
 | `EERIE_LEAP_ASSETS` | | `FS` |
 | `EERIE_LEAP_CANBUS` | `CAN` | |
@@ -94,10 +95,10 @@ automatically.
 | `EERIE_LEAP_SMP` | | `MCUMGR` and its os group, `ZCBOR`, `NET_BUF`, `CRC`, `RANDOM`, `THREADING` |
 | `EERIE_LEAP_SMP_CAN` | `CANBUS` | `SMP`, `THREADING` |
 | `EERIE_LEAP_SMP_BLE` | | `SMP` |
-| `EERIE_LEAP_CONFIGURATION` | | `THREADING` |
+| `EERIE_LEAP_CONFIGURATION` | | `THREADING`, `CRC` |
 | `EERIE_LEAP_DOMAIN_SYSTEM` | `CONFIGURATION` | |
 | `EERIE_LEAP_DOMAIN_ADC` | `ADC`, `CONFIGURATION` | |
-| `EERIE_LEAP_DOMAIN_SENSOR` | `CONFIGURATION`, `ADC` | `DOMAIN_SCRIPT`, `DOMAIN_ADC` |
+| `EERIE_LEAP_DOMAIN_SENSOR` | `CONFIGURATION`, `ADC`, `CANBUS` | `DOMAIN_SCRIPT`, `DOMAIN_ADC`, `DOMAIN_CANBUS` |
 | `EERIE_LEAP_DOMAIN_CANBUS` | `CONFIGURATION`, `CANBUS` | |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM` | | `SMP_CAN` |
 | `EERIE_LEAP_DOMAIN_LOGGING` | `CONFIGURATION`, `DOMAIN_SENSOR` | `EVENT_BUS`, `MDF`, `DOMAIN_SYSTEM` |
@@ -112,7 +113,9 @@ automatically.
 | `EERIE_LEAP_CONTROLLER_LOGGING` | `CONFIGURATION`, `EVENT_BUS`, `DOMAIN_SENSOR`, `DOMAIN_CANBUS_COM` | `THREADING` |
 
 The sensor domain needs `EERIE_LEAP_ADC` even on a unit without an ADC: the subsystem then
-provides a simulator, and the sensors controller accepts a null ADC manager.
+provides a simulator, and the sensors controller accepts a null ADC manager. It needs
+`EERIE_LEAP_CANBUS`, so `CONFIG_CAN`, even on a unit without a CAN controller: CAN sensors are fed
+through the CAN domain, and a configured bus whose device is missing is logged and skipped.
 
 Log levels: `EERIE_LEAP_RT_CORE_LOG_LEVEL_*` for the module, `EERIE_LEAP_CANBUS_LOG_LEVEL_*`
 and `EERIE_LEAP_LUA_LOG_LEVEL_*` for those two.

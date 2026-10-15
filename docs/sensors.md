@@ -353,13 +353,13 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6, sensor_7});
 
 | Symbol | Range / default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_DOMAIN_SENSOR` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION` and `EERIE_LEAP_ADC`; selects `EERIE_LEAP_DOMAIN_SCRIPT` and `EERIE_LEAP_DOMAIN_ADC`. |
+| `EERIE_LEAP_DOMAIN_SENSOR` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION`, `EERIE_LEAP_ADC` and `EERIE_LEAP_CANBUS`; selects `EERIE_LEAP_DOMAIN_SCRIPT`, `EERIE_LEAP_DOMAIN_ADC` and `EERIE_LEAP_DOMAIN_CANBUS` (CAN sensors). |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE` | 8192 | Stack of the processing work queue, where every tick, decode and script call runs. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY` | 6 | Its priority. rt_daq uses 5, above the display and CAN scheduler threads. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS` | n | Periodic rate group statistics log; a measurement aid, off in production. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S` | 1..3600, 10 | Seconds between statistics lines. |
 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS` | 1..10000, 30 | Delay between two publisher ticks. This and the next two need `EERIE_LEAP_EVENT_BUS`. |
-| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE` | 4096 | Stack of its work queue, where the subscribers' filters also run. rt_gauge's ESP32-S3 board uses 2560. |
+| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE` | 4096 | Stack of its work queue, where the subscribers' filters also run. A filter that throws is caught, but with one the thread peaked at 1.5 to 7.8 KiB on the QEMU test boards. rt_gauge's ESP32-S3 board uses 2560. |
 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY` | 6 | Its priority. |
 | `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` | 1..65535, 64 | Most sensors a configuration may hold; sizes every snapshot buffer. |
 | `EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE` | 1..1024, 32 | Raw CAN frames queued for the log writer; about 90 bytes each, allocated only while an enabled `CANBUS_RAW` sensor exists. |

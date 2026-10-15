@@ -173,5 +173,5 @@ calls `CanbusService::Configure()`, and starts them again.
 
 | Symbol | Default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_DOMAIN_CANBUS` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION` and `EERIE_LEAP_CANBUS`. |
+| `EERIE_LEAP_DOMAIN_CANBUS` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION` and `EERIE_LEAP_CANBUS`. The sensor domain selects it. |
 | `EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS` | 250 | Delay before a stored configuration is applied to the buses. |

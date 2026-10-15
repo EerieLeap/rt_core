@@ -93,7 +93,7 @@ and timeouts are in [smp.md](smp.md).
 
 | Symbol | Default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_CONFIGURATION` | n | Builds the storage service and the configuration domain. Selects `EERIE_LEAP_THREADING`. Required by every domain with stored configuration. |
+| `EERIE_LEAP_CONFIGURATION` | n | Builds the storage service and the configuration domain. Selects `EERIE_LEAP_THREADING` and `CRC` (the CRC32 of each stored file). Required by every domain with stored configuration. |
 | `EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS` | 5000 | Idle time after which an SMP write session or read snapshot is dropped. |
 
 ## Schemas

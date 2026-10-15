@@ -54,6 +54,9 @@ it; its sync cadence is the logging domain's (`EERIE_LEAP_LOG_SYNC_INTERVAL_MS`,
   `EERIE_LEAP_SD_CHECK_INTERVAL_MS` and mounts or unmounts accordingly. The application does
   not start it on SPI hosts, where the status command interferes with logging.
 
+The service is built with `CONFIG_DISK_ACCESS`, and then `EERIE_LEAP_FS` selects
+`EERIE_LEAP_THREADING` for the monitor thread.
+
 | Symbol | Default | Meaning |
 | --- | --- | --- |
 | `EERIE_LEAP_FS_SD_THREAD_STACK_SIZE` | 3072 | Stack of the monitor thread. |
