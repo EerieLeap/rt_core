@@ -47,13 +47,19 @@ inline Bytes Pattern(size_t size, uint8_t seed) {
     return bytes;
 }
 
-// A configuration manager that stores the raw CBOR it is given.
+// A configuration manager that stores the raw CBOR it is given and reports each successful store to
+// its stored handler, as CborConfigurationManagerBase does.
 class FakeConfigurationManager : public ICborConfigurationManager {
 public:
     Bytes stored;
     int apply_count = 0;
     bool reject = false;
     std::string rejection_reason;
+    StoredHandler stored_handler;
+
+    void SetStoredHandler(StoredHandler handler) override {
+        stored_handler = std::move(handler);
+    }
 
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
         apply_count++;
@@ -65,6 +71,9 @@ public:
         }
 
         stored.assign(cbor_data.begin(), cbor_data.end());
+        if(stored_handler)
+            stored_handler();
+
         return true;
     }
 

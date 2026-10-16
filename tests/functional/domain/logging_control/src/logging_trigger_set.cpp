@@ -1,3 +1,4 @@
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -25,8 +26,12 @@ struct Fixture {
     std::shared_ptr<FakeLoggingControl> control = std::make_shared<FakeLoggingControl>();
     std::unique_ptr<LoggingTriggerSet> set;
 
-    void Build(const std::vector<LoggingTrigger>& triggers, LoggingTriggerSet::SelectorResolver resolver = nullptr) {
-        set = std::make_unique<LoggingTriggerSet>(control, triggers, std::move(resolver));
+    void Build(
+        const std::vector<LoggingTrigger>& triggers,
+        LoggingTriggerSet::SelectorResolver resolver = nullptr,
+        LoggingTriggerSet::FirstValue first_value = LoggingTriggerSet::FirstValue::OneStarts) {
+
+        set = std::make_unique<LoggingTriggerSet>(control, triggers, std::move(resolver), first_value);
     }
 
     void BuildOnSensor(std::string_view sensor_id) {
@@ -270,4 +275,330 @@ ZTEST(logging_trigger_set, test_DestroyingTheSetWhileADispatchIsInFlightRequests
     PublishSensorValue("switch", 0.0f);
     PublishSensorValue("switch", 1.0f);
     zassert_equal(F().control->Requests().size(), 0);
+}
+
+// ======== A configuration update (OnConfigurationUpdated) ========
+
+namespace {
+
+const LoggingTriggerSet::SelectorResolver kKnown = [](const EventBinding&) { return true; };
+const LoggingTriggerSet::SelectorResolver kUnknown = [](const EventBinding&) { return false; };
+
+// Polls @p predicate every 2 ms until it holds or k_wait_ms passed.
+template<typename TPredicate>
+[[nodiscard]] bool Eventually(TPredicate predicate) {
+    const int64_t deadline = k_uptime_get() + k_wait_ms;
+    while(!predicate()) {
+        if(k_uptime_get() >= deadline)
+            return false;
+
+        k_msleep(2);
+    }
+
+    return true;
+}
+
+} // namespace
+
+// The old generation keeps publishing until processing stops, so what a withdrawn trigger is
+// published afterwards must request nothing, whatever it is: a 1 would start, a 0 after it would
+// stop. A value equal to the one it saw last would pass for no change anyway, so the checks publish
+// both.
+ZTEST(logging_trigger_set, test_AWithdrawnTriggerForgetsItsSensorAndRequestsNothing) {
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}));
+
+    F().set->OnConfigurationUpdated(kUnknown);
+
+    PublishSensorValue("switch", 0.0f);
+    PublishSensorValue("switch", 1.0f);
+    PublishSensorValue("switch", 0.0f);
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "The old generation's values request nothing");
+    zassert_equal(F().set->GetSubscribedCount(), 1, "and the trigger stays subscribed");
+}
+
+ZTEST(logging_trigger_set, test_ARestoredTriggerReadsABaseline) {
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 1.0f);
+    F().set->OnConfigurationUpdated(kUnknown);
+    F().set->OnConfigurationUpdated(kKnown);
+
+    PublishSensorValue("switch", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "A first value of 0 is a baseline and asserts nothing");
+
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start}), "and the 1 after it is a change");
+}
+
+ZTEST(logging_trigger_set, test_ARestoredTriggerThatIsOnStartsNothing) {
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 1.0f);
+    F().set->OnConfigurationUpdated(kUnknown);
+    F().set->OnConfigurationUpdated(kKnown);
+
+    PublishSensorValue("switch", 1.0f);
+
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}),
+        "The sensor back with a 1 is a baseline: the update stopped logging, and it starts nothing");
+
+    PublishSensorValue("switch", 0.0f);
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Stop, Kind::Start}),
+        "and the switch acts on its next change");
+}
+
+// The hazard the withdrawal ends: a sensor that returns under its id starts its switch at 0, which a
+// trigger that kept its state would read as 1 to 0 and stop whatever runs then.
+ZTEST(logging_trigger_set, test_AReturningSensorNoLongerStopsWhatRuns) {
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 1.0f);
+    F().set->OnConfigurationUpdated(kUnknown);
+    F().set->OnConfigurationUpdated(kKnown);
+
+    PublishSensorValue("switch", 0.0f);
+
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "A first 0 stops nothing");
+}
+
+ZTEST(logging_trigger_set, test_AnUpdateThatFindsTheSensorKeepsTheState) {
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 1.0f);
+
+    F().set->OnConfigurationUpdated(kKnown);
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "The 1 is still no change");
+
+    PublishSensorValue("switch", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Stop}), "and the 0 is");
+}
+
+ZTEST(logging_trigger_set, test_OnlyTheTriggersWhoseSensorIsGoneAreWithdrawn) {
+    F().Build({SensorTrigger("a"), SensorTrigger("b")});
+    PublishSensorValue("a", 1.0f);
+    PublishSensorValue("b", 1.0f);
+
+    // The resolver is asked about every trigger, with its own binding.
+    std::vector<std::string> asked;
+    F().set->OnConfigurationUpdated([&asked](const EventBinding& binding) {
+        const std::string id = std::get<std::pmr::string>(binding.selector_value).c_str();
+        asked.push_back(id);
+
+        return id == "a";
+    });
+    zassert_equal(asked.size(), 2U);
+
+    PublishSensorValue("b", 0.0f);
+    PublishSensorValue("b", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start}), "b is withdrawn");
+
+    PublishSensorValue("a", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start, Kind::Stop}), "and a kept its state");
+}
+
+ZTEST(logging_trigger_set, test_ANullResolverOrAnEmptySetWithdrawsNothing) {
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 1.0f);
+
+    F().set->OnConfigurationUpdated(nullptr);
+    PublishSensorValue("switch", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Stop}), "A null resolver changes nothing");
+
+    F().set.reset();
+    F().Build({});
+    F().set->OnConfigurationUpdated(kUnknown);
+    zassert_equal(F().set->GetSubscribedCount(), 0U, "A set without triggers has nothing to withdraw");
+}
+
+ZTEST(logging_trigger_set, test_AResolverThatThrowsWithdrawsNothing) {
+    F().Build({SensorTrigger("a"), SensorTrigger("b")});
+    PublishSensorValue("a", 1.0f);
+    PublishSensorValue("b", 1.0f);
+
+    bool is_thrown = false;
+    try {
+        F().set->OnConfigurationUpdated([](const EventBinding& binding) -> bool {
+            if(std::get<std::pmr::string>(binding.selector_value) == "b")
+                throw std::runtime_error("The sensors could not be read.");
+
+            return false;
+        });
+    } catch(const std::runtime_error&) {
+        is_thrown = true;
+    }
+    zassert_true(is_thrown, "What the resolver throws reaches the caller");
+
+    PublishSensorValue("a", 0.0f);
+    PublishSensorValue("b", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start, Kind::Stop, Kind::Stop}),
+        "Neither trigger was withdrawn: the answers are applied together, after all were asked");
+}
+
+ZTEST(logging_trigger_set, test_ABaselineIsSetEvenWhenTheResolverThrows) {
+    F().Build({SensorTrigger("a")});
+
+    bool is_thrown = false;
+    try {
+        F().set->OnConfigurationUpdated([](const EventBinding&) -> bool { throw std::runtime_error("No sensors."); });
+    } catch(const std::runtime_error&) {
+        is_thrown = true;
+    }
+    zassert_true(is_thrown);
+
+    PublishSensorValue("a", 1.0f);
+    zassert_equal(F().control->Requests().size(), 0U, "The update was made: the first value is a baseline");
+
+    PublishSensorValue("a", 0.0f);
+    PublishSensorValue("a", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Stop, Kind::Start}), "and the trigger works");
+}
+
+// A trigger that selected nothing when the set was built is withdrawn by the first update that still
+// finds nothing; one that finds it restores it.
+ZTEST(logging_trigger_set, test_ATriggerThatSelectedNothingIsWithdrawnByTheFirstUpdate) {
+    F().Build({SensorTrigger("missing")}, kUnknown);
+    zassert_logged(1, "Logged when the set is built");
+
+    F().set->OnConfigurationUpdated(kUnknown);
+    zassert_logged(2, "and again when the update still finds nothing");
+
+    PublishSensorValue("missing", 1.0f);
+    zassert_equal(F().control->Requests().size(), 0U, "It waits for its sensor");
+
+    F().set->OnConfigurationUpdated(kKnown);
+    PublishSensorValue("missing", 1.0f);
+    zassert_equal(F().control->Requests().size(), 0U, "A sensor an update brings starts nothing: its first value is a baseline");
+
+    PublishSensorValue("missing", 0.0f);
+    PublishSensorValue("missing", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Stop, Kind::Start}), "and it acts from its next change");
+}
+
+ZTEST(logging_trigger_set, test_AWithdrawalIsLoggedOnceAndARestoreIsNoWarning) {
+    F().BuildOnSensor("switch");
+    zassert_logged(0, "Nothing is logged for a working trigger");
+
+    F().set->OnConfigurationUpdated(kUnknown);
+    zassert_logged(1, "A withdrawal is logged");
+
+    F().set->OnConfigurationUpdated(kUnknown);
+    F().set->OnConfigurationUpdated(kUnknown);
+    zassert_logged(1, "once, however many applies find the sensor missing");
+
+    F().set->OnConfigurationUpdated(kKnown);
+    F().set->OnConfigurationUpdated(kKnown);
+    zassert_logged(1, "and the sensor back is no warning");
+
+    F().set->OnConfigurationUpdated(kUnknown);
+    zassert_logged(2, "A second loss is a second withdrawal");
+}
+
+// The update asks the resolver, which reads the sensors under their manager's lock, outside the
+// set's guard, so a delivery on the bus thread never waits for it; then it takes the guard, which waits
+// for the delivery in progress. A value that was delivered before the withdrawal is seen; every later
+// one is not.
+ZTEST(logging_trigger_set, test_AnUpdateWaitsForADeliveryInProgress) {
+    F().BuildOnSensor("switch");
+    F().control->HoldRequests();
+
+    PublishSensorValue("switch", 1.0f, true);
+    zassert_true(F().control->WaitUntilHeld(), "The bus thread is inside the trigger's handler, holding the guard");
+
+    struct Context {
+        k_sem done;
+        std::atomic<bool> was_asked = false;
+
+        Context() {
+            k_sem_init(&done, 0, 1);
+        }
+    };
+    auto context = std::make_shared<Context>();
+
+    TestConfigQueue()->Run([context, &set = F().set] {
+        set->OnConfigurationUpdated([context](const EventBinding&) {
+            context->was_asked = true;
+
+            return false;
+        });
+        k_sem_give(&context->done);
+    });
+
+    zassert_true(Eventually([&context] { return context->was_asked.load(); }), "The resolver does not wait for the delivery");
+    zassert_not_equal(k_sem_take(&context->done, Ms(k_no_wait_ms)), 0, "but the withdrawal does");
+
+    F().control->Release();
+    zassert_equal(k_sem_take(&context->done, Ms(k_wait_ms)), 0, "and goes through once the delivery is done");
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "The value it delivered was seen");
+
+    PublishSensorValue("switch", 0.0f);
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "and the withdrawal holds from then on");
+}
+
+// ======== After an update every first value is a baseline (L9) ========
+
+ZTEST(logging_trigger_set, test_AfterAnUpdateAFirstValueIsABaseline) {
+    F().BuildOnSensor("switch");
+    F().set->OnConfigurationUpdated();
+
+    PublishSensorValue("switch", 1.0f);
+    zassert_equal(F().control->Requests().size(), 0U, "A switch that is on asserts nothing: the update stopped logging");
+
+    PublishSensorValue("switch", 0.0f);
+    PublishSensorValue("switch", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Stop, Kind::Start}), "It acts on its next change");
+}
+
+ZTEST(logging_trigger_set, test_AfterAnUpdateAFirstValueOfZeroIsABaselineToo) {
+    F().BuildOnSensor("switch");
+    F().set->OnConfigurationUpdated();
+
+    PublishSensorValue("switch", 0.0f);
+    PublishSensorValue("switch", 1.0f);
+
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "0 to 1 starts");
+}
+
+ZTEST(logging_trigger_set, test_AfterAnUpdateAKnownValueIsKept) {
+    F().Build({SensorTrigger("a"), SensorTrigger("b")});
+    PublishSensorValue("a", 0.0f);
+    PublishSensorValue("b", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "b starts at boot");
+
+    F().set->OnConfigurationUpdated();
+
+    PublishSensorValue("a", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start}), "a saw its 0 before: 0 to 1 starts");
+
+    PublishSensorValue("b", 1.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start}), "b saw its 1 before: 1 again is no change");
+
+    PublishSensorValue("b", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start, Kind::Stop}), "and its 0 is");
+}
+
+ZTEST(logging_trigger_set, test_ASetBuiltWithBaselinesStartsNothingOnAFirstOne) {
+    F().Build({SensorTrigger("switch")}, nullptr, LoggingTriggerSet::FirstValue::IsBaseline);
+
+    PublishSensorValue("switch", 1.0f);
+    zassert_equal(F().control->Requests().size(), 0U, "A rebuilt set after an update: the replayed 1 is a baseline");
+
+    PublishSensorValue("switch", 0.0f);
+    zassert_true(F().control->Kinds() == Kinds({Kind::Stop}), "and it acts on the next change");
+}
+
+ZTEST(logging_trigger_set, test_AnUpdateWithoutTriggersOrRepeatedChangesNothing) {
+    F().Build({});
+    F().set->OnConfigurationUpdated();
+    zassert_equal(F().set->GetSubscribedCount(), 0U);
+
+    F().set.reset();
+    F().BuildOnSensor("switch");
+    PublishSensorValue("switch", 0.0f);
+    F().set->OnConfigurationUpdated();
+    F().set->OnConfigurationUpdated();
+    PublishSensorValue("switch", 1.0f);
+
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start}), "Updates in a row change no known value");
 }

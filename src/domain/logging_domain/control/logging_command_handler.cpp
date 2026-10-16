@@ -40,12 +40,7 @@ LoggingCommandHandler::LoggingCommandHandler(
             guard->Dispatch([&] {
                 LOG_DBG("Logging %s command received.", command->IsStart() ? "start" : "stop");
 
-                if(command->IsStart())
-                    control->RequestStart();
-                else
-                    control->RequestStop();
-
-                is_accepted = true;
+                is_accepted = control->HandleLoggingCommand(command->IsStart());
             });
 
             // False only while the handler is being destroyed.

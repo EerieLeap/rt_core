@@ -576,3 +576,86 @@ ZTEST(remote_logging_control, test_AStatusInFlightDuringDestructionDoesNothing) 
 
     zassert_true(F().sender->Starts() == Starts({true}), "A detached handler sends nothing");
 }
+
+// ======== A LOGGING command from another unit (HandleLoggingCommand, L9) ========
+
+// The stop another unit sent to every unit drops the wanted start, so no re-assertion sends a start
+// that undoes it.
+ZTEST(remote_logging_control, test_AStopFromAnotherUnitDropsTheWantedStart) {
+    F().Build();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}));
+
+    zassert_true(F().control->HandleLoggingCommand(false), "A stop is served");
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "and sends nothing: the other unit sent it to every unit");
+
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "No logging unit appearing re-asserts the start");
+
+    F().monitor->Report(1);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "and neither does a restart the monitor reports");
+}
+
+ZTEST(remote_logging_control, test_AStopFromAnotherUnitDropsAStartNotYetSent) {
+    F().Build();
+
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    F().control->RequestStart();
+    zassert_true(F().control->HandleLoggingCommand(false));
+    Gate().Open();
+    F().Flush();
+
+    zassert_equal(F().sender->Sends().size(), 0U, "The stop is the later request: the start is never sent");
+}
+
+ZTEST(remote_logging_control, test_AStopFromAnotherUnitKeepsAStopNotYetSent) {
+    F().Build();
+
+    zassert_true(Gate().Close(*F().queue), "The queue must be held");
+    F().control->RequestStop();
+    zassert_true(F().control->HandleLoggingCommand(false));
+    Gate().Open();
+    F().Flush();
+
+    zassert_true(F().sender->Starts() == Starts({false}), "This unit's own update stop is still sent");
+}
+
+ZTEST(remote_logging_control, test_AStartFromAnotherUnitIsNotServed) {
+    F().Build();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart();
+    F().Flush();
+
+    zassert_false(F().control->HandleLoggingCommand(true), "This unit has no writer: FAILURE");
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "Nothing is sent");
+
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true}), "and the wanted start is as it was");
+}
+
+ZTEST(remote_logging_control, test_AStartIsWantedAgainAfterAStopFromAnotherUnit) {
+    F().Build();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}));
+
+    zassert_true(F().control->HandleLoggingCommand(false));
+    F().control->RequestStart();
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true}), "A new request wants a start again");
+
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true, true}), "and it is re-asserted again");
+}

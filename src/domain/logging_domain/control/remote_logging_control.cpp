@@ -132,6 +132,19 @@ void RemoteLoggingControl::RequestStop() {
     Submit(Request::Stop);
 }
 
+bool RemoteLoggingControl::HandleLoggingCommand(bool is_start) {
+    // A unit without a writer starts nothing.
+    if(is_start)
+        return false;
+
+    // Only a start is replaced: a stop of this unit's own that is not sent yet stays due.
+    auto expected = Request::Start;
+    if(wanted_.compare_exchange_strong(expected, Request::None))
+        LOG_INF("Another unit stopped logging; the wanted start is dropped.");
+
+    return true;
+}
+
 bool RemoteLoggingControl::IsActive() const {
     return is_active_;
 }
@@ -153,14 +166,15 @@ void RemoteLoggingControl::Submit(Request request) {
 WorkQueueTaskResult RemoteLoggingControl::Process() {
     const bool is_send_due = is_send_due_.exchange(false);
     const bool is_reassert_due = is_reassert_due_.exchange(false);
-    const bool is_start_wanted = wanted_ == Request::Start;
+    const Request wanted = wanted_;
 
     // Two requests before this runs send the later one. A re-assertion in the same run is covered by
     // that send; one after a stop finds nothing wanted; a stop requested meanwhile is sent by the run
-    // it queued.
+    // it queued. Nothing wanted sends nothing: a start another unit's stop dropped before it was sent.
     if(is_send_due) {
-        command_sender_->SendLoggingCommand(is_start_wanted);
-    } else if(is_reassert_due && is_start_wanted) {
+        if(wanted != Request::None)
+            command_sender_->SendLoggingCommand(wanted == Request::Start);
+    } else if(is_reassert_due && wanted == Request::Start) {
         LOG_INF("A logging unit is back; sending the wanted logging start again.");
         command_sender_->SendLoggingCommand(true);
     }

@@ -55,7 +55,8 @@ int CanbusController::Initialize(const ConfigurationSetup& setup_test_configurat
     if(setup_test_configuration)
         setup_test_configuration(canbus_configuration_manager_);
 
-    canbus_service_ = std::make_shared<CanbusService>(DtCanbus::Get, canbus_configuration_manager_);
+    canbus_service_ = std::make_shared<CanbusService>(
+        DtCanbus::Get, canbus_configuration_manager_, config_work_queue_thread_);
 
     canbus_com_service_ = std::make_shared<CanbusComService>(canbus_service_);
     if(!canbus_com_service_->Initialize()) {

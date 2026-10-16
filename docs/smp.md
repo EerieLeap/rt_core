@@ -39,7 +39,8 @@ to the first write chunk got lost may repeat it unchanged and gets the session's
 of `BUSY`. When the last chunk arrives the CRC is checked and the configuration is validated and
 stored as received, on the configuration work queue, while the handler waits. A rejected
 configuration returns `APPLY_FAILED` with the validator's message in `msg` (up to 191
-characters).
+characters). A configuration that is stored stops logging on every unit (see
+[logging.md](logging.md#configuration-updates)); a rejected one does not.
 
 | Error | Code | Meaning |
 | --- | --- | --- |

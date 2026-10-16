@@ -265,6 +265,12 @@ private:
 public:
     void RequestStart() override { Record(Kind::Start); }
     void RequestStop() override { Record(Kind::Stop); }
+    // As the supervisor takes it: a request, accepted.
+    bool HandleLoggingCommand(bool is_start) override {
+        Record(is_start ? Kind::Start : Kind::Stop);
+
+        return true;
+    }
     [[nodiscard]] bool IsActive() const override { return false; }
 
     // Each request blocks its caller until Release().

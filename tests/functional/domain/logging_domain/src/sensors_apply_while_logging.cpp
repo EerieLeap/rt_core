@@ -4,6 +4,10 @@
 // builds the second file's logger at that start, so its header carries the new configuration's CRC
 // and the device ID current then. The restart runs on the configuration work queue in turn with the
 // requests, so a stop requested during it, or a session that fails during it, is not undone.
+//
+// The supervisor alone is tested here, without LoggingController's update rule (L9): with it, and
+// after LoggingController::Start(), every sensors store stops logging first (logging_control's
+// writer_updates), and this restart is what a store during the unit's start does.
 #include <atomic>
 #include <cstdint>
 #include <functional>

@@ -153,10 +153,16 @@ The order rt_daq's `main()` uses; dependencies flow downwards.
     controller in the remote role at this point instead: after `CanbusController` and
     `SensorsController::Initialize()`, before `SensorsController::Start()` and
     `ManagementController`.
-12. `ManagementController`, after every manager is registered, with the sensors' capabilities and
+12. `LoggingController::Start()`, once the last of the unit's boot stores is done (rt_daq: its
+    logging setup hook; rt_gauge: its test configurations, after `SensorsController::Start()`) and
+    before `ManagementController`: from here on a stored configuration stops logging on every unit
+    (see [logging.md](logging.md#configuration-updates)). A board without an SD file system
+    builds a `ConfigurationUpdateLoggingStop` with a sender instead, so what it stores still stops
+    the units that log.
+13. `ManagementController`, after every manager is registered, with the sensors' capabilities and
     the SD service.
-13. `CanbusSchedulerService`, registered as a CAN dependent service.
-14. `sensors_controller->Start()`, `canbus_scheduler_service->Start()`.
+14. `CanbusSchedulerService`, registered as a CAN dependent service.
+15. `sensors_controller->Start()`, `canbus_scheduler_service->Start()`.
 
 A BLE unit creates `BleController` after the sensors controller and starts it last.
 

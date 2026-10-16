@@ -1,9 +1,12 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+
+#include <zephyr/kernel.h>
 
 #include "subsys/event_bus/dispatch_guard.h"
 #include "subsys/fs/services/i_fs_service.h"
@@ -17,7 +20,9 @@
 #include "domain/sensor_domain/services/sensor_events_publisher.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/logging_domain/event_bus/logging_network_state.h"
+#include "domain/logging_domain/control/configuration_update_logging_stop.h"
 #include "domain/logging_domain/control/i_logging_control.h"
+#include "domain/logging_domain/control/logging_command_handler.h"
 #include "domain/logging_domain/control/logging_trigger_set.h"
 #include "domain/logging_domain/control/configuration/logging_control_configuration_manager.h"
 
@@ -26,7 +31,6 @@
 #include "subsys/threading/i_service.h"
 #include "domain/canbus_com_domain/state_bridge/network_state_exporter.h"
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
-#include "domain/logging_domain/control/logging_command_handler.h"
 #include "domain/logging_domain/services/log_writer_service.h"
 #include "domain/logging_domain/services/log_writer_supervisor.h"
 #else
@@ -48,7 +52,9 @@ using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::logging_domain::control::ConfigurationUpdateLoggingStop;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
+using eerie_leap::domain::logging_domain::control::LoggingCommandHandler;
 using eerie_leap::domain::logging_domain::control::LoggingTriggerSet;
 using eerie_leap::domain::logging_domain::control::configuration::LoggingControlConfigurationManager;
 using eerie_leap::domain::logging_domain::event_bus::LoggingNetworkState;
@@ -58,7 +64,6 @@ using eerie_leap::subsys::threading::IService;
 
 using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateExporter;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
-using eerie_leap::domain::logging_domain::control::LoggingCommandHandler;
 using eerie_leap::domain::logging_domain::services::LogWriterService;
 using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
 #else
@@ -77,6 +82,10 @@ using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
 // it, not from the configuration work queue, a bus thread or the CDMP work queue: it waits for all
 // of them. Build it once per ConfigurationService: the service cannot unregister a manager, so
 // Initialize() fails on one that already holds the logging types.
+//
+// A configuration stored on this unit after Start() stops logging on every unit (L9): the unit's own
+// control stops, the triggers take a baseline, and the LOGGING stop is broadcast. The composition
+// root calls Start() once the unit has finished starting.
 class LoggingController {
 public:
     // TODO: For test purposes only
@@ -124,6 +133,16 @@ public:
     // the first one's result.
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
 
+    /**
+     * From now on a configuration stored on this unit stops logging on every unit (L9). Call it once
+     * the unit has finished starting, after every store of its boot (defaults, the test hooks), and
+     * before ManagementController lets other units write configurations; stores before it stop
+     * nothing. 0 on success. -1 after a failed Initialize() (which logged why), and with an error
+     * before Initialize(). Once; a second call logs an error and returns the first result. Without a
+     * configuration service it returns 0 and no store stops logging.
+     */
+    int Start();
+
     // The role's ILoggingControl: LogWriterSupervisor or RemoteLoggingControl. Whoever keeps it
     // releases it before the controller goes, so no request comes in after the teardown.
     [[nodiscard]] std::shared_ptr<ILoggingControl> GetControl() const { return logging_control_; }
@@ -168,7 +187,6 @@ private:
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager_;
     std::shared_ptr<LogWriterService> log_writer_service_;
     std::shared_ptr<LogWriterSupervisor> log_writer_supervisor_;
-    std::unique_ptr<LoggingCommandHandler> logging_command_handler_;
     std::unique_ptr<LoggingStatusExporter> logging_status_exporter_;
 #else
     std::shared_ptr<RemoteLoggingControl> remote_logging_control_;
@@ -176,10 +194,20 @@ private:
 #endif
     // The role's control, set once the role's own Initialize() succeeded.
     std::shared_ptr<ILoggingControl> logging_control_;
+    // Serves the LOGGING command in both roles; the control decides.
+    std::unique_ptr<LoggingCommandHandler> logging_command_handler_;
+    std::unique_ptr<ConfigurationUpdateLoggingStop> configuration_update_logging_stop_;
 
     // Replaced only by RebuildTriggers() on the configuration work queue, and by Initialize() and
-    // Teardown() while neither the task nor the handler can run.
+    // Teardown() while neither the task nor the handler can run; trigger_set_lock_ orders those
+    // against an update's report.
     std::unique_ptr<LoggingTriggerSet> logging_trigger_set_;
+    // logging_trigger_set_ between RebuildTriggers() (configuration work queue) and an update's report
+    // (the storing thread). Taken after the update stop's guard, and the set's guard after it.
+    k_mutex trigger_set_lock_;
+    // Set by the first update after Start(): from then on a rebuilt set takes first values as
+    // baselines. Read by RebuildTriggers() under trigger_set_lock_.
+    std::atomic<bool> is_configuration_updated_ = false;
     std::optional<WorkQueueTask<LoggingController>> rebuild_task_;
     // The updated handler's way back to this; created with the controller so Teardown() can detach
     // it from any state, and detached first.
@@ -187,6 +215,8 @@ private:
     bool is_handler_registered_ = false;
     bool is_initialize_called_ = false;
     bool is_initialized_ = false;
+    bool is_start_called_ = false;
+    int start_result_ = -1;
 
     // Logs what is missing.
     bool HasDependencies() const;
@@ -195,10 +225,13 @@ private:
     // The writer's or the remote's pieces, and logging_control_.
     bool BuildRole();
     // Always a set: without a stored configuration it has no triggers.
-    std::unique_ptr<LoggingTriggerSet> BuildTriggerSet() const;
+    std::unique_ptr<LoggingTriggerSet> BuildTriggerSet(LoggingTriggerSet::FirstValue first_value) const;
     void ReplayFor(const LoggingTriggerSet& set) const;
     // The rebuild task; configuration work queue only.
     void RebuildTriggers();
+    // The update stop's UpdateHandler, inside its guard, on the storing thread: baselines for every
+    // trigger, and for a sensors update the withdrawal of triggers whose sensor is gone.
+    void OnConfigurationUpdated(ConfigurationService::Type type);
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     // From Teardown(): stops logging through the supervisor and waits for it.
     void StopLogWriter();

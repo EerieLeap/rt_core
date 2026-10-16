@@ -66,4 +66,7 @@ config EERIE_LEAP_CONTROLLER_LOGGING
       configuration, the log writer and its supervisor, and, with a CAN
       COM service, the LOGGING command handler and the shared logging
       status. Without it, the remote role: requests become the CDMP
-      LOGGING broadcast, and the status comes from the units that log.
+      LOGGING broadcast, and the status comes from the units that log;
+      it answers the LOGGING command too, a stop dropping its wanted start.
+      A configuration stored on the unit after LoggingController::Start()
+      stops logging on every unit.

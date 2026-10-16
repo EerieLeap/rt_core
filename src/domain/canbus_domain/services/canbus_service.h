@@ -8,12 +8,14 @@
 #include "domain/canbus_domain/models/canbus_com_configuration.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
+#include "subsys/threading/work_queue_thread.h"
 #include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
 
 namespace eerie_leap::domain::canbus_domain::services {
 
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanbusComConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
@@ -27,6 +29,7 @@ public:
 private:
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager_;
     std::function<const device*(uint8_t)> dt_canbus_provider_;
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread_;
 
     std::unordered_map<uint8_t, std::shared_ptr<Canbus>> canbuses_;
     std::unordered_map<uint8_t, std::shared_ptr<CanbusProxy>> canbus_proxies_;
@@ -39,9 +42,16 @@ private:
     void BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const;
 
 public:
+    /**
+     * @param config_work_queue_thread Running, or null. A bitrate a bus detects is stored on it: the
+     *        callback comes from the bus's own thread, a cooperative one with a 2 KiB stack, which must
+     *        not carry a configuration store and what it reports (the update stop of the logging
+     *        controller, the CAN reconfiguration). Null stores it on that thread.
+     */
     CanbusService(
         std::function<const device*(uint8_t)> dt_canbus_provider,
-        std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager);
+        std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager,
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread = nullptr);
     void Configure();
 
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetCanbus(uint8_t bus_channel) const;

@@ -11,6 +11,7 @@
 #include "subsys/event_bus/event_binding.h"
 #include "subsys/event_bus/event_binding_subscription.h"
 #include "subsys/event_bus/event_channel_id.h"
+#include "subsys/threading/scoped_mutex.h"
 
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
 #include "configuration/services/cbor_configuration_service.h"
@@ -19,10 +20,11 @@
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
 #include "domain/logging_domain/control/models/logging_trigger.h"
 
+#include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
+
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #else
-#include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
 #include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
 #endif
 
@@ -35,10 +37,12 @@ using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
+using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
-#ifndef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
+using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
+#ifndef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
 #endif
 
@@ -51,9 +55,11 @@ namespace {
 // Whether a binding to a sensor names an enabled sensor of the stored configuration; any other
 // binding is not checked. The selector is judged by the subscription's own rule, so text and integer
 // selectors count as they would match. It runs on the building thread (boot: the composition root's;
-// a rebuild: the configuration work queue), and the sensors are loaded by then. A sensor that
+// a rebuild: the configuration work queue), and the sensors are loaded by then. At boot a sensor that
 // appears later is not re-checked: the trigger is subscribed by hash and works as soon as it is
-// published, so the warning is informational (L6). Null manager: null resolver.
+// published, so the warning is informational (L6). The resolver runs again at each sensors update
+// (OnConfigurationUpdated()), which withdraws a trigger whose sensor is gone. Null manager: null
+// resolver.
 LoggingTriggerSet::SelectorResolver MakeSelectorResolver(std::shared_ptr<SensorsConfigurationManager> sensors_manager) {
     if(sensors_manager == nullptr)
         return nullptr;
@@ -117,7 +123,10 @@ LoggingController::LoggingController(
         time_service_(std::move(time_service)),
         sensor_readings_frame_(std::move(sensor_readings_frame)),
         tool_id_(std::move(tool_id)),
-        guard_(std::make_shared<DispatchGuard>(this)) {}
+        guard_(std::make_shared<DispatchGuard>(this)) {
+
+    k_mutex_init(&trigger_set_lock_);
+}
 
 LoggingController::~LoggingController() {
     Teardown();
@@ -154,6 +163,32 @@ int LoggingController::Initialize(const ConfigurationSetup& setup_test_configura
     Teardown();
 
     return -1;
+}
+
+int LoggingController::Start() {
+    if(is_start_called_) {
+        LOG_ERR("The logging controller is started once.");
+        return start_result_;
+    }
+
+    if(!is_initialize_called_) {
+        LOG_ERR("The logging controller is started after Initialize().");
+        return -1;
+    }
+    is_start_called_ = true;
+
+    // Initialize() logged why.
+    if(!is_initialized_)
+        return start_result_ = -1;
+
+    if(configuration_update_logging_stop_ == nullptr) {
+        LOG_INF("No configuration service: a stored configuration stops no logging.");
+        return start_result_ = 0;
+    }
+
+    start_result_ = configuration_update_logging_stop_->Start() ? 0 : -1;
+
+    return start_result_;
 }
 
 bool LoggingController::HasDependencies() const {
@@ -223,8 +258,12 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     // 5. After the role's pieces, so the first request reaches an initialized control. The replay
     //    finds an empty frame in the documented order (sensors not started yet); it makes a
     //    controller built after SensorsController::Start() still see a switch that is already on.
-    logging_trigger_set_ = BuildTriggerSet();
-    ReplayFor(*logging_trigger_set_);
+    {
+        ScopedMutex lock(trigger_set_lock_);
+
+        logging_trigger_set_ = BuildTriggerSet(LoggingTriggerSet::FirstValue::OneStarts);
+        ReplayFor(*logging_trigger_set_);
+    }
 
     // 6. The handler may run on any thread that stores the configuration and only reschedules the
     //    task. It holds the guard, not this: a call the manager already took finishes harmlessly
@@ -234,7 +273,29 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     });
     is_handler_registered_ = true;
 
-    // 7. Last, so a failed Initialize() registers nothing: ConfigurationService cannot unregister.
+    // 7. A configuration stored on this unit stops logging on every unit once Start() is called (L9).
+    //    It registers nothing before that, so it may come before the configuration types. The writer
+    //    broadcasts the stop itself; the remote control sends it with its own stop.
+    if(configuration_service_ != nullptr) {
+        std::shared_ptr<ILoggingCommandSender> stop_sender;
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+        if(canbus_com_service_ != nullptr)
+            stop_sender = std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_);
+#endif
+
+        configuration_update_logging_stop_ = std::make_unique<ConfigurationUpdateLoggingStop>(
+            configuration_service_,
+            config_work_queue_thread_,
+            logging_control_,
+            std::move(stop_sender),
+            [this](ConfigurationService::Type type) { OnConfigurationUpdated(type); });
+        if(!configuration_update_logging_stop_->Initialize()) {
+            LOG_ERR("Failed to initialize the configuration update stop.");
+            return false;
+        }
+    }
+
+    // 8. Last, so a failed Initialize() registers nothing: ConfigurationService cannot unregister.
     if(configuration_service_ != nullptr) {
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
         configuration_service_->RegisterCborConfigurationManager(
@@ -318,6 +379,10 @@ bool LoggingController::BuildRole() {
     }
     logging_control_ = remote_logging_control_;
 
+    // The gauge answers the LOGGING command too: a stop from another unit drops its wanted start, so
+    // no re-assertion undoes it (L9). After the control's Initialize(), which the command needs.
+    logging_command_handler_ = std::make_unique<LoggingCommandHandler>(canbus_com_service_, logging_control_);
+
     // After the control subscribed: the importer's first status (Unavailable) has no predecessor to
     // be told from. It throws when the transport refuses it, which fails Initialize(): the remote
     // role is blind without the status.
@@ -328,7 +393,7 @@ bool LoggingController::BuildRole() {
 
 #endif
 
-std::unique_ptr<LoggingTriggerSet> LoggingController::BuildTriggerSet() const {
+std::unique_ptr<LoggingTriggerSet> LoggingController::BuildTriggerSet(LoggingTriggerSet::FirstValue first_value) const {
     // Without a stored configuration (a unit whose file system cannot be written) the set has no
     // triggers, so a caller never meets a null set.
     const auto configuration = logging_control_configuration_manager_->Get();
@@ -342,7 +407,8 @@ std::unique_ptr<LoggingTriggerSet> LoggingController::BuildTriggerSet() const {
     auto set = std::make_unique<LoggingTriggerSet>(
         logging_control_,
         triggers,
-        MakeSelectorResolver(sensors_configuration_manager_));
+        MakeSelectorResolver(sensors_configuration_manager_),
+        first_value);
 
     LOG_INF("Logging triggers: %u of %u subscribed.",
         static_cast<unsigned>(set->GetSubscribedCount()), static_cast<unsigned>(triggers.size()));
@@ -358,18 +424,43 @@ void LoggingController::ReplayFor(const LoggingTriggerSet& set) const {
 
 // Configuration work queue only: a store from another thread has its handler queue this behind it.
 void LoggingController::RebuildTriggers() {
+    // Under the lock from the reset to the end of the build: an update's report either comes first
+    // (the flag is set, so the new set is built with baselines) or finds the new set and switches it.
+    // A set rebuilt after an update always takes baselines.
+    ScopedMutex lock(trigger_set_lock_);
+
     // The old set goes first, so two sets never act on one change and the new one starts from
-    // "unknown", which is what the replay below is for.
+    // "unknown", which is what the replay below is for: it makes the baseline current.
     logging_trigger_set_.reset();
 
     try {
-        logging_trigger_set_ = BuildTriggerSet();
+        logging_trigger_set_ = BuildTriggerSet(is_configuration_updated_
+            ? LoggingTriggerSet::FirstValue::IsBaseline
+            : LoggingTriggerSet::FirstValue::OneStarts);
     } catch(const std::exception& e) {
         LOG_ERR("Failed to rebuild the logging triggers; none act until the configuration is stored again: %s", e.what());
         return;
     }
 
     ReplayFor(*logging_trigger_set_);
+}
+
+// The update stop's handler: on the thread that stored the configuration, before the stop is
+// requested and before the store's own handler queues its work.
+void LoggingController::OnConfigurationUpdated(ConfigurationService::Type type) {
+    // Before the lock: a rebuild that takes it first still sees the flag, one that comes after builds
+    // its set with baselines.
+    is_configuration_updated_ = true;
+
+    ScopedMutex lock(trigger_set_lock_);
+
+    // A failed rebuild leaves no set; the next one is built with baselines.
+    if(logging_trigger_set_ == nullptr)
+        return;
+
+    // Only a sensors update can take a sensor away.
+    logging_trigger_set_->OnConfigurationUpdated(
+        type == ConfigurationService::Type::Sensors ? MakeSelectorResolver(sensors_configuration_manager_) : nullptr);
 }
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
@@ -422,6 +513,10 @@ void LoggingController::StopLogWriter() {
 // Also the failed-Initialize() path and the destructor, so each step tolerates a member that was
 // never built, and the whole can run again.
 void LoggingController::Teardown() {
+    // 0. No report runs after this: a store stops nothing, and the update handler's `this` is not
+    //    used again. A report in its body is waited for.
+    configuration_update_logging_stop_.reset();
+
     // 1. No rebuild can be queued any more: a handler already called on the storing thread becomes
     //    a no-op, and one in its body is waited for.
     guard_->Detach();
@@ -437,9 +532,12 @@ void LoggingController::Teardown() {
     }
 
     // 3. The inputs: nothing requests from here on. Each waits for a handler in its body.
-    logging_trigger_set_.reset();
-#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    {
+        ScopedMutex lock(trigger_set_lock_);
+        logging_trigger_set_.reset();
+    }
     logging_command_handler_.reset();
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
     // 4. Logging stops while the supervisor can still do it.
     StopLogWriter();

@@ -287,6 +287,15 @@ void LogWriterSupervisor::RequestStop() {
     task_->Reschedule(K_NO_WAIT);
 }
 
+bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
+    if(is_start)
+        RequestStart();
+    else
+        RequestStop();
+
+    return true;
+}
+
 bool LogWriterSupervisor::IsActive() const {
     return is_active_;
 }

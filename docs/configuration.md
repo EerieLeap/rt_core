@@ -71,6 +71,17 @@ Behaviour shared by every manager:
   `IConfigurationManager::RegisterConfigurationUpdatedHandler()`. The handler runs after a
   successful `Update()` or `ApplyCborConfiguration()`, not on the initial load. Controllers use
   it to restart the affected services (see each domain page).
+- **The stored handler.** Every store, `Update()`, `Adopt()` or `ApplyCborConfiguration()`, calls
+  the manager's stored handler (`SetStoredHandler()`) once it succeeded, on the storing thread and
+  before the manager's updated handler. `ConfigurationService` sets it when the manager is
+  registered, and passes the type on to its own stored handler (below). Not reported: a load, the
+  default made while the manager is built, and a rejected or failed store. A handler that throws
+  is logged and does not fail the store, which is complete by then. The handler is copied under a
+  lock and called outside it, so it can be replaced from any thread while a store calls it.
+- **`UpdateOwnSetting(configuration)`** stores like `Update()` but reports to neither handler. It is
+  for a setting the unit keeps for itself, such as the brightness the gauge's own slider sets, which
+  is no configuration update from the network and so stops no logging (see
+  [logging.md](logging.md#configuration-updates)).
 
 ## Configuration service
 
@@ -79,6 +90,15 @@ is the registry the SMP `config` group talks to. Each controller registers its m
 type ID with an optional size cap (default 64 KiB) that bounds the transfer buffer of an SMP
 write. It routes `ApplyCborConfiguration`, `GetCborConfiguration` and `GetCborConfigurationInfo`
 to the manager of a type and lists the registered types.
+
+`RegisterConfigurationStoredHandler(handler)` takes the report of every successful store of every
+registered manager, with the manager's type: an SMP write over any transport, a manager's
+`Update()` or `Adopt()`, or an apply that bypasses the service (rt_daq's `logging reapply-sensors`).
+There is one handler per service: a second call replaces the first, `nullptr` clears it, and one
+cleared during its call finishes that call. This is how logging learns of configuration updates
+(`ConfigurationUpdateLoggingStop`, see [logging.md](logging.md#configuration-updates)). Only a
+manager registered with the unit's service reports: a manager that is not registered stores
+silently. The gauge's system configuration is such a one, with no runtime store to report.
 
 The `ManagementController` must be created after every manager has been registered, because the
 `config` group lists the types once at start.

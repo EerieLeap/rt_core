@@ -14,6 +14,12 @@ public:
     virtual void RequestStart() = 0;
     virtual void RequestStop() = 0;
 
+    // The CDMP LOGGING command another unit sent (LoggingCommandHandler, on the CDMP work queue):
+    // whether this unit accepts it, answered SUCCESS, else FAILURE. A unit that logs takes it as a
+    // request. A unit without a writer serves only a stop, which drops its wanted start (L9). Never
+    // blocks.
+    virtual bool HandleLoggingCommand(bool is_start) = 0;
+
     // Whether logging runs, as logging_events last reported it: for the shell's status and for
     // tests. A trigger never reads it, its bound value already says what it wants.
     [[nodiscard]] virtual bool IsActive() const = 0;

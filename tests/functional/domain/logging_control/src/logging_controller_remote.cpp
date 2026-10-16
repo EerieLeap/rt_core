@@ -372,10 +372,15 @@ ZTEST(logging_controller_remote, test_ControllersComeAndGoWhileTheUnitRuns) {
     for(int round = 0; round < 3; round++) {
         F().Start(StoresTriggersOn({"switch"}));
 
+        // The unit hears its own broadcasts on the loopback bus: each is answered before the case goes on.
         F().rig.Commit("switch", 1.0F);
-        zassert_true(IsStart(F().peer.WaitForBroadcast()), "Round %d starts", round);
+        const auto start = F().peer.WaitForBroadcast();
+        zassert_true(IsStart(start), "Round %d starts", round);
+        zassert_true(F().peer.WaitForOwnAnswer(*start));
         F().rig.Commit("switch", 0.0F);
-        zassert_true(IsStop(F().peer.WaitForBroadcast()), "Round %d stops", round);
+        const auto stop = F().peer.WaitForBroadcast();
+        zassert_true(IsStop(stop), "Round %d stops", round);
+        zassert_true(F().peer.WaitForOwnAnswer(*stop));
 
         // A store that rebuilds the triggers and replays, with the publisher still ticking, and the
         // controller destroyed at once: the job holds the manager, not the controller.
@@ -491,6 +496,71 @@ ZTEST(logging_controller_remote, test_ASecondControllerOnTheSameConfigurationSer
     zassert_is_null(second.GetLoggingControlConfigurationManager().get());
 
     // Destroyed in After().
+}
+
+// ======== Start() and the LOGGING command (L9) ========
+
+// The gauge answers the command too: a stop is accepted (and drops its wanted start), a start is not
+// served. The controller wires the handler in the remote role.
+ZTEST(logging_controller_remote, test_TheRemoteRoleServesTheLoggingCommand) {
+    F().Start();
+
+    const auto stopped = F().peer.Ask({0x00});
+    zassert_true(stopped.has_value(), "A stop is answered");
+    zassert_equal(*stopped, CdmpResultCode::SUCCESS);
+
+    const auto started = F().peer.Ask({0x01});
+    zassert_true(started.has_value(), "and so is a start");
+    zassert_equal(*started, CdmpResultCode::FAILURE, "which this unit cannot serve");
+
+    zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "Nothing is sent in answer");
+}
+
+ZTEST(logging_controller_remote, test_TheHandlerGoesWithTheController) {
+    F().Start();
+    F().controller.reset();
+
+    const auto result = F().peer.Ask({0x00});
+    zassert_true(result.has_value());
+    zassert_equal(*result, CdmpResultCode::UNSUPPORTED_COMMAND, "The command is not served once the controller is gone");
+}
+
+ZTEST(logging_controller_remote, test_StartBeforeInitializeOrAfterAFailedOneFails) {
+    auto& before = F().Build(F().MakeParts());
+    zassert_equal(before.Start(), -1, "Start() needs Initialize()");
+    zassert_equal(before.Initialize(), 0, "which still works afterwards");
+    zassert_equal(before.Start(), 0);
+    F().controller.reset();
+
+    // The remote role is blind without the COM service.
+    Parts parts;
+    auto& failed = F().Build(std::move(parts));
+    zassert_equal(failed.Initialize(), -1);
+    zassert_equal(failed.Start(), -1, "and a failed Initialize() has no Start()");
+}
+
+ZTEST(logging_controller_remote, test_StartTwiceReturnsTheFirstResult) {
+    F().Start();
+
+    zassert_equal(F().controller->Start(), 0);
+    LogCounter::Get().Watch("logging_controller_logger");
+    zassert_equal(F().controller->Start(), 0, "A second call repeats the first one's result");
+    zassert_logged(1, "and logs an error");
+}
+
+ZTEST(logging_controller_remote, test_WithoutAConfigurationServiceStartSucceedsAndNothingStops) {
+    auto parts = F().MakeParts();
+    parts.configuration_service = nullptr;
+
+    auto& controller = F().Build(std::move(parts));
+    zassert_equal(controller.Initialize(), 0);
+    zassert_equal(controller.Start(), 0, "There is nothing to report the stores, and that is no failure");
+
+    controller.GetControl()->RequestStart();
+    zassert_true(IsStart(F().peer.WaitForBroadcast()));
+    zassert_true(controller.GetLoggingControlConfigurationManager()->Update(TriggersOn({"a"})));
+    zassert_true(Flush());
+    zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A store stops no logging");
 }
 
 #endif // !CONFIG_EERIE_LEAP_DOMAIN_LOGGING

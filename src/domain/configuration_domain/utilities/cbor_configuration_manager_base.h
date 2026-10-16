@@ -35,6 +35,11 @@ private:
     // Cleared only while that default is created, so the rejected file is not overwritten.
     bool is_saving_enabled_ = true;
 
+    // Set from any thread; a store copies it under the lock and calls it outside, so a handler cleared
+    // during its call finishes that call, and a call allocates nothing.
+    mutable k_mutex stored_handler_mutex_;
+    std::shared_ptr<const StoredHandler> stored_handler_;
+
     // Both validate; Deserialize must accept everything Serialize produces.
     virtual eerie_memory::pmr_unique_ptr<TCborConfig> Serialize(const TConfiguration& configuration) = 0;
     virtual eerie_memory::pmr_unique_ptr<TConfiguration> Deserialize(const TCborConfig& cbor_config) = 0;
@@ -71,6 +76,53 @@ private:
         OnConfigurationChanged(current);
     }
 
+    // Serializes, parses back and saves, then adopts what was parsed.
+    bool Store(const TConfiguration& configuration) {
+        LOG_MODULE_DECLARE(configuration_manager_logger);
+
+        std::shared_ptr<TConfiguration> updated_configuration;
+
+        try {
+            auto cbor_config = Serialize(configuration);
+
+            // Parsing the encoding back gives what a reload would, and nothing unparsable is saved.
+            updated_configuration = Share(Deserialize(*cbor_config));
+
+            if(!Save(*cbor_config))
+                return false;
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to update %s configuration. %s", name_, e.what());
+            return false;
+        }
+
+        SetConfiguration(std::move(updated_configuration));
+
+        return true;
+    }
+
+    // After a successful store. Logs what the handler throws: the configuration is stored by then, and
+    // the store must not turn into a failure a client retries.
+    void NotifyStored() {
+        LOG_MODULE_DECLARE(configuration_manager_logger);
+
+        std::shared_ptr<const StoredHandler> handler;
+        {
+            eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
+            handler = stored_handler_;
+        }
+
+        if(handler == nullptr)
+            return;
+
+        try {
+            (*handler)();
+        } catch(const std::exception& e) {
+            LOG_ERR("The %s configuration's stored handler failed. %s", name_, e.what());
+        } catch(...) {
+            LOG_ERR("The %s configuration's stored handler failed.", name_);
+        }
+    }
+
 protected:
     CborConfigurationManagerBase(
         const char* name,
@@ -78,6 +130,7 @@ protected:
             : name_(name), cbor_configuration_service_(std::move(cbor_configuration_service)) {
 
         k_mutex_init(&configuration_mutex_);
+        k_mutex_init(&stored_handler_mutex_);
     }
 
     // Returns whether a configuration is available afterwards.
@@ -159,6 +212,7 @@ protected:
         }
 
         SetConfiguration(std::move(configuration));
+        NotifyStored();
 
         return true;
     }
@@ -181,27 +235,32 @@ public:
         return CurrentConfiguration();
     }
 
+    // A configuration update: reports to the stored handler (SetStoredHandler()).
     bool Update(const TConfiguration& configuration) {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
-
-        std::shared_ptr<TConfiguration> updated_configuration;
-
-        try {
-            auto cbor_config = Serialize(configuration);
-
-            // Parsing the encoding back gives what a reload would, and nothing unparsable is saved.
-            updated_configuration = Share(Deserialize(*cbor_config));
-
-            if(!Save(*cbor_config))
-                return false;
-        } catch(const std::exception& e) {
-            LOG_ERR("Failed to update %s configuration. %s", name_, e.what());
+        if(!Store(configuration))
             return false;
-        }
 
-        SetConfiguration(std::move(updated_configuration));
+        NotifyStored();
 
         return true;
+    }
+
+    // Stores a setting the unit keeps for itself, such as the display brightness its own UI persists:
+    // as Update(), but no stored handler is called, so it is no configuration update and stops no
+    // logging (docs/logging.md, "Configuration updates"). A derived manager's updated handler is not
+    // called either.
+    bool UpdateOwnSetting(const TConfiguration& configuration) {
+        return Store(configuration);
+    }
+
+    void SetStoredHandler(StoredHandler handler) override {
+        std::shared_ptr<const StoredHandler> slot;
+        if(handler)
+            slot = std::make_shared<const StoredHandler>(std::move(handler));
+
+        eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
+        stored_handler_.swap(slot);
+        // The previous handler is released after the lock, by whoever drops it last.
     }
 
     using ICborConfigurationManager::ApplyCborConfiguration;
@@ -236,6 +295,8 @@ public:
         SetConfiguration(std::move(configuration));
 
         LOG_INF("%s CBOR configuration applied successfully.", name_);
+
+        NotifyStored();
 
         return true;
     }

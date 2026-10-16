@@ -100,6 +100,29 @@ ZTEST(log_writer_supervisor, test_ARequestStartsAndStopsTheWriter) {
     AssertFinalizedFile(files[0].content, "the file");
 }
 
+// The CDMP LOGGING command another unit sent (LoggingCommandHandler) is a request, accepted whether or
+// not it changes anything (L9).
+ZTEST(log_writer_supervisor, test_ALoggingCommandFromAnotherUnitIsARequest) {
+    auto rig = MakeLogWriterRig();
+    StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
+
+    zassert_true(supervisor.HandleLoggingCommand(true), "a start is accepted");
+    zassert_true(recorder.WaitForEventCount(1), "and starts the writer");
+    zassert_true(WaitFor([&] { return supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
+    zassert_equal(CountLogFiles(*rig.fs_service), 1, "in a file");
+
+    zassert_true(supervisor.HandleLoggingCommand(false), "a stop is accepted");
+    zassert_true(recorder.WaitForEventCount(2), "and stops it");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+    zassert_true(rig.log_writer_service->IsStopped());
+
+    zassert_true(supervisor.HandleLoggingCommand(false), "a stop while stopped is accepted too");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+    k_msleep(50);
+    zassert_equal(recorder.GetEvents().size(), 2, "and publishes nothing");
+}
+
 // Requests made before the task runs act once, as the last of them: start, stop, start is one start,
 // and start, stop leaves the writer stopped. None of them waits.
 ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {

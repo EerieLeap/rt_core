@@ -65,6 +65,11 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 // normally one. That is redundant when it starts by itself, and fails again when what failed before
 // fails still.
 //
+// A configuration update on this unit (RequestStop() from ConfigurationUpdateLoggingStop) or a LOGGING
+// stop from another unit (HandleLoggingCommand()) clears the wanted start, so none of the rules above
+// sends a start that undoes the stop; only a new RequestStart() wants one again. That includes the
+// re-assertion after the COM restart a CAN configuration causes (L9).
+//
 // The tests that pin each case are in canbus_com_logging_command_sender.cpp and
 // canbus_com_logging_restart_monitor.cpp.
 //
@@ -103,6 +108,13 @@ public:
 
     void RequestStart() override;
     void RequestStop() override;
+
+    // A LOGGING command from another unit (LoggingCommandHandler, CDMP work queue). A stop drops the
+    // wanted start, so no re-assertion sends a start that undoes it, and sends nothing: the other unit
+    // sent the stop to every unit, this one included. It answers SUCCESS. A start is not served here,
+    // since this unit has no writer: FAILURE, and the wanted state stays as it was. A start not yet
+    // sent is dropped by a stop; a stop not yet sent (this unit's own update) is kept.
+    bool HandleLoggingCommand(bool is_start) override;
     [[nodiscard]] bool IsActive() const override;
 
 private:

@@ -12,10 +12,12 @@ namespace eerie_leap::domain::logging_domain::control {
 using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 
-// Serves the CDMP LOGGING command on a unit that logs: start or stop becomes a request, answered
-// SUCCESS at once, which means accepted, not started; a change of state follows as the shared
-// logging status, and a start that fails leaves it as it was. A request without a payload is
-// answered FAILURE. It runs on the CDMP work queue and never waits for the writer.
+// Serves the CDMP LOGGING command on every unit with a COM service, in both roles: the command goes to
+// the control's HandleLoggingCommand(), which decides. A unit that logs takes a start or a stop as a
+// request, answered SUCCESS at once, which means accepted, not started; a change of state follows as
+// the shared logging status, and a start that fails leaves it as it was. A unit without a writer
+// answers a stop SUCCESS and drops its wanted start, and a start FAILURE. A request without a payload
+// is answered FAILURE. It runs on the CDMP work queue and never waits for the writer.
 //
 // Wiring on a unit that logs, in this order: the supervisor's Initialize(), this handler, then the
 // exporter, which shares the first logging status. A command that arrives with no handler is dropped

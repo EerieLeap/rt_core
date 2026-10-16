@@ -34,6 +34,12 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 // configuration, failed-session stop, and the stop and start around a sensors restart runs on the
 // configuration work queue, one at a time. Requests return at once from any thread, and the latest
 // one wins. The supervisor builds each session's logger and stops a session that failed.
+//
+// After LoggingController::Start() every stored configuration stops logging first (L9): the stop is
+// requested on the storing thread, before the store's own handler queues the restart for a logging
+// configuration or the sensors restart, so neither starts the writer again. Both restarts remain for a
+// store during the unit's start and for a start requested after the update's stop, which wins as the
+// later request.
 class LogWriterSupervisor final : public ILoggingControl {
 public:
     // This unit's CDMP device ID for the log header, 0 while it has none; called at every start on
@@ -77,6 +83,9 @@ public:
 
     void RequestStart() override;
     void RequestStop() override;
+    // The CDMP LOGGING command is a request; SUCCESS means accepted, whether or not the supervisor can
+    // act on it now (a request before Initialize() is refused and logged, as for any caller).
+    bool HandleLoggingCommand(bool is_start) override;
     [[nodiscard]] bool IsActive() const override;
 
     /**

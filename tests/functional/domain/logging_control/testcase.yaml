@@ -2,6 +2,11 @@ common:
   tags:
     - functional
     - domain.logging_control
+  # The configuration-update cases run the real pipeline, and QEMU runs in real time: the remote
+  # scenario alone took 62 s on qemu_cortex_a9 and a53 with the first 17 of them, past the default of
+  # 60 s. The time of the full set has not been measured on QEMU; measure it on a53 and a9 and set
+  # this to about twice that.
+  timeout: 180
   platform_allow:
     - native_sim
     - qemu_cortex_a9
@@ -10,7 +15,8 @@ common:
     - qemu_malta
 
 tests:
-  # The remote role, as the gauge builds it: logging_controller_remote.cpp.
+  # The remote role, as the gauge builds it: logging_controller_remote.cpp and
+  # logging_controller_remote_updates.cpp.
   functional.logging_control: {}
   # The suite with a raised CDMP work queue stack, for the restart monitor's throwing handler case:
   # it unwinds on that queue, which overflowed the 4096 B default on the 64 bit QEMU targets and on
@@ -21,9 +27,10 @@ tests:
     extra_configs:
       - CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE=8192
   # The writer role, as rt_daq builds it: the logging domain next to the controller, so rt_core's
-  # CMakeLists.txt globs control/ twice and de-duplicates it. logging_controller_writer.cpp replaces
-  # logging_controller_remote.cpp, and the other cases run where the domain and the controller both
-  # build control/. The log volume is the 1 MiB test filesystem, below the 16 MiB default minimum.
+  # CMakeLists.txt globs control/ twice and de-duplicates it. logging_controller_writer.cpp and
+  # logging_controller_writer_updates.cpp replace the two remote files, and the other cases run
+  # where the domain and the controller both build control/. The log volume is the 1 MiB test
+  # filesystem, below the 16 MiB default minimum.
   functional.logging_control.writer_role:
     extra_configs:
       - CONFIG_EERIE_LEAP_DOMAIN_LOGGING=y

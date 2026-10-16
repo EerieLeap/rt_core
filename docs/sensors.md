@@ -160,16 +160,19 @@ so the trigger itself has no mode:
   to the same sensor shows the same switch as the trigger acts on.
 - `Level` follows a switch, a CAN signal or an expression as it is. A debounce keeps a short dip
   from stopping a session.
-- The trigger starts logging on 0 to 1 and stops it on 1 to 0, and reads a first value of 1 as a
-  start, so a switch that is on at boot needs no new edge. A `Toggle` switch keeps its value across
-  a sensors apply (see [Generations and restarts](#generations-and-restarts)), so the trigger sees
-  no change and requests nothing, and logging continues (see [logging.md](logging.md#restarts)).
-- A change to a `Toggle` sensor's type, `debounce_ms` or `input_mode` starts its switch off, which
-  the trigger reads as 1 to 0 and stops logging (a change to `Level` waits for the sensor's first
-  reading). A change to its id stops nothing, and neither does removing or disabling it: a trigger
-  selects its sensor by id, so it hears nothing more and keeps its last state, and a trigger on the
-  new id reads the first 0 as no request. Logging goes on in a new file (see
-  [logging.md](logging.md#triggers)).
+- The trigger starts logging on 0 to 1 and stops it on 1 to 0, and at boot reads a first value of 1
+  as a start, so a switch that is on at boot needs no new edge.
+- A sensors apply is a configuration update: it stops logging on every unit (see
+  [logging.md](logging.md#configuration-updates)), and from then on every trigger reads its next
+  first value as a baseline. A `Toggle` switch keeps its value across the apply (see
+  [Generations and restarts](#generations-and-restarts)), so a switch that is on stays on and
+  starts nothing; the next change of a switch acts.
+- A trigger whose sensor the apply took away, by a new id, by removing it or by disabling it, is
+  withdrawn: it forgets its value and ignores the old generation's last values, and the sensor back
+  under that id gives it a baseline (see [logging.md](logging.md#triggers)). A change to a `Toggle`
+  sensor's type, `debounce_ms` or `input_mode` starts its switch off, which the trigger reads as
+  1 to 0 and stops logging, as the apply did already (a change to `Level` waits for the sensor's
+  first reading).
 
 | Example | Sensor | Trigger |
 | --- | --- | --- |
@@ -253,7 +256,9 @@ Services that read the frame or the sensors of the running generation register w
 services that are running before processing stops, and starts exactly those again once
 processing has been started, whether or not that start succeeded; a dependent that does not stop
 or does not come back is logged and does not fail the restart. The log writer joins through
-`LogWriterSupervisor::GetDependentService()`, so a sensors apply while logging finalizes the file
+`LogWriterSupervisor::GetDependentService()`. A sensors apply after `LoggingController::Start()`
+stops the writer first, as every configuration update does, and the dependent finds it stopped.
+During the unit's start, and for a start requested after the update's stop, it finalizes the file
 and opens the next one for the new sensors (see [logging.md](logging.md#restarts) and
 [Supervision](logging.md#supervision)).
 

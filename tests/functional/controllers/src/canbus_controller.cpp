@@ -10,8 +10,10 @@
 #include "subsys/threading/work_queue_thread.h"
 
 #include "controllers/canbus_controller.h"
+#include "domain/configuration_domain/services/configuration_service.h"
 
 using eerie_leap::controllers::CanbusController;
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::subsys::threading::IService;
@@ -67,4 +69,50 @@ ZTEST(canbus_controller, test_a_configuration_update_takes_effect_after_the_dela
     k_msleep(RECONFIGURE_DELAY_MS);
     zassert_equal(service->stops.load(), 1, "The updates were not put into effect once");
     zassert_equal(service->starts.load(), 1);
+}
+
+// A CAN configuration stored on a unit reaches the configuration service's stored handler before the
+// controller queues its reconfiguration, so a task the handler queues (the logging update stop's
+// LOGGING broadcast, L9) runs first: the stop leaves before the COM service and its dependents stop. It
+// holds with any delay, since the report comes before the CAN manager's own handler.
+ZTEST(canbus_controller, test_a_task_queued_when_the_configuration_is_stored_runs_before_the_reconfiguration) {
+    DtFs::InitInternalFs();
+    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    fs_service->Format();
+
+    auto work_queue = std::make_shared<WorkQueueThread>("canbus_test_order_wq", 6144, 5);
+    zassert_true(work_queue->Initialize());
+
+    auto configuration_service = std::make_shared<ConfigurationService>();
+    CanbusController controller(fs_service, work_queue, configuration_service);
+    zassert_equal(controller.Initialize(), 0);
+
+    auto service = std::make_shared<FakeDependentService>();
+    controller.RegisterDependentService(service);
+
+    // What the queued task saw: the dependents' stops when it ran, -1 until it did.
+    struct Seen {
+        std::atomic<int> stops_when_run = -1;
+        std::atomic<int> reports = 0;
+    };
+    auto seen = std::make_shared<Seen>();
+    configuration_service->RegisterConfigurationStoredHandler(
+        [seen, service, work_queue](ConfigurationService::Type) {
+            seen->reports++;
+            work_queue->Run([seen, service] { seen->stops_when_run = service->stops.load(); });
+        });
+
+    const auto manager = controller.GetConfigurationManager();
+    zassert_true(manager->Update(*manager->Get()));
+    zassert_equal(seen->reports.load(), 1, "The store was reported");
+
+    k_msleep(RECONFIGURE_DELAY_MS / 2);
+    zassert_equal(seen->stops_when_run.load(), 0, "The task the report queued ran before the reconfiguration");
+    zassert_equal(service->stops.load(), 0);
+
+    k_msleep(RECONFIGURE_DELAY_MS);
+    zassert_equal(service->stops.load(), 1, "and the reconfiguration followed");
+    zassert_equal(seen->stops_when_run.load(), 0);
+
+    configuration_service->RegisterConfigurationStoredHandler(nullptr);
 }

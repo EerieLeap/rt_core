@@ -17,7 +17,10 @@ run on the COM channel are in [cdmp.md](cdmp.md).
   bitrates, most common first, until one receives at least 3 frames within a 500 ms window; it
   retries every `EERIE_LEAP_CANBUS_AUTO_DETECT_INTERVAL_MS`. On success the bus switches to
   normal mode, installs the filters registered meanwhile, and the detected bitrate is written back
-  into the stored configuration by `CanbusService`.
+  into the stored configuration by `CanbusService`. That store is a configuration update: after the
+  unit has started it stops logging on every unit (see
+  [logging.md](logging.md#configuration-updates)). `CanbusService` hands it to the configuration
+  work queue when it has one, since the bus's thread is cooperative and has a 2 KiB stack.
 - Supported bitrates: 10k, 20k, 50k, 83333, 100k, 125k, 250k, 500k, 1M bit/s; CAN FD also 2M,
   4M, 5M, 8M.
 - **Receive.** The driver callback only queues the raw frame (`EERIE_LEAP_CANBUS_RX_QUEUE_SIZE`

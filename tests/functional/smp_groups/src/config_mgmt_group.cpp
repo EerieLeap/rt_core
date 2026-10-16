@@ -1,6 +1,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/crc.h>
@@ -43,10 +44,32 @@ void AssertError(const Response& response, Error error) {
         "Expected error %u, got %u", std::to_underlying(error), response.error.value_or(0));
 }
 
+// What the service's stored handler saw: the type and the thread, in order.
+struct Reports {
+    struct Entry {
+        ConfigurationService::Type type;
+        k_tid_t thread;
+    };
+
+    k_mutex lock;
+    std::vector<Entry> entries;
+
+    Reports() { k_mutex_init(&lock); }
+
+    std::vector<Entry> Get() {
+        k_mutex_lock(&lock, K_FOREVER);
+        auto copy = entries;
+        k_mutex_unlock(&lock);
+
+        return copy;
+    }
+};
+
 class Harness {
 public:
     std::shared_ptr<WorkQueueThread> work_queue;
     std::shared_ptr<ConfigurationService> configuration_service = std::make_shared<ConfigurationService>();
+    std::shared_ptr<Reports> reports = std::make_shared<Reports>();
     std::shared_ptr<FakeConfigurationManager> canbus = std::make_shared<FakeConfigurationManager>();
     std::shared_ptr<FakeConfigurationManager> ui = std::make_shared<FakeConfigurationManager>();
     std::unique_ptr<ConfigMgmtGroup> group;
@@ -58,6 +81,11 @@ public:
 
         configuration_service->RegisterCborConfigurationManager(ConfigurationService::Type::Canbus, canbus);
         configuration_service->RegisterCborConfigurationManager(ConfigurationService::Type::Ui, ui, UI_MAX_SIZE);
+        configuration_service->RegisterConfigurationStoredHandler([reports = reports](ConfigurationService::Type type) {
+            k_mutex_lock(&reports->lock, K_FOREVER);
+            reports->entries.push_back({type, k_current_get()});
+            k_mutex_unlock(&reports->lock);
+        });
 
         group = std::make_unique<ConfigMgmtGroup>(configuration_service, work_queue);
         zassert_true(group->Initialize());
@@ -66,6 +94,7 @@ public:
 
     ~Harness() {
         group.reset();
+        configuration_service->RegisterConfigurationStoredHandler(nullptr);
         work_queue.reset();
     }
 
@@ -432,4 +461,53 @@ ZTEST_F(smp_config_group, test_unregistered_group_is_not_supported) {
     auto response = harness.client.Read(SmpGroupId::CONFIG, Id(Command::LIST));
 
     zassert_equal(response.Value("rc"), MGMT_ERR_ENOTSUP);
+}
+
+// A write stores a configuration, which the service reports with its type from the thread that
+// applies it: the group's work queue, where logging learns of it (L9).
+ZTEST_F(smp_config_group, test_a_write_reports_its_type_from_the_configuration_queue) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1200, 5);
+
+    zassert_true(harness.WriteAll(CANBUS, data, Crc(data)).IsOk());
+    zassert_true(harness.WriteAll(UI, Pattern(100, 3), Crc(Pattern(100, 3))).IsOk());
+
+    const auto reports = harness.reports->Get();
+    zassert_equal(reports.size(), 2U);
+    zassert_equal(reports[0].type, ConfigurationService::Type::Canbus);
+    zassert_equal(reports[1].type, ConfigurationService::Type::Ui);
+    for(const auto& report : reports) {
+        zassert_equal(report.thread, k_work_queue_thread_get(harness.work_queue->GetWorkQueue()),
+            "The report runs on the thread that applied the write");
+    }
+}
+
+ZTEST_F(smp_config_group, test_a_write_with_a_crc_mismatch_reports_nothing) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1200, 2);
+
+    AssertError(harness.WriteAll(CANBUS, data, Crc(data) + 1), Error::CRC_MISMATCH);
+
+    zassert_equal(harness.reports->Get().size(), 0U);
+}
+
+ZTEST_F(smp_config_group, test_a_rejected_write_reports_nothing) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1200, 4);
+    harness.canbus->reject = true;
+
+    AssertError(harness.WriteAll(CANBUS, data, Crc(data)), Error::APPLY_FAILED);
+    zassert_equal(harness.canbus->apply_count, 1);
+
+    zassert_equal(harness.reports->Get().size(), 0U, "A rejected write is not an update");
+}
+
+ZTEST_F(smp_config_group, test_a_session_that_times_out_reports_nothing) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(2000, 12);
+
+    zassert_true(harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data)).IsOk());
+    k_msleep(CONFIG_EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS + 100);
+
+    zassert_equal(harness.reports->Get().size(), 0U, "A write that never finished stores nothing");
 }

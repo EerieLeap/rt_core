@@ -9,6 +9,7 @@
 #include "domain/canbus_com_domain/commands/canbus_com_command_code.h"
 #include "domain/canbus_com_domain/commands/canbus_com_logging_command.h"
 #include "domain/logging_domain/control/logging_command_handler.h"
+#include "domain/logging_domain/control/remote_logging_control.h"
 
 #include "canbus_com_loopback_harness.h"
 #include "logging_control_test_support.h"
@@ -19,6 +20,7 @@ using namespace canbus_com_loopback_test;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComLoggingCommand;
 using eerie_leap::domain::logging_domain::control::LoggingCommandHandler;
+using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
 
 namespace {
 
@@ -31,6 +33,11 @@ struct Fixture {
     std::shared_ptr<LoggingCommandHandler> handler;
     uint8_t next_transaction = 1;
 
+    // A real remote control for the cases of the role without a writer; built by BuildRemote().
+    std::shared_ptr<FakeCommandSender> remote_sender = std::make_shared<FakeCommandSender>();
+    std::shared_ptr<FakeRestartMonitor> remote_monitor = std::make_shared<FakeRestartMonitor>();
+    std::shared_ptr<RemoteLoggingControl> remote;
+
     Fixture() {
         harness.BringOnline();
         harness.Settle();
@@ -38,6 +45,13 @@ struct Fixture {
 
     void BuildHandler() {
         handler = std::make_shared<LoggingCommandHandler>(harness.com, control);
+    }
+
+    // The role of the gauge: the handler over a RemoteLoggingControl.
+    void BuildRemote() {
+        remote = std::make_shared<RemoteLoggingControl>(TestConfigQueue(), remote_sender, remote_monitor);
+        zassert_true(remote->Initialize(), "The remote control did not initialize.");
+        handler = std::make_shared<LoggingCommandHandler>(harness.com, remote);
     }
 
     // A LOGGING request from the peer to the unit; the transaction it carries.
@@ -96,6 +110,7 @@ void After(void*) {
     // The handler before the harness, so it is gone when the COM service stops.
     if(Current() != nullptr) {
         Current()->handler.reset();
+        Current()->remote.reset();
         delete Current();
         Current() = nullptr;
     }
@@ -332,4 +347,34 @@ ZTEST(logging_command_handler, test_AHandlerReplacedDuringItsCallFinishesThatCal
     zassert_equal(*later, CdmpResultCode::FAILURE, "and the next call is the replacement's");
     zassert_equal(replacement_calls->load(), 1);
     zassert_equal(signals->calls.load(), 1);
+}
+
+// The gauge answers the command too (L9): a stop is accepted and drops its wanted start, so no
+// re-assertion sends a start that undoes it.
+ZTEST(logging_command_handler, test_TheRemoteRoleAnswersAStopAndDropsItsWantedStart) {
+    F().BuildRemote();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().remote->RequestStart();
+    zassert_true(F().remote_sender->WaitForSends(1), "The start is sent");
+
+    const auto result = F().Ask({0x00});
+    zassert_true(result.has_value(), "A unit without a writer answers a stop");
+    zassert_equal(*result, CdmpResultCode::SUCCESS);
+
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().remote_monitor->Report(PEER_ID);
+    zassert_true(FlushQueue(*TestConfigQueue()));
+    zassert_equal(F().remote_sender->Sends().size(), 1U, "and sends no start again, whatever reports a logging unit");
+}
+
+ZTEST(logging_command_handler, test_TheRemoteRoleAnswersAStartFailure) {
+    F().BuildRemote();
+
+    const auto result = F().Ask({0x01});
+    zassert_true(result.has_value(), "It answers a start too");
+    zassert_equal(*result, CdmpResultCode::FAILURE, "but cannot serve it");
+
+    zassert_true(FlushQueue(*TestConfigQueue()));
+    zassert_equal(F().remote_sender->Sends().size(), 0U, "and sends nothing");
 }

@@ -16,9 +16,11 @@ LOG_MODULE_REGISTER(canbus_service_logger);
 
 CanbusService::CanbusService(
     std::function<const device*(uint8_t)> dt_canbus_provider,
-    std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager)
+    std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager,
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread)
         : canbus_configuration_manager_(std::move(canbus_configuration_manager)),
-          dt_canbus_provider_(std::move(dt_canbus_provider)) {
+          dt_canbus_provider_(std::move(dt_canbus_provider)),
+          config_work_queue_thread_(std::move(config_work_queue_thread)) {
 
     Configure();
 }
@@ -179,8 +181,12 @@ std::shared_ptr<CanMessageConfiguration> CanbusService::GetMessageConfiguration(
     return *message_configuration;
 }
 
-void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const {
-    auto canbus_configuration = canbus_configuration_manager_->Get();
+namespace {
+
+// A detected bitrate is a stored configuration: it is reported like any other (the logging update
+// stop stops logging on every unit once the unit has started).
+void StoreBitrate(CanbusConfigurationManager& manager, uint8_t bus_channel, uint32_t bitrate) {
+    auto canbus_configuration = manager.Get();
 
     if(!canbus_configuration->channel_configurations.contains(bus_channel)) {
         LOG_ERR("Failed to update bitrate for unknown bus channel %d.", bus_channel);
@@ -189,10 +195,30 @@ void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const 
 
     canbus_configuration->channel_configurations.at(bus_channel).bitrate = bitrate;
 
-    if(canbus_configuration_manager_->Update(*canbus_configuration))
+    if(manager.Update(*canbus_configuration))
         LOG_INF("Bitrate for bus channel %d updated to %u bps.", bus_channel, bitrate);
     else
         LOG_ERR("Failed to update bitrate for bus channel %d.", bus_channel);
+}
+
+} // namespace
+
+// Called on the bus's thread. The job holds the manager, not this, so it is safe after the service is
+// gone.
+void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const {
+    if(config_work_queue_thread_ != nullptr) {
+        try {
+            config_work_queue_thread_->Run([manager = canbus_configuration_manager_, bus_channel, bitrate] {
+                StoreBitrate(*manager, bus_channel, bitrate);
+            });
+
+            return;
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to hand the detected bitrate to the configuration work queue: %s", e.what());
+        }
+    }
+
+    StoreBitrate(*canbus_configuration_manager_, bus_channel, bitrate);
 }
 
 int CanbusService::RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler) {

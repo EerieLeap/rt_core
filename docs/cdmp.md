@@ -100,14 +100,7 @@ canbus_com_service->SetCommandHandler<CanbusComLoggingCommand>(
             return false;
 
         bool is_accepted = false;
-        guard->Dispatch([&] {
-            if(command->IsStart())
-                control->RequestStart();
-            else
-                control->RequestStop();
-
-            is_accepted = true;
-        });
+        guard->Dispatch([&] { is_accepted = control->HandleLoggingCommand(command->IsStart()); });
 
         return is_accepted;
     });
@@ -121,11 +114,15 @@ a `DispatchGuard` and not the object.
 `SendCommand(command, callback, device_id)` sends to one device or, by default, broadcasts
 (255); the callback receives the result code and up to 4 bytes of response data. rt_core defines
 one command, `LOGGING` (0x20, one byte: 0x01 start, 0x00 stop), to start and stop logging on every
-unit at once. `LoggingController` serves it on a unit that logs and sends it from one that does
-not (see [logging.md](logging.md#the-logging-command)). `SUCCESS` means accepted: the unit has
-queued the request, and a change of state shows in the shared `LOGGING_STATUS` (see below); a start
-that fails leaves the status as it was and is logged only on the unit that logs. A request without a
-payload is answered `FAILURE`.
+unit at once. `LoggingController` serves it on every unit with a COM service and sends it from one
+that does not log (see [logging.md](logging.md#the-logging-command)). It is also sent as a stop by
+any unit whose configuration was updated, whether or not that unit logs (see
+[logging.md](logging.md#configuration-updates)). `SUCCESS` means accepted: the unit has queued the
+request, and a change of state shows in the shared `LOGGING_STATUS` (see below); a start that
+fails leaves the status as it was and is logged only on the unit that logs. A unit without a log
+writer, such as the gauge, answers a stop `SUCCESS` and a start `FAILURE`, so a broadcast start may
+complete on its `FAILURE` while the unit that logs started. A request without a payload is answered
+`FAILURE`.
 
 ## Shared state
 
