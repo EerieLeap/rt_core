@@ -111,8 +111,8 @@ void CanbusComLoggingRestartMonitor::OnDeviceEvent(CdmpDeviceEvent event, const 
 bool CanbusComLoggingRestartMonitor::IsLoggingUnit(const CdmpDeviceInfo& device) {
     // A logger may share a status, and so may whatever shared one before it restarted; its copy is
     // still there, stale (the state service ran first). A unit that joined has no copy yet, so its
-    // features are all there is to go by (a unit whose features carry LOGGING has a log writer). It is armed whether or not another unit reports: where none
-    // does, its status ends a spell without any copy, which the status rule covers, and where one
+    // features are all there is to go by (a unit whose features carry LOGGING has a log writer). It
+    // is armed whether or not another unit reports: where none does, its status ends a spell without any copy, which the status rule covers, and where one
     // does, the monitor is the only signal. A logger that never shares a status stays armed until it
     // leaves the table, which costs a bit.
     if(HasFeature(device.features, ProductFeature::LOGGING))

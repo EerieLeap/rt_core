@@ -29,6 +29,7 @@
 #include "utilities/string/string_helpers.h"
 
 #include "subsys/cdmp/models/cdmp_device_info.h"
+#include "cdmp_test_features.h"
 #include "subsys/cdmp/services/i_cdmp_network_info.h"
 
 #include "domain/logging_domain/control/i_logging_command_sender.h"
@@ -450,7 +451,6 @@ public:
 class FakeNetworkInfo final : public eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo {
 public:
     using CdmpDeviceInfo = eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
-    using CdmpDeviceType = eerie_leap::subsys::cdmp::models::CdmpDeviceType;
     using CdmpDeviceStatus = eerie_leap::subsys::cdmp::models::CdmpDeviceStatus;
 
     static constexpr uint32_t k_own_uid = 0xA0A0A0A0;
@@ -458,7 +458,7 @@ public:
 private:
     struct Context {
         mutable k_mutex lock;
-        CdmpDeviceInfo own {.device_id = 1, .uid = k_own_uid, .device_type = CdmpDeviceType::DISPLAY, .status = CdmpDeviceStatus::ONLINE};
+        CdmpDeviceInfo own {.device_id = 1, .uid = k_own_uid, .features = eerie_leap::tests::DISPLAY_FEATURES, .status = CdmpDeviceStatus::ONLINE};
         std::vector<CdmpDeviceInfo> devices;
 
         Context() {
@@ -495,13 +495,13 @@ public:
     void Add(
         uint8_t device_id,
         uint32_t uid,
-        CdmpDeviceType type = CdmpDeviceType::LOGGER,
+        uint16_t features = eerie_leap::tests::LOGGER_FEATURES,
         CdmpDeviceStatus status = CdmpDeviceStatus::ONLINE) {
 
         Remove(device_id);
 
         ScopedMutex guard(context_->lock);
-        context_->devices.push_back({.device_id = device_id, .uid = uid, .device_type = type, .status = status});
+        context_->devices.push_back({.device_id = device_id, .uid = uid, .features = features, .status = status});
     }
 
     void Remove(uint8_t device_id) {

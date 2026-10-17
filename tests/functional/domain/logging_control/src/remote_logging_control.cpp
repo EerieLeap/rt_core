@@ -740,14 +740,14 @@ ZTEST(remote_logging_control, test_AHeldStartIsSentWhenTheStatusReturns) {
 
 ZTEST(remote_logging_control, test_AUnitThatCannotLogIsTreatedAsOffline) {
     F().BuildWithNetwork();
-    F().network->Add(kLoggerId, kLoggerUid, FakeNetworkInfo::CdmpDeviceType::DISPLAY);
+    F().network->Add(kLoggerId, kLoggerUid, eerie_leap::tests::DISPLAY_FEATURES);
 
     F().control->RequestStart(kLoggerUid);
     F().Flush();
     zassert_equal(F().sender->Sends().size(), 0U, "A display takes no LOGGING start");
 
     // And one that is offline.
-    F().network->Add(kOtherLoggerId, kOtherLoggerUid, FakeNetworkInfo::CdmpDeviceType::LOGGER,
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid, eerie_leap::tests::LOGGER_FEATURES,
         FakeNetworkInfo::CdmpDeviceStatus::OFFLINE);
     F().control->RequestStart(kOtherLoggerUid);
     F().Flush();

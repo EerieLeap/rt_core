@@ -135,7 +135,7 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
 // A unit without a log writer never sends the LOGGING feature, so senders skip it.
 ZTEST(logging_controller_remote, test_TheUnitNeverSendsTheLoggingFeature) {
     F().Start();
-    F().controller->GetControl()->RequestStart();
+    F().controller->GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()));
 
     zassert_false(HasFeature(F().harness.com->GetFeatures(), ProductFeature::LOGGING));
