@@ -43,10 +43,14 @@ interpreter in `modules/zephyr_lua/`.
 
 Scripts are plain Lua files on the SD card, referenced by a path relative to the card's mount
 point (`scripts/sensor_8.lua`) in a sensor's or a CAN message's `script_path`. A client lists
-`scripts/` with the SMP `files` group to pick one (see [smp.md](smp.md)). On a unit with an SD
-service the validators reject a configuration whose script file is not on the card, so while no
-card is mounted every non-empty `script_path` is rejected; a unit without an SD service checks no
-`script_path` and runs no script.
+`scripts/` with the SMP `files` group to pick one (see [smp.md](smp.md)). While a card is
+mounted the validators reject a configuration whose script file is not on it. While no card is
+mounted they check no `script_path`, because a stored configuration is validated as it loads and
+would otherwise be replaced by defaults on a unit booted without its card; a sensor or message
+whose script is not there runs without it (the sensor pipeline logs a warning). A sensor's script is loaded when the
+pipeline is built, a CAN message's when the CAN configuration is parsed, so a card inserted
+later serves its scripts from the next configuration change or boot. A unit without an SD
+service checks no `script_path` and runs no script.
 
 ### Hosting
 

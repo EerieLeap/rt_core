@@ -11,11 +11,14 @@
 #include "domain/canbus_domain/models/can_channel_configuration.h"
 #include "domain/canbus_domain/models/can_message_configuration.h"
 
+#include "script_card.h"
+
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::domain::canbus_domain::models;
 using namespace eerie_leap::domain::canbus_domain::configuration::parsers;
 using eerie_leap::subsys::canbus::CanbusType;
+using eerie_leap::tests::ScriptCard;
 
 ZTEST_SUITE(canbus_configuration_validator, NULL, NULL, NULL, NULL, NULL);
 
@@ -239,4 +242,39 @@ ZTEST(canbus_configuration_validator, test_a_disabled_message_cannot_share_a_fra
         zassert_str_equal(RejectionOf(configuration).c_str(),
             "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. CAN channel cannot contain duplicate Frame IDs.");
     }
+}
+
+namespace {
+
+// The rejection of a message with this script on this card, empty when it validates.
+std::string ScriptRejectionOn(ScriptCard& card, std::string_view script_path) {
+    auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
+    configuration.channel_configurations.at(0).message_configurations.front()->script_path = script_path;
+
+    try {
+        CanbusConfigurationValidator::Validate(configuration, &card);
+    } catch(const std::invalid_argument& e) {
+        return e.what();
+    }
+
+    return {};
+}
+
+} // namespace
+
+ZTEST(canbus_configuration_validator, test_a_script_path_must_exist_on_a_mounted_card) {
+    ScriptCard card;
+    card.files.insert("scripts/frame.lua");
+
+    zassert_true(ScriptRejectionOn(card, "scripts/frame.lua").empty());
+    zassert_true(ScriptRejectionOn(card, "").empty(), "A message without a script needs no file");
+    zassert_str_equal(ScriptRejectionOn(card, "scripts/missing.lua").c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Invalid script path.");
+}
+
+ZTEST(canbus_configuration_validator, test_a_script_path_is_not_checked_while_no_card_is_mounted) {
+    ScriptCard card;
+    card.is_mounted = false;
+
+    zassert_true(ScriptRejectionOn(card, "scripts/frame.lua").empty());
 }

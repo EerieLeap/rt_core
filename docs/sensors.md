@@ -48,7 +48,7 @@ expression cannot reference a disabled sensor, which never has a value. A `USER_
 when it has no script functions and no expression (a blank sensor) each tick carries the value
 last written ([scripting.md](scripting.md#functions-a-sensor-script-can-define)). Values and
 channels are checked against the unit: an ADC or GPIO channel must exist (the error names the
-channels the unit has), and with an SD card present a `script_path` must exist.
+channels the unit has), and while an SD card is mounted a `script_path` must exist.
 
 When a client applies a configuration (the SMP `config` group), each CAN sensor's bus must also be
 configured in the CAN bus configuration the unit runs, and a signal sensor's frame and signal must

@@ -203,8 +203,11 @@ void SensorValidator::ValidateConnectionString(std::string_view sensor_id, const
         InvalidSensorConfiguration(sensor_id, "Sensor must have CAN bus signal name.");
 }
 
+// Only against a mounted card: a stored configuration is validated when it loads, and rejecting it
+// while the card is out would run the unit on defaults. A missing script is logged when the
+// pipeline is built and the sensor runs without it.
 void SensorValidator::ValidateScriptPath(std::string_view sensor_id, const SensorConfiguration& sensor_configuration, IFsService* sd_fs_service) {
-    if(sd_fs_service == nullptr)
+    if(sd_fs_service == nullptr || !sd_fs_service->IsAvailable())
         return;
 
     if(!sensor_configuration.script_path.empty()) {

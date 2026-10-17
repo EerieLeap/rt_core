@@ -17,6 +17,8 @@
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 #include "domain/sensor_domain/configuration/parsers/sensor_validator.h"
 
+#include "script_card.h"
+
 using namespace eerie_memory;
 using namespace eerie_leap::domain::canbus_domain::models;
 using namespace eerie_leap::utilities::memory;
@@ -25,6 +27,7 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::models::sources;
 using eerie_leap::domain::sensor_domain::configuration::parsers::SensorValidator;
+using eerie_leap::tests::ScriptCard;
 
 ZTEST_SUITE(sensor_validator, NULL, NULL, NULL, NULL, NULL);
 
@@ -645,4 +648,40 @@ ZTEST(sensor_validator, test_unknown_input_mode_is_rejected) {
         AssertRejection(Validate({ Conditioned(MakeValidSensor(SensorType::PHYSICAL_ANALOG), 0, input_mode) }),
             Rejected("sensor_1", "Invalid indicator input mode."));
     }
+}
+
+namespace {
+
+// The error with a scripted sensor on this card, or nothing when it validates.
+std::optional<std::string> ValidateScriptOn(ScriptCard& card, std::string_view script_path) {
+    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    sensor->configuration.script_path = script_path;
+
+    try {
+        SensorValidator::Validate({ sensor }, &card, kChannelCount, kChannelCount);
+    } catch(const std::invalid_argument& e) {
+        return e.what();
+    }
+
+    return std::nullopt;
+}
+
+} // namespace
+
+ZTEST(sensor_validator, test_a_script_path_must_exist_on_a_mounted_card) {
+    ScriptCard card;
+    card.files.insert("scripts/sensor_1.lua");
+
+    zassert_false(ValidateScriptOn(card, "scripts/sensor_1.lua").has_value());
+    zassert_false(ValidateScriptOn(card, "").has_value(), "A sensor without a script needs no file");
+    zassert_true(Contains(ValidateScriptOn(card, "scripts/missing.lua"), "Invalid sensor script path."));
+}
+
+// A stored configuration is validated as it loads: rejecting it while the card is out would run the
+// unit on defaults.
+ZTEST(sensor_validator, test_a_script_path_is_not_checked_while_no_card_is_mounted) {
+    ScriptCard card;
+    card.is_mounted = false;
+
+    zassert_false(ValidateScriptOn(card, "scripts/sensor_1.lua").has_value());
 }

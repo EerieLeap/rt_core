@@ -170,8 +170,10 @@ void CanbusConfigurationValidator::ValidateMessageSendIntervalMs(const CanChanne
     }
 }
 
+// Only against a mounted card, as SensorValidator::ValidateScriptPath(): the parser loads no script
+// while the card is out, and the message is sent without it.
 void CanbusConfigurationValidator::ValidateMessageScriptPath(const CanChannelConfiguration& channel_configuration, IFsService* sd_fs_service) {
-    if(sd_fs_service == nullptr)
+    if(sd_fs_service == nullptr || !sd_fs_service->IsAvailable())
         return;
 
     for(const auto& message_configuration : channel_configuration.message_configurations) {

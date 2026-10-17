@@ -79,7 +79,7 @@ unit runs on the default (see [configuration.md](configuration.md#configuration-
 | `send_interval_ms` | > 0: the unit sends the frame at this period. ≤ 0: receive-only. |
 | `name` | Identifier (letters, digits, `_`), 1 to 32 characters. |
 | `message_size` | Bytes, 1..8 on classical CAN, 1..64 on CAN FD. |
-| `script_path` | Optional Lua script with `process_can_frame`; must exist when an SD card is present. |
+| `script_path` | Optional Lua script with `process_can_frame`; must exist while an SD card is mounted (see [scripting.md](scripting.md)). |
 
 **Signal** (DBC-style layout inside the message):
 
