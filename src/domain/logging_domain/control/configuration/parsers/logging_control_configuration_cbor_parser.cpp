@@ -33,7 +33,9 @@ pmr_unique_ptr<CborLoggingControlConfig> LoggingControlConfigurationCborParser::
             .event_type = binding.event_type,
             .payload_key = binding.payload_key,
             .has_selector = binding.HasSelector(),
-            .selector_key = binding.selector_key
+            .selector_key = binding.selector_key,
+            .selector_value = {},
+            .target_uid = trigger.target_uid
         };
 
         // Without a selector the stored value is int 0, which the decoder ignores.
@@ -61,6 +63,7 @@ pmr_unique_ptr<LoggingControlConfiguration> LoggingControlConfigurationCborParse
         trigger.binding.event_type = cbor_trigger.event_type;
         trigger.binding.payload_key = cbor_trigger.payload_key;
         trigger.binding.selector_key = cbor_trigger.selector_key;
+        trigger.target_uid = cbor_trigger.target_uid;
 
         // Whatever is stored without a selector is dropped, so an absent selector is one value.
         if(cbor_trigger.has_selector) {

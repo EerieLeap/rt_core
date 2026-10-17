@@ -27,6 +27,8 @@ static size_t cbor_get_size_CborLoggingControlConfig(const CborLoggingControlCon
             builder.AddTstr(*text);
         else if(const auto* flag = std::get_if<bool>(&trigger.selector_value))
             builder.AddBool(*flag);
+
+        builder.AddUint(trigger.target_uid);
     }
 
     return builder.Build();

@@ -11,7 +11,8 @@ CborLoggingTriggerConfig = [
     payload_key: uint,                      ; the channel's payload key whose value is read
     has_selector: bool,
     selector_key: uint,                     ; the payload key the selector matches
-    selector_value: CborSelectorValueType   ; ignored without a selector; written as 0
+    selector_value: CborSelectorValueType,  ; ignored without a selector; written as 0
+    target_uid: uint                        ; CDMP UID of the unit to start and stop, 0 = every unit that can log
 ]
 
 ; Text matches its hash, as payloads carry text ids.

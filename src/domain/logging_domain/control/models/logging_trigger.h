@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "subsys/event_bus/event_binding.h"
 
 namespace eerie_leap::domain::logging_domain::control::models {
@@ -11,6 +13,9 @@ using eerie_leap::subsys::event_bus::EventBinding;
 // mode.
 struct LoggingTrigger {
     EventBinding binding;
+    // CDMP UID (CdmpDeviceInfo::uid) of the unit it starts and stops; 0 (ILoggingControl::kAllUnits) is
+    // every unit that can log.
+    uint32_t target_uid = 0;
 };
 
 } // namespace eerie_leap::domain::logging_domain::control::models

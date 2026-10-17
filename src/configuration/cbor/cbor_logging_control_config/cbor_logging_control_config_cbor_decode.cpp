@@ -79,7 +79,8 @@ static bool decode_CborLoggingTriggerConfig(
 	&& ((zcbor_uint32_decode(state, (&(*result).payload_key))))
 	&& ((zcbor_bool_decode(state, (&(*result).has_selector))))
 	&& ((zcbor_uint32_decode(state, (&(*result).selector_key))))
-	&& (decode_CborSelectorValueType(state, (&(*result).selector_value)))) || (zcbor_list_map_end_force_decode(state), false)) && zcbor_list_end_decode(state))));
+	&& (decode_CborSelectorValueType(state, (&(*result).selector_value)))
+	&& ((zcbor_uint32_decode(state, (&(*result).target_uid))))) || (zcbor_list_map_end_force_decode(state), false)) && zcbor_list_end_decode(state))));
 
 	log_result(state, res, __func__);
 	return res;

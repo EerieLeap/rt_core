@@ -55,6 +55,15 @@ ZTEST(logging_control_configuration_validator, test_NoTriggersIsValid) {
     zassert_equal(Rejection(MakeConfiguration({})), "");
 }
 
+ZTEST(logging_control_configuration_validator, test_AnyTargetUidIsValid) {
+    auto all = MakeTrigger();
+    all.target_uid = 0;
+    auto last = MakeTrigger();
+    last.target_uid = 0xFFFFFFFF;
+
+    zassert_equal(Rejection(MakeConfiguration({all, last})), "");
+}
+
 ZTEST(logging_control_configuration_validator, test_AChannelMustBeOneThatExists) {
     const auto none = Rejection(MakeConfiguration({MakeTrigger(), MakeTrigger(EventChannelId::None)}));
     zassert_true(none.find("Invalid logging control configuration.") == 0, "%s", none.c_str());

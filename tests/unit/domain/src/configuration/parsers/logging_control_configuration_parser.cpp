@@ -28,11 +28,11 @@ namespace {
 
 using Bytes = std::vector<uint8_t>;
 
-// {Sensors (1), DataUpdated (0), Value (1), selector SensorId (0) = "ab"}. zcbor writes lists with
+// {Sensors (1), DataUpdated (0), Value (1), selector SensorId (0) = "ab", target 0x01020304}. zcbor writes lists with
 // indefinite length, so each list is 9F ... FF.
-const Bytes k_text_selector = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0xFF, 0xFF, 0xFF};
-// The same without a selector: false, key 0, and the value written as int 0.
-const Bytes k_no_selector = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+const Bytes k_text_selector = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x1A, 0x01, 0x02, 0x03, 0x04, 0xFF, 0xFF, 0xFF};
+// The same without a selector: false, key 0, the value written as int 0, and target 0 (every unit).
+const Bytes k_no_selector = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
 const Bytes k_empty = {0x9F, 0x9F, 0xFF, 0xFF};
 
 LoggingTrigger MakeTrigger(uint32_t event_type = 0, uint32_t payload_key = 1, uint32_t selector_key = 0) {
@@ -82,6 +82,7 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
         zassert_equal(b.event_type, a.event_type);
         zassert_equal(b.payload_key, a.payload_key);
         zassert_equal(b.selector_key, a.selector_key);
+        zassert_equal(actual.triggers[i].target_uid, expected.triggers[i].target_uid, "trigger %u target", static_cast<unsigned>(i));
         zassert_equal(b.selector_value.index(), a.selector_value.index(), "trigger %u selector kind", static_cast<unsigned>(i));
         zassert_true(b.selector_value == a.selector_value, "trigger %u selector", static_cast<unsigned>(i));
     }
@@ -100,6 +101,9 @@ ZTEST(logging_control_configuration_parser, test_TriggersRoundTripThroughCbor) {
     flag.binding.selector_value = true;
     auto none = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 9);
     none.binding.channel = EventChannelId::Navigation;
+    text.target_uid = 0x12345678;
+    number.target_uid = 1;
+    none.target_uid = 0xFFFFFFFF;
 
     const auto configuration = MakeConfiguration({text, number, flag, none});
 
@@ -131,6 +135,7 @@ ZTEST(logging_control_configuration_parser, test_AnEmptyConfigurationRoundTrips)
 ZTEST(logging_control_configuration_parser, test_TheEncodingIsStable) {
     auto with_selector = MakeTrigger();
     with_selector.binding.selector_value = std::pmr::string("ab");
+    with_selector.target_uid = 0x01020304;
     zassert_true(Encode(MakeConfiguration({with_selector})) == k_text_selector, "A text selector");
 
     zassert_true(Encode(MakeConfiguration({MakeTrigger()})) == k_no_selector, "No selector is int 0");
@@ -147,7 +152,7 @@ ZTEST(logging_control_configuration_parser, test_TheEncodingIsStable) {
 
 ZTEST(logging_control_configuration_parser, test_AnAbsentSelectorIsIgnoredWhateverIsStored) {
     // has_selector false with a text value: the value is dropped.
-    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x62, 0x61, 0x62, 0xFF, 0xFF, 0xFF};
+    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF};
 
     LoggingControlConfigurationCborParser parser;
     const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
@@ -163,16 +168,23 @@ ZTEST(logging_control_configuration_parser, test_ATriggerWithoutAFieldDoesNotDec
     zassert_is_null(Decode(bytes).get());
 }
 
+ZTEST(logging_control_configuration_parser, test_ATriggerWithoutATargetDoesNotDecode) {
+    // The layout before target_uid: six fields. Every field is required, so a file stored then is refused.
+    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+
+    zassert_is_null(Decode(bytes).get());
+}
+
 ZTEST(logging_control_configuration_parser, test_AFloatSelectorDoesNotDecode) {
     // selector_value is a float64 (1.0): int / tstr / bool only.
     const Bytes bytes = {
-        0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0xFB, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+        0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0xFB, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
 
     zassert_is_null(Decode(bytes).get());
 }
 
 ZTEST(logging_control_configuration_parser, test_AListSelectorDoesNotDecode) {
-    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x82, 0x01, 0x02, 0xFF, 0xFF, 0xFF};
+    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x82, 0x01, 0x02, 0x00, 0xFF, 0xFF, 0xFF};
 
     zassert_is_null(Decode(bytes).get());
 }
@@ -184,6 +196,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     for(size_t i = 0; i < LoggingControlConfiguration::kMaxTriggers; i++) {
         auto trigger = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
         trigger.binding.selector_value = std::pmr::string(64, static_cast<char>('a' + i));
+        trigger.target_uid = 0xFFFFFFFF;
         triggers.push_back(std::move(trigger));
     }
     const auto configuration = MakeConfiguration(triggers);
@@ -205,7 +218,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
 
 ZTEST(logging_control_configuration_parser, test_MoreTriggersThanTheSchemaAllowsDoNotDecode) {
     // 0*16: the sixteenth decodes, the seventeenth does not.
-    const Bytes trigger = {0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0xFF};
+    const Bytes trigger = {0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF};
 
     auto build = [&trigger](size_t count) {
         Bytes bytes = {0x9F, 0x9F};
@@ -225,7 +238,7 @@ ZTEST(logging_control_configuration_parser, test_MoreTriggersThanTheSchemaAllows
 
 ZTEST(logging_control_configuration_parser, test_DeserializeValidates) {
     // Channel 0 is no channel.
-    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x00, 0x00, 0x01, 0xF4, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+    const Bytes bytes = {0x9F, 0x9F, 0x9F, 0x00, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
 
     const auto decoded = Decode(bytes);
     zassert_not_null(decoded.get(), "The bytes are the schema's");

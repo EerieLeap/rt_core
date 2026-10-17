@@ -39,7 +39,8 @@ and filesystem work. Calls from the queue thread itself run inline.
 
 The file names are set by the controllers that create the managers. `LoggingController` registers
 logging control (the logging triggers, see [logging.md](logging.md#stored-triggers)) on units with and
-without a log writer, and the logging configuration only on those with one.
+without a log writer, and the logging configuration only on those with one. A logging trigger names the unit it starts and stops by
+its CDMP UID, 0 for every unit that can log.
 
 ## Configuration managers
 

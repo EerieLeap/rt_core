@@ -45,12 +45,13 @@ static bool encode_CborLoggingTriggerConfig(
 {
 	zcbor_log("%s\r\n", __func__);
 
-	bool res = (((zcbor_list_start_encode(state, 6) && ((((zcbor_uint32_encode(state, (&(*input).channel))))
+	bool res = (((zcbor_list_start_encode(state, 7) && ((((zcbor_uint32_encode(state, (&(*input).channel))))
 	&& ((zcbor_uint32_encode(state, (&(*input).event_type))))
 	&& ((zcbor_uint32_encode(state, (&(*input).payload_key))))
 	&& ((zcbor_bool_encode(state, (&(*input).has_selector))))
 	&& ((zcbor_uint32_encode(state, (&(*input).selector_key))))
-	&& (encode_CborSelectorValueType(state, (&(*input).selector_value)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 6))));
+	&& (encode_CborSelectorValueType(state, (&(*input).selector_value)))
+	&& ((zcbor_uint32_encode(state, (&(*input).target_uid))))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 7))));
 
 	log_result(state, res, __func__);
 	return res;

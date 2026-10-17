@@ -20,6 +20,8 @@ struct CborLoggingTriggerConfig {
 	uint32_t selector_key{};
 	// int 0 when has_selector is false.
 	CborLoggingTriggerSelectorValue selector_value{};
+	// CDMP UID of the unit to start and stop; 0 is every unit that can log.
+	uint32_t target_uid{};
 };
 
 struct CborLoggingControlConfig {
