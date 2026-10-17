@@ -397,12 +397,20 @@ ZTEST(writer_updates, test_TheUnitsOwnSettingStopsNothing) {
 
 // Before Start() the unit is still starting: a sensors store restarts the writer into a new file, as it
 // always did, and nothing is broadcast.
+//
+// The switch is off from the sensors store on, as the gauge's logging button is at every boot. A trigger
+// stored before Start() reads its first value as at boot, and a first value of 1 starts logging, which is
+// broadcast to the other units. The new generation samples its sensors 100 ms after it starts, as long as
+// the wait for a broadcast below, so with the switch on that start falls on either side of the wait
+// depending on the speed of the target (it did on the 64 bit QEMU ones, not on the others). A switch that
+// is off asserts nothing, so a broadcast here is an update's stop. The start of a switch that is on at boot
+// is test_ASwitchThatIsOnAtBootStillStarts.
 ZTEST(writer_updates, test_ABootTimeStoreStopsNothing) {
     F().Boot(Base(), {}, true, false);
     F().RegisterOthers();
     F().StartLogging();
 
-    F().rig->Apply({ Indicator("switch", "1"), Analog("spare"), Analog("other"), Analog("added") });
+    F().rig->Apply({ Indicator("switch", "0"), Analog("spare"), Analog("other"), Analog("added") });
     zassert_true(IsStopped(F().log.WaitForEntry()), "The file is finalized");
     zassert_true(IsStarted(F().log.WaitForEntry()), "and logging goes on in the next");
     zassert_true(WaitUntil([] { return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2; }));
