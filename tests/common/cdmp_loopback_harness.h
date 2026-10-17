@@ -24,6 +24,9 @@
 #include "subsys/cdmp/models/cdmp_message.h"
 #include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
 #include "subsys/cdmp/utilities/enums.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
 
 // A CDMP unit on a `zephyr,can-loopback` controller labelled can_loopback0, and a peer scripted on the
 // same bus: the suites that include this declare the node in their devicetree overlay.
@@ -93,12 +96,12 @@ inline Bytes SyncRequestFrame(uint8_t target, uint8_t transaction_id) {
         .data = {0, 0, 0, 0, 0}}.ToCanFrame();
 }
 
-inline Bytes HeartbeatFrame(uint8_t device_id, uint8_t state_digest = 0) {
+inline Bytes HeartbeatFrame(uint8_t device_id, uint8_t state_digest = 0, uint16_t features = 0) {
     return CdmpHeartbeatMessage{
         .device_id = device_id,
         .health_status = CdmpHealthStatus::OK,
         .sequence_number = 0,
-        .capability_flags = 0,
+        .features = features,
         .state_digest = state_digest}.ToCanFrame();
 }
 
@@ -303,7 +306,7 @@ public:
         SendAsPeer(MANAGEMENT, CdmpDiscoveryResponseMessage{
             .device_id = PEER_ID,
             .uid = PEER_UID,
-            .device_type = CdmpDeviceType::LOGGER}.ToCanFrame());
+            .features = LOGGER_FEATURES}.ToCanFrame());
 
         auto claim = bus.Wait(MANAGEMENT, IsManagement(CdmpManagementMessageType::ID_CLAIM), STARTUP_TIMEOUT_MS);
         zassert_true(claim.has_value(), "The unit claims an ID after discovery");

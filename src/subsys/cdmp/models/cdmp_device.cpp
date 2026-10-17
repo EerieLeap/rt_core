@@ -10,10 +10,10 @@ namespace eerie_leap::subsys::cdmp::models {
 
 CdmpDevice::CdmpDevice(
     uint32_t uid,
-    CdmpDeviceType device_type,
+    uint16_t features,
     CdmpDeviceStatus status)
         : uid_(uid),
-        device_type_(device_type),
+        features_(features),
         protocol_version_(GetCurrentProtocolVersion()),
         status_machine_(std::make_shared<CdmpStatusMachine>(status)) {
 
@@ -51,14 +51,6 @@ void CdmpDevice::Reset() {
 
 void CdmpDevice::UpdateHeartbeat() {
     last_heartbeat_ = k_uptime_get();
-}
-
-void CdmpDevice::SetCapability(CdmpDeviceCapabilityFlags capability, bool enabled) {
-    if (enabled) {
-        capability_flags_ |= std::to_underlying(capability);
-    } else {
-        capability_flags_ &= ~std::to_underlying(capability);
-    }
 }
 
 bool CdmpDevice::IsProtocolCompatible(uint8_t other_version) const {

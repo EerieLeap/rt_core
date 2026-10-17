@@ -7,10 +7,13 @@
 #include "domain/canbus_com_domain/smp/network_mgmt_group.h"
 
 #include "smp_groups_test_support.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 using namespace smp_groups_test;
 
-using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::domain::system_domain::smp::DeviceMgmtGroup;
@@ -24,7 +27,7 @@ CdmpDeviceInfo MakeDevice(uint8_t device_id) {
     return {
         .device_id = device_id,
         .uid = 0x10000000U + device_id,
-        .device_type = CdmpDeviceType::LOGGER,
+        .features = LOGGER_FEATURES,
         .status = CdmpDeviceStatus::ONLINE,
     };
 }
@@ -38,7 +41,7 @@ ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
     network_info->self = {
         .device_id = 7,
         .uid = 0xCAFEBABE,
-        .device_type = CdmpDeviceType::DISPLAY,
+        .features = DISPLAY_FEATURES,
         .status = CdmpDeviceStatus::ONLINE,
     };
     DeviceMgmtGroup group(BUILD_NUMBER, network_info);
@@ -48,16 +51,16 @@ ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
     auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
 
     zassert_true(response.IsOk());
-    zassert_equal(response.Value("family"), 2);
     zassert_equal(response.Value("product"), 4660);
     zassert_equal(response.Value("revision"), 3);
-    zassert_equal(response.Value("features"), 1 << 2);
+    zassert_equal(response.Value("features"), DISPLAY_FEATURES, "The mask the unit sends on CDMP");
+    zassert_false(response.Has("family"));
     zassert_equal(response.Value("hw"), (1U << 24) | (2U << 16) | 3U);
     zassert_equal(response.Value("sw"), (4U << 24) | (5U << 16) | 6U);
     zassert_equal(response.Value("build"), BUILD_NUMBER);
     zassert_equal(response.Value("cdmp_id"), 7);
     zassert_equal(response.Value("uid"), 0xCAFEBABE);
-    zassert_equal(response.Value("device_type"), std::to_underlying(CdmpDeviceType::DISPLAY));
+    zassert_false(response.Has("device_type"));
     zassert_equal(response.Value("status"), std::to_underlying(CdmpDeviceStatus::ONLINE));
 }
 
@@ -70,6 +73,7 @@ ZTEST(smp_device_group, test_info_without_cdmp_has_no_identity) {
 
     zassert_true(response.IsOk());
     zassert_true(response.Has("product"));
+    zassert_equal(response.Value("features"), 1 << 2, "The build's features without CDMP");
     zassert_false(response.Has("cdmp_id"));
     zassert_false(response.Has("adc_channels"), "No sensor inputs on a unit without sensors");
 }
@@ -125,7 +129,7 @@ ZTEST(smp_network_group, test_devices_lists_the_network) {
     zassert_equal(response.entries.size(), 3);
     zassert_equal(response.entries[0]["id"], 2);
     zassert_equal(response.entries[0]["uid"], 0x10000002);
-    zassert_equal(response.entries[0]["type"], std::to_underlying(CdmpDeviceType::LOGGER));
+    zassert_equal(response.entries[0]["features"], LOGGER_FEATURES);
     zassert_equal(response.entries[0]["status"], std::to_underlying(CdmpDeviceStatus::ONLINE));
     zassert_equal(response.entries[2]["id"], 9);
 }

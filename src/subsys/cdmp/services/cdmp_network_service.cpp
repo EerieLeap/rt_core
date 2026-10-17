@@ -24,7 +24,7 @@ CdmpDeviceInfo ToDeviceInfo(const CdmpDevice& device) {
     return {
         .device_id = device.GetDeviceId(),
         .uid = device.GetUniqueIdentifier(),
-        .device_type = device.GetDeviceType(),
+        .features = device.GetFeatures(),
         .status = device.GetStatus()
     };
 }
@@ -288,7 +288,7 @@ void CdmpNetworkService::SendDiscoveryResponse() {
     CdmpDiscoveryResponseMessage message = {};
     message.device_id = device_->GetDeviceId();
     message.uid = device_->GetUniqueIdentifier();
-    message.device_type = device_->GetDeviceType();
+    message.features = device_->GetFeatures();
 
     k_msleep(device_->GetStaggeredMessageDelay());
 
@@ -400,7 +400,6 @@ void CdmpNetworkService::SendIdClaim() {
     CdmpIdClaimRequestMessage message = {};
     message.claiming_device_id = claiming_device_id_;
     message.uid = device_->GetUniqueIdentifier();
-    message.device_type = device_->GetDeviceType();
     message.protocol_version = device_->GetProtocolVersion();
 
     auto frame_data = message.ToCanFrame();
@@ -546,7 +545,6 @@ void CdmpNetworkService::StorePendingIdClaim(const CdmpIdClaimRequestMessage& cl
     *slot = {
         .device_id = claim.claiming_device_id,
         .uid = claim.uid,
-        .device_type = claim.device_type,
         .claimed_at_ms = k_uptime_get()
     };
 }
@@ -600,7 +598,7 @@ void CdmpNetworkService::UpdateDeviceFromDiscovery(const CdmpDiscoveryResponseMe
     {
         ScopedMutex guard(devices_lock_);
 
-        if(AddOrUpdateDevice(discovery.device_id, discovery.device_type, discovery.uid))
+        if(AddOrUpdateDevice(discovery.device_id, discovery.uid, discovery.features))
             joined = ToDeviceInfo(*network_devices_.at(discovery.device_id));
 
         // Only an online device answers discovery, so its claim, if any, is complete.
@@ -628,17 +626,13 @@ void CdmpNetworkService::UpdateDeviceFromHeartbeat(const CdmpHeartbeatMessage& h
         PendingIdClaim* claim = FindPendingIdClaim(device_id);
 
         if(claim != nullptr) {
-            if(AddOrUpdateDevice(device_id, claim->device_type, claim->uid, heartbeat.capability_flags))
+            if(AddOrUpdateDevice(device_id, claim->uid, heartbeat.features))
                 joined = ToDeviceInfo(*network_devices_.at(device_id));
 
             *claim = {};
         } else if(network_devices_.contains(device_id)) {
             const auto& device = network_devices_.at(device_id);
-            AddOrUpdateDevice(
-                device_id,
-                device->GetDeviceType(),
-                device->GetUniqueIdentifier(),
-                heartbeat.capability_flags);
+            AddOrUpdateDevice(device_id, device->GetUniqueIdentifier(), heartbeat.features);
         } else {
             is_known = false;
         }
@@ -655,11 +649,7 @@ void CdmpNetworkService::UpdateDeviceFromHeartbeat(const CdmpHeartbeatMessage& h
     NotifyHeartbeat(heartbeat);
 }
 
-bool CdmpNetworkService::AddOrUpdateDevice(
-    uint8_t device_id,
-    CdmpDeviceType device_type,
-    uint32_t uid,
-    uint32_t capability_flags) {
+bool CdmpNetworkService::AddOrUpdateDevice(uint8_t device_id, uint32_t uid, uint16_t features) {
 
     ScopedMutex guard(devices_lock_);
 
@@ -668,23 +658,20 @@ bool CdmpNetworkService::AddOrUpdateDevice(
 
         device->UpdateHeartbeat();
         device->GoOnline(true);
-        if(capability_flags != 0)
-            device->SetCapabilityFlags(capability_flags);
+        device->SetFeatures(features);
 
         LOG_DBG("Updated device %d.", device_id);
 
         return false;
     }
 
-    auto device = std::make_unique<CdmpDevice>(uid, device_type, CdmpDeviceStatus::ONLINE);
+    auto device = std::make_unique<CdmpDevice>(uid, features, CdmpDeviceStatus::ONLINE);
     device->SetDeviceId(device_id);
-    if(capability_flags != 0)
-        device->SetCapabilityFlags(capability_flags);
 
     network_devices_.emplace(device_id, std::move(device));
     UpdateNetworkDevices();
 
-    LOG_INF("Added new device: ID=%d, Type=%d, UID=0x%08X", device_id, std::to_underlying(device_type), uid);
+    LOG_INF("Added new device: ID=%d, Features=0x%04X, UID=0x%08X", device_id, features, uid);
 
     return true;
 }
@@ -903,8 +890,8 @@ void CdmpNetworkService::PrintNetworkStatus() const {
     LOG_INF("Network Status: %zu devices total", network_devices_.size());
 
     for(const auto& [device_id, device] : network_devices_) {
-        LOG_INF("  Device %d: Type=%d, Status=%d, UID=0x%08X",
-            device_id, std::to_underlying(device->GetDeviceType()),
+        LOG_INF("  Device %d: Features=0x%04X, Status=%d, UID=0x%08X",
+            device_id, device->GetFeatures(),
             std::to_underlying(device->GetStatus()), device->GetUniqueIdentifier());
     }
 }

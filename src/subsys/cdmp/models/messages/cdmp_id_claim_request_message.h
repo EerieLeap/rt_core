@@ -13,15 +13,12 @@
 namespace eerie_leap::subsys::cdmp::models {
 
 using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
-using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
-
 
 // Base message structures (Base + 0)
 struct CdmpIdClaimRequestMessage {
     static constexpr CdmpManagementMessageType message_type = CdmpManagementMessageType::ID_CLAIM;
     uint8_t claiming_device_id;
     uint32_t uid;
-    CdmpDeviceType device_type;
     uint8_t protocol_version;
 
     static CdmpIdClaimRequestMessage FromCanFrame(std::span<const uint8_t> frame_data) {
@@ -35,7 +32,7 @@ struct CdmpIdClaimRequestMessage {
             | (static_cast<uint32_t>(frame_data[4]) << 16)
             | (static_cast<uint32_t>(frame_data[3]) << 8)
             | static_cast<uint32_t>(frame_data[2]);
-        message.device_type = static_cast<CdmpDeviceType>(frame_data[6]);
+        // Byte 6 is reserved: sent 0, ignored on receipt.
         message.protocol_version = frame_data[7];
 
         return message;
@@ -49,7 +46,7 @@ struct CdmpIdClaimRequestMessage {
             static_cast<uint8_t>(uid >> 8),
             static_cast<uint8_t>(uid >> 16),
             static_cast<uint8_t>(uid >> 24),
-            std::to_underlying(device_type),
+            0,
             protocol_version};
 
         return frame_data;

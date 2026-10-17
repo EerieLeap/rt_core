@@ -4,6 +4,7 @@
 #include <zephyr/logging/log.h>
 
 #include "subsys/cdmp/utilities/cdmp_uid.h"
+#include "domain/system_domain/models/product_feature.h"
 
 #include "canbus_com_service.h"
 
@@ -13,14 +14,18 @@ using namespace eerie_leap::subsys::cdmp::models;
 using eerie_leap::subsys::cdmp::services::CdmpStateService;
 using eerie_leap::subsys::cdmp::utilities::CdmpUid;
 using eerie_leap::subsys::smp::can::SmpCanIdLayout;
+using eerie_leap::domain::system_domain::models::BUILD_FEATURES;
+using eerie_leap::domain::system_domain::models::ProductFeature;
+using eerie_leap::domain::system_domain::models::ToMask;
 
 LOG_MODULE_REGISTER(canbus_com_logger);
 
 CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service)
     : canbus_service_(std::move(canbus_service)) {
 
+    // LOGGING starts cleared: it is set only while this unit has a log writer (SetLoggingAvailable()).
     cdmp_service_ = std::make_shared<CdmpService>(
-        static_cast<CdmpDeviceType>(CONFIG_EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE),
+        static_cast<uint16_t>(BUILD_FEATURES & ~ToMask(ProductFeature::LOGGING)),
         CdmpUid::Generate());
 
     if(cdmp_service_ == nullptr)

@@ -123,7 +123,7 @@ void CdmpHeartbeatService::SendHeartbeat() {
             .device_id = device_->GetDeviceId(),
             .health_status = device_->GetHealthStatus(),
             .sequence_number = heartbeat_sequence_number_,
-            .capability_flags = device_->GetCapabilityFlags(),
+            .features = device_->GetFeatures(),
             .state_digest = device_->GetStateDigest()
         };
 

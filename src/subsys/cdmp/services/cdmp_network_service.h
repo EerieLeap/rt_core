@@ -26,7 +26,6 @@ using threading::WorkQueueThread;
 using threading::WorkQueueTaskResult;
 using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
 using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
-using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::cdmp::models::CdmpDiscoveryResponseMessage;
 using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
@@ -64,7 +63,6 @@ private:
     struct PendingIdClaim {
         uint8_t device_id = CdmpDevice::DEVICE_ID_UNASSIGNED; // Unassigned marks a free slot.
         uint32_t uid = 0;
-        CdmpDeviceType device_type = CdmpDeviceType::NONE;
         int64_t claimed_at_ms = 0;
     };
 
@@ -151,12 +149,12 @@ private:
     void ExpirePendingIdClaims();
     std::optional<uint8_t> FindDeviceIdByUid(uint32_t uid) const;
 
-    /** @return Whether the device was added rather than updated. */
-    bool AddOrUpdateDevice(
-        uint8_t device_id,
-        CdmpDeviceType device_type,
-        uint32_t uid,
-        uint32_t capability_flags = 0);
+    /**
+     * @brief Adds the device or marks it alive, and stores its features (0 included: a unit that
+     *        clears every feature says so).
+     * @return Whether the device was added rather than updated.
+     */
+    bool AddOrUpdateDevice(uint8_t device_id, uint32_t uid, uint16_t features);
     void UpdateDeviceFromDiscovery(const CdmpDiscoveryResponseMessage& discovery);
     /** @brief A valid device ID other than this unit's own while it is online. */
     bool IsPeerDeviceId(uint8_t device_id) const;

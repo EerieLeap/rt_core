@@ -19,9 +19,11 @@ class DeviceMgmtGroup : public SmpGroup<DeviceMgmtGroup> {
 public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
-        /// Read: `{family, product, revision, features, hw, sw, build}`, versions packed as
-        /// `major << 24 | minor << 16 | patch`, plus `{cdmp_id, uid, device_type, status}` with CDMP
-        /// and `{adc_channels, gpio_channels, sensors_max}` with sensors.
+        /// Read: `{product, revision, features, hw, sw, build}`, versions packed as
+        /// `major << 24 | minor << 16 | patch`, plus `{cdmp_id, uid, status}` with CDMP
+        /// and `{adc_channels, gpio_channels, sensors_max}` with sensors. `features` is the
+        /// ProductFeature mask this unit sends on CDMP now (LOGGING only while a log writer is
+        /// available), or the build's features without CDMP.
         INFO = 0,
     };
 

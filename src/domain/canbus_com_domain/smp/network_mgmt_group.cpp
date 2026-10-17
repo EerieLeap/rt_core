@@ -12,7 +12,7 @@ using eerie_leap::subsys::smp::SmpMapKey;
 namespace {
 
 // A device map, and the ends of the list and the response map, encode to less than this.
-constexpr size_t DEVICE_ENTRY_SIZE = 40;
+constexpr size_t DEVICE_ENTRY_SIZE = 44;
 
 } // namespace
 
@@ -53,7 +53,7 @@ int NetworkMgmtGroup::HandleDevices(smp_streamer* ctxt) {
         ok = zcbor_map_start_encode(zse, 4)
             && zcbor_tstr_put_lit(zse, "id") && zcbor_uint32_put(zse, device.device_id)
             && zcbor_tstr_put_lit(zse, "uid") && zcbor_uint32_put(zse, device.uid)
-            && zcbor_tstr_put_lit(zse, "type") && zcbor_uint32_put(zse, std::to_underlying(device.device_type))
+            && zcbor_tstr_put_lit(zse, "features") && zcbor_uint32_put(zse, device.features)
             && zcbor_tstr_put_lit(zse, "status") && zcbor_uint32_put(zse, std::to_underlying(device.status))
             && zcbor_map_end_encode(zse, 4);
     }

@@ -27,6 +27,10 @@
 #include "subsys/cdmp/services/cdmp_command_service.h"
 #include "subsys/cdmp/services/cdmp_network_service.h"
 #include "subsys/cdmp/services/cdmp_state_service.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::models;
@@ -152,7 +156,7 @@ public:
 };
 
 struct StateFixture {
-    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(OWN_UID, CdmpDeviceType::DISPLAY);
+    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(OWN_UID, DISPLAY_FEATURES);
     std::shared_ptr<WorkQueueThread> work_queue = std::make_shared<WorkQueueThread>(
         "cdmp_test_wq",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
@@ -253,14 +257,13 @@ struct StateFixture {
         network->ProcessFrame(CdmpDiscoveryResponseMessage{
             .device_id = device_id,
             .uid = uid,
-            .device_type = CdmpDeviceType::LOGGER}.ToCanFrame());
+            .features = LOGGER_FEATURES}.ToCanFrame());
     }
 
     void ClaimAgain(uint8_t device_id, uint32_t uid) {
         network->ProcessFrame(CdmpIdClaimRequestMessage{
             .claiming_device_id = device_id,
             .uid = uid,
-            .device_type = CdmpDeviceType::LOGGER,
             .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
     }
 
@@ -282,7 +285,7 @@ struct StateFixture {
             .device_id = device_id,
             .health_status = CdmpHealthStatus::OK,
             .sequence_number = 0,
-            .capability_flags = 0,
+            .features = 0,
             .state_digest = state_digest});
     }
 

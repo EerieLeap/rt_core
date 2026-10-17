@@ -18,8 +18,8 @@ Base UUID `e7a1b2c3-d4e5-6f78-9a0b-c1d2e3f4xxxx`:
 | `live` | `0003` | notify | Live value notifications |
 
 **Advertising.** The advertisement carries the flags, the service UUID and manufacturer data
-(`company 0xFFFF`, product family, product ID, feature bits, revision from the system domain's
-Kconfig); the scan response carries `CONFIG_BT_DEVICE_NAME`. One connection at a time; advertising
+(7 bytes: `company 0xFFFF`, product ID, feature bits, revision, little-endian, from the system
+domain's Kconfig; there is no product family byte); the scan response carries `CONFIG_BT_DEVICE_NAME`. One connection at a time; advertising
 restarts after a disconnect. A client can read `info` and subscribe before pairing, but SMP
 writes are refused until the link is encrypted.
 

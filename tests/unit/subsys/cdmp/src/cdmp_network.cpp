@@ -21,6 +21,10 @@
 #include "subsys/cdmp/models/messages/cdmp_id_claim_response_message.h"
 #include "subsys/cdmp/services/cdmp_network_service.h"
 #include "subsys/cdmp/services/cdmp_service.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::models;
@@ -50,20 +54,18 @@ void ResetLoopbackDevice(void* /*fixture*/) {
     can_stop(LoopbackDevice());
 }
 
-Frame DiscoveryResponseFrame(uint8_t device_id, uint32_t uid, CdmpDeviceType type) {
-    return CdmpDiscoveryResponseMessage{.device_id = device_id, .uid = uid, .device_type = type}.ToCanFrame();
+Frame DiscoveryResponseFrame(uint8_t device_id, uint32_t uid, uint16_t features) {
+    return CdmpDiscoveryResponseMessage{.device_id = device_id, .uid = uid, .features = features}.ToCanFrame();
 }
 
 Frame ClaimFrame(
     uint8_t device_id,
     uint32_t uid,
-    CdmpDeviceType type,
     uint8_t protocol_version = CdmpDevice::GetCurrentProtocolVersion()) {
 
     return CdmpIdClaimRequestMessage{
         .claiming_device_id = device_id,
         .uid = uid,
-        .device_type = type,
         .protocol_version = protocol_version}.ToCanFrame();
 }
 
@@ -136,7 +138,7 @@ struct HeartbeatRecord {
 };
 
 struct NetworkFixture {
-    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(OWN_UID, CdmpDeviceType::DISPLAY);
+    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(OWN_UID, DISPLAY_FEATURES);
     std::shared_ptr<WorkQueueThread> work_queue = std::make_shared<WorkQueueThread>(
         "cdmp_test_wq",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
@@ -255,26 +257,25 @@ struct NetworkFixture {
         return CdmpIdClaimRequestMessage::FromCanFrame(*frame);
     }
 
-    void Discover(uint8_t device_id, uint32_t uid, CdmpDeviceType type) {
-        service.ProcessFrame(DiscoveryResponseFrame(device_id, uid, type));
+    void Discover(uint8_t device_id, uint32_t uid, uint16_t features) {
+        service.ProcessFrame(DiscoveryResponseFrame(device_id, uid, features));
     }
 
     void Claim(
         uint8_t device_id,
         uint32_t uid,
-        CdmpDeviceType type,
         uint8_t protocol_version = CdmpDevice::GetCurrentProtocolVersion()) {
 
-        service.ProcessFrame(ClaimFrame(device_id, uid, type, protocol_version));
+        service.ProcessFrame(ClaimFrame(device_id, uid, protocol_version));
     }
 
     // Through the frame codec, as the heartbeat service hands it over.
-    void Heartbeat(uint8_t device_id, uint32_t capability_flags = 0) {
+    void Heartbeat(uint8_t device_id, uint16_t features = 0) {
         const CdmpHeartbeatMessage message{
             .device_id = device_id,
             .health_status = CdmpHealthStatus::OK,
             .sequence_number = 0,
-            .capability_flags = capability_flags,
+            .features = features,
             .state_digest = 0};
         service.UpdateDeviceFromHeartbeat(CdmpHeartbeatMessage::FromCanFrame(message.ToCanFrame()));
     }
@@ -294,9 +295,9 @@ ZTEST(cdmp_network, test_snapshot_is_empty_without_peers) {
 
 ZTEST(cdmp_network, test_snapshot_copies_discovered_devices_in_id_order) {
     NetworkFixture fixture;
-    fixture.Discover(5, 0x55555555, CdmpDeviceType::LOGGER);
-    fixture.Discover(2, 0x22222222, CdmpDeviceType::DISPLAY);
-    fixture.Discover(9, 0x99999999, CdmpDeviceType::LOGGER);
+    fixture.Discover(5, 0x55555555, LOGGER_FEATURES);
+    fixture.Discover(2, 0x22222222, DISPLAY_FEATURES);
+    fixture.Discover(9, 0x99999999, LOGGER_FEATURES);
 
     std::array<CdmpDeviceInfo, 8> devices{};
     const size_t count = fixture.service.GetNetworkDevices(devices);
@@ -306,18 +307,18 @@ ZTEST(cdmp_network, test_snapshot_copies_discovered_devices_in_id_order) {
 
     zassert_equal(devices[0].device_id, 2);
     zassert_equal(devices[0].uid, 0x22222222);
-    zassert_equal(devices[0].device_type, CdmpDeviceType::DISPLAY);
+    zassert_equal(devices[0].features, DISPLAY_FEATURES);
     zassert_equal(devices[0].status, CdmpDeviceStatus::ONLINE);
     zassert_equal(devices[1].device_id, 5);
     zassert_equal(devices[2].device_id, 9);
-    zassert_equal(devices[2].device_type, CdmpDeviceType::LOGGER);
+    zassert_equal(devices[2].features, LOGGER_FEATURES);
 }
 
 ZTEST(cdmp_network, test_snapshot_is_limited_to_the_buffer) {
     NetworkFixture fixture;
-    fixture.Discover(1, 0xA1, CdmpDeviceType::LOGGER);
-    fixture.Discover(2, 0xA2, CdmpDeviceType::LOGGER);
-    fixture.Discover(3, 0xA3, CdmpDeviceType::LOGGER);
+    fixture.Discover(1, 0xA1, LOGGER_FEATURES);
+    fixture.Discover(2, 0xA2, LOGGER_FEATURES);
+    fixture.Discover(3, 0xA3, LOGGER_FEATURES);
 
     std::array<CdmpDeviceInfo, 2> devices{};
 
@@ -327,8 +328,8 @@ ZTEST(cdmp_network, test_snapshot_is_limited_to_the_buffer) {
 
 ZTEST(cdmp_network, test_removed_device_leaves_the_snapshot) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
-    fixture.Discover(6, 0x66666666, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
+    fixture.Discover(6, 0x66666666, LOGGER_FEATURES);
 
     fixture.service.RemoveDevice(4);
 
@@ -340,7 +341,7 @@ ZTEST(cdmp_network, test_removed_device_leaves_the_snapshot) {
 ZTEST(cdmp_network, test_uid_conflict_is_not_added) {
     NetworkFixture fixture;
 
-    fixture.Discover(3, OWN_UID, CdmpDeviceType::LOGGER);
+    fixture.Discover(3, OWN_UID, LOGGER_FEATURES);
 
     std::array<CdmpDeviceInfo, 4> devices{};
     zassert_equal(fixture.service.GetNetworkDevices(devices), 0);
@@ -351,35 +352,35 @@ ZTEST(cdmp_network, test_uid_conflict_is_not_added) {
 ZTEST(cdmp_network, test_discovered_device_reports_joined) {
     NetworkFixture fixture;
 
-    fixture.Discover(5, 0x55555555, CdmpDeviceType::LOGGER);
-    fixture.Discover(5, 0x55555555, CdmpDeviceType::LOGGER);
+    fixture.Discover(5, 0x55555555, LOGGER_FEATURES);
+    fixture.Discover(5, 0x55555555, LOGGER_FEATURES);
 
     zassert_equal(fixture.events.size(), 1, "Only the first response adds the device");
     zassert_equal(fixture.events[0].event, CdmpDeviceEvent::JOINED);
     zassert_equal(fixture.events[0].device.device_id, 5);
     zassert_equal(fixture.events[0].device.uid, 0x55555555);
-    zassert_equal(fixture.events[0].device.device_type, CdmpDeviceType::LOGGER);
+    zassert_equal(fixture.events[0].device.features, LOGGER_FEATURES);
 }
 
 ZTEST(cdmp_network, test_unit_that_is_not_lowest_learns_claimant_from_first_heartbeat) {
     NetworkFixture fixture;
     // Device 1 is the lowest ID and answers the claim; this unit, device 2, only listens.
     fixture.device->SetDeviceId(2);
-    fixture.Discover(1, 0x10101010, CdmpDeviceType::LOGGER);
+    fixture.Discover(1, 0x10101010, LOGGER_FEATURES);
     fixture.events.clear();
 
-    fixture.Claim(3, 0x33333333, CdmpDeviceType::LOGGER);
+    fixture.Claim(3, 0x33333333);
 
     zassert_equal(fixture.service.GetDeviceCount(), 1, "A claim alone does not add the claimant");
     zassert_true(fixture.events.empty());
 
-    fixture.Heartbeat(3, 0x05);
+    fixture.Heartbeat(3, LOGGER_FEATURES);
 
     std::array<CdmpDeviceInfo, 4> devices{};
     zassert_equal(fixture.service.GetNetworkDevices(devices), 2);
     zassert_equal(devices[1].device_id, 3);
     zassert_equal(devices[1].uid, 0x33333333, "The UID comes from the claim");
-    zassert_equal(devices[1].device_type, CdmpDeviceType::LOGGER);
+    zassert_equal(devices[1].features, LOGGER_FEATURES);
     zassert_equal(devices[1].status, CdmpDeviceStatus::ONLINE);
     zassert_true(fixture.service.IsDeviceOnline(3));
 
@@ -395,7 +396,7 @@ ZTEST(cdmp_network, test_unit_that_is_not_lowest_learns_claimant_from_first_hear
 
 ZTEST(cdmp_network, test_second_heartbeat_does_not_join_again) {
     NetworkFixture fixture;
-    fixture.Claim(3, 0x33333333, CdmpDeviceType::LOGGER);
+    fixture.Claim(3, 0x33333333);
 
     fixture.Heartbeat(3);
     fixture.Heartbeat(3);
@@ -418,8 +419,8 @@ ZTEST(cdmp_network, test_heartbeat_without_claim_is_ignored) {
 // One wait past the timeout covers both, since it costs real time on boards without icount.
 ZTEST(cdmp_network, test_silence_past_the_heartbeat_timeout_expires_claims_and_devices) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
-    fixture.Claim(3, 0x33333333, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
+    fixture.Claim(3, 0x33333333);
     fixture.events.clear();
 
     k_msleep(CdmpConstants::HEARTBEAT_TIMEOUT_MS + 1);
@@ -443,7 +444,7 @@ ZTEST(cdmp_network, test_full_pending_claims_replace_the_oldest) {
     constexpr uint8_t CLAIMS = CdmpConstants::PENDING_ID_CLAIMS_MAX + 1;
 
     for(uint8_t id = 1; id <= CLAIMS; id++)
-        fixture.Claim(id, 0xC0000000 | id, CdmpDeviceType::LOGGER);
+        fixture.Claim(id, 0xC0000000 | id);
     for(uint8_t id = 1; id <= CLAIMS; id++)
         fixture.Heartbeat(id);
 
@@ -456,7 +457,7 @@ ZTEST(cdmp_network, test_full_pending_claims_replace_the_oldest) {
 ZTEST(cdmp_network, test_incompatible_claim_is_not_recorded) {
     NetworkFixture fixture;
 
-    fixture.Claim(3, 0x33333333, CdmpDeviceType::LOGGER, 0x20);
+    fixture.Claim(3, 0x33333333, 0x20);
     fixture.Heartbeat(3);
 
     zassert_equal(fixture.service.GetDeviceCount(), 0, "The lowest ID refuses the claim");
@@ -466,7 +467,7 @@ ZTEST(cdmp_network, test_incompatible_claim_is_not_recorded) {
 ZTEST(cdmp_network, test_own_claim_is_not_recorded) {
     NetworkFixture fixture;
 
-    fixture.Claim(3, OWN_UID, CdmpDeviceType::DISPLAY);
+    fixture.Claim(3, OWN_UID);
     fixture.Heartbeat(3);
 
     zassert_equal(fixture.service.GetDeviceCount(), 0);
@@ -475,12 +476,12 @@ ZTEST(cdmp_network, test_own_claim_is_not_recorded) {
 
 ZTEST(cdmp_network, test_same_uid_claim_reports_restarted_once) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     fixture.events.clear();
 
     // A claimant repeats its claim until it is answered.
-    fixture.Claim(4, 0x44444444, CdmpDeviceType::LOGGER);
-    fixture.Claim(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Claim(4, 0x44444444);
+    fixture.Claim(4, 0x44444444);
 
     zassert_equal(fixture.events.size(), 1);
     zassert_equal(fixture.events[0].event, CdmpDeviceEvent::RESTARTED);
@@ -493,7 +494,7 @@ ZTEST(cdmp_network, test_same_uid_claim_reports_restarted_once) {
     zassert_equal(fixture.events.size(), 1, "Its first heartbeat is not a new join");
     zassert_equal(fixture.heartbeats.size(), 1);
 
-    fixture.Claim(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Claim(4, 0x44444444);
 
     zassert_equal(fixture.events.size(), 2, "A claim after a heartbeat is the next restart");
     zassert_equal(fixture.events[1].event, CdmpDeviceEvent::RESTARTED);
@@ -501,26 +502,26 @@ ZTEST(cdmp_network, test_same_uid_claim_reports_restarted_once) {
 
 ZTEST(cdmp_network, test_claim_with_another_uid_for_known_id_changes_nothing) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     fixture.events.clear();
 
-    fixture.Claim(4, 0x55555555, CdmpDeviceType::DISPLAY);
-    fixture.Heartbeat(4);
+    fixture.Claim(4, 0x55555555);
+    fixture.Heartbeat(4, LOGGER_FEATURES);
 
     zassert_true(fixture.events.empty(), "The owner rejects a conflicting claim");
 
     std::array<CdmpDeviceInfo, 2> devices{};
     zassert_equal(fixture.service.GetNetworkDevices(devices), 1);
     zassert_equal(devices[0].uid, 0x44444444);
-    zassert_equal(devices[0].device_type, CdmpDeviceType::LOGGER);
+    zassert_equal(devices[0].features, LOGGER_FEATURES);
 }
 
 ZTEST(cdmp_network, test_known_uid_claiming_another_id_leaves_the_old_one) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     fixture.events.clear();
 
-    fixture.Claim(6, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Claim(6, 0x44444444);
 
     zassert_equal(fixture.service.GetDeviceCount(), 0);
     zassert_equal(fixture.events.size(), 1);
@@ -537,11 +538,11 @@ ZTEST(cdmp_network, test_known_uid_claiming_another_id_leaves_the_old_one) {
 
 ZTEST(cdmp_network, test_discovered_uid_under_another_id_replaces_the_old_entry) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     fixture.events.clear();
 
     // It restarted under ID 6, and this unit missed the claim.
-    fixture.Discover(6, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(6, 0x44444444, LOGGER_FEATURES);
 
     zassert_equal(fixture.service.GetDeviceCount(), 1);
     zassert_equal(fixture.events.size(), 2);
@@ -553,7 +554,7 @@ ZTEST(cdmp_network, test_discovered_uid_under_another_id_replaces_the_old_entry)
 
 ZTEST(cdmp_network, test_removed_device_reports_left) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     fixture.events.clear();
 
     fixture.service.RemoveDevice(4);
@@ -563,18 +564,18 @@ ZTEST(cdmp_network, test_removed_device_reports_left) {
     zassert_equal(fixture.events[0].event, CdmpDeviceEvent::LEFT);
     zassert_equal(fixture.events[0].device.device_id, 4);
     zassert_equal(fixture.events[0].device.uid, 0x44444444);
-    zassert_equal(fixture.events[0].device.device_type, CdmpDeviceType::LOGGER);
+    zassert_equal(fixture.events[0].device.features, LOGGER_FEATURES);
 }
 
 ZTEST(cdmp_network, test_heartbeat_handler_receives_the_full_message) {
     NetworkFixture fixture;
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
 
     const CdmpHeartbeatMessage sent{
         .device_id = 4,
         .health_status = CdmpHealthStatus::WARNING,
         .sequence_number = 7,
-        .capability_flags = 0x01020304,
+        .features = 0x0304,
         .state_digest = 0xA5};
     fixture.service.UpdateDeviceFromHeartbeat(sent);
 
@@ -583,7 +584,7 @@ ZTEST(cdmp_network, test_heartbeat_handler_receives_the_full_message) {
     zassert_equal(received.device_id, 4);
     zassert_equal(received.health_status, CdmpHealthStatus::WARNING);
     zassert_equal(received.sequence_number, 7);
-    zassert_equal(received.capability_flags, 0x01020304);
+    zassert_equal(received.features, 0x0304);
     zassert_equal(received.state_digest, 0xA5);
 }
 
@@ -599,7 +600,7 @@ ZTEST(cdmp_network, test_unregistered_handlers_are_not_called) {
 
     zassert_not_equal(event_handler_id, heartbeat_handler_id);
 
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     fixture.Heartbeat(4);
 
     zassert_equal(device_events, 1);
@@ -609,7 +610,7 @@ ZTEST(cdmp_network, test_unregistered_handlers_are_not_called) {
     fixture.service.UnregisterHeartbeatHandler(heartbeat_handler_id);
 
     fixture.service.RemoveDevice(4);
-    fixture.Discover(5, 0x55555555, CdmpDeviceType::LOGGER);
+    fixture.Discover(5, 0x55555555, LOGGER_FEATURES);
     fixture.Heartbeat(5);
 
     zassert_equal(device_events, 1);
@@ -622,7 +623,7 @@ ZTEST(cdmp_network, test_claim_and_heartbeat_for_own_id_are_ignored_while_online
     NetworkFixture fixture;
     fixture.GoOnline(2);
 
-    fixture.Claim(2, 0x22222222, CdmpDeviceType::LOGGER);
+    fixture.Claim(2, 0x22222222);
 
     auto frame = fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM_RESPONSE);
     zassert_true(frame.has_value(), "The owner answers a claim on its ID");
@@ -644,9 +645,9 @@ ZTEST(cdmp_network, test_discovery_response_with_reserved_or_own_id_is_ignored) 
     NetworkFixture fixture;
     fixture.GoOnline(2);
 
-    fixture.Discover(CdmpDevice::DEVICE_ID_UNASSIGNED, 0x0A0A0A0A, CdmpDeviceType::LOGGER);
-    fixture.Discover(CdmpDevice::DEVICE_ID_BROADCAST, 0x0B0B0B0B, CdmpDeviceType::LOGGER);
-    fixture.Discover(2, 0x22222222, CdmpDeviceType::LOGGER);
+    fixture.Discover(CdmpDevice::DEVICE_ID_UNASSIGNED, 0x0A0A0A0A, LOGGER_FEATURES);
+    fixture.Discover(CdmpDevice::DEVICE_ID_BROADCAST, 0x0B0B0B0B, LOGGER_FEATURES);
+    fixture.Discover(2, 0x22222222, LOGGER_FEATURES);
 
     zassert_equal(fixture.service.GetDeviceCount(), 0);
     zassert_true(fixture.events.empty());
@@ -657,7 +658,7 @@ ZTEST(cdmp_network, test_lowest_id_accepts_claim_and_learns_claimant_from_heartb
     NetworkFixture fixture;
     fixture.GoOnline(1);
 
-    fixture.Claim(3, 0x33333333, CdmpDeviceType::LOGGER);
+    fixture.Claim(3, 0x33333333);
 
     auto frame = fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM_RESPONSE);
     zassert_true(frame.has_value(), "The lowest ID answers the claim");
@@ -681,7 +682,7 @@ ZTEST(cdmp_network, test_lowest_id_accepts_claim_and_learns_claimant_from_heartb
 ZTEST(cdmp_network, test_heartbeat_from_removed_device_requests_rediscovery) {
     NetworkFixture fixture;
     fixture.GoOnline(2);
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
     // As after the heartbeat timeout, for example while its cable was unplugged.
     fixture.service.RemoveDevice(4);
     fixture.events.clear();
@@ -701,7 +702,7 @@ ZTEST(cdmp_network, test_heartbeat_from_removed_device_requests_rediscovery) {
         "At most one request per heartbeat interval");
 
     // Its answer to the request.
-    fixture.Discover(4, 0x44444444, CdmpDeviceType::LOGGER);
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
 
     zassert_equal(fixture.events.size(), 1);
     zassert_equal(fixture.events[0].event, CdmpDeviceEvent::JOINED);
@@ -721,8 +722,8 @@ ZTEST(cdmp_network, test_discovery_answer_and_pending_claim_steer_the_id_claim) 
     zassert_true(fixture.bus_frames.Wait(CdmpManagementMessageType::DISCOVERY_REQUEST).has_value());
 
     // Received while discovery waits: device 1 answers, and another unit claims ID 2.
-    fixture.Receive(DiscoveryResponseFrame(1, 0x10101010, CdmpDeviceType::LOGGER));
-    fixture.Receive(ClaimFrame(2, 0x20202020, CdmpDeviceType::LOGGER));
+    fixture.Receive(DiscoveryResponseFrame(1, 0x10101010, LOGGER_FEATURES));
+    fixture.Receive(ClaimFrame(2, 0x20202020));
 
     auto claim = fixture.WaitForClaim();
     zassert_true(claim.has_value());
@@ -791,7 +792,7 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     fixture.AttachLoopbackBus();
     fixture.Start();
 
-    fixture.SendAsPeer(DiscoveryResponseFrame(5, 0x55555555, CdmpDeviceType::LOGGER));
+    fixture.SendAsPeer(DiscoveryResponseFrame(5, 0x55555555, LOGGER_FEATURES));
     zassert_true(fixture.bus_frames.Wait().has_value());
     fixture.DrainQueue();
 
@@ -803,7 +804,7 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     k_sem_init(&release, 0, 1);
     fixture.work_queue->Run([&release]() { k_sem_take(&release, K_FOREVER); });
 
-    fixture.SendAsPeer(DiscoveryResponseFrame(6, 0x66666666, CdmpDeviceType::LOGGER));
+    fixture.SendAsPeer(DiscoveryResponseFrame(6, 0x66666666, LOGGER_FEATURES));
     // Both handlers see a frame in one dispatch, so the service's has queued it by now.
     zassert_true(fixture.bus_frames.Wait().has_value());
 
@@ -815,10 +816,103 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     zassert_equal(fixture.events.size(), 1, "Device 6 arrived before the stop and must not join after it");
 
     // A start forgets whatever reached the table while stopped.
-    fixture.Discover(7, 0x77777777, CdmpDeviceType::LOGGER);
+    fixture.Discover(7, 0x77777777, LOGGER_FEATURES);
     zassert_true(fixture.service.Start());
 
     zassert_equal(fixture.service.GetDeviceCount(), 0);
+}
+
+ZTEST(cdmp_network, test_heartbeat_with_no_features_clears_the_devices_mask) {
+    NetworkFixture fixture;
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
+
+    fixture.Heartbeat(4, 0);
+
+    std::array<CdmpDeviceInfo, 2> devices{};
+    zassert_equal(fixture.service.GetNetworkDevices(devices), 1);
+    zassert_equal(devices[0].features, 0, "A unit that clears LOGGING says so in its next heartbeat");
+
+    fixture.Heartbeat(4, LOGGER_FEATURES);
+
+    zassert_equal(fixture.service.GetNetworkDevices(devices), 1);
+    zassert_equal(devices[0].features, LOGGER_FEATURES);
+}
+
+ZTEST(cdmp_network, test_claimant_joins_with_the_features_of_its_first_heartbeat) {
+    NetworkFixture fixture;
+    fixture.device->SetDeviceId(2);
+    fixture.Discover(1, 0x10101010, DISPLAY_FEATURES);
+    fixture.events.clear();
+
+    fixture.Claim(3, 0x33333333);
+    fixture.Heartbeat(3, LOGGER_FEATURES | DISPLAY_FEATURES);
+
+    zassert_equal(fixture.events.size(), 1);
+    zassert_equal(fixture.events[0].event, CdmpDeviceEvent::JOINED);
+    zassert_equal(fixture.events[0].device.features, LOGGER_FEATURES | DISPLAY_FEATURES);
+}
+
+ZTEST(cdmp_network, test_heartbeat_reserved_bytes_are_ignored) {
+    NetworkFixture fixture;
+    fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
+
+    auto frame = CdmpHeartbeatMessage{
+        .device_id = 4,
+        .health_status = CdmpHealthStatus::OK,
+        .sequence_number = 0,
+        .features = LOGGER_FEATURES,
+        .state_digest = 0}.ToCanFrame();
+    frame[5] = 0xFF;
+    frame[6] = 0xFF;
+    fixture.service.UpdateDeviceFromHeartbeat(CdmpHeartbeatMessage::FromCanFrame(frame));
+
+    std::array<CdmpDeviceInfo, 2> devices{};
+    zassert_equal(fixture.service.GetNetworkDevices(devices), 1);
+    zassert_equal(devices[0].features, LOGGER_FEATURES);
+}
+
+ZTEST(cdmp_network, test_short_discovery_response_adds_no_device) {
+    NetworkFixture fixture;
+    auto frame = DiscoveryResponseFrame(5, 0x55555555, LOGGER_FEATURES);
+    frame.pop_back();
+
+    fixture.service.ProcessFrame(frame);
+
+    zassert_equal(fixture.service.GetDeviceCount(), 0, "A discovery response needs all 8 bytes");
+}
+
+ZTEST(cdmp_network, test_id_claim_sends_byte_6_as_zero_and_ignores_it) {
+    const auto frame = CdmpIdClaimRequestMessage{
+        .claiming_device_id = 3,
+        .uid = 0x33333333,
+        .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame();
+
+    zassert_equal(frame.size(), 8);
+    zassert_equal(frame[6], 0, "Byte 6 is reserved");
+
+    auto received = frame;
+    received[6] = 0xFF;
+    const auto message = CdmpIdClaimRequestMessage::FromCanFrame(received);
+
+    zassert_equal(message.claiming_device_id, 3);
+    zassert_equal(message.uid, 0x33333333);
+    zassert_equal(message.protocol_version, CdmpDevice::GetCurrentProtocolVersion());
+}
+
+ZTEST_SUITE(cdmp_discovery_response_message, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(cdmp_discovery_response_message, test_features_are_in_bytes_6_and_7) {
+    const auto frame = DiscoveryResponseFrame(5, 0x01020304, 0x2010);
+
+    zassert_equal(frame.size(), CdmpDiscoveryResponseMessage::FRAME_SIZE);
+    zassert_equal(frame[6], 0x10, "Features are LSB first");
+    zassert_equal(frame[7], 0x20);
+
+    const auto message = CdmpDiscoveryResponseMessage::FromCanFrame(frame);
+
+    zassert_equal(message.device_id, 5);
+    zassert_equal(message.uid, 0x01020304);
+    zassert_equal(message.features, 0x2010);
 }
 
 ZTEST_SUITE(cdmp_heartbeat_message, NULL, NULL, NULL, NULL, NULL);
@@ -828,14 +922,16 @@ ZTEST(cdmp_heartbeat_message, test_round_trips_with_state_digest) {
         .device_id = 9,
         .health_status = CdmpHealthStatus::WARNING,
         .sequence_number = 200,
-        .capability_flags = 0x80402010,
+        .features = 0x2010,
         .state_digest = 0xC3};
 
     const auto frame = sent.ToCanFrame();
 
     zassert_equal(frame.size(), CdmpHeartbeatMessage::FRAME_SIZE);
-    zassert_equal(frame[3], 0x10, "Capability flags are LSB first");
-    zassert_equal(frame[6], 0x80);
+    zassert_equal(frame[3], 0x10, "Features are LSB first");
+    zassert_equal(frame[4], 0x20);
+    zassert_equal(frame[5], 0, "Bytes 5 and 6 are reserved");
+    zassert_equal(frame[6], 0);
     zassert_equal(frame[7], 0xC3, "Byte 7 is the state digest");
 
     const auto received = CdmpHeartbeatMessage::FromCanFrame(frame);
@@ -843,7 +939,7 @@ ZTEST(cdmp_heartbeat_message, test_round_trips_with_state_digest) {
     zassert_equal(received.device_id, 9);
     zassert_equal(received.health_status, CdmpHealthStatus::WARNING);
     zassert_equal(received.sequence_number, 200);
-    zassert_equal(received.capability_flags, 0x80402010);
+    zassert_equal(received.features, 0x2010);
     zassert_equal(received.state_digest, 0xC3);
 }
 
@@ -863,7 +959,7 @@ ZTEST(cdmp_heartbeat_message, test_short_frame_is_rejected) {
 ZTEST_SUITE(cdmp_service, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
-    CdmpService service(CdmpDeviceType::DISPLAY, OWN_UID);
+    CdmpService service(DISPLAY_FEATURES, OWN_UID);
 
     CdmpDeviceStatus seen_old = CdmpDeviceStatus::ONLINE;
     CdmpDeviceStatus seen_new = CdmpDeviceStatus::ONLINE;
@@ -889,8 +985,23 @@ ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
 }
 
 ZTEST(cdmp_service, test_network_snapshot_starts_empty) {
-    CdmpService service(CdmpDeviceType::DISPLAY, OWN_UID);
+    CdmpService service(DISPLAY_FEATURES, OWN_UID);
     std::array<CdmpDeviceInfo, 4> devices{};
 
     zassert_equal(service.GetNetworkDevices(devices), 0);
+}
+
+ZTEST(cdmp_service, test_device_info_follows_the_features_of_the_device) {
+    CdmpService service(DISPLAY_FEATURES, OWN_UID);
+
+    zassert_equal(service.GetDeviceInfo().features, DISPLAY_FEATURES);
+
+    service.GetDevice()->SetFeature(LOGGER_FEATURES, true);
+    zassert_equal(service.GetDeviceInfo().features, DISPLAY_FEATURES | LOGGER_FEATURES);
+
+    service.GetDevice()->SetFeature(DISPLAY_FEATURES, false);
+    zassert_equal(service.GetDeviceInfo().features, LOGGER_FEATURES);
+
+    service.GetDevice()->SetFeatures(0);
+    zassert_equal(service.GetDeviceInfo().features, 0);
 }

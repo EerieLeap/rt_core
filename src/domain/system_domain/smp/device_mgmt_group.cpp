@@ -1,3 +1,4 @@
+#include <optional>
 #include <utility>
 
 #include "domain/system_domain/models/product_info.h"
@@ -7,6 +8,7 @@
 
 namespace eerie_leap::domain::system_domain::smp {
 
+using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::smp::SmpGroupId;
 using eerie_leap::domain::system_domain::models::ProductInfo;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
@@ -31,21 +33,23 @@ DeviceMgmtGroup::~DeviceMgmtGroup() {
 int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
     zcbor_state_t* zse = ctxt->writer->zs;
 
-    bool ok = zcbor_tstr_put_lit(zse, "family") && zcbor_uint32_put(zse, std::to_underlying(ProductInfo::family))
-        && zcbor_tstr_put_lit(zse, "product") && zcbor_uint32_put(zse, ProductInfo::product_id)
+    std::optional<CdmpDeviceInfo> device;
+    if(network_info_ != nullptr)
+        device = network_info_->GetDeviceInfo();
+
+    const uint16_t features = device.has_value() ? device->features : ProductInfo::features;
+
+    bool ok = zcbor_tstr_put_lit(zse, "product") && zcbor_uint32_put(zse, ProductInfo::product_id)
         && zcbor_tstr_put_lit(zse, "revision") && zcbor_uint32_put(zse, ProductInfo::revision)
-        && zcbor_tstr_put_lit(zse, "features") && zcbor_uint32_put(zse, ProductInfo::features)
+        && zcbor_tstr_put_lit(zse, "features") && zcbor_uint32_put(zse, features)
         && zcbor_tstr_put_lit(zse, "hw") && zcbor_uint32_put(zse, SystemConfiguration::hw_version)
         && zcbor_tstr_put_lit(zse, "sw") && zcbor_uint32_put(zse, SystemConfiguration::sw_version)
         && zcbor_tstr_put_lit(zse, "build") && zcbor_uint32_put(zse, build_number_);
 
-    if(ok && network_info_ != nullptr) {
-        const auto device = network_info_->GetDeviceInfo();
-
-        ok = zcbor_tstr_put_lit(zse, "cdmp_id") && zcbor_uint32_put(zse, device.device_id)
-            && zcbor_tstr_put_lit(zse, "uid") && zcbor_uint32_put(zse, device.uid)
-            && zcbor_tstr_put_lit(zse, "device_type") && zcbor_uint32_put(zse, std::to_underlying(device.device_type))
-            && zcbor_tstr_put_lit(zse, "status") && zcbor_uint32_put(zse, std::to_underlying(device.status));
+    if(ok && device.has_value()) {
+        ok = zcbor_tstr_put_lit(zse, "cdmp_id") && zcbor_uint32_put(zse, device->device_id)
+            && zcbor_tstr_put_lit(zse, "uid") && zcbor_uint32_put(zse, device->uid)
+            && zcbor_tstr_put_lit(zse, "status") && zcbor_uint32_put(zse, std::to_underlying(device->status));
     }
 
     if(ok && sensor_capabilities_.has_value()) {

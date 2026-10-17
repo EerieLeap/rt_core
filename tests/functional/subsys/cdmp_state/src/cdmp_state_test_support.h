@@ -10,6 +10,9 @@
 #include "subsys/cdmp/services/cdmp_service.h"
 
 #include "cdmp_loopback_harness.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 namespace cdmp_state_test {
 
@@ -41,7 +44,7 @@ public:
 
         AttachBus(canbus);
 
-        unit = std::make_shared<CdmpService>(CdmpDeviceType::DISPLAY, OWN_UID);
+        unit = std::make_shared<CdmpService>(DISPLAY_FEATURES, OWN_UID);
         zassert_true(unit->Initialize());
         unit->Configure(canbus);
     }

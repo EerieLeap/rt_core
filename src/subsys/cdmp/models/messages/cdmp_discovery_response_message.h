@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 #include <span>
@@ -13,16 +14,21 @@
 namespace eerie_leap::subsys::cdmp::models {
 
 using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
-using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 
 // Base message structures (Base + 0)
 struct CdmpDiscoveryResponseMessage {
     static constexpr CdmpManagementMessageType message_type = CdmpManagementMessageType::DISCOVERY_RESPONSE;
     uint8_t device_id;
     uint32_t uid;
-    CdmpDeviceType device_type;
+    uint16_t features; ///< Application feature mask, bytes 6-7.
+
+    // Every unit sends all 8 bytes, so a shorter frame is malformed.
+    static constexpr size_t FRAME_SIZE = 8;
 
     static CdmpDiscoveryResponseMessage FromCanFrame(std::span<const uint8_t> frame_data) {
+        if(frame_data.size() < FRAME_SIZE)
+            throw std::invalid_argument("Discovery response frame is shorter than 8 bytes");
+
         if(frame_data[0] != static_cast<uint8_t>(CdmpManagementMessageType::DISCOVERY_RESPONSE))
             throw std::invalid_argument("Incorrect message type");
 
@@ -33,7 +39,9 @@ struct CdmpDiscoveryResponseMessage {
             | (static_cast<uint32_t>(frame_data[4]) << 16)
             | (static_cast<uint32_t>(frame_data[3]) << 8)
             | static_cast<uint32_t>(frame_data[2]);
-        message.device_type = static_cast<CdmpDeviceType>(frame_data[6]);
+        message.features = static_cast<uint16_t>(
+            (static_cast<uint16_t>(frame_data[7]) << 8)
+            | static_cast<uint16_t>(frame_data[6]));
 
         return message;
     }
@@ -46,7 +54,8 @@ struct CdmpDiscoveryResponseMessage {
             static_cast<uint8_t>(uid >> 8),
             static_cast<uint8_t>(uid >> 16),
             static_cast<uint8_t>(uid >> 24),
-            std::to_underlying(device_type)};
+            static_cast<uint8_t>(features),
+            static_cast<uint8_t>(features >> 8)};
 
         return frame_data;
     }

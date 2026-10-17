@@ -34,7 +34,6 @@ using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
 using eerie_leap::subsys::cdmp::utilities::CdmpStatusMachine;
-using eerie_leap::subsys::cdmp::models::CdmpDeviceType;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 
 /** @brief One CDMP node: discovery, heartbeat, commands and shared state on a shared work queue. */
@@ -66,8 +65,12 @@ private:
     bool DoStop() override;
 
 public:
-    /** @param uid Unique identifier of this unit, usually CdmpUid::Generate(). */
-    CdmpService(CdmpDeviceType device_type, uint32_t uid);
+    /**
+     * @param features Application feature mask this unit sends in heartbeats and discovery responses;
+     *        change it later through GetDevice()->SetFeatures() / SetFeature().
+     * @param uid Unique identifier of this unit, usually CdmpUid::Generate().
+     */
+    CdmpService(uint16_t features, uint32_t uid);
     ~CdmpService();
 
     /**
@@ -80,7 +83,6 @@ public:
 
     // Configuration
     void SetAutoDiscovery(bool enabled);
-    void SetDeviceType(CdmpDeviceType device_type);
 
     std::shared_ptr<CdmpDevice> GetDevice() const { return device_; }
     std::shared_ptr<CdmpCommandService> GetCommandService() const { return command_service_; }

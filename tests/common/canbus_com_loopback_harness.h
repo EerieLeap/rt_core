@@ -22,6 +22,9 @@
 #include "domain/canbus_com_domain/services/i_network_state_transport.h"
 
 #include "cdmp_loopback_harness.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
 
 // A CanbusComService on the loopback controller and a peer scripted on its bus, shared by the
 // suites that exercise the COM domain: canbus_com_domain and logging_control.
@@ -131,9 +134,8 @@ public:
         SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
             .claiming_device_id = device_id,
             .uid = uid,
-            .device_type = CdmpDeviceType::LOGGER,
             .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
-        SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id));
+        SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, 0, LOGGER_FEATURES));
 
         const int64_t deadline = k_uptime_get() + FRAME_TIMEOUT_MS;
         while(!IsInDeviceTable(device_id)) {

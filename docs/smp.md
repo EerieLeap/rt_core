@@ -55,15 +55,16 @@ characters). A configuration that is stored stops logging on every unit (see
 
 ### `device`: identity
 
-`INFO` (read) returns `{family, product, revision, features, hw, sw, build}` (versions packed as
-`major << 24 | minor << 16 | patch`), with CDMP `{cdmp_id, uid, device_type, status}`, and on a
+`INFO` (read) returns `{product, revision, features, hw, sw, build}` (versions packed as
+`major << 24 | minor << 16 | patch`; `features` is the `ProductFeature` mask the unit sends on CDMP now,
+the build's without CDMP), with CDMP `{cdmp_id, uid, status}`, and on a
 unit with sensors `{adc_channels, gpio_channels, sensors_max}`: the ADC and GPIO channels a sensor
 can read, each numbered from 0, and the most sensors a configuration holds, which the sensors
 configuration is validated against. See [system.md](system.md) and [sensors.md](sensors.md).
 
 ### `network`: other units
 
-`DEVICES` (read) with an optional `{off}` returns `{total, off, devices: [{id, uid, type,
+`DEVICES` (read) with an optional `{off}` returns `{total, off, devices: [{id, uid, features,
 status}]}` ordered by CDMP device ID, as many as fit into one response; request the rest from the
 next offset. At most `EERIE_LEAP_SMP_NETWORK_MAX_DEVICES` are listed.
 

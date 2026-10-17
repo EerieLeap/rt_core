@@ -336,10 +336,10 @@ a heartbeat and a state handler with the COM service (`RegisterDeviceEventHandle
 `RegisterHeartbeatHandler()`, `RegisterStateHandler()`), all on the CDMP work queue.
 
 - **Armed** when a unit joins (`CdmpDeviceEvent::JOINED`) or claims its ID again with its UID
-  (`CdmpDeviceEvent::RESTARTED`), and it is a `LOGGER`, which may share a status, or this unit holds
-  a `LOGGING_STATUS` copy of it: the record is what makes a unit a logging unit, whatever its type.
-  A unit that joined has no copy yet, so its type is all there is to go by. Two claims before the
-  unit is current are one restart. A `LOGGER` that never shares a status stays armed until it leaves
+  (`CdmpDeviceEvent::RESTARTED`), and its features carry LOGGING, which may share a status, or this unit holds
+  a `LOGGING_STATUS` copy of it: the record is what makes a unit a logging unit, whatever its features.
+  A unit that joined has no copy yet, so its features are all there is to go by. Two claims before the
+  unit is current are one restart. A unit with LOGGING that never shares a status stays armed until it leaves
   the table, which costs a bit. With no copy of another unit, the status passes through
   `Unavailable` when the unit reports, which the status rule covers; with one, the monitor is the
   only signal.

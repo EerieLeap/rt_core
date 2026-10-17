@@ -124,7 +124,7 @@ void BleService::ConfigureAdvertisingData() const {
     ad_builder.Add(BT_DATA_FLAGS, flags);
 
     // The service UUID shares the advertisement with the manufacturer data, so a scan filtered by the
-    // UUID also sees the product without a scan response. Together they fill all 31 bytes.
+    // UUID also sees the product without a scan response. Together they take 30 of the 31 bytes.
     const std::vector<uint8_t> service_uuid = { BT_UUID_ACCESS_POINT_SERVICE_VAL };
     ad_builder.Add(BT_DATA_UUID128_ALL, service_uuid);
 
@@ -161,12 +161,11 @@ void BleService::PairingFinished() {
 
 std::vector<uint8_t> BleService::GetManufacturerData() {
     // 2 (SIG company ID)
-    // 1 (family)
     // 2 (product ID)
     // 2 (product features)
     // 1 (revision)
     std::vector<uint8_t> manufacturer_data;
-    manufacturer_data.reserve(8);
+    manufacturer_data.reserve(7);
 
     // Bluetooth SIG Company ID - must be first 2 bytes, little-endian
     // 0xFFFF = reserved for internal use / testing
@@ -174,11 +173,6 @@ std::vector<uint8_t> BleService::GetManufacturerData() {
     const uint16_t company_id_le = sys_cpu_to_le16(company_id);
     const auto* cid = reinterpret_cast<const uint8_t*>(&company_id_le);
     manufacturer_data.insert(manufacturer_data.end(), cid, cid + sizeof(company_id_le));
-
-    // Product family (1 byte)
-    constexpr uint8_t product_family_le = std::to_underlying(ProductInfo::family);
-    const auto* product_family_ptr = &product_family_le;
-    manufacturer_data.insert(manufacturer_data.end(), product_family_ptr, product_family_ptr + sizeof(product_family_le));
 
     // Product ID (2 bytes, little-endian)
     constexpr uint16_t product_id_le = sys_cpu_to_le16(ProductInfo::product_id);

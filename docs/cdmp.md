@@ -12,7 +12,7 @@ Code: `src/subsys/cdmp/` (protocol), `src/subsys/smp/can/` (SMP over CAN),
 
 | Item | Source |
 | --- | --- |
-| Device type | `EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_*` choice: `NONE` (0), `LOGGER` (1), `DISPLAY` (2). |
+| Features (16-bit) | The `ProductFeature` mask (`EERIE_LEAP_FEATURES_*`, see [system.md](system.md)), sent in the heartbeat (bytes 3-4) and the discovery response (bytes 6-7). There is no device type. `CdmpDevice` keeps the mask in an atomic, so any thread may change it; a receiver stores the latest heartbeat's mask as the sender's. |
 | UID (32-bit) | `CdmpUid::Generate()`: CRC32 of the SoC hardware ID (eFuse MAC on ESP32), so it is stable across reboots; random when the SoC reports none. |
 | Device ID (1..254) | Claimed at start by discovery, lowest free ID first; 0 is unassigned, 255 broadcast. |
 | Protocol version | 1.0 (`0x10`). A unit with another major version puts the whole network into `VERSION_MISMATCH`. |
@@ -281,7 +281,6 @@ descriptor ([logging.md](logging.md#status-on-other-units)). Another shared stat
 | `EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS` | 1..32, 8 | State types this unit can share at once. |
 | `EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS` | 1..1024, 32 | Records of other units kept, about 10 bytes each. Also sizes a span that takes every unit's record of one type (`INetworkStateTransport::MAX_REMOTE_RECORDS`). |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM` | n | Builds the COM service; selects `EERIE_LEAP_SMP_CAN`. |
-| `EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_*` | `NONE` | CDMP device type of this unit. |
 | `EERIE_LEAP_SMP_CAN` | n | SMP transport over CAN. Depends on `EERIE_LEAP_CANBUS`; selects `EERIE_LEAP_SMP`. |
 | `EERIE_LEAP_SMP_CAN_RX_SLOTS` | 1..8, 2 | Sources that may send a packet at the same time. |
 | `EERIE_LEAP_SMP_CAN_RX_TIMEOUT_MS` | 100 | Inter-frame timeout of a partial packet. |

@@ -12,6 +12,9 @@
 #include "domain/canbus_com_domain/commands/canbus_com_command_code.h"
 
 #include "canbus_com_loopback_harness.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
 
 // The restart of a scripted logging unit on the loopback harness, for the suites that exercise the
 // restart monitor and the re-assertion it feeds. Everything has external linkage on purpose.
@@ -46,9 +49,8 @@ inline void SendRestart(Harness& harness, uint8_t device_id, uint32_t uid, std::
     harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
         .claiming_device_id = device_id,
         .uid = uid,
-        .device_type = CdmpDeviceType::LOGGER,
         .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
-    harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records)));
+    harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records), LOGGER_FEATURES));
 }
 
 // Returns once the unit has taken what SendRestart() sent, and whether it sent a LOGGING command
@@ -130,7 +132,7 @@ public:
 
         context_->is_armed = true;
         is_closed_ = true;
-        harness_.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, state_digest));
+        harness_.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, state_digest, LOGGER_FEATURES));
 
         return k_sem_take(&context_->entered, K_SECONDS(5)) == 0;
     }

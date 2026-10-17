@@ -13,6 +13,9 @@
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/services/cdmp_canbus_service_base.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::models;
@@ -68,7 +71,7 @@ size_t CountFreeControllerFilters() {
 
 struct ReceiveFilterFixture {
     std::shared_ptr<CdmpCanIdManager> ids = std::make_shared<CdmpCanIdManager>();
-    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(0x12345678, CdmpDeviceType::DISPLAY);
+    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(0x12345678, DISPLAY_FEATURES);
     std::shared_ptr<CanbusProxy> canbus;
     ProbeService probe{ids, device};
     std::vector<int> handler_ids;

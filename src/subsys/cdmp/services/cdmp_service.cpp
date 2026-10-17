@@ -15,9 +15,9 @@ namespace eerie_leap::subsys::cdmp::services {
 
 using namespace eerie_leap::utilities::memory;
 
-CdmpService::CdmpService(CdmpDeviceType device_type, uint32_t uid) {
+CdmpService::CdmpService(uint16_t features, uint32_t uid) {
     can_id_manager_ = std::make_shared<CdmpCanIdManager>();
-    device_ = std::make_shared<CdmpDevice>(uid, device_type);
+    device_ = std::make_shared<CdmpDevice>(uid, features);
 
     thread_ = std::make_unique<Thread>(
         "cdmp_service_thread",
@@ -72,8 +72,8 @@ bool CdmpService::DoInitialize() {
     for(const auto& service : canbus_services_)
         service->Initialize();
 
-    LOG_INF("CDMP service initialized with device type %d, unique ID 0x%08X",
-        std::to_underlying(device_->GetDeviceType()), device_->GetUniqueIdentifier());
+    LOG_INF("CDMP service initialized with features 0x%04X, unique ID 0x%08X",
+        device_->GetFeatures(), device_->GetUniqueIdentifier());
 
     return true;
 }
@@ -138,7 +138,7 @@ CdmpDeviceInfo CdmpService::GetDeviceInfo() const {
     return {
         .device_id = device_->GetDeviceId(),
         .uid = device_->GetUniqueIdentifier(),
-        .device_type = device_->GetDeviceType(),
+        .features = device_->GetFeatures(),
         .status = device_->GetStatus(),
     };
 }
@@ -159,12 +159,11 @@ void CdmpService::PrintDeviceStatus() const {
 
     LOG_INF("CDMP Device Status:");
     LOG_INF("  Device ID: %d", device_->GetDeviceId());
-    LOG_INF("  Device Type: %d", std::to_underlying(device_->GetDeviceType()));
     LOG_INF("  Unique ID: 0x%08X", device_->GetUniqueIdentifier());
     LOG_INF("  Protocol Version: 0x%02X", device_->GetProtocolVersion());
     LOG_INF("  Status: %d", static_cast<int>(device_->GetStatus()));
     LOG_INF("  Health: %d", static_cast<int>(device_->GetHealthStatus()));
-    LOG_INF("  Capability Flags: 0x%08X", device_->GetCapabilityFlags());
+    LOG_INF("  Features: 0x%04X", device_->GetFeatures());
     LOG_INF("  Uptime: %d", device_->GetUptimeCounter());
 }
 

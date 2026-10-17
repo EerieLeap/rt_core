@@ -3,27 +3,3 @@ config EERIE_LEAP_DOMAIN_CANBUS_COM
     select EERIE_LEAP_SMP_CAN
     help
       Add EerieLeap CANBus COM Domain.
-
-menu "EerieLeap CANBus COM Domain config"
-    depends on EERIE_LEAP_DOMAIN_CANBUS_COM
-
-    choice EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_CHOICE
-        prompt "EerieLeap CANBus COM Domain Device Type"
-        default EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_NONE
-        help
-            Add EerieLeap CANBus COM Domain Device Type.
-
-        config EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_NONE
-            bool "COM device type None"
-        config EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_LOGGER
-            bool "COM device type Logger"
-        config EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_DISPLAY
-            bool "COM device type Display"
-    endchoice
-
-    config EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE
-        int
-        default 0 if EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_NONE
-        default 1 if EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_LOGGER
-        default 2 if EERIE_LEAP_DOMAIN_CANBUS_COM_DEVICE_TYPE_DISPLAY
-endmenu

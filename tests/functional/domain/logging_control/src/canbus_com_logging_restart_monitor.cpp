@@ -15,6 +15,10 @@
 #include "canbus_com_loopback_harness.h"
 #include "logging_control_test_support.h"
 #include "logging_restart_test_support.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::LOGGER_FEATURES;
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 using namespace logging_control_test;
 using namespace logging_restart_test;
@@ -121,7 +125,7 @@ struct Fixture {
     }
 
     void Heartbeat(uint8_t device_id, std::initializer_list<Record> records) {
-        harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records)));
+        harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records), LOGGER_FEATURES));
     }
 
     std::optional<uint8_t> WaitForReport(int timeout_ms = k_wait_ms) {
@@ -488,30 +492,27 @@ void LeaveTable(Fixture& fixture) {
     fixture.harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
         .claiming_device_id = SPARE_ID,
         .uid = PEER_UID,
-        .device_type = CdmpDeviceType::LOGGER,
         .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
     zassert_true(WaitForTableEntry(fixture.harness, PEER_ID, false), "The table dropped the old ID");
 }
 
-// A unit of the given type joins: its ID claim, then its first heartbeat.
-void JoinAs(Fixture& fixture, uint8_t device_id, uint32_t uid, CdmpDeviceType device_type) {
+// A unit with the given features joins: its ID claim, then its first heartbeat.
+void JoinAs(Fixture& fixture, uint8_t device_id, uint32_t uid, uint16_t features) {
     fixture.harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
         .claiming_device_id = device_id,
         .uid = uid,
-        .device_type = device_type,
         .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
-    fixture.harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id));
+    fixture.harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, 0, features));
     zassert_true(WaitForTableEntry(fixture.harness, device_id, true), "and joins on its first heartbeat");
 }
 
-// It returns under its first ID, as a new device with the given type, on its first heartbeat.
-void ReturnToTable(Fixture& fixture, CdmpDeviceType device_type) {
+// It returns under its first ID, as a new device with the given features, on its first heartbeat.
+void ReturnToTable(Fixture& fixture, uint16_t features) {
     fixture.harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
         .claiming_device_id = PEER_ID,
         .uid = PEER_UID,
-        .device_type = device_type,
         .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
-    fixture.harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(PEER_ID));
+    fixture.harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(PEER_ID, 0, features));
     zassert_true(WaitForTableEntry(fixture.harness, PEER_ID, true), "and joins on its first heartbeat");
     fixture.next_version.at(PEER_ID) = 1;
 }
@@ -528,7 +529,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatLeavesIsForgotten) {
 
     F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
     LeaveTable(F());
-    ReturnToTable(F(), CdmpDeviceType::DISPLAY);
+    ReturnToTable(F(), DISPLAY_FEATURES);
 
     F().ShareStatus(STOPPED);
     zassert_true(F().HasNoReport(), "A unit that came back after leaving is not a restart");
@@ -542,7 +543,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatReturnsAfterLeavingIsRep
     F().ShareStatus(ACTIVE);
 
     LeaveTable(F());
-    ReturnToTable(F(), CdmpDeviceType::LOGGER);
+    ReturnToTable(F(), LOGGER_FEATURES);
     zassert_true(F().HasNoReport(), "It has no status yet");
 
     F().ShareStatus(STOPPED);
@@ -573,7 +574,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfALoggerWithoutAStatusWh
 ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfAnotherTypeWithoutAStatusIsNotTracked) {
     F().harness.Join(OTHER_ID, OTHER_UID);
     F().ShareStatus(OTHER_ID, ACTIVE);
-    JoinAs(F(), SPARE_ID, DISPLAY_UID, CdmpDeviceType::DISPLAY);
+    JoinAs(F(), SPARE_ID, DISPLAY_UID, DISPLAY_FEATURES);
 
     F().Restart(SPARE_ID, DISPLAY_UID, {}, false);
     F().ShareStatus(SPARE_ID, STOPPED);
@@ -582,7 +583,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfAnotherTypeWithoutAStat
 
 // The record is what makes a unit a logging unit, whatever its type.
 ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfAnotherTypeThatHoldsAStatusIsTracked) {
-    JoinAs(F(), SPARE_ID, DISPLAY_UID, CdmpDeviceType::DISPLAY);
+    JoinAs(F(), SPARE_ID, DISPLAY_UID, DISPLAY_FEATURES);
     F().ShareStatus(SPARE_ID, ACTIVE);
 
     F().Restart(SPARE_ID, DISPLAY_UID, {{LOGGING_STATUS_CODE, 1, STOPPED}}, true);

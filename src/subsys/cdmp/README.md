@@ -108,7 +108,7 @@ Application specific CAN IDs are available for aplication specific uses.
 - Application defines capability (name, data format, update rate)
 - Library assigns next available CAN ID from pool (Base + 20+)
 - Capability ID and CAN ID mapping stored in device configuration
-- Heartbeat capability flags indicate which capabilities are active
+- Capability streams are not implemented: the heartbeat carries application features (§4.1), not capability flags (§14)
 
 **Example Capability Registrations:**
 ```
@@ -145,7 +145,7 @@ The protocol does not predefine specific capabilities or their CAN ID assignment
   - 0: Reserved (invalid/unassigned)
   - 255: Reserved (broadcast address)
 - **Unique Identifier (UID)**: 32-bit, non-zero. Derived from the hardware ID (CRC32 of the device ID reported by the SoC, the eFuse MAC on ESP32), so it stays the same across reboots. Random only when the SoC reports no hardware ID.
-- **Device Type**: uint8_t enumeration (application-specific)
+- **Features**: uint16_t application bit mask (EerieLeap: `ProductFeature`, see `docs/cdmp.md`), sent in the heartbeat and the discovery response. The protocol only carries it; there is no device type.
 
 ### 3.2 ID Assignment Protocol
 
@@ -182,7 +182,7 @@ The protocol does not predefine specific capabilities or their CAN ID assignment
 Byte 0:    Message Type = 0x01 (ID_CLAIM)
 Byte 1:    Claiming Device ID
 Byte 2-5:  Claiming Device UID (32-bit)
-Byte 6:    Device Type
+Byte 6:    Reserved (sent 0, ignored on receipt)
 Byte 7:    Protocol Version
 ```
 
@@ -242,7 +242,7 @@ If new device receives 0x02 response:
 
 Every device, not only the responders, tracks claims so that it learns every other device:
 
-- An ID_CLAIM for an unknown ID is recorded as pending (UID and device type). The claimant joins the device table with its first heartbeat, which proves the claim went through. A pending claim without a heartbeat expires after the heartbeat timeout (§4.1), and a device's newer claim replaces its pending one.
+- An ID_CLAIM for an unknown ID is recorded as pending (its UID). The claimant joins the device table with its first heartbeat, which proves the claim went through. A pending claim without a heartbeat expires after the heartbeat timeout (§4.1), and a device's newer claim replaces its pending one.
 - An ID_CLAIM for a known ID with the same UID means that device restarted. It stays in the table.
 - An ID_CLAIM for a known ID with a different UID is a conflict, which the owner rejects. The table does not change.
 - An ID_CLAIM whose UID is in the table under another ID removes that old entry. So does a Discovery Response.
@@ -267,9 +267,10 @@ Byte 5-7:  Reserved
 Byte 0:    Message Type = 0x04 (DISCOVERY_RESPONSE)
 Byte 1:    Device ID
 Byte 2-5:  UID (32-bit)
-Byte 6:    Device Type
-Byte 7:    Reserved
+Byte 6-7:  Features (16 bits, LSB first)
 ```
+
+A discovery response is always 8 bytes, and a receiver drops a shorter one as malformed.
 
 If a device receives a discovery response with its own UID, it shall enter ERROR status immediately and cease all protocol transmissions.
 
@@ -285,19 +286,20 @@ Each device sends periodic heartbeat to indicate liveness.
 Byte 0:    Device ID
 Byte 1:    Health Status (0x00=OK, 0x01=Warning, 0x02=Error)
 Byte 2:    Uptime Counter (rolls over at 255)
-Byte 3-6:  Capability Flags (32 bits, LSB first)
+Byte 3-4:  Features (16 bits, LSB first)
+Byte 5-6:  Reserved (sent 0, ignored on receipt)
 Byte 7:    State Digest (CRC-8 over the sender's state records, 0x00 without records)
 ```
 
 A heartbeat is always 8 bytes, and a receiver drops a shorter one as malformed. A heartbeat from a device that is neither in the receiver's table nor pending makes an online receiver request discovery (§3.2.4). A receiver checks the State Digest against its copies of the sender's state records ([§4.3](#43-shared-state-can-id-base--4-and-base--5)).
 
-**Note:** See section 14 for details on capability flags.
+The receiver stores the features of every heartbeat as the sender's current mask, so a sender that clears a bit (EerieLeap: LOGGING, while it has no log writer) is seen to within one heartbeat. A claimant joins the table with the features of its first heartbeat.
 
 **Timing:**
 
 - **Interval**: 1-5 seconds (configurable per device)
 - **Timeout**: 3× heartbeat interval (missing 3 consecutive = presumed offline)
-- **Purpose**: Liveness indication, capability advertisement and the consistency check of shared state
+- **Purpose**: Liveness indication, feature advertisement and the consistency check of shared state
 
 ### 4.2 Command Messages
 
@@ -727,7 +729,7 @@ A target validates a written configuration completely before it commits it to pe
 1. **SMP Pacing**: Verify SMP traffic stays within the configured bus share under load
 1. **State Synchronization**: Verify state version gap detection and recovery
 1. **Bus Coexistence**: Run protocol alongside heavy sensor traffic (80% bus load)
-1. **Capability Discovery**: Verify capability flags in heartbeat
+1. **Feature Discovery**: Verify the features in heartbeat and discovery response
 1. **Multi-device Capability**: Test time-slotting with 3 devices sharing same capability
 
 **Version Incompatibility Handling:**
@@ -839,11 +841,13 @@ A target validates a written configuration completely before it commits it to pe
 
 ### 14.1 Overview
 
+**Not implemented.** The heartbeat no longer carries capability flags: bytes 3-4 carry the application features (§4.1) and bytes 5-6 are reserved, so the capability bits below have no announcement yet. Base + 20 through Base + 51 stay reserved for streams. The section describes the intended design.
+
 Devices can implement application-defined capabilities that are automatically discovered via heartbeat messages. Each capability reserves a dedicated CAN ID and defines its own data format and update rate. The protocol provides only the framework for capability registration, discovery, and time-slotted transmission—all specific capability definitions are application-specific.
 
 ### 14.2 Capability Discovery
 
-**Heartbeat Capability Flags (Bytes 3-6 of Heartbeat message):**
+**Heartbeat Capability Flags (not carried by the current heartbeat; formerly bytes 3-6):**
 
 ```
 Bits 0-31: Application-defined capability flags (32 bits, LSB first)

@@ -9,20 +9,32 @@ SMP `device` group.
 
 | Symbol | Range / default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_PRODUCT_FAMILY_*` (choice) | `NONE` | `NONE` (0), `PROCESSING_MODULE` (1), `DISPLAY_MODULE` (2), `INPUT_MODULE` (3). |
 | `EERIE_LEAP_PRODUCT_ID` | 0..65535, 0 | 16-bit product ID (rt_daq uses 0xC401). |
-| `EERIE_LEAP_FEATURES_ANALOG_INPUTS` | n | Feature bit 0. |
-| `EERIE_LEAP_FEATURES_DIGITAL_INPUTS` | n | Bit 1. |
-| `EERIE_LEAP_FEATURES_CANBUS` | n | Bit 2. |
-| `EERIE_LEAP_FEATURES_LOGGING` | n | Bit 3. |
-| `EERIE_LEAP_FEATURES_BLUETOOTH` | n | Bit 4. |
-| `EERIE_LEAP_FEATURES_DISPLAY` | n | Bit 5. |
 | `EERIE_LEAP_REVISION` | 0..255, 0 | Hardware revision. |
 | `EERIE_LEAP_HW_VERSION_MAJOR/MINOR` | 0..255 | Packed as `major << 24 \| minor << 16 \| patch`. |
 | `EERIE_LEAP_HW_VERSION_PATCH` | 0..65535 | |
 | `EERIE_LEAP_SW_VERSION_MAJOR/MINOR/PATCH` | same | Software version, formatted `major.minor.patch.build`. |
 
-The feature bits are a declaration for clients; they do not enable code.
+## Unit features
+
+The features are the one description of what a unit can do: a 16-bit `ProductFeature` mask
+(`models/product_feature.h`) that the SMP `device` group, the BLE advertisement and CDMP (heartbeat
+and discovery response) all carry. There is no product family and no CDMP device type. The
+`EERIE_LEAP_FEATURES_*` options sit in their own menu, "EerieLeap unit features", and default from
+the domains the build contains; a board can turn one off. `BUILD_FEATURES` is the mask they make.
+
+| Symbol | Bit | Default |
+| --- | --- | --- |
+| `EERIE_LEAP_FEATURES_ANALOG_INPUTS` | 0 | y with `EERIE_LEAP_CONTROLLER_ADC` (the ADC domain alone, which `EERIE_LEAP_DOMAIN_SENSOR` selects, is not an input). |
+| `EERIE_LEAP_FEATURES_DIGITAL_INPUTS` | 1 | y with `EERIE_LEAP_DOMAIN_SENSOR` and `EERIE_LEAP_GPIO`. |
+| `EERIE_LEAP_FEATURES_CANBUS` | 2 | y with `EERIE_LEAP_DOMAIN_CANBUS`. |
+| `EERIE_LEAP_FEATURES_LOGGING` | 3 | y with `EERIE_LEAP_DOMAIN_LOGGING`. |
+| `EERIE_LEAP_FEATURES_BLUETOOTH` | 4 | y with `EERIE_LEAP_DOMAIN_BLE`. |
+| `EERIE_LEAP_FEATURES_DISPLAY` | 5 | n; set by hand. |
+
+The bits follow the build and enable no code. The one runtime bit is LOGGING on CDMP, which a unit
+sends only while it has a log writer (see [cdmp.md](cdmp.md)); the SMP `device` group reports what
+the unit sends on CDMP, and the build's features on a unit without CDMP.
 
 ## Stored configuration
 
@@ -41,8 +53,8 @@ There are no validation rules. The file is `config/system_config.cbor`.
 
 ## SMP `device` group
 
-Command `INFO` (read) returns `{family, product, revision, features, hw, sw, build}`, on a unit
-with CDMP `{cdmp_id, uid, device_type, status}`, and on a unit with sensors
+Command `INFO` (read) returns `{product, revision, features, hw, sw, build}`, on a unit
+with CDMP `{cdmp_id, uid, status}`, and on a unit with sensors
 `{adc_channels, gpio_channels, sensors_max}`, which the application passes to the
 `ManagementController` from `SensorsController::GetCapabilities()`. Served by the
 `ManagementController`; see [smp.md](smp.md).

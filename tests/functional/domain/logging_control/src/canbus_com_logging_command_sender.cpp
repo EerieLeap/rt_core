@@ -143,7 +143,7 @@ struct Fixture {
     }
 
     void PeerHeartbeat(std::initializer_list<Record> records) {
-        harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(PEER_ID, Digest(records)));
+        harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(PEER_ID, Digest(records), LOGGER_FEATURES));
     }
 
     // The next LOGGING broadcast of the unit, or nothing in time.

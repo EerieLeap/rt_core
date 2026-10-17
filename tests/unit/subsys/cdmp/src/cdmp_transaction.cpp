@@ -10,6 +10,9 @@
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/cdmp/models/messages/cdmp_command_response_message.h"
 #include "subsys/cdmp/services/command_service/cdmp_transaction_service.h"
+#include "cdmp_test_features.h"
+
+using eerie_leap::tests::DISPLAY_FEATURES;
 
 using namespace eerie_leap::subsys::cdmp::models;
 using namespace eerie_leap::subsys::cdmp::services::command_service;
@@ -29,7 +32,7 @@ struct TransactionFixture {
         "cdmp_test_wq",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY);
-    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(0x11111111, CdmpDeviceType::DISPLAY);
+    std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(0x11111111, DISPLAY_FEATURES);
     std::unique_ptr<CdmpTransactionService> transactions;
 
     k_sem completed{};
