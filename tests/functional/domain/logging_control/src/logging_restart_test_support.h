@@ -28,6 +28,16 @@ inline bool IsLoggingBroadcastFrame(const Bytes& frame) {
     return frame.size() == 4 && frame[0] == CdmpDevice::DEVICE_ID_BROADCAST && frame[1] == k_logging_command_code;
 }
 
+// A LOGGING command to any unit: the broadcast, or a unicast to one.
+inline bool IsLoggingCommandFrame(const Bytes& frame) {
+    return frame.size() == 4 && frame[1] == k_logging_command_code;
+}
+
+// A LOGGING command addressed to @p device_id alone.
+inline bool IsLoggingCommandTo(const Bytes& frame, uint8_t device_id) {
+    return IsLoggingCommandFrame(frame) && frame[0] == device_id;
+}
+
 // What a unit that reboots sends: its ID claim again with the same UID, which the unit reports as a
 // restart, then its first heartbeat with the digest of the records it holds. The frames only: the
 // unit takes them on the CDMP work queue, in this order. A digest of no records is a unit that has
@@ -41,7 +51,7 @@ inline void SendRestart(Harness& harness, uint8_t device_id, uint32_t uid, std::
     harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records)));
 }
 
-// Returns once the unit has taken what SendRestart() sent, and whether it sent a LOGGING broadcast
+// Returns once the unit has taken what SendRestart() sent, and whether it sent a LOGGING command
 // meanwhile, which it must not before the restarted unit can accept it: tests assert it is false.
 //
 // A unit that finds its copies different from the digest asks the restarted unit to replay its
@@ -55,15 +65,15 @@ inline void SendRestart(Harness& harness, uint8_t device_id, uint32_t uid, std::
     if(is_sync_request_due) {
         // One matcher for both frames: a wait for the request alone would drop a broadcast on the way.
         const auto frame = harness.bus.Wait(COMMAND, [device_id](const Bytes& bytes) {
-            return IsLoggingBroadcastFrame(bytes) || IsSyncRequestTo(device_id)(bytes);
+            return IsLoggingCommandFrame(bytes) || IsSyncRequestTo(device_id)(bytes);
         });
         zassert_true(frame.has_value(),
             "The unit asks the restarted unit to replay its records, as its digest differs");
-        if(IsLoggingBroadcastFrame(frame->data))
+        if(IsLoggingCommandFrame(frame->data))
             return true;
     }
 
-    return harness.bus.Wait(COMMAND, IsLoggingBroadcastFrame, NO_FRAME_TIMEOUT_MS).has_value();
+    return harness.bus.Wait(COMMAND, IsLoggingCommandFrame, NO_FRAME_TIMEOUT_MS).has_value();
 }
 
 // Holds the CDMP work queue inside a heartbeat handler, so that the frames the scripted peer sends

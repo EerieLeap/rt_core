@@ -651,6 +651,21 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatJoinsWhileNoneReportsIsL
     zassert_true(F().HasNoReport(), "Neither was armed");
 }
 
+// A control without a status rule (the network half of a writer) has nothing to leave the unit to, so
+// the monitor reports the unit that ends the spell without any copy.
+ZTEST(canbus_com_logging_restart_monitor, test_WithoutAStatusRuleTheMonitorReportsAReturningUnit) {
+    F().monitor.reset();
+    F().monitor = std::make_unique<CanbusComLoggingRestartMonitor>(F().harness.com, false);
+    F().monitor->SetRestartHandler(F().MakeHandler());
+
+    F().harness.Join(OTHER_ID, OTHER_UID);
+
+    F().ShareStatus(OTHER_ID, STOPPED);
+    const auto report = F().WaitForReport();
+    zassert_true(report.has_value(), "No rule sends for it, so the monitor does");
+    zassert_equal(report.value(), OTHER_ID);
+}
+
 ZTEST(canbus_com_logging_restart_monitor, test_NoReportAfterTheHandlerIsRemovedOrTheMonitorIsGone) {
     F().ShareStatus(ACTIVE);
 

@@ -24,8 +24,11 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 
 LOG_MODULE_REGISTER(canbus_com_logging_restart_monitor_logger);
 
-CanbusComLoggingRestartMonitor::CanbusComLoggingRestartMonitor(std::shared_ptr<CanbusComService> canbus_com_service)
-    : canbus_com_service_(std::move(canbus_com_service)) {
+CanbusComLoggingRestartMonitor::CanbusComLoggingRestartMonitor(
+    std::shared_ptr<CanbusComService> canbus_com_service,
+    bool has_status_rule)
+    : canbus_com_service_(std::move(canbus_com_service)),
+    has_status_rule_(has_status_rule) {
 
     if(canbus_com_service_ == nullptr)
         throw std::invalid_argument("The logging restart monitor needs the COM service.");
@@ -126,7 +129,7 @@ void CanbusComLoggingRestartMonitor::OnHeartbeat(const CdmpHeartbeatMessage& hea
     // While no unit has a copy, a record can be applied, and its unit's heartbeat handled, before the
     // state handler call that ends the spell and leaves the unit to the status rule: a report here
     // would be a second start.
-    if(!restarted_.test(heartbeat.device_id) || is_status_empty_)
+    if(!restarted_.test(heartbeat.device_id) || (has_status_rule_ && is_status_empty_))
         return;
 
     // The state service's heartbeat handler ran first (it registered first), so a digest that
@@ -166,7 +169,7 @@ void CanbusComLoggingRestartMonitor::Resolve(size_t count, std::optional<uint8_t
     // The status passes from Unavailable to Stopped in this call, and RemoteLoggingControl sends for
     // it, to every unit that can take the command: those with a copy. Reporting them too would send
     // twice. Anything else the status shows, active or a failure, sends nothing.
-    const bool is_left_to_status_rule = is_status_returning && IsCombinedStatusStopped(count);
+    const bool is_left_to_status_rule = has_status_rule_ && is_status_returning && IsCombinedStatusStopped(count);
 
     for(size_t i = 0; i < count; i++) {
         const RemoteStateRecord& record = records_[i];

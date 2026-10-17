@@ -19,7 +19,7 @@
 using namespace logging_controller_test;
 
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
-using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
+using eerie_leap::domain::logging_domain::control::WriterLoggingControl;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::utilities::memory::Mrm;
 
@@ -128,7 +128,7 @@ ZTEST(logging_controller_writer, test_TheWriterRoleBuildsItsPieces) {
     auto& controller = *F().controller;
 
     const auto control = controller.GetControl();
-    zassert_not_null(dynamic_cast<LogWriterSupervisor*>(control.get()), "The writer role's control");
+    zassert_not_null(dynamic_cast<WriterLoggingControl*>(control.get()), "The writer role's control: the writer plus the network");
     zassert_not_null(controller.GetLoggingControlConfigurationManager().get());
     zassert_not_null(controller.GetConfigurationManager().get());
     zassert_not_null(controller.GetDependentService().get());
@@ -140,13 +140,13 @@ ZTEST(logging_controller_writer, test_TheWriterRoleBuildsItsPieces) {
 
     StoreLoggingConfiguration(controller, {"switch"});
 
-    control->RequestStart();
+    control->RequestStart(kAllUnits);
     auto entry = log.WaitForEntry();
     zassert_true(entry.has_value() && entry->is_active, "A request starts the writer");
     zassert_true(WaitUntil([&writer] { return writer->IsRunning(); }));
     zassert_true(WaitUntil([&control] { return control->IsActive(); }), "and the control follows the status");
 
-    control->RequestStop();
+    control->RequestStop(kAllUnits);
     entry = log.WaitForEntry();
     zassert_true(entry.has_value() && !entry->is_active, "and stops it");
     zassert_equal(entry->reason, LoggingStatusReason::Stopped);

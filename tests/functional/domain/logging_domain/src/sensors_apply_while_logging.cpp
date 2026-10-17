@@ -28,6 +28,8 @@
 #include "logging_test_support.h"
 
 using namespace logging_test_support;
+
+using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::controllers::SensorsController;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::subsys::threading::ServiceState;
@@ -131,7 +133,7 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
     EnableSensorLogging(rig, std::vector{ before, after });
 
     zassert_equal(controller.Start(), 0, "processing did not start");
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     k_msleep(300);
 
@@ -150,7 +152,7 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
     zassert_true(before_info.is_applied && after_info.is_applied, "both sensors configurations must be applied");
     zassert_not_equal(before_info.crc, after_info.crc, "the two sensors configurations must differ");
 
-    supervisor.RequestStop();
+    supervisor.RequestStop(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(4), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     zassert_true(rig.log_writer_service->IsStopped(), "the requested stop must leave the writer stopped");
@@ -200,12 +202,12 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
     EnableSensorLogging(rig, std::vector{ first, second, third });
 
     auto fake = std::make_shared<FakeDependent>();
-    fake->on_start = [&supervisor] { supervisor.RequestStop(); };
+    fake->on_start = [&supervisor] { supervisor.RequestStop(ILoggingControl::kAllUnits); };
     controller.RegisterDependentService(fake);
     controller.RegisterDependentService(supervisor.GetDependentService());
 
     zassert_equal(controller.Start(), 0, "processing did not start");
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     ApplySensors(rig, controller, second);
@@ -261,7 +263,7 @@ ZTEST(sensors_apply_while_logging, test_ASessionThatFailsDuringASensorsRestartIs
     controller.RegisterDependentService(supervisor.GetDependentService());
 
     zassert_equal(controller.Start(), 0, "processing did not start");
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     k_msleep(150);
 

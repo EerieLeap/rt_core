@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace eerie_leap::domain::logging_domain::control {
 
 // Starts and stops logging, on this unit or on the units that log, and tells whether it runs.
@@ -11,8 +13,13 @@ public:
     // state arrives as StatusUpdated on logging_events. A request that changes nothing publishes
     // nothing: a stop while stopped, or a start that fails (logged on the unit that logs). So a
     // requester cannot tell a refusal from a request not yet served.
-    virtual void RequestStart() = 0;
-    virtual void RequestStop() = 0;
+    //
+    // @p target_uid is the CDMP UID of the unit to start or stop; kAllUnits is every unit that can log.
+    // A unit with a log writer acts on its own state for kAllUnits or its own UID (WriterLoggingControl
+    // routes the rest to the network); the control of a unit without a writer sends everything out.
+    static constexpr uint32_t kAllUnits = 0;
+    virtual void RequestStart(uint32_t target_uid) = 0;
+    virtual void RequestStop(uint32_t target_uid) = 0;
 
     // The CDMP LOGGING command another unit sent (LoggingCommandHandler, on the CDMP work queue):
     // whether this unit accepts it, answered SUCCESS, else FAILURE. A unit that logs takes it as a

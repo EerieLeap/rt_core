@@ -163,7 +163,7 @@ The rules:
 
 | Code | Thread |
 | --- | --- |
-| `RequestStart()`, `RequestStop()`, `IsActive()` | Any; no lock. |
+| `RequestStart(target_uid)`, `RequestStop(target_uid)`, `IsActive()` | Any; no lock. |
 | Status handler | The bus thread that carries `logging_events`. Records the status; on a failure it reschedules the task. |
 | Updated handler | The thread that stored the logging configuration (the configuration work queue for an SMP apply). Reschedules the task. |
 | Every writer `Start()` and `Stop()`, the logger factory | The configuration work queue. |
@@ -212,7 +212,7 @@ the destructor: whoever requests keeps the supervisor alive or goes first.
 
 | Method | Meaning |
 | --- | --- |
-| `RequestStart()`, `RequestStop()` | Record the wanted state and return, from any thread. The latest request wins. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
+| `RequestStart(target_uid)`, `RequestStop(target_uid)` | Record the wanted state and return, from any thread. The latest request wins. `target_uid` is the CDMP UID of the unit to start or stop; `ILoggingControl::kAllUnits` (0) is every unit that can log, this one included in the writer role. The supervisor ignores it: routing is `WriterLoggingControl`'s. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
 | `HandleLoggingCommand(is_start)` | The CDMP `LOGGING` command another unit sent (see [The `LOGGING` command](#the-logging-command)). Whether this unit accepts it: the answer is `SUCCESS` if so, else `FAILURE`. A unit that logs takes it as a request; a unit without a writer serves only a stop. |
 | `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. For a shell's status and for tests: a trigger never reads it. |
 
@@ -232,16 +232,38 @@ The build picks the implementation (`EERIE_LEAP_DOMAIN_LOGGING`):
 
 | Role | Control | Unit |
 | --- | --- | --- |
-| Writer | `LogWriterSupervisor` (see [Supervision](#supervision)): a request starts or stops this unit's writer. | rt_daq |
-| Remote | `RemoteLoggingControl`: a request becomes the CDMP `LOGGING` broadcast. | rt_gauge |
+| Writer | `WriterLoggingControl` (`control/writer_logging_control.h`): `LogWriterSupervisor` (see [Supervision](#supervision)) for this unit, and a `RemoteLoggingControl` in `Peer` mode for the others. Every unit with a writer can start and stop the other units too. | rt_daq |
+| Remote | `RemoteLoggingControl`: a request becomes the CDMP `LOGGING` command. | rt_gauge |
+
+`WriterLoggingControl` routes by target and holds no state or thread: `kAllUnits` is this unit's
+writer and one broadcast (so a trigger on a unit that logs starts every other unit too), this unit's
+own UID (`LoggingController::GetUnitUid()`) is the writer alone, and any other UID is a unicast
+through the network half. Without a COM service there is no network half: only the writer is served,
+and a request for another UID is logged and dropped. A received command goes to the writer, and a
+stop also tells the network half to drop its wanted starts.
 
 ### Remote control
 
 `RemoteLoggingControl` (`control/remote_logging_control.h`) is the control of a unit without a log
 writer.
 
+- **Targets.** A request names its target. `kAllUnits` is one broadcast, whatever the device table
+  holds. A UID is one unicast to the device ID of the unit with that UID, looked up through
+  `ICdmpNetworkInfo` when the command is sent: the unit must be online and `CanLog()` (today a
+  `LOGGER`; `control/logging_unit.h` is the one place that says so). The control keeps one wanted
+  state per target: slot 0 for all units and a slot per UID (at most one per trigger; a request that
+  finds none is logged and dropped). A request for all units replaces every slot, since the broadcast
+  reaches the others too. A start for a UID that is not online is held and sent when that unit
+  appears, by the rules below; a stop for it is only logged, since an offline unit is not reachable
+  and no signal would deliver the stop later. A request for this unit's own UID is dropped with a
+  warning: it has no writer.
+- **Peer mode.** The network half of a writer is the same class with `Mode::Peer`: it subscribes to
+  no status (the writer's own status is local, so `IsActive()` is false and the writer control
+  answers it) and has no status rule. Its restart monitor is built with `has_status_rule = false`, so
+  it reports every returning unit itself, also in the spell without any copy that the rule would
+  have covered.
 - **The send.** A request stores the wanted state and reschedules its task on the configuration
-  work queue, which sends the `LOGGING` broadcast through `CanbusComLoggingCommandSender`.
+  work queue, which sends the `LOGGING` command through `CanbusComLoggingCommandSender`.
   `CanbusComService::SendCommand()` starts the transaction and sends the CAN frame on the calling
   thread, so a send never runs on the thread of a request. Two requests before the task runs send
   one command, the later one.
@@ -256,9 +278,10 @@ writer.
   So the control remembers that a start is wanted, from `RequestStart()` until `RequestStop()` or a
   `LOGGING` stop from another unit (below), and sends it again on two signals and on no other:
   - **The status.** It goes from inactive `Unavailable` to inactive `Stopped`: a logging unit
-    appears.
+    appears. One broadcast when all units want a start, else a start to each target that resolves.
   - **The restart monitor** (below) reports a logging unit that restarted or joined and shares an
-    inactive `Stopped` status again.
+    inactive `Stopped` status again. One start to that unit, when all units want one or its own target
+    does (a held start is delivered here); it used to be a broadcast.
 
   A stop from the logging unit's shell, or a failure such as `NoSpace`, stands until the switch
   moves, except where one of these follows it. Causes that meet in one run of the task send one
@@ -267,7 +290,8 @@ writer.
   update stop, see [Configuration updates](#configuration-updates)) and a `LOGGING` stop from another
   unit (`HandleLoggingCommand(false)`) drop it, so no rule below sends a start that undoes the
   stop. Only a new `RequestStart()` wants one again. The control sends nothing for a received stop:
-  the other unit sent it to every unit. A start that is not sent yet is dropped; a stop of its own
+  the other unit sent it to every unit. It drops the wanted start of every target, since it cannot
+  tell a broadcast from a unicast. A start that is not sent yet is dropped; a stop of its own
   that is not sent yet stays due. A start from another unit is not served (`FAILURE`): this unit has
   no writer.
 
@@ -358,9 +382,10 @@ every unit with a COM service, in both roles. It passes the command to the contr
 
 | Role | A stop | A start |
 | --- | --- | --- |
-| Writer (a unit that logs) | `RequestStop()`, answered `SUCCESS` at once, which means accepted, not stopped. | `RequestStart()`, answered `SUCCESS` at once: a change of state arrives as the shared status, and a start that fails leaves it as it was (logged on this unit only). |
+| Writer (a unit that logs) | `RequestStop()`, answered `SUCCESS` at once, which means accepted, not stopped; it also drops the wanted starts of the network half. | `RequestStart()`, answered `SUCCESS` at once: a change of state arrives as the shared status, and a start that fails leaves it as it was (logged on this unit only). |
 | Remote (a unit without a writer) | Drops the wanted start and sends nothing; `SUCCESS`. | Not served: `FAILURE`, nothing changes. |
 
+A unicast is answered by its unit alone, so a targeted request has no first-answer ambiguity.
 A request without a payload is answered `FAILURE`, and so is one that arrives while the handler is
 being destroyed. With two units in the remote role, a broadcast start can complete on the other
 one's `FAILURE`: the sender then logs "Logging start command failed." although the unit that logs
@@ -391,9 +416,10 @@ work, does the following in this order:
 1. Makes the triggers take the next first value of each as a baseline. For a sensors update it
    also withdraws the triggers whose sensor is gone (see [Triggers](#triggers)). This is
    `LoggingController`'s update handler.
-2. Calls `RequestStop()` on the unit's `ILoggingControl`.
+2. Calls `RequestStop(kAllUnits)` on the unit's `ILoggingControl`.
 3. Where the control does not send the stop itself, queues the `LOGGING` stop broadcast on the
-   configuration work queue. Several stores before it runs send one stop.
+   configuration work queue. In both roles the control sends it: the writer's network half, the
+   remote control. Several stores before it runs send one stop.
 
 Because the stop is requested first, the supervisor's task runs before the restart the store
 queues (the sensors restart, the restart for a logging configuration), and nothing starts the
@@ -413,9 +439,9 @@ writer again. The broadcast leaves before a CAN reconfiguration stops the COM se
 
 | | Writer role (rt_daq) | Remote role (rt_gauge) | No logging controller |
 | --- | --- | --- | --- |
-| The unit's own stop | `RequestStop()` on the supervisor: the writer stops for good, the wanted state is cleared. | `RequestStop()` on the remote control: the wanted start is cleared at once, and its task sends the `LOGGING` stop. | None. |
-| The broadcast | The update stop's own task, with a COM service. | Sent by the remote control. | The update stop's task: a unit without an SD card still tells the units that log, since its sensors feed their files. |
-| Received `LOGGING` stop | `RequestStop()`. | Drops the wanted start. | No handler. |
+| The unit's own stop | `RequestStop(kAllUnits)` on the writer control: the supervisor stops the writer for good and clears the wanted state, and the network half sends the stop. | `RequestStop()` on the remote control: the wanted start is cleared at once, and its task sends the `LOGGING` stop. | None. |
+| The broadcast | One broadcast, sent by the writer's network half (a `RemoteLoggingControl` in `Peer` mode). | Sent by the remote control. | The update stop's task: a unit without an SD card still tells the units that log, since its sensors feed their files. |
+| Received `LOGGING` stop | `RequestStop()` on the supervisor, and the network half drops its wanted starts. | Drops the wanted starts. | No handler. |
 
 **`Start()`.** The update stop registers nothing until `LoggingController::Start()`. The composition
 root calls it once the unit has finished starting, after the last of its boot stores, before
@@ -506,7 +532,7 @@ controller brings. The remote role brings none.
 | The updated handler of the triggers' configuration | The thread that stored it (the configuration work queue for an SMP apply). It only reschedules the rebuild. |
 | The rebuild of the triggers and the replay | The configuration work queue. |
 | Trigger handlers | The bus thread of the bound channel (the sensors' bus for a sensor), or the caller of `Publish()`. |
-| The supervisor's task, `RemoteLoggingControl`'s send, the update stop's broadcast | The configuration work queue. |
+| The supervisor's task, `RemoteLoggingControl`'s send (both modes), the update stop's broadcast | The configuration work queue. Requests, from any thread, take only `RemoteLoggingControl`'s spinlock around its per-target state; the task copies it and sends outside. |
 | Status handlers (supervisor, remote control, exporter) | The bus thread that carries `logging_events`. |
 | `LoggingCommandHandler` (both roles), the importer, `CanbusComLoggingRestartMonitor`'s handlers and its report into `RemoteLoggingControl` | The CDMP work queue. |
 
@@ -787,11 +813,11 @@ builds, in this order:
 | --- | --- | --- |
 | 1 | The triggers' configuration manager (`config/logging_control_config.cbor`). | Same. |
 | 2 | The test hook, `Initialize(setup)`, may store triggers: before the set exists, so it rebuilds nothing. | Same. |
-| 3 | The logging configuration manager (`config/logging_config.cbor`), `LogWriterService` (initialized), `LogWriterSupervisor` (initialized), then, with a COM service, `LoggingCommandHandler` and the exporter. A failed exporter is logged and not fatal. | `CanbusComLoggingRestartMonitor`, then `RemoteLoggingControl` (initialized), then `LoggingCommandHandler`, then the importer. The monitor, the handler and the importer fail `Initialize()` when the COM service refuses a handler. |
+| 3 | The logging configuration manager (`config/logging_config.cbor`), `LogWriterService` (initialized), `LogWriterSupervisor` (initialized), then, with a COM service, the network half (`CanbusComLoggingRestartMonitor` with `has_status_rule = false`, then `RemoteLoggingControl` in `Peer` mode, initialized), `WriterLoggingControl` over both, `LoggingCommandHandler` and the exporter. Without a COM service `WriterLoggingControl` has the supervisor only. A failed exporter is logged and not fatal. | `CanbusComLoggingRestartMonitor`, then `RemoteLoggingControl` (initialized, with `GetNetworkInfo()`), then `LoggingCommandHandler`, then the importer. The monitor, the handler and the importer fail `Initialize()` when the COM service refuses a handler. |
 | 4 | The rebuild task. | Same. |
 | 5 | The trigger set, then a replay if any trigger subscribed. | Same. |
 | 6 | The triggers' updated handler. | Same. |
-| 7 | With a configuration service, `ConfigurationUpdateLoggingStop` (initialized; it registers nothing before `Start()`), with a `CanbusComLoggingCommandSender` when there is a COM service. | The same, without a sender: the remote control sends its own stop. |
+| 7 | With a configuration service, `ConfigurationUpdateLoggingStop` (initialized; it registers nothing before `Start()`), without a sender in both roles: the control sends the stop. |
 | 8 | Registration with `ConfigurationService`: logging (type 5), then logging control (type 8). | Logging control (type 8). |
 
 Registration is last because `ConfigurationService` cannot unregister, so a failed `Initialize()`

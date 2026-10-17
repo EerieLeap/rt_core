@@ -2,12 +2,12 @@
 
 // A configuration update on a unit that writes the log (rt_daq, writer role), L9: a configuration of any
 // type stored on the unit after LoggingController::Start() stops the writer for good (the wanted state is
-// cleared as by RequestStop(), and neither the restart after a logging configuration nor the sensors
+// cleared as by RequestStop(kAllUnits), and neither the restart after a logging configuration nor the sensors
 // restart starts it again) and broadcasts the LOGGING stop. What a unit stores while it starts, a
 // rejected write and the unit's own settings are no updates. The real sensor pipeline runs, and the
 // stores are those of an SMP write or a shell command: through a manager. The unit's CDMP bus is the
 // loopback one, which hands the unit its own frames, so each stop it broadcasts is heard by its own
-// handler (RequestStop() again): a case waits for that (Peer::WaitForOwnAnswer()) before it requests
+// handler (RequestStop(kAllUnits) again): a case waits for that (Peer::WaitForOwnAnswer()) before it requests
 // anything, or runs without a COM service where the order of a request matters.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
@@ -171,7 +171,8 @@ struct Fixture {
 
     // The unit logs: one session, one file.
     void StartLogging() {
-        controller->GetControl()->RequestStart();
+        // This unit alone: a request for every unit would also broadcast the start.
+        controller->GetControl()->RequestStart(controller->GetUnitUid());
         zassert_true(IsStarted(log.WaitForEntry()), "A request starts the writer");
         zassert_true(WaitUntil([this] { return writer->IsRunning(); }));
         zassert_equal(CountLogFiles(*rig->fs_service), 1U);
@@ -197,7 +198,7 @@ struct Fixture {
 
     // A new request starts a new session.
     void AssertStartsAgain() {
-        controller->GetControl()->RequestStart();
+        controller->GetControl()->RequestStart(controller->GetUnitUid());
         zassert_true(IsStarted(log.WaitForEntry()), "A new request starts a new session");
         zassert_true(WaitUntil([this] { return writer->IsRunning() && CountLogFiles(*rig->fs_service) == 2; }));
     }
@@ -357,7 +358,7 @@ ZTEST(writer_updates, test_AStartRequestedAfterTheUpdatesStopWins) {
     HeldSensorsStore held(F().rig->sensors_manager, sensors);
     zassert_true(held.WaitUntilStored(), "The sensors are stored, and the supervisor's run waits behind the job");
 
-    F().controller->GetControl()->RequestStart();
+    F().controller->GetControl()->RequestStart(kAllUnits);
     held.Release();
 
     zassert_true(IsStopped(F().log.WaitForEntry()), "The restart finalizes the file");
@@ -462,6 +463,7 @@ ZTEST(writer_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
     PublishSensorValue("switch", kOn);
     zassert_true(IsStarted(F().log.WaitForEntry()), "A switch turned on starts logging");
     zassert_true(WaitUntil([] { return F().writer->IsRunning(); }));
+    zassert_true(IsStart(F().peer->WaitForBroadcast()), "and the other units: the trigger names every unit");
 
     StoreStandIn(F().ui);
     F().AssertStoppedForGood();
@@ -487,6 +489,7 @@ ZTEST(writer_updates, test_ATriggerRebuiltByAnUpdateTakesItsSwitchAsABaseline) {
     zassert_true(F().blocker.Fence());
     zassert_true(IsStarted(F().log.WaitForEntry()), "The switch turned on");
     zassert_true(WaitUntil([] { return F().writer->IsRunning(); }));
+    zassert_true(IsStart(F().peer->WaitForBroadcast()), "and the other units follow");
 
     F().switch_probe.Clear();
     zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({"switch"})));

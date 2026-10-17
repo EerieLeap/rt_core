@@ -9,11 +9,15 @@
 #include "domain/logging_domain/event_bus/logging_event_type.h"
 #include "domain/logging_domain/event_bus/logging_payload_type.h"
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "subsys/cdmp/models/cdmp_device.h"
+
+#include "logging_unit.h"
 
 #include "remote_logging_control.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
+using eerie_leap::subsys::cdmp::models::CdmpDeviceStatus;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
@@ -21,13 +25,35 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 
 LOG_MODULE_REGISTER(remote_logging_control_logger);
 
+namespace {
+
+// The lock around the targets.
+class ScopedSpinlock {
+public:
+    explicit ScopedSpinlock(k_spinlock& lock) : lock_(lock), key_(k_spin_lock(&lock)) {}
+    ~ScopedSpinlock() { k_spin_unlock(&lock_, key_); }
+
+    ScopedSpinlock(const ScopedSpinlock&) = delete;
+    ScopedSpinlock& operator=(const ScopedSpinlock&) = delete;
+
+private:
+    k_spinlock& lock_;
+    k_spinlock_key_t key_;
+};
+
+} // namespace
+
 RemoteLoggingControl::RemoteLoggingControl(
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
     std::shared_ptr<ILoggingCommandSender> command_sender,
-    std::shared_ptr<ILoggingRestartMonitor> restart_monitor)
+    std::shared_ptr<ILoggingRestartMonitor> restart_monitor,
+    std::shared_ptr<const ICdmpNetworkInfo> network_info,
+    Mode mode)
         : config_work_queue_thread_(std::move(config_work_queue_thread)),
         command_sender_(std::move(command_sender)),
         restart_monitor_(std::move(restart_monitor)),
+        network_info_(std::move(network_info)),
+        mode_(mode),
         guard_(std::make_shared<DispatchGuard>(this)) {
 
     if(config_work_queue_thread_ == nullptr || command_sender_ == nullptr)
@@ -65,30 +91,33 @@ bool RemoteLoggingControl::Initialize() {
         return false;
     }
 
-    // The composition root decides which bus carries the channel. Until one does, IsActive() stays
-    // false and a wanted start is not sent again when a logging unit appears.
-    auto& channel = LoggingEventsChannel::GetInstance();
-    if(!channel.IsRegistered())
-        LOG_WRN("No bus carries logging_events yet; the logging status goes unseen until one does.");
+    // A peer follows no status: the writer it belongs to knows its own.
+    if(mode_ == Mode::Remote) {
+        // The composition root decides which bus carries the channel. Until one does, IsActive() stays
+        // false and a wanted start is not sent again when a logging unit appears.
+        auto& channel = LoggingEventsChannel::GetInstance();
+        if(!channel.IsRegistered())
+            LOG_WRN("No bus carries logging_events yet; the logging status goes unseen until one does.");
 
-    // The importer publishes asynchronously, so this runs on the bus thread.
-    try {
-        status_subscription_ = CreateScopedSubscription(
-            channel,
-            LoggingEventType::StatusUpdated,
-            [guard = guard_, this](const LoggingEventsChannel::EventMessage& event) {
-                guard->Dispatch([&] { OnStatusUpdated(event); });
-            });
-    } catch(const std::exception& e) {
-        LOG_ERR("Failed to subscribe to the logging status: %s", e.what());
-    }
+        // The importer publishes asynchronously, so this runs on the bus thread.
+        try {
+            status_subscription_ = CreateScopedSubscription(
+                channel,
+                LoggingEventType::StatusUpdated,
+                [guard = guard_, this](const LoggingEventsChannel::EventMessage& event) {
+                    guard->Dispatch([&] { OnStatusUpdated(event); });
+                });
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to subscribe to the logging status: %s", e.what());
+        }
 
-    if(status_subscription_ == nullptr) {
-        LOG_ERR("Failed to subscribe to the logging status.");
-        // Nothing was scheduled, and no request reaches a control that is not initialized.
-        task_.reset();
+        if(status_subscription_ == nullptr) {
+            LOG_ERR("Failed to subscribe to the logging status.");
+            // Nothing was scheduled, and no request reaches a control that is not initialized.
+            task_.reset();
 
-        return false;
+            return false;
+        }
     }
 
     // Last: nothing can fail after it. Setting the handler allocates, so it can throw.
@@ -113,7 +142,11 @@ bool RemoteLoggingControl::Initialize() {
             guard_ = std::make_shared<DispatchGuard>(this);
             is_active_ = false;
             is_unavailable_ = false;
-            is_reassert_due_ = false;
+            {
+                ScopedSpinlock lock(targets_lock_);
+                is_status_reassert_due_ = false;
+                restarted_devices_.reset();
+            }
 
             return false;
         }
@@ -124,12 +157,12 @@ bool RemoteLoggingControl::Initialize() {
     return true;
 }
 
-void RemoteLoggingControl::RequestStart() {
-    Submit(Request::Start);
+void RemoteLoggingControl::RequestStart(uint32_t target_uid) {
+    Submit(target_uid, Request::Start);
 }
 
-void RemoteLoggingControl::RequestStop() {
-    Submit(Request::Stop);
+void RemoteLoggingControl::RequestStop(uint32_t target_uid) {
+    Submit(target_uid, Request::Stop);
 }
 
 bool RemoteLoggingControl::HandleLoggingCommand(bool is_start) {
@@ -137,10 +170,24 @@ bool RemoteLoggingControl::HandleLoggingCommand(bool is_start) {
     if(is_start)
         return false;
 
-    // Only a start is replaced: a stop of this unit's own that is not sent yet stays due.
-    auto expected = Request::Start;
-    if(wanted_.compare_exchange_strong(expected, Request::None))
-        LOG_INF("Another unit stopped logging; the wanted start is dropped.");
+    // Only starts are replaced: a stop of this unit's own that is not sent yet stays due. A stop
+    // reaches this unit as a broadcast or as a unicast, and it cannot tell which, so it drops every
+    // wanted start.
+    bool is_dropped = false;
+    {
+        ScopedSpinlock lock(targets_lock_);
+
+        for(auto& target : targets_) {
+            if(target.wanted == Request::Start) {
+                target.wanted = Request::None;
+                target.is_held = false;
+                is_dropped = true;
+            }
+        }
+    }
+
+    if(is_dropped)
+        LOG_INF("Another unit stopped logging; the wanted starts are dropped.");
 
     return true;
 }
@@ -149,34 +196,220 @@ bool RemoteLoggingControl::IsActive() const {
     return is_active_;
 }
 
-// The stores are ordered: the task takes the flag first and the request second, so a run that takes
-// the flag sees at least this request, and a later request sets the flag again.
-void RemoteLoggingControl::Submit(Request request) {
+// Under the lock the task takes its snapshot with, so a run that takes the due flag sees at least this
+// request, and a later request sets it again.
+void RemoteLoggingControl::Submit(uint32_t target_uid, Request request) {
     if(!is_initialized_) {
         LOG_ERR("Logging %s requested before the remote logging control was initialized.",
             request == Request::Start ? "start" : "stop");
         return;
     }
 
-    wanted_ = request;
-    is_send_due_ = true;
+    // This unit has no writer, so it cannot be a target.
+    if(target_uid != kAllUnits && mode_ == Mode::Remote && network_info_ != nullptr
+        && network_info_->GetDeviceInfo().uid == target_uid) {
+
+        LOG_WRN("Logging %s for this unit (uid %u) is dropped: it has no log writer.",
+            request == Request::Start ? "start" : "stop", static_cast<unsigned>(target_uid));
+        return;
+    }
+
+    bool is_taken = true;
+    {
+        ScopedSpinlock lock(targets_lock_);
+
+        if(target_uid == kAllUnits) {
+            // The broadcast reaches every unit, so it replaces what any target wanted.
+            for(auto& target : targets_)
+                target = Target {};
+
+            targets_[0].wanted = request;
+            targets_[0].is_send_due = true;
+        } else {
+            Target* slot = nullptr;
+            Target* free_slot = nullptr;
+            for(size_t i = 1; i < targets_.size(); i++) {
+                auto& target = targets_[i];
+                if(target.uid == target_uid && target.wanted != Request::None) {
+                    slot = &target;
+                    break;
+                }
+
+                // Free: nothing wanted, or a stop that is already sent.
+                if(free_slot == nullptr
+                    && (target.wanted == Request::None || (target.wanted == Request::Stop && !target.is_send_due))) {
+                    free_slot = &target;
+                }
+            }
+
+            if(slot == nullptr)
+                slot = free_slot;
+
+            if(slot == nullptr) {
+                is_taken = false;
+            } else {
+                *slot = Target {
+                    .uid = target_uid,
+                    .wanted = request,
+                    .is_send_due = true,
+                    .is_held = false
+                };
+            }
+        }
+    }
+
+    if(!is_taken) {
+        LOG_ERR("No room to follow logging %s for uid %u; dropped.",
+            request == Request::Start ? "start" : "stop", static_cast<unsigned>(target_uid));
+        return;
+    }
+
     task_->Reschedule(K_NO_WAIT);
 }
 
-WorkQueueTaskResult RemoteLoggingControl::Process() {
-    const bool is_send_due = is_send_due_.exchange(false);
-    const bool is_reassert_due = is_reassert_due_.exchange(false);
-    const Request wanted = wanted_;
+std::optional<uint8_t> RemoteLoggingControl::Resolve(uint32_t uid, size_t count) const {
+    for(size_t i = 0; i < count; i++) {
+        const auto& device = devices_[i];
+        if(device.uid == uid && device.status == CdmpDeviceStatus::ONLINE && CanLog(device))
+            return device.device_id;
+    }
 
-    // Two requests before this runs send the later one. A re-assertion in the same run is covered by
-    // that send; one after a stop finds nothing wanted; a stop requested meanwhile is sent by the run
-    // it queued. Nothing wanted sends nothing: a start another unit's stop dropped before it was sent.
-    if(is_send_due) {
-        if(wanted != Request::None)
-            command_sender_->SendLoggingCommand(wanted == Request::Start);
-    } else if(is_reassert_due && wanted == Request::Start) {
-        LOG_INF("A logging unit is back; sending the wanted logging start again.");
-        command_sender_->SendLoggingCommand(true);
+    return std::nullopt;
+}
+
+WorkQueueTaskResult RemoteLoggingControl::Process() {
+    // What this run acts on, taken at once: a request after this schedules the next run.
+    std::array<Target, kMaxTargets> targets;
+    std::bitset<256> restarted;
+    bool is_status_reassert_due;
+    {
+        ScopedSpinlock lock(targets_lock_);
+
+        targets = targets_;
+        for(auto& target : targets_)
+            target.is_send_due = false;
+
+        restarted = restarted_devices_;
+        restarted_devices_.reset();
+        is_status_reassert_due = is_status_reassert_due_;
+        is_status_reassert_due_ = false;
+    }
+
+    // The device table, once, when some UID target or restart needs it.
+    size_t device_count = 0;
+    if(network_info_ != nullptr) {
+        bool is_needed = restarted.any();
+        for(size_t i = 1; i < targets.size() && !is_needed; i++)
+            is_needed = targets[i].wanted != Request::None;
+
+        if(is_needed)
+            device_count = network_info_->GetNetworkDevices(devices_);
+    }
+
+    // The devices a start went to in this run, and whether the broadcast start went out: either covers
+    // a re-assertion for the same unit.
+    std::bitset<256> started_devices;
+    bool is_broadcast_start_sent = false;
+    std::array<bool, kMaxTargets> is_held;
+    for(size_t i = 0; i < targets.size(); i++)
+        is_held[i] = targets[i].is_held;
+
+    // 1. The requests. Two requests for a target before this runs send the later one; nothing wanted
+    //    sends nothing: a start another unit's stop dropped before it was sent.
+    for(size_t i = 0; i < targets.size(); i++) {
+        const auto& target = targets[i];
+        if(!target.is_send_due || target.wanted == Request::None)
+            continue;
+
+        const bool is_start = target.wanted == Request::Start;
+
+        if(i == 0) {
+            command_sender_->SendLoggingCommand(is_start, ILoggingCommandSender::kBroadcast);
+            is_broadcast_start_sent = is_start;
+            continue;
+        }
+
+        const auto device_id = Resolve(target.uid, device_count);
+        if(device_id.has_value()) {
+            command_sender_->SendLoggingCommand(is_start, device_id.value());
+            is_held[i] = false;
+            if(is_start)
+                started_devices.set(device_id.value());
+        } else if(is_start) {
+            is_held[i] = true;
+            LOG_INF("Logging start for uid %u is held until that unit is online.", static_cast<unsigned>(target.uid));
+        } else {
+            is_held[i] = false;
+            LOG_WRN("Logging stop for uid %u is not sent: that unit is not online.", static_cast<unsigned>(target.uid));
+        }
+    }
+
+    // 2. The status shows a logging unit again (Remote mode): one broadcast when all units want a start,
+    //    else a start to each target that resolves.
+    if(is_status_reassert_due) {
+        if(targets[0].wanted == Request::Start) {
+            if(!is_broadcast_start_sent) {
+                LOG_INF("A logging unit is back; sending the wanted logging start again.");
+                command_sender_->SendLoggingCommand(true, ILoggingCommandSender::kBroadcast);
+                is_broadcast_start_sent = true;
+            }
+        } else {
+            for(size_t i = 1; i < targets.size(); i++) {
+                if(targets[i].wanted != Request::Start)
+                    continue;
+
+                const auto device_id = Resolve(targets[i].uid, device_count);
+                if(!device_id.has_value() || started_devices.test(device_id.value()))
+                    continue;
+
+                LOG_INF("A logging unit is back; sending the logging start for uid %u again.",
+                    static_cast<unsigned>(targets[i].uid));
+                command_sender_->SendLoggingCommand(true, device_id.value());
+                started_devices.set(device_id.value());
+                is_held[i] = false;
+            }
+        }
+    }
+
+    // 3. A unit the monitor found back and idle gets one start, if it is wanted to log: by the request
+    //    for all units, or by its own target (a held one is delivered here).
+    if(restarted.any() && !is_broadcast_start_sent) {
+        for(size_t id = 0; id < restarted.size(); id++) {
+            if(!restarted.test(id) || started_devices.test(id))
+                continue;
+
+            bool is_wanted = targets[0].wanted == Request::Start;
+            size_t held_index = 0;
+            for(size_t i = 1; i < targets.size() && !is_wanted; i++) {
+                if(targets[i].wanted != Request::Start)
+                    continue;
+
+                const auto device_id = Resolve(targets[i].uid, device_count);
+                if(device_id.has_value() && device_id.value() == id) {
+                    is_wanted = true;
+                    held_index = i;
+                }
+            }
+
+            if(!is_wanted)
+                continue;
+
+            LOG_INF("Logging unit %u is back; sending it the wanted logging start.", static_cast<unsigned>(id));
+            command_sender_->SendLoggingCommand(true, static_cast<uint8_t>(id));
+            started_devices.set(id);
+            if(held_index != 0)
+                is_held[held_index] = false;
+        }
+    }
+
+    // 4. What was held or delivered, for the slots no request changed meanwhile.
+    {
+        ScopedSpinlock lock(targets_lock_);
+
+        for(size_t i = 1; i < targets.size(); i++) {
+            if(targets_[i].uid == targets[i].uid && targets_[i].wanted == targets[i].wanted && targets[i].wanted != Request::None)
+                targets_[i].is_held = is_held[i];
+        }
     }
 
     return {};
@@ -202,7 +435,10 @@ void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMess
     // which stands, unless the unit restarted: that is the restart monitor's case, and it reports it
     // by OnLoggingUnitRestarted().
     if(!is_active && reason == LoggingStatusReason::Stopped && is_unavailable_) {
-        is_reassert_due_ = true;
+        {
+            ScopedSpinlock lock(targets_lock_);
+            is_status_reassert_due_ = true;
+        }
         task_->Reschedule(K_NO_WAIT);
     }
 
@@ -212,9 +448,12 @@ void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMess
 void RemoteLoggingControl::OnLoggingUnitRestarted(uint8_t device_id) {
     LOG_DBG("Logging unit %u restarted and is idle.", static_cast<unsigned>(device_id));
 
-    // The same flag as the status rule: a send already due covers it, nothing wanted sends nothing,
-    // and one run sends one start for any number of reports.
-    is_reassert_due_ = true;
+    // A send already due covers it, nothing wanted sends nothing, and one run sends one start to a
+    // unit for any number of reports.
+    {
+        ScopedSpinlock lock(targets_lock_);
+        restarted_devices_.set(device_id);
+    }
     task_->Reschedule(K_NO_WAIT);
 }
 

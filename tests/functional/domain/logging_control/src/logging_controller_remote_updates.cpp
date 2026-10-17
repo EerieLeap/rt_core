@@ -93,7 +93,7 @@ struct Fixture {
 
     // The unit wants logging: the start goes out and a logging unit shares that it logs.
     void WantLogging() {
-        controller->GetControl()->RequestStart();
+        controller->GetControl()->RequestStart(kAllUnits);
         const auto start = peer.WaitForBroadcast();
         zassert_true(IsStart(start), "The start goes out");
         zassert_true(peer.WaitForOwnAnswer(*start), "and the unit's own handler is done with it");
@@ -110,7 +110,7 @@ struct Fixture {
 
     void AssertSilent(const char* message) {
         zassert_true(Flush());
-        zassert_false(peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "%s", message);
+        zassert_false(peer.WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "%s", message);
     }
 
     // The logging unit restarts quickly, announcing the record it held, and shares Stopped: the case
@@ -239,7 +239,7 @@ ZTEST(remote_updates, test_ARejectedWriteSendsNothing) {
     F().AssertSilent("A rejected write is not an update");
 
     F().RestartLoggingUnit();
-    zassert_true(IsStart(F().peer.WaitForBroadcast()), "and the wanted start is still re-asserted");
+    zassert_true(IsStart(F().peer.WaitForCommand()), "and the wanted start is still re-asserted");
 }
 
 ZTEST(remote_updates, test_TheUnitsOwnSettingSendsNothing) {
@@ -251,7 +251,7 @@ ZTEST(remote_updates, test_TheUnitsOwnSettingSendsNothing) {
     F().AssertSilent("A unit's own setting is no configuration update");
 
     F().RestartLoggingUnit();
-    zassert_true(IsStart(F().peer.WaitForBroadcast()), "and the wanted start stands");
+    zassert_true(IsStart(F().peer.WaitForCommand()), "and the wanted start stands");
 }
 
 // The gauge's order: the sensors hook adds the logging button, the logging hook stores its trigger, the
@@ -308,7 +308,7 @@ ZTEST(remote_updates, test_AStartFromAnotherUnitIsNotServed) {
     F().AssertSilent("and sends nothing");
 
     F().RestartLoggingUnit();
-    zassert_true(IsStart(F().peer.WaitForBroadcast()), "The wanted start is as it was");
+    zassert_true(IsStart(F().peer.WaitForCommand()), "The wanted start is as it was");
 }
 
 // ======== The re-assertions, across the COM restart a CAN configuration causes ========
@@ -347,9 +347,9 @@ ZTEST(remote_updates, test_ARestartWithoutAnUpdateIsStillReasserted) {
 
     F().RestartLoggingUnit();
 
-    const auto start = F().peer.WaitForBroadcast();
+    const auto start = F().peer.WaitForCommand();
     zassert_true(IsStart(start), "The logging unit lost the start: it is sent again");
-    zassert_true(F().peer.WaitForOwnAnswer(*start));
+    zassert_equal(start->data[0], PEER_ID, "to that unit alone");
     F().AssertSilent("once");
 }
 

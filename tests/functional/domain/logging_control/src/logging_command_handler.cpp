@@ -355,7 +355,7 @@ ZTEST(logging_command_handler, test_TheRemoteRoleAnswersAStopAndDropsItsWantedSt
     F().BuildRemote();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().remote->RequestStart();
+    F().remote->RequestStart(kAllUnits);
     zassert_true(F().remote_sender->WaitForSends(1), "The start is sent");
 
     const auto result = F().Ask({0x00});

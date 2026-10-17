@@ -23,9 +23,9 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 
 // Stops logging on every unit when a configuration is stored on this one after it has started (L9):
-// the unit's own control stops (a writer stops for good, a remote control drops its wanted start and
-// sends the LOGGING stop), and with a sender the LOGGING stop is broadcast, so every other unit that
-// logs stops too. The stores are those the ConfigurationService reports: an SMP write of any type
+// the unit's own control stops for all units (a writer stops for good and its network half sends the
+// LOGGING stop; a remote control drops its wanted start and sends it), and with a sender, for a unit
+// without a control, the LOGGING stop is broadcast, so every other unit that logs stops too. The stores are those the ConfigurationService reports: an SMP write of any type
 // over any transport, a manager's Update() or Adopt(). A rejected write, UpdateOwnSetting() and
 // anything stored before Start() (the unit's boot: defaults, test hooks) are not updates.
 //
@@ -46,7 +46,8 @@ public:
     /**
      * @param logging_control The unit's control, null without one; RequestStop() on the storing thread.
      * @param stop_sender Broadcasts the LOGGING stop from the configuration work queue; null where the
-     *        control sends it (RemoteLoggingControl) or the unit has no COM service.
+     *        control sends it (RequestStop(kAllUnits) of both roles' controls) or the unit has no COM
+     *        service. It serves a unit without a logging controller.
      * Throws std::invalid_argument for a null service or queue.
      */
     ConfigurationUpdateLoggingStop(

@@ -267,7 +267,7 @@ bool LogWriterSupervisor::Initialize() {
     return true;
 }
 
-void LogWriterSupervisor::RequestStart() {
+void LogWriterSupervisor::RequestStart(uint32_t /*target_uid*/) {
     if(!is_initialized_) {
         LOG_ERR("Logging start requested before the supervisor was initialized.");
         return;
@@ -277,7 +277,7 @@ void LogWriterSupervisor::RequestStart() {
     task_->Reschedule(K_NO_WAIT);
 }
 
-void LogWriterSupervisor::RequestStop() {
+void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
     if(!is_initialized_) {
         LOG_ERR("Logging stop requested before the supervisor was initialized.");
         return;
@@ -289,9 +289,9 @@ void LogWriterSupervisor::RequestStop() {
 
 bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
     if(is_start)
-        RequestStart();
+        RequestStart(kAllUnits);
     else
-        RequestStop();
+        RequestStop(kAllUnits);
 
     return true;
 }

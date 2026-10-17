@@ -23,7 +23,7 @@ public:
     // Starts the CDMP transaction and sends the CAN frame on the calling thread, so call it from the
     // configuration work queue, not from a bus thread. A response that fails, or none in time (no
     // logging unit online), is logged by the callback, which holds nothing that can die.
-    void SendLoggingCommand(bool is_start) override;
+    void SendLoggingCommand(bool is_start, uint8_t device_id) override;
 };
 
 } // namespace eerie_leap::domain::logging_domain::control

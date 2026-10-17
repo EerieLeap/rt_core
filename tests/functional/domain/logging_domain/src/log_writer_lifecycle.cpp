@@ -19,6 +19,8 @@
 #include "logging_test_support.h"
 
 using namespace logging_test_support;
+
+using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::sensor_domain::models::SensorLimits;
 using rt_core_test::MemoryStreamBuf;
 
@@ -74,11 +76,11 @@ ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
     StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "Start must publish StatusUpdated");
     zassert_true(WaitFor([&] { return supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
 
-    supervisor.RequestStop();
+    supervisor.RequestStop(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(2), "Stop must publish StatusUpdated");
     zassert_true(WaitFor([&] { return !supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
@@ -107,7 +109,7 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
     const std::string filler_path = "session_fill.bin";
 
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     const auto first_probe = probes->Current();
     const auto file_path = std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/"
@@ -135,11 +137,11 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
 
     RemoveFiller(*rig.fs_service, filler_path);
 
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(4), "a start must succeed once the volume has room again");
     zassert_false(rig.log_writer_service->HasFailed(), "Start must clear the failure");
     k_msleep(250);
-    supervisor.RequestStop();
+    supervisor.RequestStop(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(5), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
@@ -162,7 +164,7 @@ ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
     probe->refuse_next_reading = true;
 
     PublishValue(rig, *sensors[0], 3, rig.time_service->GetCurrentTime());
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
 
     zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
     zassert_true(WaitFor([&] {
@@ -213,14 +215,14 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
     // About three ticks of the frames below per file.
     rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 1024, 0);
 
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     for(uint8_t i = 0; i < published_frames; i++) {
         PublishReadings(rig, sensors, i);
         k_msleep(10);
     }
     k_msleep(250);
-    supervisor.RequestStop();
+    supervisor.RequestStop(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     zassert_true(rig.log_writer_service->IsStopped(), "the requested stop must leave the service stopped");
@@ -280,7 +282,7 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
 
     rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 512, 128 * 1024);
 
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must succeed on a volume with the minimum free");
     FillVolume(*rig.fs_service, filler_path, 96 * 1024);
 
@@ -313,7 +315,7 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
-    supervisor.RequestStart();
+    supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     k_msleep(250);
 
@@ -327,7 +329,7 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     k_msleep(250);
 
     zassert_true(rig.log_writer_service->IsRunning(), "the restarted writer must run");
-    supervisor.RequestStop();
+    supervisor.RequestStop(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(6), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 

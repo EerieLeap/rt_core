@@ -120,7 +120,7 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
         "The default configuration is stored");
 
     // The sender is wired to the COM service.
-    control->RequestStart();
+    control->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "A request goes out as the LOGGING broadcast");
 
     // The importer is wired into the control.
@@ -133,7 +133,7 @@ ZTEST(logging_controller_remote, test_AWantedStartIsSentAgainWhenALoggingUnitApp
     F().Start();
 
     // No unit shares a status.
-    F().controller->GetControl()->RequestStart();
+    F().controller->GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "The start goes out");
     zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
@@ -148,15 +148,16 @@ ZTEST(logging_controller_remote, test_AWantedStartIsSentAgainWhenALoggingUnitApp
 ZTEST(logging_controller_remote, test_AQuickRestartOfTheLoggingUnitIsReasserted) {
     F().Start();
 
-    F().controller->GetControl()->RequestStart();
+    F().controller->GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "The start goes out");
 
     F().peer.ShareStatus({0x01});
 
     F().peer.Restart({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
     F().peer.ShareStatus({0x00, 0x00});
-    zassert_true(IsStart(F().peer.WaitForBroadcast()), "The restarted unit lost the start: it is sent again");
-    zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    const auto again = F().peer.WaitForCommandTo(PEER_ID);
+    zassert_true(IsStart(again), "The restarted unit lost the start: it is sent again, to that unit alone");
+    zassert_false(F().peer.WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 ZTEST(logging_controller_remote, test_WithoutAComServiceInitializeFails) {
@@ -436,7 +437,7 @@ ZTEST(logging_controller_remote, test_WithoutAWritableFileSystemThereAreNoTrigge
     zassert_true(configuration_service->IsRegistered(ConfigurationService::Type::LoggingControl));
     zassert_equal(SensorSubscriptionGeneration(), generation, "An empty set subscribes nothing");
 
-    F().controller->GetControl()->RequestStart();
+    F().controller->GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "Requests still go out");
 
     zassert_false(manager->Update(TriggersOn({"switch"})), "A store fails");
@@ -556,7 +557,7 @@ ZTEST(logging_controller_remote, test_WithoutAConfigurationServiceStartSucceedsA
     zassert_equal(controller.Initialize(), 0);
     zassert_equal(controller.Start(), 0, "There is nothing to report the stores, and that is no failure");
 
-    controller.GetControl()->RequestStart();
+    controller.GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()));
     zassert_true(controller.GetLoggingControlConfigurationManager()->Update(TriggersOn({"a"})));
     zassert_true(Flush());

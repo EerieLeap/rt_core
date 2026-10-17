@@ -734,6 +734,17 @@ public:
         return harness_.bus.Wait(COMMAND, logging_restart_test::IsLoggingBroadcastFrame, timeout_ms);
     }
 
+    // The next LOGGING command to any unit, or to @p device_id alone.
+    std::optional<RecordedFrame> WaitForCommand(int timeout_ms = k_wait_ms) {
+        return harness_.bus.Wait(COMMAND, logging_restart_test::IsLoggingCommandFrame, timeout_ms);
+    }
+
+    std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = k_wait_ms) {
+        return harness_.bus.Wait(COMMAND, [device_id](const Bytes& bytes) {
+            return logging_restart_test::IsLoggingCommandTo(bytes, device_id);
+        }, timeout_ms);
+    }
+
     // The unit's next notification of its LOGGING_STATUS record that carries @p data, skipping
     // resends of the older ones; acknowledges each, so the unit stops resending it.
     bool WaitForRecord(const Bytes& data, int timeout_ms = k_wait_ms) {

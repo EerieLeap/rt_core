@@ -85,6 +85,24 @@ ZTEST(logging_trigger_set, test_ASwitchTurnedOnStartsAndTurnedOffStops) {
     zassert_logged(0, "A working trigger logs no warning");
 }
 
+ZTEST(logging_trigger_set, test_ATriggerRequestsForItsTarget) {
+    auto all = SensorTrigger("all");
+    auto one = SensorTrigger("one");
+    one.target_uid = 0x1234;
+    auto other = SensorTrigger("other");
+    other.target_uid = 0xABCD;
+    F().Build({all, one, other});
+
+    PublishSensorValue("all", 1.0f);
+    PublishSensorValue("one", 1.0f);
+    PublishSensorValue("other", 1.0f);
+    PublishSensorValue("one", 0.0f);
+
+    zassert_true(F().control->Kinds() == Kinds({Kind::Start, Kind::Start, Kind::Start, Kind::Stop}));
+    zassert_true(F().control->Targets() == std::vector<uint32_t>({kAllUnits, 0x1234, 0xABCD, 0x1234}),
+        "Each request names the target of its trigger");
+}
+
 ZTEST(logging_trigger_set, test_AFirstValueOfOneStarts) {
     F().BuildOnSensor("switch");
 

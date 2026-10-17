@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -7,6 +8,7 @@
 #include <memory>
 #include <new>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,6 +27,9 @@
 #include "subsys/threading/scoped_mutex.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "utilities/string/string_helpers.h"
+
+#include "subsys/cdmp/models/cdmp_device_info.h"
+#include "subsys/cdmp/services/i_cdmp_network_info.h"
 
 #include "domain/logging_domain/control/i_logging_command_sender.h"
 #include "domain/logging_domain/control/i_logging_control.h"
@@ -68,6 +73,10 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventsChannel;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventType;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
+
+// Every unit that can log, as a request names it.
+inline constexpr uint32_t kAllUnits = ILoggingControl::kAllUnits;
+inline constexpr uint8_t kBroadcast = ILoggingCommandSender::kBroadcast;
 
 // Well past the time an event takes through the bus or a job through a queue.
 inline constexpr int k_wait_ms = 2000;
@@ -217,6 +226,8 @@ public:
         Kind kind;
         k_tid_t thread;
         std::string thread_name;
+        // What the request named; kAllUnits for a received command.
+        uint32_t target_uid = kAllUnits;
 
         bool operator==(const Request& other) const {
             return kind == other.kind;
@@ -245,10 +256,10 @@ private:
 
     std::shared_ptr<Context> context_ = std::make_shared<Context>();
 
-    void Record(Kind kind) {
+    void Record(Kind kind, uint32_t target_uid = kAllUnits) {
         {
             ScopedMutex guard(context_->lock);
-            context_->requests.push_back({kind, k_current_get(), CurrentThreadName()});
+            context_->requests.push_back({kind, k_current_get(), CurrentThreadName(), target_uid});
         }
         k_sem_give(&context_->requested);
 
@@ -263,8 +274,8 @@ private:
     }
 
 public:
-    void RequestStart() override { Record(Kind::Start); }
-    void RequestStop() override { Record(Kind::Stop); }
+    void RequestStart(uint32_t target_uid) override { Record(Kind::Start, target_uid); }
+    void RequestStop(uint32_t target_uid) override { Record(Kind::Stop, target_uid); }
     // As the supervisor takes it: a request, accepted.
     bool HandleLoggingCommand(bool is_start) override {
         Record(is_start ? Kind::Start : Kind::Stop);
@@ -293,6 +304,15 @@ public:
         ScopedMutex guard(context_->lock);
 
         return context_->requests;
+    }
+
+    // The targets of the requests, in order.
+    std::vector<uint32_t> Targets() const {
+        std::vector<uint32_t> targets;
+        for(const auto& request : Requests())
+            targets.push_back(request.target_uid);
+
+        return targets;
     }
 
     std::vector<Kind> Kinds() const {
@@ -327,6 +347,7 @@ public:
     struct Send {
         bool is_start;
         k_tid_t thread;
+        uint8_t device_id;
     };
 
 private:
@@ -347,10 +368,10 @@ private:
     std::shared_ptr<Context> context_ = std::make_shared<Context>();
 
 public:
-    void SendLoggingCommand(bool is_start) override {
+    void SendLoggingCommand(bool is_start, uint8_t device_id) override {
         {
             ScopedMutex guard(context_->lock);
-            context_->sends.push_back({is_start, k_current_get()});
+            context_->sends.push_back({is_start, k_current_get(), device_id});
         }
 
         if(context_->is_holding) {
@@ -385,6 +406,32 @@ public:
         return starts;
     }
 
+    // The IDs the sends went to, in order (kBroadcast for a broadcast).
+    std::vector<uint8_t> Devices() const {
+        std::vector<uint8_t> devices;
+        for(const auto& send : Sends())
+            devices.push_back(send.device_id);
+
+        return devices;
+    }
+
+    // How many sends were broadcasts, and how many went to @p device_id.
+    size_t Broadcasts() const {
+        size_t count = 0;
+        for(const auto& send : Sends())
+            count += send.device_id == kBroadcast ? 1 : 0;
+
+        return count;
+    }
+
+    size_t SentTo(uint8_t device_id) const {
+        size_t count = 0;
+        for(const auto& send : Sends())
+            count += send.device_id == device_id ? 1 : 0;
+
+        return count;
+    }
+
     [[nodiscard]] bool WaitForSends(size_t count, int timeout_ms = k_wait_ms) const {
         const int64_t deadline = k_uptime_get() + timeout_ms;
         while(Sends().size() < count) {
@@ -395,6 +442,72 @@ public:
         }
 
         return true;
+    }
+};
+
+// The CDMP device table as a case sets it: this unit and the other devices, safe to change while the
+// control reads it. Add() puts an online logger in the table.
+class FakeNetworkInfo final : public eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo {
+public:
+    using CdmpDeviceInfo = eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+    using CdmpDeviceType = eerie_leap::subsys::cdmp::models::CdmpDeviceType;
+    using CdmpDeviceStatus = eerie_leap::subsys::cdmp::models::CdmpDeviceStatus;
+
+    static constexpr uint32_t k_own_uid = 0xA0A0A0A0;
+
+private:
+    struct Context {
+        mutable k_mutex lock;
+        CdmpDeviceInfo own {.device_id = 1, .uid = k_own_uid, .device_type = CdmpDeviceType::DISPLAY, .status = CdmpDeviceStatus::ONLINE};
+        std::vector<CdmpDeviceInfo> devices;
+
+        Context() {
+            k_mutex_init(&lock);
+        }
+    };
+
+    std::shared_ptr<Context> context_ = std::make_shared<Context>();
+
+public:
+    CdmpDeviceInfo GetDeviceInfo() const override {
+        ScopedMutex guard(context_->lock);
+
+        return context_->own;
+    }
+
+    size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const override {
+        ScopedMutex guard(context_->lock);
+
+        const size_t count = std::min(devices.size(), context_->devices.size());
+        for(size_t i = 0; i < count; i++)
+            devices[i] = context_->devices[i];
+
+        return count;
+    }
+
+    size_t GetNetworkDeviceCount() const override {
+        ScopedMutex guard(context_->lock);
+
+        return context_->devices.size();
+    }
+
+    // Puts a device in the table, or replaces the one with that ID.
+    void Add(
+        uint8_t device_id,
+        uint32_t uid,
+        CdmpDeviceType type = CdmpDeviceType::LOGGER,
+        CdmpDeviceStatus status = CdmpDeviceStatus::ONLINE) {
+
+        Remove(device_id);
+
+        ScopedMutex guard(context_->lock);
+        context_->devices.push_back({.device_id = device_id, .uid = uid, .device_type = type, .status = status});
+    }
+
+    void Remove(uint8_t device_id) {
+        ScopedMutex guard(context_->lock);
+
+        std::erase_if(context_->devices, [device_id](const CdmpDeviceInfo& device) { return device.device_id == device_id; });
     }
 };
 

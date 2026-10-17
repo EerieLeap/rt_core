@@ -21,10 +21,17 @@ struct Fixture {
     std::shared_ptr<WorkQueueThread> queue = TestConfigQueue();
     std::shared_ptr<FakeCommandSender> sender = std::make_shared<FakeCommandSender>();
     std::shared_ptr<FakeRestartMonitor> monitor = std::make_shared<FakeRestartMonitor>();
+    std::shared_ptr<FakeNetworkInfo> network = std::make_shared<FakeNetworkInfo>();
     std::unique_ptr<RemoteLoggingControl> control;
 
     void Build() {
         control = std::make_unique<RemoteLoggingControl>(queue, sender, monitor);
+        zassert_true(control->Initialize(), "The control did not initialize.");
+    }
+
+    // The same over the fake device table, as a remote unit (the default) or as the network half of a writer.
+    void BuildWithNetwork(RemoteLoggingControl::Mode mode = RemoteLoggingControl::Mode::Remote) {
+        control = std::make_unique<RemoteLoggingControl>(queue, sender, monitor, network, mode);
         zassert_true(control->Initialize(), "The control did not initialize.");
     }
 
@@ -74,10 +81,10 @@ ZTEST_SUITE(remote_logging_control, NULL, SetUp, Before, After, NULL);
 ZTEST(remote_logging_control, test_ARequestSendsFromTheConfigurationWorkQueue) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     zassert_true(F().sender->WaitForSends(1), "A start request must be sent");
 
-    F().control->RequestStop();
+    F().control->RequestStop(kAllUnits);
     zassert_true(F().sender->WaitForSends(2), "A stop request must be sent");
 
     const auto sends = F().sender->Sends();
@@ -96,9 +103,9 @@ ZTEST(remote_logging_control, test_RequestsBeforeTheTaskRunsSendOneCommand) {
 
     // The requests return at once, whatever the queue is doing.
     const int64_t start_ms = k_uptime_get();
-    F().control->RequestStart();
-    F().control->RequestStop();
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
+    F().control->RequestStop(kAllUnits);
+    F().control->RequestStart(kAllUnits);
     zassert_true(k_uptime_get() - start_ms < k_no_wait_ms, "Requests must not wait for the send");
 
     Gate().Open();
@@ -106,8 +113,8 @@ ZTEST(remote_logging_control, test_RequestsBeforeTheTaskRunsSendOneCommand) {
     zassert_true(F().sender->Starts() == Starts({true}), "Start, stop, start is one command: the latest");
 
     zassert_true(Gate().Close(*F().queue));
-    F().control->RequestStart();
-    F().control->RequestStop();
+    F().control->RequestStart(kAllUnits);
+    F().control->RequestStop(kAllUnits);
     Gate().Open();
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, false}), "Start, stop is a stop");
@@ -118,7 +125,7 @@ ZTEST(remote_logging_control, test_AWantedStartIsSentAgainWhenALoggingUnitAppear
 
     // No logging unit is online when the start is wanted.
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
@@ -144,7 +151,7 @@ ZTEST(remote_logging_control, test_AReassertionInTheRunOfARequestIsThatRequest) 
     PublishStatus(false, LoggingStatusReason::Unavailable);
 
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     PublishStatus(false, LoggingStatusReason::Stopped);
     Gate().Open();
     F().Flush();
@@ -154,7 +161,7 @@ ZTEST(remote_logging_control, test_AReassertionInTheRunOfARequestIsThatRequest) 
     PublishStatus(false, LoggingStatusReason::Unavailable);
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
     PublishStatus(false, LoggingStatusReason::Stopped);
-    F().control->RequestStop();
+    F().control->RequestStop(kAllUnits);
     Gate().Open();
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, false}), "The stop is sent and no start follows it");
@@ -164,7 +171,7 @@ ZTEST(remote_logging_control, test_NoStartIsSentAgainAfterLoggingRan) {
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
 
     PublishStatus(true);
@@ -177,9 +184,9 @@ ZTEST(remote_logging_control, test_NoStartIsSentAgainAfterLoggingRan) {
 ZTEST(remote_logging_control, test_NoStartIsSentAgainAfterAStop) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
-    F().control->RequestStop();
+    F().control->RequestStop(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, false}));
 
@@ -193,7 +200,7 @@ ZTEST(remote_logging_control, test_NoStartIsSentAgainAfterAStop) {
 ZTEST(remote_logging_control, test_NoStartIsSentAgainAfterAFailure) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
@@ -207,7 +214,7 @@ ZTEST(remote_logging_control, test_NoStartIsSentAgainAfterAFailure) {
 ZTEST(remote_logging_control, test_TheFirstStatusSendsNothing) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
 
     // No predecessor: the unit was there, or this is the first we hear of it, and the start was sent.
@@ -231,7 +238,7 @@ ZTEST(remote_logging_control, test_AnEventWithoutAStatusIsIgnored) {
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
 
     // The fence events of the blockers carry no IsActive.
@@ -259,7 +266,7 @@ ZTEST(remote_logging_control, test_IsActiveFollowsTheStatus) {
 ZTEST(remote_logging_control, test_ARestartedLoggingUnitGetsTheWantedStartAgain) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
@@ -279,9 +286,9 @@ ZTEST(remote_logging_control, test_ARestartWithoutAWantedStartSendsNothing) {
     F().Flush();
     zassert_equal(F().sender->Sends().size(), 0, "Nothing was wanted");
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
-    F().control->RequestStop();
+    F().control->RequestStop(kAllUnits);
     F().Flush();
     F().monitor->Report(1);
     F().Flush();
@@ -291,7 +298,7 @@ ZTEST(remote_logging_control, test_ARestartWithoutAWantedStartSendsNothing) {
 ZTEST(remote_logging_control, test_EachRestartIsReassertedOnce) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
 
     F().monitor->Report(1);
@@ -300,13 +307,16 @@ ZTEST(remote_logging_control, test_EachRestartIsReassertedOnce) {
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, true, true}), "Each restart is one re-assertion");
 
-    // Reports taken in one run, whichever units they name, send one start.
+    // Reports taken in one run send one start to each unit they name, however often it is named.
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
     F().monitor->Report(1);
     F().monitor->Report(3);
+    F().monitor->Report(1);
     Gate().Open();
     F().Flush();
-    zassert_true(F().sender->Starts() == Starts({true, true, true, true}), "Two reports before the task runs: one start");
+    zassert_true(F().sender->Starts() == Starts({true, true, true, true, true}), "Two units: one start each");
+    zassert_equal(F().sender->SentTo(1), 3U, "and the unit named twice got one");
+    zassert_equal(F().sender->SentTo(3), 1U);
 }
 
 // A request and a restart taken in one run: the request's send is the re-assertion.
@@ -314,7 +324,7 @@ ZTEST(remote_logging_control, test_ARestartInTheRunOfARequestIsThatRequest) {
     F().Build();
 
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().monitor->Report(1);
     Gate().Open();
     F().Flush();
@@ -323,7 +333,7 @@ ZTEST(remote_logging_control, test_ARestartInTheRunOfARequestIsThatRequest) {
     // A stop requested in the run that sees the restart is the only thing sent.
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
     F().monitor->Report(1);
-    F().control->RequestStop();
+    F().control->RequestStop(kAllUnits);
     Gate().Open();
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, false}), "The stop is sent and no start follows it");
@@ -335,7 +345,7 @@ ZTEST(remote_logging_control, test_ARestartAndAnAppearanceInOneRunSendOneStart) 
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
@@ -369,7 +379,7 @@ ZTEST(remote_logging_control, test_TheRestartHandlerIsSetByInitializeAndClearedO
 ZTEST(remote_logging_control, test_ARestartReportInFlightDuringDestructionDoesNothing) {
     F().Build();
 
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
@@ -405,14 +415,14 @@ ZTEST(remote_logging_control, test_AMonitorThatCannotTakeItsHandlerFailsInitiali
     // No subscription is left to see a status, and no task to send from.
     PublishStatus(true);
     zassert_false(F().control->IsActive(), "The status subscription was withdrawn");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     PublishStatus(false, LoggingStatusReason::Unavailable);
     PublishStatus(false, LoggingStatusReason::Stopped);
     F().Flush();
     zassert_equal(F().sender->Sends().size(), 0, "A control that is not initialized sends nothing");
 
     zassert_true(F().control->Initialize(), "A later attempt starts clean");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     PublishStatus(false, LoggingStatusReason::Stopped);
     F().Flush();
@@ -448,7 +458,7 @@ ZTEST(remote_logging_control, test_AFailedInitializeCancelsTheRunItScheduled) {
 
     // The queue is still held, so the run of the task that was dropped is not over.
     zassert_true(F().control->Initialize(), "A later attempt succeeds");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
 
     Gate().Open();
     F().Flush();
@@ -458,8 +468,8 @@ ZTEST(remote_logging_control, test_AFailedInitializeCancelsTheRunItScheduled) {
 ZTEST(remote_logging_control, test_ARequestBeforeInitializeSendsNothing) {
     F().control = std::make_unique<RemoteLoggingControl>(F().queue, F().sender);
 
-    F().control->RequestStart();
-    F().control->RequestStop();
+    F().control->RequestStart(kAllUnits);
+    F().control->RequestStop(kAllUnits);
     F().Flush();
 
     zassert_equal(F().sender->Sends().size(), 0, "A control that is not initialized has no task to send from");
@@ -474,8 +484,8 @@ ZTEST(remote_logging_control, test_AControlThatFailedToInitializeDoesNothing) {
 
     zassert_false(control->Initialize(), "Initialize() must fail without a running queue");
 
-    control->RequestStart();
-    control->RequestStop();
+    control->RequestStart(kAllUnits);
+    control->RequestStop(kAllUnits);
     F().Flush();
     zassert_equal(F().sender->Sends().size(), 0, "A request must do nothing without a successful Initialize()");
     zassert_false(control->IsActive());
@@ -506,7 +516,7 @@ ZTEST(remote_logging_control, test_DestroyingWithAPendingSendSendsNothing) {
     F().Build();
 
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().control.reset();
 
     Gate().Open();
@@ -521,7 +531,7 @@ ZTEST(remote_logging_control, test_DestroyingWhileASendRunsWaitsForIt) {
     F().Build();
 
     F().sender->HoldSends();
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     zassert_true(F().sender->WaitUntilHeld(), "The send must be running");
 
     // Destroyed on another thread, which has to wait for the send on the configuration work queue;
@@ -558,7 +568,7 @@ ZTEST(remote_logging_control, test_AStatusInFlightDuringDestructionDoesNothing) 
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
@@ -585,7 +595,7 @@ ZTEST(remote_logging_control, test_AStopFromAnotherUnitDropsTheWantedStart) {
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
@@ -606,7 +616,7 @@ ZTEST(remote_logging_control, test_AStopFromAnotherUnitDropsAStartNotYetSent) {
     F().Build();
 
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     zassert_true(F().control->HandleLoggingCommand(false));
     Gate().Open();
     F().Flush();
@@ -618,7 +628,7 @@ ZTEST(remote_logging_control, test_AStopFromAnotherUnitKeepsAStopNotYetSent) {
     F().Build();
 
     zassert_true(Gate().Close(*F().queue), "The queue must be held");
-    F().control->RequestStop();
+    F().control->RequestStop(kAllUnits);
     zassert_true(F().control->HandleLoggingCommand(false));
     Gate().Open();
     F().Flush();
@@ -630,7 +640,7 @@ ZTEST(remote_logging_control, test_AStartFromAnotherUnitIsNotServed) {
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
 
     zassert_false(F().control->HandleLoggingCommand(true), "This unit has no writer: FAILURE");
@@ -646,16 +656,235 @@ ZTEST(remote_logging_control, test_AStartIsWantedAgainAfterAStopFromAnotherUnit)
     F().Build();
 
     PublishStatus(false, LoggingStatusReason::Unavailable);
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true}));
 
     zassert_true(F().control->HandleLoggingCommand(false));
-    F().control->RequestStart();
+    F().control->RequestStart(kAllUnits);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, true}), "A new request wants a start again");
 
     PublishStatus(false, LoggingStatusReason::Stopped);
     F().Flush();
     zassert_true(F().sender->Starts() == Starts({true, true, true}), "and it is re-asserted again");
+}
+
+// ======== Targets: a request names the unit it is for ========
+
+namespace {
+
+constexpr uint8_t kLoggerId = 5;
+constexpr uint32_t kLoggerUid = 0x55555555;
+constexpr uint8_t kOtherLoggerId = 6;
+constexpr uint32_t kOtherLoggerUid = 0x66666666;
+
+} // namespace
+
+ZTEST(remote_logging_control, test_AStartForAnOnlineLoggerIsSentToItsDeviceId) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+
+    F().control->RequestStart(kLoggerUid);
+    zassert_true(F().sender->WaitForSends(1), "The start is sent");
+    F().control->RequestStop(kLoggerUid);
+    zassert_true(F().sender->WaitForSends(2));
+
+    zassert_true(F().sender->Starts() == Starts({true, false}));
+    zassert_equal(F().sender->SentTo(kLoggerId), 2U, "to the unit's CDMP device ID");
+    zassert_equal(F().sender->Broadcasts(), 0U, "and not as a broadcast");
+}
+
+ZTEST(remote_logging_control, test_ARequestForAllUnitsIsOneBroadcast) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+
+    F().control->RequestStart(kAllUnits);
+    zassert_true(F().sender->WaitForSends(1));
+
+    zassert_equal(F().sender->Broadcasts(), 1U, "One message for all units, whatever the table holds");
+    zassert_equal(F().sender->Sends().size(), 1U);
+}
+
+ZTEST(remote_logging_control, test_AStartForAnOfflineTargetIsHeldAndSentWhenItRestarts) {
+    F().BuildWithNetwork();
+
+    F().control->RequestStart(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0U, "The unit is not in the table: the start is held");
+
+    // The unit comes online, and the monitor reports it.
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+
+    zassert_true(F().sender->Starts() == Starts({true}), "The held start is delivered when the unit appears");
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U);
+}
+
+ZTEST(remote_logging_control, test_AHeldStartIsSentWhenTheStatusReturns) {
+    F().BuildWithNetwork();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0U, "No unit with that UID is online");
+
+    F().network->Add(kLoggerId, kLoggerUid);
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+
+    zassert_true(F().sender->Starts() == Starts({true}), "A logging unit appeared: the start goes to the target");
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U);
+}
+
+ZTEST(remote_logging_control, test_AUnitThatCannotLogIsTreatedAsOffline) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid, FakeNetworkInfo::CdmpDeviceType::DISPLAY);
+
+    F().control->RequestStart(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0U, "A display takes no LOGGING start");
+
+    // And one that is offline.
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid, FakeNetworkInfo::CdmpDeviceType::LOGGER,
+        FakeNetworkInfo::CdmpDeviceStatus::OFFLINE);
+    F().control->RequestStart(kOtherLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0U, "and neither does an offline logger");
+}
+
+ZTEST(remote_logging_control, test_AStopForAnOfflineTargetIsNotHeld) {
+    F().BuildWithNetwork();
+
+    F().control->RequestStop(kLoggerUid);
+    F().Flush();
+
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+
+    zassert_equal(F().sender->Sends().size(), 0U, "No signal delivers a stop later: the unit is not wanted to log");
+}
+
+ZTEST(remote_logging_control, test_ARequestForAllUnitsReplacesEveryTargetsWantedState) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid);
+
+    F().control->RequestStart(kLoggerUid);
+    F().control->RequestStart(kOtherLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 2U);
+
+    F().control->RequestStop(kAllUnits);
+    F().Flush();
+    zassert_equal(F().sender->Broadcasts(), 1U, "The stop for all units is one broadcast");
+
+    F().monitor->Report(kLoggerId);
+    F().monitor->Report(kOtherLoggerId);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 3U, "and no target wants a start any more");
+}
+
+ZTEST(remote_logging_control, test_TargetsAreWantedIndependently) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid);
+
+    F().control->RequestStart(kLoggerUid);
+    F().control->RequestStart(kOtherLoggerUid);
+    F().Flush();
+    F().control->RequestStop(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 3U);
+
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 3U, "The unit that was stopped wants no start");
+
+    F().monitor->Report(kOtherLoggerId);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 4U, "The other still does");
+    zassert_equal(F().sender->SentTo(kOtherLoggerId), 2U);
+}
+
+ZTEST(remote_logging_control, test_ARestartSendsOneStartToThatUnitOnly) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid);
+
+    // Every unit wants a start, and this one in particular.
+    F().control->RequestStart(kAllUnits);
+    F().control->RequestStart(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Broadcasts(), 1U);
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U);
+
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+
+    zassert_equal(F().sender->Broadcasts(), 1U, "A restart is no broadcast");
+    zassert_equal(F().sender->SentTo(kLoggerId), 2U, "It is one start to the unit that came back");
+    zassert_equal(F().sender->SentTo(kOtherLoggerId), 0U);
+}
+
+ZTEST(remote_logging_control, test_AReceivedStopDropsEveryWantedStart) {
+    F().BuildWithNetwork();
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart(kLoggerUid);
+    F().control->RequestStart(kAllUnits);
+    F().control->RequestStart(kOtherLoggerUid);
+    F().Flush();
+    const size_t sent = F().sender->Sends().size();
+
+    zassert_true(F().control->HandleLoggingCommand(false));
+
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().monitor->Report(kLoggerId);
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+
+    zassert_equal(F().sender->Sends().size(), sent, "Nothing is re-asserted after the stop");
+}
+
+ZTEST(remote_logging_control, test_ATargetThatIsThisUnitSendsNothing) {
+    F().BuildWithNetwork();
+
+    F().control->RequestStart(FakeNetworkInfo::k_own_uid);
+    F().control->RequestStop(FakeNetworkInfo::k_own_uid);
+    F().Flush();
+
+    zassert_equal(F().sender->Sends().size(), 0U, "This unit has no writer: the request is dropped");
+}
+
+ZTEST(remote_logging_control, test_ARequestWithoutANetworkInfoIsHeldForever) {
+    F().Build();
+
+    F().control->RequestStart(kLoggerUid);
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+
+    zassert_equal(F().sender->Sends().size(), 0U, "A UID never resolves without the device table");
+}
+
+ZTEST(remote_logging_control, test_PeerModeIgnoresTheStatus) {
+    F().BuildWithNetwork(RemoteLoggingControl::Mode::Peer);
+
+    PublishStatus(true);
+    zassert_false(F().control->IsActive(), "A peer follows no status");
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart(kAllUnits);
+    F().Flush();
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true}), "and has no status rule: the start is not sent again");
+
+    // The restart monitor still works for it.
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+    zassert_true(F().sender->Starts() == Starts({true, true}));
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U);
 }

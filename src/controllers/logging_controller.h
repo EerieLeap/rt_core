@@ -24,6 +24,7 @@
 #include "domain/logging_domain/control/i_logging_control.h"
 #include "domain/logging_domain/control/logging_command_handler.h"
 #include "domain/logging_domain/control/logging_trigger_set.h"
+#include "domain/logging_domain/control/remote_logging_control.h"
 #include "domain/logging_domain/control/configuration/logging_control_configuration_manager.h"
 
 // The role headers are conditional: the log writer's header reads logging domain options.
@@ -33,9 +34,9 @@
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
 #include "domain/logging_domain/services/log_writer_service.h"
 #include "domain/logging_domain/services/log_writer_supervisor.h"
+#include "domain/logging_domain/control/writer_logging_control.h"
 #else
 #include "domain/canbus_com_domain/state_bridge/network_state_importer.h"
-#include "domain/logging_domain/control/remote_logging_control.h"
 #endif
 
 namespace eerie_leap::controllers {
@@ -56,6 +57,7 @@ using eerie_leap::domain::logging_domain::control::ConfigurationUpdateLoggingSto
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::control::LoggingCommandHandler;
 using eerie_leap::domain::logging_domain::control::LoggingTriggerSet;
+using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
 using eerie_leap::domain::logging_domain::control::configuration::LoggingControlConfigurationManager;
 using eerie_leap::domain::logging_domain::event_bus::LoggingNetworkState;
 
@@ -65,10 +67,10 @@ using eerie_leap::subsys::threading::IService;
 using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateExporter;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::services::LogWriterService;
+using eerie_leap::domain::logging_domain::control::WriterLoggingControl;
 using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
 #else
 using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateImporter;
-using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
 #endif
 
 // Starts and stops logging, by triggers, by the CDMP LOGGING command and through GetControl(). The
@@ -143,9 +145,13 @@ public:
      */
     int Start();
 
-    // The role's ILoggingControl: LogWriterSupervisor or RemoteLoggingControl. Whoever keeps it
-    // releases it before the controller goes, so no request comes in after the teardown.
+    // The role's ILoggingControl: WriterLoggingControl (the writer, and the other units through the
+    // network) or RemoteLoggingControl. Whoever keeps it releases it before the controller goes, so no
+    // request comes in after the teardown.
     [[nodiscard]] std::shared_ptr<ILoggingControl> GetControl() const { return logging_control_; }
+    // This unit's CDMP UID, 0 without a COM service (or before the network knows it): what a request
+    // passes to act on this unit alone, such as a shell command or an autostart on a writer.
+    [[nodiscard]] uint32_t GetUnitUid() const;
     [[nodiscard]] std::shared_ptr<LoggingControlConfigurationManager> GetLoggingControlConfigurationManager() const {
         return logging_control_configuration_manager_;
     }
@@ -188,6 +194,8 @@ private:
     std::shared_ptr<LogWriterService> log_writer_service_;
     std::shared_ptr<LogWriterSupervisor> log_writer_supervisor_;
     std::unique_ptr<LoggingStatusExporter> logging_status_exporter_;
+    // The network half of the writer's control (Mode::Peer); null without a COM service.
+    std::shared_ptr<RemoteLoggingControl> network_logging_control_;
 #else
     std::shared_ptr<RemoteLoggingControl> remote_logging_control_;
     std::unique_ptr<LoggingStatusImporter> logging_status_importer_;

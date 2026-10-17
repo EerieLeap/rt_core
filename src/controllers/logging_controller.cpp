@@ -21,11 +21,10 @@
 #include "domain/logging_domain/control/models/logging_trigger.h"
 
 #include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
+#include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
-#else
-#include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
 #endif
 
 #include "logging_controller.h"
@@ -42,9 +41,7 @@ using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
-#ifndef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
-#endif
 
 namespace config_services = eerie_leap::configuration::services;
 
@@ -191,6 +188,15 @@ int LoggingController::Start() {
     return start_result_;
 }
 
+uint32_t LoggingController::GetUnitUid() const {
+    if(canbus_com_service_ == nullptr)
+        return 0;
+
+    const auto network_info = canbus_com_service_->GetNetworkInfo();
+
+    return network_info != nullptr ? network_info->GetDeviceInfo().uid : 0;
+}
+
 bool LoggingController::HasDependencies() const {
     bool has_all = true;
 
@@ -274,20 +280,15 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     is_handler_registered_ = true;
 
     // 7. A configuration stored on this unit stops logging on every unit once Start() is called (L9).
-    //    It registers nothing before that, so it may come before the configuration types. The writer
-    //    broadcasts the stop itself; the remote control sends it with its own stop.
+    //    It registers nothing before that, so it may come before the configuration types. In both roles
+    //    the control's RequestStop(kAllUnits) sends the broadcast (the writer's network half, the remote
+    //    control itself), so there is no sender of its own.
     if(configuration_service_ != nullptr) {
-        std::shared_ptr<ILoggingCommandSender> stop_sender;
-#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
-        if(canbus_com_service_ != nullptr)
-            stop_sender = std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_);
-#endif
-
         configuration_update_logging_stop_ = std::make_unique<ConfigurationUpdateLoggingStop>(
             configuration_service_,
             config_work_queue_thread_,
             logging_control_,
-            std::move(stop_sender),
+            nullptr,
             [this](ConfigurationService::Type type) { OnConfigurationUpdated(type); });
         if(!configuration_update_logging_stop_->Initialize()) {
             LOG_ERR("Failed to initialize the configuration update stop.");
@@ -337,12 +338,28 @@ bool LoggingController::BuildRole() {
         LOG_ERR("Failed to initialize the log writer supervisor.");
         return false;
     }
-    logging_control_ = log_writer_supervisor_;
 
     if(canbus_com_service_ == nullptr) {
         LOG_INF("No CAN COM service: logging runs on this unit only, without the LOGGING command or a shared status.");
+        logging_control_ = std::make_shared<WriterLoggingControl>(log_writer_supervisor_, nullptr, 0);
         return true;
     }
+
+    // The network half sends this unit's requests for other units and for all of them. A peer follows
+    // no status, so its monitor reports every restart itself. The control owns the monitor, and a
+    // monitor that cannot register its handlers fails Initialize().
+    network_logging_control_ = std::make_shared<RemoteLoggingControl>(
+        config_work_queue_thread_,
+        std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
+        std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_, false),
+        canbus_com_service_->GetNetworkInfo(),
+        RemoteLoggingControl::Mode::Peer);
+    if(!network_logging_control_->Initialize()) {
+        LOG_ERR("Failed to initialize the network half of the logging control.");
+        return false;
+    }
+    logging_control_ = std::make_shared<WriterLoggingControl>(
+        log_writer_supervisor_, network_logging_control_, GetUnitUid());
 
     // The handler before the exporter: the exporter shares the first status as soon as it exists,
     // and a command that arrives with no handler is dropped without an answer. Both after the
@@ -372,7 +389,9 @@ bool LoggingController::BuildRole() {
     remote_logging_control_ = std::make_shared<RemoteLoggingControl>(
         config_work_queue_thread_,
         std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
-        std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_));
+        std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_),
+        canbus_com_service_->GetNetworkInfo(),
+        RemoteLoggingControl::Mode::Remote);
     if(!remote_logging_control_->Initialize()) {
         LOG_ERR("Failed to initialize the remote logging control.");
         return false;
@@ -470,10 +489,11 @@ void LoggingController::OnConfigurationUpdated(ConfigurationService::Type type) 
 // configuration work queue has run the stop, so the writer is never dropped while it runs. Dropping
 // a running LogWriterService is unsafe: its delayable tick would outlive it.
 void LoggingController::StopLogWriter() {
-    if(logging_control_ == nullptr || log_writer_service_ == nullptr)
+    if(log_writer_supervisor_ == nullptr || log_writer_service_ == nullptr)
         return;
 
-    logging_control_->RequestStop();
+    // The supervisor itself: this stops this unit's writer, not the other units.
+    log_writer_supervisor_->RequestStop(ILoggingControl::kAllUnits);
 
     if(config_work_queue_thread_->IsCurrentThread()) {
         // The stop is queued behind this very job, so waiting for it would wait for itself.
@@ -549,6 +569,7 @@ void LoggingController::Teardown() {
     // 6. The control, then what it drives. The dependent that SensorsController keeps holds the
     //    stopped writer and the wanted state, never this.
     logging_control_.reset();
+    network_logging_control_.reset();
     log_writer_supervisor_.reset();
     log_writer_service_.reset();
     logging_configuration_manager_.reset();

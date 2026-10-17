@@ -20,17 +20,23 @@ CanbusComLoggingCommandSender::CanbusComLoggingCommandSender(std::shared_ptr<Can
         throw std::invalid_argument("The logging command sender needs the COM service.");
 }
 
-void CanbusComLoggingCommandSender::SendLoggingCommand(bool is_start) {
-    // The command is broadcast, so every logging unit follows it, and the status they share, not the
-    // response, tells whether they did. The transaction may complete or time out after this sender is
-    // gone, so the callback captures only the flag.
+void CanbusComLoggingCommandSender::SendLoggingCommand(bool is_start, uint8_t device_id) {
+    // A broadcast reaches every logging unit, and the status they share, not the response, tells
+    // whether they followed it. A unicast is answered by its unit. The transaction may complete or time
+    // out after this sender is gone, so the callback captures only the flag and the ID.
     CanbusComLoggingCommand command(is_start);
     canbus_com_service_->SendCommand(
         command,
-        [is_start](bool success) {
-            if(!success)
+        [is_start, device_id](bool success) {
+            if(success)
+                return;
+
+            if(device_id == kBroadcast)
                 LOG_WRN("Logging %s command failed.", is_start ? "start" : "stop");
-        });
+            else
+                LOG_WRN("Logging %s command to %u failed.", is_start ? "start" : "stop", static_cast<unsigned>(device_id));
+        },
+        device_id);
 }
 
 } // namespace eerie_leap::domain::logging_domain::control

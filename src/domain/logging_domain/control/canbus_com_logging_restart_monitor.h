@@ -83,7 +83,14 @@ class CanbusComLoggingRestartMonitor final : public ILoggingRestartMonitor {
 public:
     // Registers its handlers with the COM service. Throws std::invalid_argument for a null service,
     // and std::runtime_error when the service refuses a handler, with nothing left registered.
-    explicit CanbusComLoggingRestartMonitor(std::shared_ptr<CanbusComService> canbus_com_service);
+    //
+    // @p has_status_rule: whether the control it reports to follows the logging status and sends a
+    // start when the status returns from Unavailable to Stopped (RemoteLoggingControl::Mode::Remote).
+    // A control that does not (Mode::Peer) has no rule to leave a unit to, so the monitor reports every
+    // unit itself, in the spell without any copy as well.
+    explicit CanbusComLoggingRestartMonitor(
+        std::shared_ptr<CanbusComService> canbus_com_service,
+        bool has_status_rule = true);
 
     // Unregisters its handlers, waiting for one in progress. Not on the CDMP work queue.
     ~CanbusComLoggingRestartMonitor() override;
@@ -99,6 +106,7 @@ public:
 private:
     // Holds the service strongly, like the command sender: the controller that builds both outlives them.
     std::shared_ptr<CanbusComService> canbus_com_service_;
+    const bool has_status_rule_;
     int state_handler_id_ = -1;
     int device_event_handler_id_ = -1;
     int heartbeat_handler_id_ = -1;

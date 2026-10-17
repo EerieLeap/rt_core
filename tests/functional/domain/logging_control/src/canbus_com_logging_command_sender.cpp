@@ -150,6 +150,16 @@ struct Fixture {
     std::optional<RecordedFrame> WaitForBroadcast(int timeout_ms = k_wait_ms) {
         return harness.bus.Wait(COMMAND, IsLoggingBroadcastFrame, timeout_ms);
     }
+
+    // The next LOGGING command to any unit: a restart is re-asserted to the unit that came back.
+    std::optional<RecordedFrame> WaitForCommand(int timeout_ms = k_wait_ms) {
+        return harness.bus.Wait(COMMAND, IsLoggingCommandFrame, timeout_ms);
+    }
+
+    // The next LOGGING command to @p device_id alone.
+    std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = k_wait_ms) {
+        return harness.bus.Wait(COMMAND, [device_id](const Bytes& bytes) { return IsLoggingCommandTo(bytes, device_id); }, timeout_ms);
+    }
 };
 
 Fixture*& Current() {
@@ -186,12 +196,12 @@ ZTEST_SUITE(canbus_com_logging_command_sender, NULL, SetUp, Before, After, NULL)
 ZTEST(canbus_com_logging_command_sender, test_TheCommandIsTheLoggingBroadcast) {
     CanbusComLoggingCommandSender sender(F().harness.com);
 
-    sender.SendLoggingCommand(true);
+    sender.SendLoggingCommand(true, kBroadcast);
     const auto start = F().WaitForBroadcast();
     zassert_true(start.has_value(), "A start must go out on the command identifier");
     zassert_equal(start->data[3], 0x01, "start");
 
-    sender.SendLoggingCommand(false);
+    sender.SendLoggingCommand(false, kBroadcast);
     const auto stop = F().WaitForBroadcast();
     zassert_true(stop.has_value());
     zassert_equal(stop->data[3], 0x00, "stop");
@@ -201,7 +211,7 @@ ZTEST(canbus_com_logging_command_sender, test_TheCommandIsTheLoggingBroadcast) {
 ZTEST(canbus_com_logging_command_sender, test_AResponseAfterTheSenderIsGoneIsHarmless) {
     auto sender = std::make_unique<CanbusComLoggingCommandSender>(F().harness.com);
 
-    sender->SendLoggingCommand(true);
+    sender->SendLoggingCommand(true, kBroadcast);
     const auto sent = F().WaitForBroadcast();
     zassert_true(sent.has_value());
 
@@ -217,7 +227,7 @@ ZTEST(canbus_com_logging_command_sender, test_AResponseAfterTheSenderIsGoneIsHar
     k_msleep(NO_FRAME_TIMEOUT_MS);
 
     CanbusComLoggingCommandSender later(F().harness.com);
-    later.SendLoggingCommand(false);
+    later.SendLoggingCommand(false, kBroadcast);
     zassert_true(F().WaitForBroadcast().has_value(), "A new sender still works");
 }
 
@@ -274,7 +284,7 @@ ZTEST(canbus_com_logging_command_sender, test_AStartNoUnitReceivedIsSentAgainOnc
     zassert_false(status->is_active);
     zassert_equal(status->reason, LoggingStatusReason::Unavailable, "No unit shares a status");
 
-    remote.control.RequestStart();
+    remote.control.RequestStart(kAllUnits);
     zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
     zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
@@ -313,8 +323,8 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartThatKeepsItsRecordIsR
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     auto status = remote.log.WaitForEntry();
@@ -330,20 +340,20 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartThatKeepsItsRecordIsR
     zassert_false(status->is_active);
     zassert_equal(status->reason, LoggingStatusReason::Stopped, "Stopped follows the active status directly");
 
-    const auto again = F().WaitForBroadcast();
+    const auto again = F().WaitForCommand();
     zassert_true(IsStart(again), "No Unavailable came between, so the restart monitor sends the start again");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     F().PeerHeartbeat({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}});
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "and not again at the heartbeat that confirms the copy");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "and not again at the heartbeat that confirms the copy");
 }
 
 ZTEST(canbus_com_logging_command_sender, test_AQuickRestartThatAnnouncesItsRecordLaterIsReasserted) {
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     auto status = remote.log.WaitForEntry();
@@ -362,8 +372,8 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartThatAnnouncesItsRecor
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
 
-    zassert_true(IsStart(F().WaitForBroadcast()), "Unavailable, then Stopped: the start is sent again");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(),
+    zassert_true(IsStart(F().WaitForCommand()), "Unavailable, then Stopped: the start is sent again");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(),
         "once: the monitor left the unit to the status rule when its record returned");
 }
 
@@ -374,8 +384,8 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAStoppedUnitIsReass
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "The unit logs");
@@ -385,18 +395,18 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAStoppedUnitIsReass
     auto status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A stop from the shell stands");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "A stop from the shell stands");
 
     // The reboot: version 1 again, so the copy (version 2) differs from the heartbeat's digest.
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
     F().ShareStatus({0x00, 0x00});
 
     zassert_false(remote.log.WaitForEntry(NO_FRAME_TIMEOUT_MS).has_value(), "The value did not change: no status event");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "and nothing says yet that the copy is current");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "and nothing says yet that the copy is current");
 
     F().PeerHeartbeat({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}});
-    zassert_true(IsStart(F().WaitForBroadcast()), "Its heartbeat confirms the copy: the start is sent, over the shell's stop");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "Its heartbeat confirms the copy: the start is sent, over the shell's stop");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 // The restart is consumed by a first current record that is active, or a failure: the unit started by
@@ -406,8 +416,8 @@ ZTEST(canbus_com_logging_command_sender, test_AUnitThatComesBackLoggingConsumesT
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "The unit logs");
@@ -416,13 +426,13 @@ ZTEST(canbus_com_logging_command_sender, test_AUnitThatComesBackLoggingConsumesT
     // confirms it at once.
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x01}}}, false);
     F().next_peer_version = 2;
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "It logs: nothing to start");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "It logs: nothing to start");
 
     F().ShareStatus({0x00, 0x00});
     auto status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "and its later stop is its own doing");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "and its later stop is its own doing");
 }
 
 ZTEST(canbus_com_logging_command_sender, test_AQuickRestartWithoutAWantedStartSendsNothing) {
@@ -435,17 +445,17 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartWithoutAWantedStartSe
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
     F().ShareStatus({0x00, 0x00});
     zassert_equal(remote.log.WaitForEntry()->reason, LoggingStatusReason::Stopped);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "Nothing was wanted");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "Nothing was wanted");
 
     // A stop ends what was wanted: the next restart, confirmed at once, sends nothing either.
-    remote.control.RequestStart();
-    zassert_true(IsStart(F().WaitForBroadcast()));
-    remote.control.RequestStop();
-    zassert_true(IsStop(F().WaitForBroadcast()));
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(IsStart(F().WaitForCommand()));
+    remote.control.RequestStop(kAllUnits);
+    zassert_true(IsStop(F().WaitForCommand()));
 
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, false);
     F().next_peer_version = 2;
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A stop ends what was wanted");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "A stop ends what was wanted");
 }
 
 // Each restart is one re-assertion, however many claims it takes.
@@ -453,29 +463,29 @@ ZTEST(canbus_com_logging_command_sender, test_EachQuickRestartIsReassertedOnce) 
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
     F().ShareStatus({0x00, 0x00});
-    zassert_true(IsStart(F().WaitForBroadcast()), "The first restart");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The first restart");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     // It logs again after the start, and reboots again. The replay request is rate limited.
     F().ShareStatus({0x01});
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, false);
     F().ShareStatus({0x00, 0x00});
-    zassert_true(IsStart(F().WaitForBroadcast()), "The second restart");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The second restart");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     // Two reboots before the unit's record is back: claim, heartbeat, claim, heartbeat.
     F().ShareStatus({0x01});
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, false);
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, false);
     F().ShareStatus({0x00, 0x00});
-    zassert_true(IsStart(F().WaitForBroadcast()), "Two reboots in a row");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "are one re-assertion");
+    zassert_true(IsStart(F().WaitForCommand()), "Two reboots in a row");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "are one re-assertion");
 }
 
 // Another unit still logs, so the combined status does not change when the restarted unit comes back
@@ -487,8 +497,8 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartWhileAnotherUnitLogsI
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareOtherStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "A unit logs");
@@ -498,15 +508,15 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartWhileAnotherUnitLogsI
     F().ShareStatus({0x00, 0x00});
 
     zassert_false(remote.log.WaitForEntry(NO_FRAME_TIMEOUT_MS).has_value(), "The other unit still logs: the status does not change");
-    zassert_true(IsStart(F().WaitForBroadcast()), "but the restarted unit lost the start: sent again");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "but the restarted unit lost the start: sent again");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     // The other unit stops on its own: the status goes Stopped, and nothing is left to send.
     F().ShareOtherStatus({0x00, 0x00});
     auto status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "nothing lingers");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "nothing lingers");
 }
 
 // A logging unit that had failed comes back clean: the wanted start is sent again, which is what the
@@ -515,8 +525,8 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAUnitThatHadAFailur
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "The unit logs");
@@ -524,7 +534,7 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAUnitThatHadAFailur
     auto status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::NoSpace);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A failure stands");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "A failure stands");
 
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
     F().ShareStatus({0x00, 0x00});
@@ -532,8 +542,8 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAUnitThatHadAFailur
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
 
-    zassert_true(IsStart(F().WaitForBroadcast()), "The restarted unit starts clean: the start is sent again");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The restarted unit starts clean: the start is sent again");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 // The logging unit's own COM service restarts (a CAN configuration applied on it): it claims its ID
@@ -546,19 +556,19 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheLoggingUnitsOwnComSer
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "The unit logs");
     F().ShareStatus({0x00, 0x00});
     zassert_equal(remote.log.WaitForEntry()->reason, LoggingStatusReason::Stopped);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A stop from the shell stands");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "A stop from the shell stands");
 
     SendRestart(F().harness, PEER_ID, PEER_UID, {{LOGGING_STATUS_CODE, 2, {0x00, 0x00}}});
 
-    zassert_true(IsStart(F().WaitForBroadcast()), "The first heartbeat confirms the copy: the start is sent again");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The first heartbeat confirms the copy: the start is sent again");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 // Two logging units reboot together, as on a shared supply, and announce no record yet. The status
@@ -570,8 +580,8 @@ ZTEST(canbus_com_logging_command_sender, test_UnitsThatRestartTogetherAreEachRea
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareOtherStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "A unit logs");
@@ -587,13 +597,13 @@ ZTEST(canbus_com_logging_command_sender, test_UnitsThatRestartTogetherAreEachRea
     status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_true(IsStart(F().WaitForBroadcast()), "The first unit back: the status rule sends");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The first unit back: the status rule sends");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     F().ShareOtherStatus({0x00, 0x00});
     zassert_false(remote.log.WaitForEntry(NO_FRAME_TIMEOUT_MS).has_value(), "The status stays Stopped");
-    zassert_true(IsStart(F().WaitForBroadcast()), "The second unit back: the monitor sends again, for it");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The second unit back: the monitor sends again, for it");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 // A logging unit joins while another one reports: the combined status does not pass through
@@ -603,8 +613,8 @@ ZTEST(canbus_com_logging_command_sender, test_ALoggingUnitThatJoinsWhileAnotherL
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "A unit logs");
@@ -614,8 +624,8 @@ ZTEST(canbus_com_logging_command_sender, test_ALoggingUnitThatJoinsWhileAnotherL
 
     zassert_false(remote.log.WaitForEntry(NO_FRAME_TIMEOUT_MS).has_value(),
         "The unit that logs keeps the status active");
-    zassert_true(IsStart(F().WaitForBroadcast()), "but the unit that joined has not got the start: sent again");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "but the unit that joined has not got the start: sent again");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 // Two logging units power up after the gauge's switch went on. The first to report ends the spell
@@ -626,8 +636,8 @@ ZTEST(canbus_com_logging_command_sender, test_LoggingUnitsThatJoinTogetherAreEac
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().harness.Join(OTHER_ID, OTHER_UID);
 
@@ -635,13 +645,13 @@ ZTEST(canbus_com_logging_command_sender, test_LoggingUnitsThatJoinTogetherAreEac
     auto status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_true(IsStart(F().WaitForBroadcast()), "The first unit to report: the status rule sends");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The first unit to report: the status rule sends");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     F().ShareOtherStatus({0x00, 0x00});
     zassert_false(remote.log.WaitForEntry(NO_FRAME_TIMEOUT_MS).has_value(), "The status stays Stopped");
-    zassert_true(IsStart(F().WaitForBroadcast()), "The unit that joined has not got the start: the monitor sends");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
+    zassert_true(IsStart(F().WaitForCommand()), "The unit that joined has not got the start: the monitor sends");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 }
 
 // The reverse, from the plan's risks: this unit's own COM service restarts (a CAN reconfiguration
@@ -652,8 +662,8 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheUnitsOwnComServiceRea
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart();
-    zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
+    remote.control.RequestStart(kAllUnits);
+    zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({0x01});
     zassert_true(remote.log.WaitForEntry()->is_active, "The unit logs");
@@ -663,7 +673,7 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheUnitsOwnComServiceRea
     auto status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A stop from the shell stands");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "A stop from the shell stands");
 
     // This unit's COM service restarts and forgets the network.
     zassert_true(F().harness.com->Stop());
@@ -679,8 +689,8 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheUnitsOwnComServiceRea
     status = remote.log.WaitForEntry();
     zassert_true(status.has_value());
     zassert_equal(status->reason, LoggingStatusReason::Stopped);
-    zassert_true(F().WaitForBroadcast().has_value(), "so the wanted start is sent again, over the stop from the shell");
-    zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once: no monitor had a restart to report");
+    zassert_true(F().WaitForCommand().has_value(), "so the wanted start is sent again, over the stop from the shell");
+    zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once: no monitor had a restart to report");
 
     // The monitor's registrations survived the restart: a quick restart of the logging unit is
     // re-asserted as before.
@@ -688,5 +698,5 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheUnitsOwnComServiceRea
     zassert_true(remote.log.WaitForEntry()->is_active, "The unit logs");
     F().RestartPeer({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
     F().ShareStatus({0x00, 0x00});
-    zassert_true(IsStart(F().WaitForBroadcast()), "A restart after the COM restart is re-asserted");
+    zassert_true(IsStart(F().WaitForCommand()), "A restart after the COM restart is re-asserted");
 }

@@ -51,6 +51,8 @@ struct LoggingTriggerSet::Trigger {
     size_t index;
     // What it selects, for the log lines and for OnConfigurationUpdated(). Read-only after construction.
     EventBinding binding;
+    // The unit it starts and stops; ILoggingControl::kAllUnits is every unit that can log.
+    uint32_t target_uid;
 
     // Inside the guard only: the guard serializes every delivery to the set, so a trigger reached
     // from two threads at once (the bus thread and a synchronous Publish()) never races on them.
@@ -91,9 +93,9 @@ struct LoggingTriggerSet::Trigger {
             return;
 
         if(*state)
-            logging_control->RequestStart();
+            logging_control->RequestStart(target_uid);
         else
-            logging_control->RequestStop();
+            logging_control->RequestStop(target_uid);
     }
 };
 
@@ -124,6 +126,7 @@ LoggingTriggerSet::LoggingTriggerSet(
                 .logging_control = logging_control_.get(),
                 .index = i,
                 .binding = binding,
+                .target_uid = triggers[i].target_uid,
                 .last_state = std::nullopt,
                 .first_value = first_value
             });

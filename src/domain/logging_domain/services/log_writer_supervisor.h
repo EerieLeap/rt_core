@@ -81,8 +81,10 @@ public:
      */
     bool Initialize();
 
-    void RequestStart() override;
-    void RequestStop() override;
+    // The target is ignored: this is the writer of this unit. Which requests reach it is
+    // WriterLoggingControl's routing.
+    void RequestStart(uint32_t target_uid) override;
+    void RequestStop(uint32_t target_uid) override;
     // The CDMP LOGGING command is a request; SUCCESS means accepted, whether or not the supervisor can
     // act on it now (a request before Initialize() is refused and logged, as for any caller).
     bool HandleLoggingCommand(bool is_start) override;
