@@ -85,6 +85,13 @@ and the SMP-CAN transport on the channel named by the stored CAN configuration's
   whose COM service restarts claims its ID again just as one that rebooted does, and CDMP reports
   both as `RESTARTED`. `CanbusComLoggingRestartMonitor` uses them (see
   [logging.md](logging.md#remote-control));
+- sends the unit's features: `GetFeatures()` returns the mask that heartbeats and discovery
+  responses carry now. It starts as the build's `BUILD_FEATURES` without LOGGING, and
+  `SetLoggingAvailable(bool)` sets or clears LOGGING from any thread (a no-op when the build lacks
+  `EERIE_LEAP_FEATURES_LOGGING`); the next heartbeat (within 3 s) carries it, and it survives a bus
+  reconfiguration. Only a unit with a log writer sets it, through
+  `CanbusComLoggingAvailabilityReporter` (see [logging.md](logging.md)); senders skip a unit
+  without it;
 - implements `INetworkStateTransport`, which shares state records with the other units (see
   [Shared state](#shared-state)).
 

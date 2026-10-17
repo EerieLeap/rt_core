@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cstdint>
 #include <deque>
@@ -296,6 +297,45 @@ public:
     bool Format() override { return false; }
 };
 
+// The rig's file system as a log volume that a case can take away: every call goes to the real one,
+// except IsAvailable(), which reports the switch.
+class SwitchableVolume final : public IFsService {
+private:
+    std::shared_ptr<IFsService> inner_;
+    std::atomic<bool> is_available_ = true;
+
+public:
+    explicit SwitchableVolume(std::shared_ptr<IFsService> inner) : inner_(std::move(inner)) {}
+
+    void SetAvailable(bool is_available) { is_available_ = is_available; }
+
+    bool Initialize() override { return inner_->Initialize(); }
+    bool IsAvailable() const override { return is_available_; }
+    bool WriteFile(std::string_view path, const void* data, size_t size, bool append) override {
+        return inner_->WriteFile(path, data, size, append);
+    }
+    bool ReadFile(std::string_view path, void* data, size_t size, size_t& out_len) override {
+        return inner_->ReadFile(path, data, size, out_len);
+    }
+    int OpenFile(std::string_view path, fs_mode_t flags, fs_file_t* file) override {
+        return inner_->OpenFile(path, flags, file);
+    }
+    bool CreateDirectory(std::string_view path) override { return inner_->CreateDirectory(path); }
+    bool Exists(std::string_view path) const override { return inner_->Exists(path); }
+    bool DeleteFile(std::string_view path) override { return inner_->DeleteFile(path); }
+    bool DeleteRecursive(std::string_view path) override { return inner_->DeleteRecursive(path); }
+    std::vector<std::string> ListFiles(std::string_view path) const override { return inner_->ListFiles(path); }
+    int ListDirectory(
+        std::string_view path, size_t first, size_t max_entries,
+        std::vector<DirectoryEntry>& entries, size_t& count) const override {
+        return inner_->ListDirectory(path, first, max_entries, entries, count);
+    }
+    std::optional<size_t> GetFileSize(std::string_view path) const override { return inner_->GetFileSize(path); }
+    uint64_t GetTotalSpace() const override { return inner_->GetTotalSpace(); }
+    uint64_t GetUsedSpace() const override { return inner_->GetUsedSpace(); }
+    bool Format() override { return inner_->Format(); }
+};
+
 // What a controller of a case is given beyond the rig. A null configuration service, or a false
 // has_* flag, leaves that dependency out.
 struct Parts {
@@ -310,6 +350,8 @@ struct Parts {
     bool has_sensors_manager = true;
     bool has_publisher = true;
     bool has_log_volume = true;
+    // The log volume; null: the rig's file system.
+    std::shared_ptr<IFsService> log_volume;
     bool has_time_service = true;
     bool has_frame = true;
 };
@@ -324,7 +366,8 @@ inline std::unique_ptr<LoggingController> MakeController(ControllerRig& rig, Par
         parts.has_sensors_manager ? rig.sensors_manager : nullptr,
         std::move(parts.com),
         parts.has_publisher ? rig.publisher : nullptr,
-        parts.has_log_volume ? rig.fs_service : nullptr,
+        parts.log_volume != nullptr ? std::move(parts.log_volume)
+            : (parts.has_log_volume ? std::shared_ptr<IFsService>(rig.fs_service) : nullptr),
         parts.has_time_service ? rig.time_service : nullptr,
         parts.has_frame ? rig.frame : nullptr,
         kControllerToolId);

@@ -20,6 +20,7 @@
 #include "domain/sensor_domain/services/sensor_events_publisher.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/logging_domain/event_bus/logging_network_state.h"
+#include "domain/logging_domain/control/canbus_com_logging_availability_reporter.h"
 #include "domain/logging_domain/control/configuration_update_logging_stop.h"
 #include "domain/logging_domain/control/i_logging_control.h"
 #include "domain/logging_domain/control/logging_command_handler.h"
@@ -53,6 +54,7 @@ using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::logging_domain::control::CanbusComLoggingAvailabilityReporter;
 using eerie_leap::domain::logging_domain::control::ConfigurationUpdateLoggingStop;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::control::LoggingCommandHandler;
@@ -196,6 +198,7 @@ private:
     std::unique_ptr<LoggingStatusExporter> logging_status_exporter_;
     // The network half of the writer's control (Mode::Peer); null without a COM service.
     std::shared_ptr<RemoteLoggingControl> network_logging_control_;
+    std::unique_ptr<CanbusComLoggingAvailabilityReporter> logging_availability_reporter_;
 #else
     std::shared_ptr<RemoteLoggingControl> remote_logging_control_;
     std::unique_ptr<LoggingStatusImporter> logging_status_importer_;

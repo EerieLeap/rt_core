@@ -352,6 +352,11 @@ a heartbeat and a state handler with the COM service (`RegisterDeviceEventHandle
   restart without a report. What a unit shares before that check is seen only if it changes the
   value: a unit that started by itself with a record equal to the stale copy, and stopped again
   before its next heartbeat, is reported, and the wanted start overrides that stop.
+- **Features.** The monitor goes by `ProductFeature::LOGGING` in a unit's features, which a unit
+  with a log writer and a mounted log volume sends in its heartbeat. It reads the features of the
+  join or restart event: a unit that rejoins after the heartbeat timeout may send its first
+  heartbeat before its reporter has run, with LOGGING still clear, and only its status copy then
+  arms the monitor.
 - **Ready.** A current copy means the unit can take the `LOGGING` command: the writer role builds
   the command handler before the exporter that shares the record. A command that reaches a unit
   without the handler is dropped, so the monitor never reports on the claim alone.
@@ -532,7 +537,7 @@ controller brings. The remote role brings none.
 | The updated handler of the triggers' configuration | The thread that stored it (the configuration work queue for an SMP apply). It only reschedules the rebuild. |
 | The rebuild of the triggers and the replay | The configuration work queue. |
 | Trigger handlers | The bus thread of the bound channel (the sensors' bus for a sensor), or the caller of `Publish()`. |
-| The supervisor's task, `RemoteLoggingControl`'s send (both modes), the update stop's broadcast | The configuration work queue. Requests, from any thread, take only `RemoteLoggingControl`'s spinlock around its per-target state; the task copies it and sends outside. |
+| The supervisor's task, `RemoteLoggingControl`'s send (both modes), the update stop's broadcast, the availability reporter's poll | The configuration work queue. Requests, from any thread, take only `RemoteLoggingControl`'s spinlock around its per-target state; the task copies it and sends outside. |
 | Status handlers (supervisor, remote control, exporter) | The bus thread that carries `logging_events`. |
 | `LoggingCommandHandler` (both roles), the importer, `CanbusComLoggingRestartMonitor`'s handlers and its report into `RemoteLoggingControl` | The CDMP work queue. |
 
@@ -835,6 +840,13 @@ failed `Initialize()`) builds a `ConfigurationUpdateLoggingStop` with a sender a
 initializes it and calls its `Start()` at the same place, so what it stores still stops the units
 that log.
 
+**Availability.** In the writer role with a COM service, `CanbusComLoggingAvailabilityReporter`
+keeps the LOGGING feature that the unit sends on CDMP equal to `IsAvailable()` of the log volume:
+it sets the bit in its constructor, so the first heartbeat carries it, polls every second on the
+configuration work queue (not the CDMP one: `IsAvailable()` takes the filesystem mutex, which the
+writer holds across SD syncs) and clears the bit when torn down. A write failure or a full volume
+does not clear it; the logging status reports those. A unit without a writer never sets it.
+
 **Getters.** `GetControl()` is the role's `ILoggingControl`;
 `GetLoggingControlConfigurationManager()` serves both roles. The writer role adds
 `GetDependentService()`, `GetConfigurationManager()` (the logging manager) and
@@ -856,7 +868,7 @@ failed or skipped `Initialize()`.
    has run it, so the wanted state is cleared and the dependent that `SensorsController` keeps
    cannot start the writer again. A writer is never dropped while it runs. Then the exporter
    withdraws the record, so the other units see `Unavailable`; they may never see the `Stopped`,
-   which is published asynchronously.
+   which is published asynchronously. The availability reporter goes with the exporter and clears LOGGING.
 5. Destroys the control and what it drives. Remote role: the importer first, then the control,
    which waits for a send in progress, clears the restart monitor's handler and drops the monitor,
    which unregisters from the COM service and waits for a handler in progress.

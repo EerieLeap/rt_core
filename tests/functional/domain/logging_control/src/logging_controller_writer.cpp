@@ -14,12 +14,16 @@
 
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
+#include "domain/system_domain/models/product_feature.h"
 #include "domain/logging_domain/services/log_writer_supervisor.h"
 
 using namespace logging_controller_test;
 
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::control::WriterLoggingControl;
+using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
+using eerie_leap::domain::system_domain::models::HasFeature;
+using eerie_leap::domain::system_domain::models::ProductFeature;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::utilities::memory::Mrm;
 
@@ -204,6 +208,47 @@ ZTEST(logging_controller_writer, test_ACdmpStartIsAcceptedAndShared) {
     zassert_true(ContainsText(content, Property("device_id", std::to_string(OWN_ID))),
         "The log header carries the CDMP device ID of this unit");
     zassert_true(ContainsText(content, std::string("<tool_id>") + kControllerToolId + "</tool_id>"), "and the tool ID");
+}
+
+// The LOGGING feature this unit sends on CDMP follows the log volume: senders skip a unit that cannot
+// log. It is set before the first heartbeat, polled once a second, and cleared with the controller.
+ZTEST(logging_controller_writer, test_TheLoggingFeatureFollowsTheLogVolume) {
+    F().Open(true);
+    auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+    const auto com = F().harness->com;
+    zassert_false(HasFeature(com->GetFeatures(), ProductFeature::LOGGING), "Cleared until a writer exists");
+
+    auto parts = F().MakeParts();
+    parts.log_volume = volume;
+    zassert_equal(F().Build(std::move(parts)).Initialize(), 0);
+
+    zassert_true(HasFeature(com->GetFeatures(), ProductFeature::LOGGING), "Set as soon as the controller is built");
+    zassert_true(HasFeature(com->GetFeatures(), ProductFeature::CANBUS), "The other features stay");
+
+    volume->SetAvailable(false);
+    zassert_true(WaitUntil([&com] { return !HasFeature(com->GetFeatures(), ProductFeature::LOGGING); }, 2500),
+        "The volume going away clears the feature within a poll or two");
+    zassert_true(HasFeature(com->GetFeatures(), ProductFeature::CANBUS));
+
+    volume->SetAvailable(true);
+    zassert_true(WaitUntil([&com] { return HasFeature(com->GetFeatures(), ProductFeature::LOGGING); }, 2500),
+        "and the volume coming back sets it again");
+
+    F().controller.reset();
+    zassert_false(HasFeature(com->GetFeatures(), ProductFeature::LOGGING), "Tearing down the writer clears it");
+}
+
+ZTEST(logging_controller_writer, test_WithoutAnAvailableLogVolumeTheFeatureStartsCleared) {
+    F().Open(true);
+    auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+    volume->SetAvailable(false);
+    const auto com = F().harness->com;
+
+    auto parts = F().MakeParts();
+    parts.log_volume = volume;
+    zassert_equal(F().Build(std::move(parts)).Initialize(), 0);
+
+    zassert_false(HasFeature(com->GetFeatures(), ProductFeature::LOGGING));
 }
 
 ZTEST(logging_controller_writer, test_WithoutAComServiceTriggersStillLog) {

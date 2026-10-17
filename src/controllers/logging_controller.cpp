@@ -366,6 +366,14 @@ bool LoggingController::BuildRole() {
     // supervisor's Initialize(), which a request needs.
     logging_command_handler_ = std::make_unique<LoggingCommandHandler>(canbus_com_service_, logging_control_);
 
+    // The LOGGING feature on CDMP follows the log volume: senders skip a unit that cannot log.
+    try {
+        logging_availability_reporter_ = std::make_unique<CanbusComLoggingAvailabilityReporter>(
+            config_work_queue_thread_, sd_fs_service_, canbus_com_service_);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to report the log volume's availability: %s", e.what());
+    }
+
     // Not fatal: the unit still logs and takes commands; the other units just see no status from it.
     try {
         logging_status_exporter_ = std::make_unique<LoggingStatusExporter>(canbus_com_service_);
@@ -565,6 +573,7 @@ void LoggingController::Teardown() {
     // 5. The record goes: the other units see Unavailable. They may never see the Stopped, which is
     //    published asynchronously and can still be on its way to the bus thread.
     logging_status_exporter_.reset();
+    logging_availability_reporter_.reset();
 
     // 6. The control, then what it drives. The dependent that SensorsController keeps holds the
     //    stopped writer and the wanted state, never this.

@@ -15,10 +15,13 @@
 #include "domain/logging_domain/control/remote_logging_control.h"
 #include "domain/logging_domain/event_bus/logging_event_type.h"
 #include "domain/logging_domain/event_bus/logging_payload_type.h"
+#include "domain/system_domain/models/product_feature.h"
 
 using namespace logging_controller_test;
 
 using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
+using eerie_leap::domain::system_domain::models::HasFeature;
+using eerie_leap::domain::system_domain::models::ProductFeature;
 using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::utilities::string::StringHelpers;
 
@@ -127,6 +130,15 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
     zassert_false(control->IsActive());
     F().peer.ShareStatus({0x01});
     zassert_true(WaitUntil([&control] { return control->IsActive(); }), "The shared status reaches the control");
+}
+
+// A unit without a log writer never sends the LOGGING feature, so senders skip it.
+ZTEST(logging_controller_remote, test_TheUnitNeverSendsTheLoggingFeature) {
+    F().Start();
+    F().controller->GetControl()->RequestStart();
+    zassert_true(IsStart(F().peer.WaitForBroadcast()));
+
+    zassert_false(HasFeature(F().harness.com->GetFeatures(), ProductFeature::LOGGING));
 }
 
 ZTEST(logging_controller_remote, test_AWantedStartIsSentAgainWhenALoggingUnitAppears) {

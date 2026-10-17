@@ -88,6 +88,16 @@ public:
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
     ~CanbusComService() override;
 
+    /** @brief The features as heartbeats and discovery responses send them now. Any thread. */
+    [[nodiscard]] uint16_t GetFeatures() const;
+    /**
+     * @brief Sets or clears LOGGING in what this unit sends. The bit starts cleared; a unit sets it
+     * while it has a log writer and a mounted log volume (CanbusComLoggingAvailabilityReporter).
+     * Setting it does nothing when the build lacks EERIE_LEAP_FEATURES_LOGGING. Any thread; the next
+     * heartbeat (within 3 s) carries it, and it survives a bus reconfiguration.
+     */
+    void SetLoggingAvailable(bool is_available);
+
     /** @brief This unit and the other devices, as CDMP sees them. */
     [[nodiscard]] std::shared_ptr<const ICdmpNetworkInfo> GetNetworkInfo() const { return cdmp_service_; }
 

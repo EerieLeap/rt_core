@@ -15,6 +15,7 @@ using eerie_leap::subsys::cdmp::services::CdmpStateService;
 using eerie_leap::subsys::cdmp::utilities::CdmpUid;
 using eerie_leap::subsys::smp::can::SmpCanIdLayout;
 using eerie_leap::domain::system_domain::models::BUILD_FEATURES;
+using eerie_leap::domain::system_domain::models::HasFeature;
 using eerie_leap::domain::system_domain::models::ProductFeature;
 using eerie_leap::domain::system_domain::models::ToMask;
 
@@ -49,6 +50,18 @@ CanbusComService::~CanbusComService() {
     canbus_service_->UnregisterConfigurationUpdatedHandler(canbus_updated_handler_id_);
     canbus_service_->UnregisterConfigurationResetHandler(canbus_reset_handler_id_);
     cdmp_service_->UnregisterStatusChangedHandler(cdmp_status_handler_id_);
+}
+
+uint16_t CanbusComService::GetFeatures() const {
+    return cdmp_service_->GetDevice()->GetFeatures();
+}
+
+void CanbusComService::SetLoggingAvailable(bool is_available) {
+    // The build decides whether this unit can log at all.
+    if(!HasFeature(BUILD_FEATURES, ProductFeature::LOGGING))
+        return;
+
+    cdmp_service_->GetDevice()->SetFeature(ToMask(ProductFeature::LOGGING), is_available);
 }
 
 bool CanbusComService::DoInitialize() {
