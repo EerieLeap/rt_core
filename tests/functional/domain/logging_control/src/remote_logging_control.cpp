@@ -888,3 +888,65 @@ ZTEST(remote_logging_control, test_PeerModeIgnoresTheStatus) {
     zassert_true(F().sender->Starts() == Starts({true, true}));
     zassert_equal(F().sender->SentTo(kLoggerId), 1U);
 }
+
+// A stop for one unit, after a start for all units, is the latest request for that unit.
+ZTEST(remote_logging_control, test_AStopForOneUnitAfterAStartForAllIsNotUndoneByARestart) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid);
+
+    F().control->RequestStart(kAllUnits);
+    F().Flush();
+    F().control->RequestStop(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Broadcasts(), 1U);
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U, "The stop goes to the unit");
+
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U, "The unit that was stopped is not started by its restart");
+
+    F().monitor->Report(kOtherLoggerId);
+    F().Flush();
+    zassert_equal(F().sender->SentTo(kOtherLoggerId), 1U, "The other unit still is");
+}
+
+ZTEST(remote_logging_control, test_TheStatusRuleLeavesOutAUnitThatWasStopped) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().network->Add(kOtherLoggerId, kOtherLoggerUid);
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart(kAllUnits);
+    F().Flush();
+    F().control->RequestStop(kLoggerUid);
+    F().Flush();
+    zassert_equal(F().sender->Broadcasts(), 1U);
+
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+
+    zassert_equal(F().sender->Broadcasts(), 1U, "No second broadcast: it would start the stopped unit");
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U, "The stopped unit gets nothing more");
+    zassert_equal(F().sender->SentTo(kOtherLoggerId), 1U, "The other gets a start of its own");
+}
+
+// A unit whose features gain LOGGING after the status or the restart was handled: the held start goes
+// out on the next report.
+ZTEST(remote_logging_control, test_AHeldStartIsSentOnceTheUnitGainsTheLoggingFeature) {
+    F().BuildWithNetwork();
+    F().network->Add(kLoggerId, kLoggerUid, eerie_leap::tests::DISPLAY_FEATURES);
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    F().control->RequestStart(kLoggerUid);
+    PublishStatus(false, LoggingStatusReason::Stopped);
+    F().Flush();
+    zassert_equal(F().sender->Sends().size(), 0U, "The unit cannot log yet: the start is held");
+
+    F().network->Add(kLoggerId, kLoggerUid);
+    F().monitor->Report(kLoggerId);
+    F().Flush();
+
+    zassert_true(F().sender->Starts() == Starts({true}), "The unit gained the feature: the held start goes out");
+    zassert_equal(F().sender->SentTo(kLoggerId), 1U);
+}

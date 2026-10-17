@@ -39,6 +39,15 @@ CanbusComLoggingRestartMonitor::CanbusComLoggingRestartMonitor(
     // handler's first call is scheduled at once.
     k_mutex_init(&handler_lock_);
 
+    // The units already online are the baseline of the LOGGING bit: only a unit that gains it later is
+    // armed by a heartbeat. Before the handlers, which use the bitset on the CDMP work queue.
+    if(const auto network_info = canbus_com_service_->GetNetworkInfo(); network_info != nullptr) {
+        std::array<CdmpDeviceInfo, 64> devices{};
+        const size_t count = network_info->GetNetworkDevices(devices);
+        for(size_t i = 0; i < count; i++)
+            has_logging_.set(devices[i].device_id, HasFeature(devices[i].features, ProductFeature::LOGGING));
+    }
+
     // A constructor that throws runs no destructor, so it withdraws what it registered itself.
     try {
         device_event_handler_id_ = canbus_com_service_->RegisterDeviceEventHandler(
@@ -95,6 +104,7 @@ void CanbusComLoggingRestartMonitor::OnDeviceEvent(CdmpDeviceEvent event, const 
     switch(event) {
         case CdmpDeviceEvent::RESTARTED:
         case CdmpDeviceEvent::JOINED:
+            has_logging_.set(device.device_id, HasFeature(device.features, ProductFeature::LOGGING));
             if(IsLoggingUnit(device)) {
                 restarted_.set(device.device_id);
                 LOG_INF("Logging unit %u %s.", static_cast<unsigned>(device.device_id),
@@ -104,6 +114,7 @@ void CanbusComLoggingRestartMonitor::OnDeviceEvent(CdmpDeviceEvent event, const 
 
         case CdmpDeviceEvent::LEFT:
             restarted_.reset(device.device_id);
+            has_logging_.reset(device.device_id);
             break;
     }
 }
@@ -128,6 +139,16 @@ bool CanbusComLoggingRestartMonitor::IsLoggingUnit(const CdmpDeviceInfo& device)
 }
 
 void CanbusComLoggingRestartMonitor::OnHeartbeat(const CdmpHeartbeatMessage& heartbeat) {
+    // A unit that gains LOGGING (a DAQ whose writer is built after its first heartbeat, or that has a
+    // writer again) is armed, as one that joined with it: its record may be current already, or may
+    // follow, and it resolves like the others. The features at the join or restart are the baseline.
+    const bool has_logging = HasFeature(heartbeat.features, ProductFeature::LOGGING);
+    if(has_logging && !has_logging_.test(heartbeat.device_id)) {
+        restarted_.set(heartbeat.device_id);
+        LOG_INF("Unit %u gained the logging feature.", static_cast<unsigned>(heartbeat.device_id));
+    }
+    has_logging_.set(heartbeat.device_id, has_logging);
+
     // While no unit has a copy, a record can be applied, and its unit's heartbeat handled, before the
     // state handler call that ends the spell and leaves the unit to the status rule: a report here
     // would be a second start.

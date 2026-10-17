@@ -249,13 +249,16 @@ writer.
 
 - **Targets.** A request names its target. `kAllUnits` is one broadcast, whatever the device table
   holds. A UID is one unicast to the device ID of the unit with that UID, looked up through
-  `ICdmpNetworkInfo` when the command is sent: the unit must be online and `CanLog()` (today a
-  `LOGGER`; `control/logging_unit.h` is the one place that says so). The control keeps one wanted
+  `ICdmpNetworkInfo` when the command is sent: the unit must be online and `CanLog()` (its
+  features carry `LOGGING`; `control/logging_unit.h` is the one place that says so). The control keeps one wanted
   state per target: slot 0 for all units and a slot per UID (at most one per trigger; a request that
   finds none is logged and dropped). A request for all units replaces every slot, since the broadcast
   reaches the others too. A start for a UID that is not online is held and sent when that unit
   appears, by the rules below; a stop for it is only logged, since an offline unit is not reachable
-  and no signal would deliver the stop later. A request for this unit's own UID is dropped with a
+  and no signal would deliver the stop later. A stop for a UID that follows a start for all units
+  is that unit's latest request: no re-assertion starts it again (a restart report skips it, and the
+  status rule starts the other units one by one instead of broadcasting) until a later request moves
+  it. A request for this unit's own UID is dropped with a
   warning: it has no writer.
 - **Peer mode.** The network half of a writer is the same class with `Mode::Peer`: it subscribes to
   no status (the writer's own status is local, so `IsActive()` is false and the writer control
@@ -353,10 +356,11 @@ a heartbeat and a state handler with the COM service (`RegisterDeviceEventHandle
   value: a unit that started by itself with a record equal to the stale copy, and stopped again
   before its next heartbeat, is reported, and the wanted start overrides that stop.
 - **Features.** The monitor goes by `ProductFeature::LOGGING` in a unit's features, which a unit
-  with a log writer and a mounted log volume sends in its heartbeat. It reads the features of the
-  join or restart event: a unit that rejoins after the heartbeat timeout may send its first
-  heartbeat before its reporter has run, with LOGGING still clear, and only its status copy then
-  arms the monitor.
+  with a log writer and a mounted log volume sends in its heartbeat. A unit that joins or restarts
+  with LOGGING set is armed at the event. A DAQ sets the bit when its writer is built, after its
+  first heartbeat, so the join may carry it clear: a heartbeat that shows LOGGING newly set (it was
+  clear at the join, restart or last heartbeat) arms the unit too, whether its record came before or
+  comes after that heartbeat. So does a status copy the unit held at the event.
 - **Ready.** A current copy means the unit can take the `LOGGING` command: the writer role builds
   the command handler before the exporter that shares the record. A command that reaches a unit
   without the handler is dropped, so the monitor never reports on the claim alone.

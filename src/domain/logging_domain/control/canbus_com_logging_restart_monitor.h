@@ -39,9 +39,12 @@ using eerie_leap::domain::canbus_com_domain::states::RemoteStateRecord;
 //
 // A unit is armed when it joins (CdmpDeviceEvent::JOINED, after the heartbeat timeout or for the
 // first time) or claims its ID again with its UID (RESTARTED) and
-// - it is a LOGGER, which may share a status, or
+// - its features carry LOGGING, which may share a status, or
 // - this unit holds a LOGGING_STATUS copy of it: the record is what makes a unit a logging unit.
-// A unit that joined has no copy yet, so its type is all there is to go by. With no copy at all the
+// A unit that joined has no copy yet, so its features are all there is to go by. A unit also becomes
+// armed when a heartbeat shows LOGGING that its join or restart did not have: a log writer sets the bit
+// when it is built, after the unit's first heartbeat, and may share its record before the heartbeat that
+// carries the bit. With no copy at all the
 // status goes through Unavailable when the unit reports, which the status rule covers; with another
 // unit's copy it does not, and the monitor is the only signal.
 //
@@ -119,6 +122,8 @@ private:
     // The CDMP work queue only, as in NetworkStateImporter. The records are a member so that they
     // stay off the work queue's stack.
     std::bitset<256> restarted_;
+    // The LOGGING bit of each unit's last features (join, restart or heartbeat), to see it gained.
+    std::bitset<256> has_logging_;
     // Whether the last state handler call found no LOGGING_STATUS copy at all, which is the combined
     // status Unavailable in that same call.
     bool is_status_empty_ = false;

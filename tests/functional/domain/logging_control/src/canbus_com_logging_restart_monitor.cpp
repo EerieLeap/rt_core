@@ -113,8 +113,14 @@ struct Fixture {
 
     // @p device_id reboots: its claim again, its first heartbeat with the digest of @p records, and
     // its next record is version 1. Nothing is reported while it cannot accept a start.
-    void Restart(uint8_t device_id, uint32_t uid, std::initializer_list<Record> records, bool is_sync_request_due) {
-        SendRestart(harness, device_id, uid, records);
+    void Restart(
+        uint8_t device_id,
+        uint32_t uid,
+        std::initializer_list<Record> records,
+        bool is_sync_request_due,
+        uint16_t features = LOGGER_FEATURES) {
+
+        SendRestart(harness, device_id, uid, records, features);
         next_version.at(device_id) = 1;
         zassert_false(WaitForRestartTaken(harness, device_id, is_sync_request_due),
             "Nothing is sent before the restarted unit can accept it");
@@ -576,7 +582,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfAnotherTypeWithoutAStat
     F().ShareStatus(OTHER_ID, ACTIVE);
     JoinAs(F(), SPARE_ID, DISPLAY_UID, DISPLAY_FEATURES);
 
-    F().Restart(SPARE_ID, DISPLAY_UID, {}, false);
+    F().Restart(SPARE_ID, DISPLAY_UID, {}, false, DISPLAY_FEATURES);
     F().ShareStatus(SPARE_ID, STOPPED);
     zassert_true(F().HasNoReport(), "A display is no logging unit");
 }
@@ -586,7 +592,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfAnotherTypeThatHoldsASt
     JoinAs(F(), SPARE_ID, DISPLAY_UID, DISPLAY_FEATURES);
     F().ShareStatus(SPARE_ID, ACTIVE);
 
-    F().Restart(SPARE_ID, DISPLAY_UID, {{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart(SPARE_ID, DISPLAY_UID, {{LOGGING_STATUS_CODE, 1, STOPPED}}, true, DISPLAY_FEATURES);
     F().ShareStatus(SPARE_ID, STOPPED);
     const auto report = F().WaitForReport();
     zassert_true(report.has_value(), "A unit that shared a status is a logging unit");
@@ -736,4 +742,37 @@ ZTEST(canbus_com_logging_restart_monitor, test_ANullServiceIsRefused) {
     }
 
     zassert_true(is_refused, "A monitor without the COM service could hear nothing");
+}
+
+// A DAQ joins with LOGGING clear (its writer is built after its first heartbeat) and shares its record
+// first, while another unit reports: nothing arms it until a heartbeat carries the bit.
+ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatGainsLoggingAfterItsRecordIsReported) {
+    F().ShareStatus(ACTIVE);
+
+    JoinAs(F(), OTHER_ID, OTHER_UID, DISPLAY_FEATURES);
+    F().ShareStatus(OTHER_ID, STOPPED);
+    zassert_true(F().HasNoReport(), "It cannot log as far as anyone knows");
+
+    F().Heartbeat(OTHER_ID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    const auto report = F().WaitForReport();
+    zassert_true(report.has_value(), "The heartbeat with LOGGING arms it, and its record is current");
+    zassert_equal(report.value(), OTHER_ID);
+
+    F().Heartbeat(OTHER_ID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    zassert_true(F().HasNoReport(), "once");
+}
+
+// The heartbeat with LOGGING comes first, the record after it.
+ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatGainsLoggingBeforeItsRecordIsReported) {
+    F().ShareStatus(ACTIVE);
+
+    JoinAs(F(), OTHER_ID, OTHER_UID, DISPLAY_FEATURES);
+    F().Heartbeat(OTHER_ID, {});
+    zassert_true(F().HasNoReport(), "It has no record yet");
+
+    F().ShareStatus(OTHER_ID, STOPPED);
+    const auto report = F().WaitForReport();
+    zassert_true(report.has_value(), "Its record ends the wait");
+    zassert_equal(report.value(), OTHER_ID);
+    zassert_true(F().HasNoReport(), "once");
 }

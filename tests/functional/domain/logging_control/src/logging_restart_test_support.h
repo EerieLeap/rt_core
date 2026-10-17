@@ -45,12 +45,17 @@ inline bool IsLoggingCommandTo(const Bytes& frame, uint8_t device_id) {
 // restart, then its first heartbeat with the digest of the records it holds. The frames only: the
 // unit takes them on the CDMP work queue, in this order. A digest of no records is a unit that has
 // not announced any yet.
-inline void SendRestart(Harness& harness, uint8_t device_id, uint32_t uid, std::initializer_list<Record> records) {
+inline void SendRestart(
+    Harness& harness,
+    uint8_t device_id,
+    uint32_t uid,
+    std::initializer_list<Record> records,
+    uint16_t features = LOGGER_FEATURES) {
     harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
         .claiming_device_id = device_id,
         .uid = uid,
         .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
-    harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records), LOGGER_FEATURES));
+    harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records), features));
 }
 
 // Returns once the unit has taken what SendRestart() sent, and whether it sent a LOGGING command

@@ -306,6 +306,18 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
             device_count = network_info_->GetNetworkDevices(devices_);
     }
 
+    // The units a request of their own stopped: the start for all units must not undo it. A stop slot
+    // lasts until a later request takes it, which is as long as the control remembers.
+    std::bitset<256> stopped_devices;
+    for(size_t i = 1; i < targets.size(); i++) {
+        if(targets[i].wanted != Request::Stop)
+            continue;
+
+        const auto device_id = Resolve(targets[i].uid, device_count);
+        if(device_id.has_value())
+            stopped_devices.set(device_id.value());
+    }
+
     // The devices a start went to in this run, and whether the broadcast start went out: either covers
     // a re-assertion for the same unit.
     std::bitset<256> started_devices;
@@ -345,13 +357,29 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
     }
 
     // 2. The status shows a logging unit again (Remote mode): one broadcast when all units want a start,
-    //    else a start to each target that resolves.
+    //    else a start to each target that resolves. A unit that was stopped on its own is left out of
+    //    the broadcast, so the others get a unicast each.
     if(is_status_reassert_due) {
         if(targets[0].wanted == Request::Start) {
-            if(!is_broadcast_start_sent) {
+            if(is_broadcast_start_sent) {
+                // Already covered.
+            } else if(stopped_devices.none()) {
                 LOG_INF("A logging unit is back; sending the wanted logging start again.");
                 command_sender_->SendLoggingCommand(true, ILoggingCommandSender::kBroadcast);
                 is_broadcast_start_sent = true;
+            } else {
+                for(size_t i = 0; i < device_count; i++) {
+                    const auto& device = devices_[i];
+                    if(device.status != CdmpDeviceStatus::ONLINE || !CanLog(device)
+                        || stopped_devices.test(device.device_id) || started_devices.test(device.device_id)) {
+                        continue;
+                    }
+
+                    LOG_INF("A logging unit is back; sending the wanted logging start to unit %u.",
+                        static_cast<unsigned>(device.device_id));
+                    command_sender_->SendLoggingCommand(true, device.device_id);
+                    started_devices.set(device.device_id);
+                }
             }
         } else {
             for(size_t i = 1; i < targets.size(); i++) {
@@ -378,7 +406,7 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
             if(!restarted.test(id) || started_devices.test(id))
                 continue;
 
-            bool is_wanted = targets[0].wanted == Request::Start;
+            bool is_wanted = targets[0].wanted == Request::Start && !stopped_devices.test(id);
             size_t held_index = 0;
             for(size_t i = 1; i < targets.size() && !is_wanted; i++) {
                 if(targets[i].wanted != Request::Start)
