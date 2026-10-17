@@ -32,10 +32,6 @@ config EERIE_LEAP_SW_VERSION_PATCH
 	range 0 65535
 	default 0
 
-config EERIE_LEAP_LOG_DATA_FILES_DIR
-	string "Log data files directory"
-	default "data_logs"
-
 config EERIE_LEAP_LOG_DATA_FILE_PREFIX
 	string "Log data files prefix"
 	default "log_data"

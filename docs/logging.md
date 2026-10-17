@@ -19,10 +19,12 @@ unit stops logging on every unit (see [Configuration updates](#configuration-upd
    `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` free on the card;
 2. builds this session's logger with the factory (`SetLoggerFactory()`), so every start, a
    restart included, writes the layout of the configurations in effect at that moment;
-3. creates `EERIE_LEAP_LOG_DATA_FILES_DIR` if missing and picks a new file name
+3. creates the `logs/` directory (`LogFileNaming::LOGS_DIR`) if missing and picks a new file name
    `<prefix>_<YYYYMMDD>T<HHMMSS>Z_<rand4>.<ext>` from the start time in UTC and a random
    four-digit suffix (`log_data_20261011T093000Z_4242.mf4` by default), so names sort by start
-   time; it tries up to ten suffixes when a name is taken (`LogFileNaming` builds the name);
+   time; it tries up to ten suffixes when a name is taken (`LogFileNaming` builds the name).
+   The directory is fixed, no longer a Kconfig option: logs written before this change stay in
+   `data_logs/` and are not listed;
 4. discards the raw CAN frames queued before the start (the frame queues them whether or not
    logging runs), then opens the file through a seekable stream and calls the logger's
    `StartLogging()`;
@@ -758,7 +760,6 @@ The default configuration logs nothing.
 | `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` | 0..1048576, 16 | Free space needed to start logging and to rotate to the next file. 0 disables the check. |
 | `EERIE_LEAP_DOMAIN_LOGGING_STATS` | n | Logs the writer's counters once per period: ticks, readings, frames, drops, bytes, stream writes, syncs, rotations, overruns, errors, tick duration. The counters are always kept (`GetStats()`). |
 | `EERIE_LEAP_LOG_STATS_LOG_PERIOD_S` | 1..3600, 10 | Period of the statistics line, and the shortest interval between two dropped-frame warnings. |
-| `EERIE_LEAP_LOG_DATA_FILES_DIR` | `"data_logs"` | Directory of the log files on the SD card. |
 | `EERIE_LEAP_LOG_DATA_FILE_PREFIX` | `"log_data"` | File name prefix; empty drops the prefix and the underscore. |
 | `EERIE_LEAP_MDF` | n | Builds the MDF 4 writer; selected by `EERIE_LEAP_DOMAIN_LOGGING`, and usable without it. |
 | `EERIE_LEAP_CONTROLLER_LOGGING` | n | Builds `LoggingController`, logging control and the triggers' configuration, with or without the logging domain, which picks the role. Depends on `EERIE_LEAP_CONFIGURATION`, `EERIE_LEAP_EVENT_BUS`, `EERIE_LEAP_DOMAIN_SENSOR` (the publisher, the trigger values) and `EERIE_LEAP_DOMAIN_CANBUS_COM` (the command handler, the importer, the remote role); selects `EERIE_LEAP_THREADING`. A configuration stored after `LoggingController::Start()` stops logging on every unit. |

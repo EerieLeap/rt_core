@@ -799,11 +799,13 @@ ZTEST(mdf4_logger, test_LogFileNaming) {
 
     const system_clock::time_point time = sys_days{year{2026} / October / 11} + hours{9} + minutes{30};
 
-    const auto path = LogFileNaming::GetFilePath("data_logs", "log_data", time, 4242, "mf4");
-    zassert_true(path == "data_logs/log_data_20261011T093000Z_4242.mf4", "unexpected file name %s", path.CStr());
+    const std::string directory = LogFileNaming::LOGS_DIR;
 
-    const auto without_prefix = LogFileNaming::GetFilePath("data_logs", "", time + seconds{5}, 123456, "mf4");
-    zassert_true(without_prefix == "data_logs/20261011T093005Z_3456.mf4",
+    const auto path = LogFileNaming::GetFilePath(directory, "log_data", time, 4242, "mf4");
+    zassert_true(path.ToString() == directory + "/log_data_20261011T093000Z_4242.mf4", "unexpected file name %s", path.CStr());
+
+    const auto without_prefix = LogFileNaming::GetFilePath(directory, "", time + seconds{5}, 123456, "mf4");
+    zassert_true(without_prefix.ToString() == directory + "/20261011T093005Z_3456.mf4",
         "an empty prefix drops its underscore and the suffix keeps four digits (got %s)", without_prefix.CStr());
 }
 

@@ -88,9 +88,9 @@ bool LogWriterService::DoStart() {
         return false;
     }
 
-    if(!fs_service_->Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR)) {
-        if(!fs_service_->CreateDirectory(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR)) {
-            LOG_ERR("Failed to create %s directory", CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    if(!fs_service_->Exists(LogFileNaming::LOGS_DIR)) {
+        if(!fs_service_->CreateDirectory(LogFileNaming::LOGS_DIR)) {
+            LOG_ERR("Failed to create %s directory", LogFileNaming::LOGS_DIR);
             return false;
         }
     }
@@ -223,7 +223,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
 
     for(int i = 0; i < 10; i++) {
         auto new_file_path = LogFileNaming::GetFilePath(
-            CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR,
+            LogFileNaming::LOGS_DIR,
             CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX,
             start_time,
             Rng::Get<uint16_t>(),

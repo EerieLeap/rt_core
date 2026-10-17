@@ -25,7 +25,7 @@ Two instances exist in the application:
 | Instance | Mount | Holds |
 | --- | --- | --- |
 | Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor` |
-| SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts, `data_logs/` |
+| SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts, `logs/` |
 
 The SD service is optional for the sensors and CAN code, which accept a null SD service and then
 skip script validation. The writer-role `LoggingController` requires one, and its `Initialize()`
@@ -82,4 +82,4 @@ other options.
 | --- | --- | --- |
 | `config/<type>_config.cbor` | internal | Configuration managers |
 | `scripts/*.lua` (by convention) | SD | The user; referenced by sensors and CAN messages through `script_path` |
-| `data_logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`EERIE_LEAP_LOG_DATA_FILES_DIR`, `_PREFIX`); UTC start time |
+| `logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`LogFileNaming::LOGS_DIR`, `EERIE_LEAP_LOG_DATA_FILE_PREFIX`); UTC start time. Logs written before the directory was fixed stay in `data_logs/` and are not listed. |

@@ -166,7 +166,7 @@ ZTEST_F(smp_files_group, test_list_reports_names_sizes_and_types) {
 
 ZTEST_F(smp_files_group, test_empty_request_lists_the_root) {
     Harness& harness = *fixture->harness;
-    harness.card->directories[""] = {Folder("scripts"), Folder("data_logs")};
+    harness.card->directories[""] = {Folder("scripts"), Folder("logs")};
 
     auto without_body = harness.client.Read(SmpGroupId::FILES, LIST, {});
 

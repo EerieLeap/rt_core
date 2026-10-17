@@ -944,6 +944,7 @@ public:
 
 using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
 using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
+using eerie_leap::domain::logging_domain::services::LogFileNaming;
 
 // Stores a logging configuration that logs @p sensor_ids, so a file has a group, as rt_daq's would.
 inline void StoreLoggingConfiguration(LoggingController& controller, std::initializer_list<std::string_view> sensor_ids) {
@@ -961,14 +962,14 @@ inline void StoreLoggingConfiguration(LoggingController& controller, std::initia
 
 // The bytes of the log file the writer wrote, the only one of a case; empty when there is none.
 inline std::vector<uint8_t> ReadTheLogFile(FsService& fs_service) {
-    if(!fs_service.Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR))
+    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
         return {};
 
-    const auto names = fs_service.ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    const auto names = fs_service.ListFiles(LogFileNaming::LOGS_DIR);
     if(names.size() != 1)
         return {};
 
-    const std::string path = std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/" + names.front();
+    const std::string path = std::string(LogFileNaming::LOGS_DIR) + "/" + names.front();
     const auto size = fs_service.GetFileSize(path);
     if(!size.has_value())
         return {};
@@ -989,10 +990,10 @@ inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view t
 
 // The log files of the data directory: one per session.
 inline size_t CountLogFiles(FsService& fs_service) {
-    if(!fs_service.Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR))
+    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
         return 0;
 
-    return fs_service.ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR).size();
+    return fs_service.ListFiles(LogFileNaming::LOGS_DIR).size();
 }
 
 // A property of the header comment, as the logger writes LoggerMetadata.

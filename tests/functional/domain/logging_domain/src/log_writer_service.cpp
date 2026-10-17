@@ -68,10 +68,10 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     zassert_equal(stats.frames, published_frames, "every queued raw frame is logged (got %u)", stats.frames);
     zassert_true(stats.readings >= 3, "each tick sees a new value timestamp (got %u readings)", stats.readings);
 
-    const auto files = rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
 
-    const std::string path = std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/" + files[0];
+    const std::string path = std::string(LogFileNaming::LOGS_DIR) + "/" + files[0];
     const auto content = ReadWholeFile(*rig.fs_service, path);
 
     zassert_true(content.size() >= kIdBlockSize + kBlockHeaderSize, "the file is shorter than an MDF header");
@@ -133,10 +133,10 @@ ZTEST(log_writer_service, test_FramesQueuedBeforeStartAreNotLogged) {
     zassert_equal(stats.frames, published_frames, "only the frames after the start are logged (got %u)", stats.frames);
     zassert_equal(stats.frames_dropped, 0, "drops before the start are not this file's (got %u)", stats.frames_dropped);
 
-    const auto files = rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
 
-    const auto content = ReadWholeFile(*rig.fs_service, std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/" + files[0]);
+    const auto content = ReadWholeFile(*rig.fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + files[0]);
     const auto records = ReadDataRecords(content);
     zassert_equal(records.frame_times.size(), published_frames, "one CAN record per frame after the start (got %zu)",
         records.frame_times.size());
@@ -156,10 +156,10 @@ ZTEST(log_writer_service, test_HeldSampleIsRepeatedAtEveryTick) {
     k_sleep(K_MSEC(550));
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
-    const auto files = rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
 
-    const auto content = ReadWholeFile(*rig.fs_service, std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/" + files[0]);
+    const auto content = ReadWholeFile(*rig.fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + files[0]);
     const auto records = ReadDataRecords(content);
 
     zassert_true(records.value_times.size() >= 4, "550 ms at 100 ms must repeat the sample (got %zu records)",
@@ -195,10 +195,10 @@ ZTEST(log_writer_service, test_FailingSensorIsLoggedInvalidUntilItRecovers) {
     k_sleep(K_MSEC(250));
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
-    const auto files = rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
 
-    const auto content = ReadWholeFile(*rig.fs_service, std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/" + files[0]);
+    const auto content = ReadWholeFile(*rig.fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + files[0]);
     const auto records = ReadDataRecords(content);
 
     // valid (10.5) ... invalid (0, bits 0 and 1) ... valid again (10.7)
@@ -245,7 +245,7 @@ ZTEST(log_writer_service, test_StartFailsWhenTheHeaderCannotReachTheVolume) {
     const std::string filler_path = "start_fill.bin";
 
     // Created before the fill so that Start() gets as far as the file, not just the directory.
-    zassert_true(rig.fs_service->CreateDirectory(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR),
+    zassert_true(rig.fs_service->CreateDirectory(LogFileNaming::LOGS_DIR),
         "the data directory could not be created on an empty volume");
 
     const std::vector<uint8_t> chunk(4096, 0xA5);
@@ -256,7 +256,7 @@ ZTEST(log_writer_service, test_StartFailsWhenTheHeaderCannotReachTheVolume) {
 
     zassert_false(rig.log_writer_service->Start(), "Start must fail when the header cannot be synced");
 
-    const auto files = rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
     zassert_equal(files.size(), 0, "a failed Start must not leave a file behind (found %zu)", files.size());
 
     if(!rig.fs_service->DeleteFile(filler_path))

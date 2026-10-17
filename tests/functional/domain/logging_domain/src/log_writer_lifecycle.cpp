@@ -112,8 +112,8 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
     supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     const auto first_probe = probes->Current();
-    const auto file_path = std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/"
-        + rig.fs_service->ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR).at(0);
+    const auto file_path = std::string(LogFileNaming::LOGS_DIR) + "/"
+        + rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR).at(0);
 
     FillVolume(*rig.fs_service, filler_path);
 

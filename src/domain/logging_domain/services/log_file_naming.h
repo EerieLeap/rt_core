@@ -15,6 +15,9 @@ using eerie_leap::utilities::string::StaticString;
 
 class LogFileNaming {
 public:
+    /// The directory of the log files, relative to the log volume; also the directory of the LOGS
+    /// assets.
+    static constexpr const char* LOGS_DIR = "logs";
     static constexpr size_t PATH_MAX_LENGTH = 128;
     static constexpr uint32_t RANDOM_SUFFIX_MODULO = 10000;
 

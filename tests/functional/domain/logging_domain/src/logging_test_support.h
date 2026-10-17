@@ -84,6 +84,7 @@ using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
 using eerie_leap::domain::logging_domain::loggers::ILogger;
 using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
 using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
+using eerie_leap::domain::logging_domain::services::LogFileNaming;
 using eerie_leap::domain::logging_domain::services::LogWriterService;
 using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
 
@@ -128,8 +129,8 @@ inline std::shared_ptr<FsService> GetFormattedFsService() {
 inline void RemoveDataDirectory() {
     auto fs_service = GetFormattedFsService();
 
-    if(fs_service->Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR))
-        fs_service->DeleteRecursive(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR);
+    if(fs_service->Exists(LogFileNaming::LOGS_DIR))
+        fs_service->DeleteRecursive(LogFileNaming::LOGS_DIR);
 
     for(const char* path : {"config/logging_config.cbor", "config/sensors_config.cbor"}) {
         if(fs_service->Exists(path))
@@ -219,12 +220,12 @@ struct LogFile {
 inline std::vector<LogFile> ReadLogFiles(FsService& fs_service) {
     std::vector<LogFile> files;
 
-    if(!fs_service.Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR))
+    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
         return files;
 
-    for(const auto& name : fs_service.ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR)) {
+    for(const auto& name : fs_service.ListFiles(LogFileNaming::LOGS_DIR)) {
         LogFile file;
-        file.path = std::string(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR) + "/" + name;
+        file.path = std::string(LogFileNaming::LOGS_DIR) + "/" + name;
         file.content = ReadWholeFile(fs_service, file.path);
         zassert_true(file.content.size() >= kHeaderStartTimeOffset + 8, "%s is shorter than an MDF header", file.path.c_str());
         file.start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(file.content, kHeaderStartTimeOffset));
@@ -237,10 +238,10 @@ inline std::vector<LogFile> ReadLogFiles(FsService& fs_service) {
 }
 
 inline size_t CountLogFiles(FsService& fs_service) {
-    if(!fs_service.Exists(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR))
+    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
         return 0;
 
-    return fs_service.ListFiles(CONFIG_EERIE_LEAP_LOG_DATA_FILES_DIR).size();
+    return fs_service.ListFiles(LogFileNaming::LOGS_DIR).size();
 }
 
 // Polls @p condition every 10 ms until it holds or @p timeout_ms passed.
