@@ -568,7 +568,7 @@ Byte 1-N:  Packet data, N = 7 on classic CAN and 63 on CAN FD
 ### 5.5 Flow Control and Pacing
 
 - A sender transmits one packet at a time to a given target, frames of two packets to the same target never interleave.
-- An SMP client keeps no more requests in flight to a target than the target reports as its buffer count (`mcumgr params`), and no packet exceeds the reported buffer size.
+- An SMP client keeps fewer requests in flight to a target than the target reports as its buffer count (`mcumgr params`): requests and responses draw from the same pool, so a window of that many exhausts it. No packet exceeds the reported buffer size.
 - Each sender limits its SMP frames to a configured share of the bus time (default 25 %), assuming worst-case frames with a 29-bit ID and bit stuffing:
   - classic CAN: 160 bit times per frame;
   - CAN FD: 60 bit times at the nominal bitrate plus 700 at the data bitrate.

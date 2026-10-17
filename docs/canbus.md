@@ -167,7 +167,9 @@ sensor is configured.
 `CanbusController` (`EERIE_LEAP_CONTROLLER_CANBUS`; depends on `EERIE_LEAP_DOMAIN_CANBUS`,
 `EERIE_LEAP_DOMAIN_CANBUS_COM`, `EERIE_LEAP_DEVICE_TREE`, `EERIE_LEAP_FS`) creates the
 configuration manager, the `CanbusService`, the `CanbusComService` and the SMP `network`
-group. When a configuration is stored it waits `EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS`
+group. Given an SD service and the asset registry it also serves `scripts/can` as the `can_scripts`
+asset kind and refuses to delete a script a message's `script_path` names (see
+[filesystem.md](filesystem.md#assets-eerie_leap_assets)). When a configuration is stored it waits `EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS`
 (default 250 ms, restarted by every further update) so that the SMP response to the request that
 stored it, which may travel over the very bus being restarted, gets out first. Then, on the
 configuration work queue, it stops the COM service and every service registered with
@@ -177,4 +179,5 @@ calls `CanbusService::Configure()`, and starts them again.
 | Symbol | Default | Meaning |
 | --- | --- | --- |
 | `EERIE_LEAP_DOMAIN_CANBUS` | n | Builds the domain. Depends on `EERIE_LEAP_CONFIGURATION` and `EERIE_LEAP_CANBUS`. The sensor domain selects it. |
+| `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | 1..1048576, 65536 | Largest message script an upload of the `can_scripts` kind may bring, in bytes (see [scripting.md](scripting.md)). |
 | `EERIE_LEAP_CONTROLLER_CANBUS_RECONFIGURE_DELAY_MS` | 250 | Delay before a stored configuration is applied to the buses. |

@@ -23,8 +23,9 @@ unit stops logging on every unit (see [Configuration updates](#configuration-upd
    `<prefix>_<YYYYMMDD>T<HHMMSS>Z_<rand4>.<ext>` from the start time in UTC and a random
    four-digit suffix (`log_data_20261011T093000Z_4242.mf4` by default), so names sort by start
    time; it tries up to ten suffixes when a name is taken (`LogFileNaming` builds the name).
-   The directory is fixed, no longer a Kconfig option: logs written before this change stay in
-   `data_logs/` and are not listed;
+   The directory is fixed, and is the directory of the `logs` asset kind (see
+   [Log files as assets](#log-files-as-assets)); logs that earlier firmware wrote to `data_logs/`
+   stay there and are not listed;
 4. discards the raw CAN frames queued before the start (the frame queues them whether or not
    logging runs), then opens the file through a seekable stream and calls the logger's
    `StartLogging()`;
@@ -79,9 +80,29 @@ stats' byte and write counts cover every file of the session.
 
 `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` (default 16, 0 disables the check) is checked when logging
 starts and before each rotation, never per tick: the free space comes from FatFs's free cluster
-count, which can take a scan of the whole FAT on a large card. A start without it fails; a
-rotation without it ends the session with the reason `NoSpace`, leaving the full file open for
-the stop to finalize.
+count, which can take a scan of the whole FAT on a large card. It is the volume's total space minus
+its used space, both counted in allocation units (a FAT cluster), so the minimum means the room it
+names. A start without it fails; a rotation without it ends the session with the reason `NoSpace`,
+leaving the full file open for the stop to finalize.
+
+### Log files as assets
+
+The files in `logs/` are the `logs` asset kind (see [filesystem.md](filesystem.md#assets-eerie_leap_assets)):
+a client lists, downloads and deletes them with the SMP `assets` group (see [smp.md](smp.md)). The
+kind takes no uploads: the writer is the only source of logs. It serves files ending in `.mf4`; a
+name that `LogFileNaming` builds is `EERIE_LEAP_LOG_DATA_FILE_PREFIX` plus 26 characters
+(`_YYYYMMDDTHHMMSSZ_NNNN.mf4`), which must be a valid asset name: a build with `EERIE_LEAP_ASSETS`
+refuses a prefix that makes the longest name exceed `EERIE_LEAP_ASSETS_MAX_NAME_LENGTH`, holds a
+character outside `A-Z a-z 0-9 . _ -` or starts with a dot.
+
+The file the writer has open is in use: it can be neither downloaded nor deleted (`IN_USE`), where
+every other log can. `LogWriterService::IsOpenFile(path)` says which that is, for a path relative to
+the volume, compared ignoring ASCII case, from any thread; it takes a lock of its own that is never
+held across file I/O. The writer sets the path before the file exists and clears it where the file is
+closed and final (after the finalize), on every failure path and on a stop, so a stopped writer has no
+open file and the log of the last session can be fetched, and a rotation has none between its two
+files. Only a unit with a log writer registers the kind: `LoggingController` in the writer role, with
+the SD service and a registry (see [Wiring](#wiring)); the remote role registers nothing.
 
 ### Status events and failures
 
@@ -760,7 +781,7 @@ The default configuration logs nothing.
 | `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` | 0..1048576, 16 | Free space needed to start logging and to rotate to the next file. 0 disables the check. |
 | `EERIE_LEAP_DOMAIN_LOGGING_STATS` | n | Logs the writer's counters once per period: ticks, readings, frames, drops, bytes, stream writes, syncs, rotations, overruns, errors, tick duration. The counters are always kept (`GetStats()`). |
 | `EERIE_LEAP_LOG_STATS_LOG_PERIOD_S` | 1..3600, 10 | Period of the statistics line, and the shortest interval between two dropped-frame warnings. |
-| `EERIE_LEAP_LOG_DATA_FILE_PREFIX` | `"log_data"` | File name prefix; empty drops the prefix and the underscore. |
+| `EERIE_LEAP_LOG_DATA_FILE_PREFIX` | `"log_data"` | File name prefix; empty drops the prefix and the underscore. With `EERIE_LEAP_ASSETS` the prefix plus the 26 characters the writer adds must be a valid asset name (see [Log files as assets](#log-files-as-assets)); the build checks it. |
 | `EERIE_LEAP_MDF` | n | Builds the MDF 4 writer; selected by `EERIE_LEAP_DOMAIN_LOGGING`, and usable without it. |
 | `EERIE_LEAP_CONTROLLER_LOGGING` | n | Builds `LoggingController`, logging control and the triggers' configuration, with or without the logging domain, which picks the role. Depends on `EERIE_LEAP_CONFIGURATION`, `EERIE_LEAP_EVENT_BUS`, `EERIE_LEAP_DOMAIN_SENSOR` (the publisher, the trigger values) and `EERIE_LEAP_DOMAIN_CANBUS_COM` (the command handler, the importer, the remote role); selects `EERIE_LEAP_THREADING`. A configuration stored after `LoggingController::Start()` stops logging on every unit. |
 
@@ -795,7 +816,9 @@ auto logging_controller = std::make_shared<LoggingController>(
     fs_service, config_work_queue_thread, configuration_service,
     sensors_controller->GetConfigurationManager(), canbus_com_service, sensor_events_publisher,
     // The writer role only:
-    sd_fs_service, time_service, sensor_readings_frame, "rt_daq");
+    sd_fs_service, time_service, sensor_readings_frame, "rt_daq",
+    // With EERIE_LEAP_ASSETS: the registry the log files are registered with.
+    assets_manager);
 
 // The writer role: the composition root registers the dependent, before SensorsController::Start().
 if(logging_controller->Initialize() == 0)
@@ -815,6 +838,7 @@ logging_controller->Start();
 | `sensor_events_publisher` | Null: a rebuilt trigger waits for the next change of its value instead of a replay. | Same. |
 | `sd_fs_service`, `time_service`, `sensor_readings_frame` | Required. | Ignored. |
 | `tool_id` | The log header's tool ID. | Ignored. |
+| `assets_manager` | With `EERIE_LEAP_ASSETS` and the SD service: the registry the `logs` kind is registered with once `Initialize()` succeeded. Null: not registered. | Ignored: the remote role writes no logs. |
 
 **`Initialize()`** returns 0, or -1 with every getter null and nothing registered. It runs once. It
 builds, in this order:
@@ -829,9 +853,12 @@ builds, in this order:
 | 6 | The triggers' updated handler. | Same. |
 | 7 | With a configuration service, `ConfigurationUpdateLoggingStop` (initialized; it registers nothing before `Start()`), without a sender in both roles: the control sends the stop. |
 | 8 | Registration with `ConfigurationService`: logging (type 5), then logging control (type 8). | Logging control (type 8). |
+| 9 | With `EERIE_LEAP_ASSETS`, a registry and the log volume: the `logs` kind (see [Log files as assets](#log-files-as-assets)). | Nothing. |
 
-Registration is last because `ConfigurationService` cannot unregister, so a failed `Initialize()`
-leaves nothing behind. For the same reason it keeps the first manager of a type, and a controller
+Registration is the last step that can fail, because `ConfigurationService` cannot unregister, so a
+failed `Initialize()` leaves nothing behind. The `logs` kind follows it: a registration the registry
+refuses, or that throws, is only logged and does not fail `Initialize()`; `Teardown()` takes the kind
+back. `ConfigurationService` also keeps the first manager of a type, and a controller
 built on a service that holds one would work against a manager nothing reacts to: `Initialize()`
 refuses it before it builds anything. The replay at step 5 finds an empty frame when sensors are not started yet;
 it makes a controller built after `SensorsController::Start()` still see a switch that is already on.
@@ -862,7 +889,8 @@ failed controller registers nothing and the root skips what depends on it.
 
 **Teardown.** The destructor withdraws everything that refers to the controller, in an order that is
 safe while the bus threads and the configuration and CDMP work queues run. It also runs after a
-failed or skipped `Initialize()`.
+failed or skipped `Initialize()`. The `logs` kind is unregistered first, so no request asks the
+writer about a file past this.
 
 1. Destroys the update stop: its handler is cleared, a report in its body is waited for, and a
    broadcast still pending is dropped.

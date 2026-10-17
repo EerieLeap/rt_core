@@ -151,7 +151,7 @@ ones.
 | CAN RX bottom half (per bus) | highest, cooperative | 2048 | fixed; give it a MetaIRQ level with `CONFIG_NUM_METAIRQ_PRIORITIES` |
 | SD card monitor | 2 | `EERIE_LEAP_FS_SD_THREAD_STACK_SIZE` | fixed |
 | CDMP service thread and work queue | 5 | 4096 | `EERIE_LEAP_CDMP_*` |
-| Configuration work queue | application | application | the application creates it (8192 / 5 in rt_daq); log writer starts and stops, trigger rebuilds, the remote `LOGGING` send and the `LOGGING` stop of a configuration update run on it; so does the report of an update stored by an SMP write ([logging.md](logging.md#supervision), [logging.md](logging.md#configuration-updates), [logging.md](logging.md#threading)) |
+| Configuration work queue | application | application | the application creates it (8192 / 5 in rt_daq); log writer starts and stops, trigger rebuilds, the remote `LOGGING` send and the `LOGGING` stop of a configuration update run on it; so does the report of an update stored by an SMP write ([logging.md](logging.md#supervision), [logging.md](logging.md#configuration-updates), [logging.md](logging.md#threading)), and every request of the SMP `assets` group, file I/O and CRC included, while the MCUmgr handler waits (a resumed download first reads the file up to its offset; [smp.md](smp.md#assets-asset-kinds)) |
 | Sensor processing | 6 | 8192 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_*` (rt_daq uses 5) |
 | Sensor events publisher | 6 | 4096 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_*` |
 | Calibration sampling | 6 | 4096 | fixed |

@@ -12,7 +12,9 @@ with the mount prefix. The interface (`IFsService`) offers `WriteFile` (overwrit
 (replaces a file at the target: atomic on littlefs, a delete and a rename on FAT; a missing source
 fails with `-ENOENT` before the target is touched), `ListFiles`, `ListDirectory` (a page of a
 directory's entries with their sizes and types), `GetFileSize` (of a file: a directory has none),
-`GetTotalSpace`, `GetUsedSpace` and `Format`. All calls hold one mutex per service.
+`GetTotalSpace`, `GetUsedSpace` (both in bytes of the volume's allocation units, a FAT cluster or a
+littlefs block, so the difference is the room that files can still take) and `Format`. All calls
+hold one mutex per service.
 
 Zephyr's FAT rename deletes the target first, so a file renamed onto itself is lost. `Rename`
 therefore takes only plain paths, `A-Z a-z 0-9 . _ -` and `/` with no name ending in a dot, and
@@ -24,16 +26,18 @@ Two instances exist in the application:
 
 | Instance | Mount | Holds |
 | --- | --- | --- |
-| Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor` |
-| SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts, `logs/` |
+| Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor`, `ui_assets/` (rt_gauge's images and animations) |
+| SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts (`scripts/sensors`, `scripts/can`), `logs/` |
 
 The SD service is optional for the sensors and CAN code, which accept a null SD service and then
-skip script validation. The writer-role `LoggingController` requires one, and its `Initialize()`
+skip script validation and serve no script kind. The writer-role `LoggingController` requires one, and its `Initialize()`
 fails without it, so a composition root with no SD service does not build it (rt_daq skips it). The
 remote role ignores the SD service. See [logging.md](logging.md#wiring).
 
-Clients list a directory of the card, such as `scripts/`, with the SMP `files` group, which the
-`ManagementController` serves with the SD service it is given (see [smp.md](smp.md)).
+Clients list a directory of the card, such as `scripts/`, with the SMP `files` group, and list,
+download, upload and delete the files of the asset kinds below with the `assets` group. The
+`ManagementController` serves both, `files` with the SD service and `assets` with the registry it is
+given (see [smp.md](smp.md)).
 
 ## Stream buffer
 
@@ -72,14 +76,115 @@ The service is built with `CONFIG_DISK_ACCESS`, and then `EERIE_LEAP_FS` selects
 
 ## Assets (`EERIE_LEAP_ASSETS`)
 
-`AssetsManager(fs_service, assets_dir)` stores opaque blobs under one directory of a filesystem
-service: `Save`, `Load` (into a PMR vector), `Delete`, `Exists`. Selects `EERIE_LEAP_FS`; no
-other options.
+Code: `src/subsys/assets/`; selects `EERIE_LEAP_FS`. An asset is a file of one kind (images,
+animations, Lua scripts, logs) that a client lists, downloads, uploads and deletes over SMP by kind
+and name, without knowing the directory behind it (the `assets` group, see [smp.md](smp.md)).
+
+**`AssetStore(fs_service, directory)`** is the files of one directory of one file system service
+(`directory` is relative to the mount point; empty is the volume's root). The directory is created
+when the store is, if the volume is available, otherwise when a write needs it.
+
+- Whole files by a path relative to the directory: `Save`, `Load` (into a PMR vector on the external
+  heap; empty for a file that is missing, empty, unreadable or that changed size while it was read),
+  `Delete`, `Exists` and `GetSize` (nothing for a directory). No name rules apply here: a widget's
+  `FILE_PATH` may hold a sub-path.
+- `IsAvailable()` and `GetFreeSpace()` (total minus used space, 0 when unavailable).
+- `List(first, max_entries, extensions, ...)` reads a page of the directory and keeps the files whose
+  names are valid for the extensions; directories and other names are skipped but counted, and each
+  kept entry carries its directory position. A directory that does not exist lists nothing.
+- `OpenRead(name, reader)` and `BeginWrite(name, writer)` stream a file (below).
+
+**`AssetReader` and `AssetWriter`** stream a file through a buffer of `BUFFER_SIZE` (4 KiB) bytes on
+the external heap, aligned to 32 bytes for block devices that transfer by DMA. A reader fills the
+buffer at multiples of 4 KiB, so the file system sees aligned reads of whole sectors whatever offsets
+the caller asks for, and the next block in sequence costs no seek (a seek back on FAT walks the
+cluster chain from the start of the file). A writer collects data until the buffer is full. Both are
+move-only and close on destruction (a writer aborts); each is used by one thread at a time. An open
+reader or writer holds a file slot of the file system (`FS_LITTLEFS_NUM_FILES`,
+`FS_FATFS_NUM_FILES`; `OpenRead` returns `-ENOMEM` when none is free).
+
+They work on the file handle directly, outside the service's mutex. littlefs locks each call per
+mount; FatFs does only with `FS_FATFS_REENTRANT` (Zephyr's default is n), which a FAT volume needs
+whenever another thread uses it at the same time, as the log writer does. A write that fails or falls
+short (FAT reports a full volume as a short write, which counts as `-ENOSPC`) latches: later appends
+return the same error and `Commit()` refuses to publish a file with a hole.
+
+**Staged writes.** `BeginWrite()` opens `.assets_tmp/upload.part` at the root of the store's volume
+(creating the directory, truncating a stale file); one write is staged per volume at a time, for
+whichever store. `Commit()` writes out the buffer, closes the file, creates the store's directory
+when it is missing and renames the staged file onto the asset (`IFsService::Rename`), replacing
+the old one; when that fails the staged file is deleted. `Abort()` closes and deletes it.
+`RemoveStaged()` deletes one that a power loss left.
+
+**`AssetProvider`** is what a unit serves of one kind: the kind and its name (`"images"`), the store,
+the extensions with their dot, the allowed operations as bits (`READ` 1, `WRITE` 2, `DELETE` 4), the
+largest upload (`max_size`, 0 for a kind that takes none) and an optional `is_in_use(operation,
+name)` that refuses an operation on a file. That callback runs on the configuration work queue
+without the registry's lock and must not take the LVGL lock. `MakeScriptProvider()` builds the two
+script kinds.
+
+**`AssetsManager`** is the registry: at most one provider per kind. `Register()` refuses a kind that
+is registered already and a provider without a store; `Unregister()` never throws, so destructors
+call it; `Find()` and `GetProviders()` (ordered by kind) hand out shared pointers, so a caller keeps
+the provider it found while another thread unregisters it. It is thread-safe: widgets call `Find()`
+under the LVGL lock and the SMP group from the configuration work queue, and its mutex is never held
+while a provider's callback or a referrer runs. It holds a kernel mutex, so create it with
+`std::make_shared`. The composition root creates one after the file systems and passes it to every
+controller that registers a kind and to the `ManagementController` that serves them; like the
+configuration work queue it is shared, not owned by one controller.
+
+The rt_core controllers register their kind at the end of a successful `Initialize()`, when they
+have a registry and an SD service, and take it back, with their referrers, when they are destroyed
+(`LoggingController::Teardown()`); without `EERIE_LEAP_ASSETS` they accept the registry and ignore
+it. The `LoggingController` registers `logs` in the writer role only. rt_gauge's `UiController`
+registers its two kinds on the internal volume when it initializes and removes them when it is
+destroyed.
+
+| Kind | Name | Store (volume, directory) | Extensions | Access | Max | In use | Registered by |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | `images` | internal, `ui_assets/images` | `.bin` | R W D | rt_gauge's `EERIE_LEAP_UI_IMAGE_MAX_SIZE` (4 MiB) | never | rt_gauge `UiController` |
+| 1 | `animations` | internal, `ui_assets/animations` | `.json` | R W D | rt_gauge's `EERIE_LEAP_UI_ANIMATION_MAX_SIZE` (512 KiB) | never | rt_gauge `UiController` |
+| 2 | `sensor_scripts` | SD, `scripts/sensors` | `.lua` | R W D | `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `SensorsController` |
+| 3 | `can_scripts` | SD, `scripts/can` | `.lua` | R W D | `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `CanbusController` |
+| 4 | `logs` | SD, `logs` | `.mf4` | R D | 0 | `READ` and `DELETE` of the file being written | `LoggingController`, writer role |
+
+The kind numbers go over the wire: append only. Widgets find their images and animations through the
+registry by kind (`FILE_PATH` is a path relative to the kind's directory, a bare name for a file a
+client uploaded); a client that overwrites or deletes a file a widget shows changes it at the widget's
+next render.
+
+**Script references.** A controller that owns stored script paths adds a referrer with
+`AddReferrer(owner, fn)`, which says whether its configuration refers to a path relative to the
+volume. `SensorsController` answers for every sensor's `script_path`, enabled or not,
+`CanbusController` for every message's over every channel. Paths compare ignoring ASCII case, as FAT
+does, skipping empty names and `.`; an empty path matches nothing. They read the configuration in
+effect in memory (the default, when the stored one failed to load); none (a null `Get()`) refers to
+nothing, and an exception while reading it counts as referring, so a script that might be in use is
+kept. Both script kinds ask every
+referrer (`IsReferenced(path)`), since a sensor may name a script in `scripts/can` and a message one in
+`scripts/sensors`: a referenced script cannot be deleted (`IN_USE`), but it can be read and
+overwritten. A script outside the two directories still runs when a `script_path` names it; it is
+not listed or served.
+
+**Names.** A name is 1 to `EERIE_LEAP_ASSETS_MAX_NAME_LENGTH` bytes of `A-Z a-z 0-9 . _ -`, not
+starting with a dot and ending in one of the kind's extensions (compared ignoring ASCII case) with at
+least one character before it (`AssetStore::IsValidName()`). There is no separator, so a name cannot
+leave its directory. The writer's log names (`EERIE_LEAP_LOG_DATA_FILE_PREFIX` plus 26 characters, see
+[logging.md](logging.md#how-it-works)) must pass it; the build checks that.
+
+| Symbol | Range / default | Meaning |
+| --- | --- | --- |
+| `EERIE_LEAP_ASSETS` | n | Builds the assets; selects `EERIE_LEAP_FS`. |
+| `EERIE_LEAP_ASSETS_MAX_NAME_LENGTH` | 8..128, 64 | Longest asset name, in bytes. |
+| `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | 1..1048576, 65536 | Largest sensor script an upload may bring. |
+| `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | 1..1048576, 65536 | Largest CAN script an upload may bring. |
 
 ## Directory layout
 
 | Path | Filesystem | Written by |
 | --- | --- | --- |
 | `config/<type>_config.cbor` | internal | Configuration managers |
-| `scripts/*.lua` (by convention) | SD | The user; referenced by sensors and CAN messages through `script_path` |
-| `logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`LogFileNaming::LOGS_DIR`, `EERIE_LEAP_LOG_DATA_FILE_PREFIX`); UTC start time. Logs written before the directory was fixed stay in `data_logs/` and are not listed. |
+| `ui_assets/images/*.bin`, `ui_assets/animations/*.json` | internal | Clients, as the `images` and `animations` kinds; rt_gauge's test setup writes its demo files there |
+| `scripts/sensors/*.lua`, `scripts/can/*.lua` | SD | Clients, as the `sensor_scripts` and `can_scripts` kinds; referenced by sensors and CAN messages through `script_path`. A `script_path` may name any file on the card, and a script outside these directories still runs but is not listed. |
+| `logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`LogFileNaming::LOGS_DIR`, `EERIE_LEAP_LOG_DATA_FILE_PREFIX`); UTC start time; the `logs` kind. Logs written before the directory was fixed stay in `data_logs/` and are not listed. |
+| `.assets_tmp/upload.part` | each volume that takes uploads | The upload being staged; renamed onto the asset or deleted, and a stale one is deleted when the `assets` group starts. |

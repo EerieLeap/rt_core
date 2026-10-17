@@ -42,8 +42,7 @@ Code: `src/subsys/lua_script/` (the host), `src/domain/script_domain/` (the sens
 interpreter in `modules/zephyr_lua/`.
 
 Scripts are plain Lua files on the SD card, referenced by a path relative to the card's mount
-point (`scripts/sensor_8.lua`) in a sensor's or a CAN message's `script_path`. A client lists
-`scripts/` with the SMP `files` group to pick one (see [smp.md](smp.md)). While a card is
+point (`scripts/sensors/sensor_8.lua`) in a sensor's or a CAN message's `script_path`. While a card is
 mounted the validators reject a configuration whose script file is not on it. While no card is
 mounted they check no `script_path`, because a stored configuration is validated as it loads and
 would otherwise be replaced by defaults on a unit booted without its card; a sensor or message
@@ -51,7 +50,23 @@ whose script is not there runs without it (the sensor pipeline logs a warning). 
 pipeline is built, a CAN message's when the CAN configuration is parsed, so a card inserted
 later serves its scripts from the next configuration change or boot. A unit without an SD
 service, which reports no `STORAGE` feature ([system.md](system.md#unit-features)), checks no
-`script_path` and runs no script.
+`script_path`, runs no script and serves no script kind.
+
+**Putting scripts on the card.** A client uploads, downloads and deletes scripts with the SMP
+`assets` group (see [smp.md](smp.md)): a sensor script is the `sensor_scripts` kind, stored in
+`scripts/sensors/`, a CAN message script the `can_scripts` kind, in `scripts/can/`, so the
+`script_path` of an uploaded script is the directory and the name. A name is a file name of
+`A-Z a-z 0-9 . _ -` ending in `.lua`, and a script is at most `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` or
+`EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` bytes (64 KiB by default). A `script_path` may still name any other
+file on the card, such as one copied there by hand; the SMP `files` group lists the whole card to
+find it, where the `assets` group serves only the two directories.
+
+- A script that a stored configuration refers to cannot be deleted (`IN_USE`), also a sensor's script
+  in the CAN directory and a message's in the sensors' directory.
+- Uploading over a referenced script is allowed, and the unit runs the script it has loaded until the
+  next load: a sensor script at the next build of the sensor pipeline (any restart of sensor
+  processing, such as a stored sensors, ADC or CAN configuration), a CAN message script at the next
+  parse of the CAN configuration (a stored CAN configuration or a boot).
 
 ### Hosting
 
@@ -180,6 +195,7 @@ end
 | --- | --- | --- |
 | `EERIE_LEAP_LUA_SCRIPT` | n | Builds the host; selects `LUA`. |
 | `EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB` | 256 | Memory budget of one state; 0 is unlimited. |
+| `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE`, `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | 1..1048576, 65536 | Largest script the `sensor_scripts` and `can_scripts` kinds take in an upload (see [filesystem.md](filesystem.md#assets-eerie_leap_assets)). A script is read into memory whole when it is loaded. |
 | `EERIE_LEAP_DOMAIN_SCRIPT` | n | The `get_sensor_value` and `update_sensor_value` bindings; selected by the sensor domain. |
 | `LUA_32BITS` | y | `float` numbers and 32-bit integers. |
 | `LUA_LIB_BASE` | y | Compiles the base library; the host opens it when present. `table`, `string`, `math` and `utf8` are always built and opened. |

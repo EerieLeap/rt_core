@@ -376,6 +376,7 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6, sensor_7});
 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY` | 6 | Its priority. |
 | `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` | 1..65535, 64 | Most sensors a configuration may hold; sizes every snapshot buffer. |
 | `EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE` | 1..1024, 32 | Raw CAN frames queued for the log writer; about 90 bytes each, allocated only while an enabled `CANBUS_RAW` sensor exists. |
+| `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | 1..1048576, 65536 | Largest sensor script an upload of the `sensor_scripts` kind may bring, in bytes (see [scripting.md](scripting.md)). |
 
 ## Wiring
 
@@ -383,7 +384,9 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6, sensor_7});
 `EERIE_LEAP_DOMAIN_CANBUS`, `EERIE_LEAP_GPIO`, `EERIE_LEAP_RANDOM`, `EERIE_LEAP_FS`) takes the
 internal filesystem, the configuration work queue, the configuration service, the time service,
 the shared `SensorReadingsFrame`, the CAN service, the GPIO, and optionally the ADC manager, the
-ADC configuration manager and the SD service. It creates the configuration manager (validating
+ADC configuration manager, the SD service and the asset registry. With the last two it serves
+`scripts/sensors` as the `sensor_scripts` asset kind and refuses to delete a script a sensor's
+`script_path` names (see [filesystem.md](filesystem.md#assets-eerie_leap_assets)). It creates the configuration manager (validating
 channels against the GPIO and ADC channel counts, and a client's CAN sensors against the CAN
 service's configuration), the reader factories and the processing service, registers type 4, and
 wires the restart handlers. `Start()` starts processing; `RegisterDependentService()` adds a

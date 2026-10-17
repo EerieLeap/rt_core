@@ -5,7 +5,7 @@ response maps in 8-byte-header packets, carried over CAN between units and over 
 or PC. rt_core adds its own groups on top of MCUmgr's `os` group (echo, reset, `mcumgr params`).
 
 Code: `src/subsys/smp/` (group helper, transports), the groups next to their domains
-(`src/domain/*/smp/`).
+(`src/domain/*/smp/`), the `assets` group with the assets (`src/subsys/assets/smp/`).
 
 ## Groups
 
@@ -21,6 +21,7 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 | `live` | 67 | `BleService` | `SUBSCRIBE` 0, `UNSUBSCRIBE` 1 |
 | `calibration` | 68 | `AdcController` | `START` 0, `STOP` 1, `READ` 2 |
 | `files` | 69 | `ManagementController` | `LIST` 0 |
+| `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4 |
 
 ### `config`: read and write stored configurations
 
@@ -117,6 +118,142 @@ feature, still serves the group and answers `NO_CARD`; firmware without the grou
 | `IO_ERROR` | 5 | The card could not be read. |
 | `NO_MEMORY` | 6 | The entries could not be stored. |
 
+The group only lists. Scripts are put on the card, and logs fetched from it, with the
+[`assets`](#assets-asset-kinds) group.
+
+### `assets`: asset kinds
+
+Files a unit keeps for its own use, such as images, animations, Lua scripts and logs, grouped by
+kind. A client addresses a file by its kind and a flat name, never by a path: the unit decides the
+directory, the extensions, what a client may do with the kind and how large an upload can be. Each
+controller registers the kinds it owns with the `AssetsManager` ([filesystem.md](filesystem.md#assets-eerie_leap_assets)),
+so a unit serves the kinds it has the services for, and `KINDS` says which.
+
+| Command | Request | Response |
+| --- | --- | --- |
+| `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) and whether the volume is mounted now. A unit without kinds answers an empty list. |
+| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size}], next?}` |
+| `READ` (read) | `{kind, name, off}` | `{off, data}`; at `off = 0` also `len`, the size of the file; the chunk that ends at `len` also `crc`, the CRC32 of the whole file |
+| `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |
+| `DELETE` (write) | `{kind, name}` | `{}` |
+
+The CRC32 is the IEEE one (`zlib.crc32`). The kind numbers are `0` `images`, `1` `animations`,
+`2` `sensor_scripts`, `3` `can_scripts` and `4` `logs`; they are append only, and
+[filesystem.md](filesystem.md#assets-eerie_leap_assets) lists which unit registers which, with
+directory, access and size cap. A name is 1 to `EERIE_LEAP_ASSETS_MAX_NAME_LENGTH` (64) bytes of
+`A-Z a-z 0-9 . _ -`, not starting with a dot, ending in one of the kind's extensions (compared
+ignoring ASCII case) with at least one character before it; any other name is `BAD_NAME`. `READ`,
+`DELETE` and the first chunk of `WRITE` check, before anything else and in this order, the kind
+(`UNKNOWN_KIND`), its `access` (`DENIED`), the name (`BAD_NAME`) and the volume (`UNAVAILABLE`). `LIST`
+checks the kind and the volume only: it needs no access bit and takes no name. A later chunk of
+`WRITE` is matched to the open upload instead, and checks neither access nor name (see below).
+
+**`LIST`.** The entries come from directory position `off` (0 when absent), at most 48 directory
+entries per request, in the file system's order, not sorted. Only files whose names are valid for the
+kind are listed: directories, dot files and other extensions are skipped but counted. `next` is the
+position to ask for next, absent once the directory is done; a page can be empty while `next` is
+present, so a client asks until `next` is absent. A directory that does not exist yet lists nothing.
+Paging keeps no state on the unit and holds together while the directory does not change.
+
+**`READ`.** A download is one session on one file: the unit keeps the file open and a running CRC32
+of the bytes up to the farthest it has read, and the chunk that reaches `len` carries it as `crc`. A
+request at `off = len` answers empty data and `crc`; `off` past `len` is `BAD_OFFSET`, and the
+answer carries `len`. Every chunk but the last has the same length whatever its offset, a little
+under `MCUMGR_TRANSPORT_NETBUF_SIZE`, so a client learns it from the first answer and may keep
+several requests in flight at multiples of it (see [Transports](#transports)). `IN_USE` is asked
+when a session opens.
+
+- A request at `off = 0` or for another file replaces the session; a request at `off > 0` for the
+  open file continues it.
+- A request past the bytes the CRC covers (a request lost in a pipeline, a resume) makes the unit read
+  the gap first, so it takes as long as that read. A chunk below the CRC (a repeat after a lost
+  answer) leaves it alone.
+- The session closes after the last chunk, on a failure to read the file or to extend the CRC
+  (`IO_ERROR`), when a request replaces it (also when that request then fails, `NOT_FOUND` or `IN_USE`),
+  when the file is deleted or replaced, when a `READ` of its kind finds the volume unavailable and
+  after `EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS` without a request. A refused request (`BAD_OFFSET`,
+  `UNKNOWN_KIND`, `DENIED`, `BAD_NAME`) leaves it open.
+- A closing session leaves a checkpoint of its CRC, for one file and its size, the last one closed: a
+  client that resumes at `off > 0` on that file continues without the unit reading it again. After a
+  reboot there is none, and the unit reads the file up to `off` before it answers. A download from
+  `off = 0` never uses the checkpoint, as the file may have changed, and a delete or an upload of the
+  file drops it.
+- An upload that replaces the file meanwhile closes the session: the next request opens the new
+  file, and the `crc` it ends with is the new file's, so a client that checks its data against it
+  sees the mix.
+
+**`WRITE`.** One upload is open at a time, for all kinds, held by the client that has its token. The
+first chunk carries `len` and `crc` and is answered with the token `tok`; every later chunk carries
+the token and starts where the last one ended. A file of no bytes is a first chunk with `len` 0 and
+empty data. The data goes to a staged file, `.assets_tmp/upload.part` at the root of the kind's
+volume, which no kind lists (the `files` group lists directories as they are, so it shows
+`.assets_tmp/` at the root of the card, and `upload.part` in it while an upload is staged). With the
+last chunk the unit checks the CRC32 of everything it received and renames the staged file onto the
+asset, replacing it (the kind's directory is created when missing). The first chunk is checked after the kind, access, name and volume, in this order:
+the size (`TOO_LARGE`: `len` above `max`, or more data than `len`), whether the file is in use
+(`IN_USE`), whether an upload is open (`BUSY`) and the room (`NO_SPACE`: `len` above the free space
+of the volume, checked once; the old file counts as used until it is replaced, so replacing a file
+needs room for both).
+
+- A later chunk is matched to the open upload by its token, kind and exact name (`BAD_TOKEN` when
+  there is none or they differ), then checked for the kind (`UNKNOWN_KIND`), the volume
+  (`UNAVAILABLE`), the offset (`BAD_OFFSET`) and the length (`TOO_LARGE`), in this order.
+- An upload ends, with its staged file deleted and the asset as it was, on `CRC_MISMATCH`, on data
+  beyond `len` (`TOO_LARGE`), on a failure of the file system (`NO_SPACE` for a full volume,
+  `IO_ERROR`), when the file went into use (`IN_USE`, asked again just before the file is replaced), when
+  the kind or its volume went away (`UNKNOWN_KIND`, `UNAVAILABLE` on a later chunk) and after
+  `EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS` without a request, which makes it no upload for the next
+  request, whoever sends it. `BAD_OFFSET`, `BAD_TOKEN` and `BUSY` answer one request and leave the
+  upload as it was.
+- A staged file that a power loss or a pulled card left is deleted when the group starts and before
+  the next upload checks the room.
+- A client whose answer got lost sends the request again. The first chunk, unchanged, while nothing came
+  after it, is answered with the upload's `{off, tok}` instead of `BUSY`. A chunk the unit already
+  holds is answered `BAD_OFFSET` with `off`, the offset it expects. The last chunk, within the
+  session timeout after the file was stored, is answered `{off: len}` again and not written; later it is
+  `BAD_TOKEN`, and the client reads the outcome with `LIST` or `READ`. A file sent in one chunk that
+  was stored, sent again without a token within the timeout and while the file is still as stored,
+  is answered `{off: len, tok}` again.
+- A first chunk with the upload's own token starts the upload over, for the same file or another: the
+  staged data goes, and the room it held counts for the check.
+
+**`DELETE`.** A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
+and so is the log the writer is writing, which cannot be downloaded either. A download of the file is
+closed first.
+
+**File system.** Every command runs on the configuration work queue while the handler waits, as
+`config` and `files` do, so the MCUmgr stack stays small and the group needs no lock. Its file I/O
+runs next to the log writer's on the same SD card, which needs FatFs reentrancy. FatFs has no
+open-file locking: deleting or replacing an open file corrupts the volume, so the group closes its own
+download of a file before it deletes the file or stores an upload over it. A rename onto an
+existing file is atomic on littlefs; on FAT it is a delete and a rename, and a power loss between
+them loses the asset (the staged copy goes at the next start). A group that cannot get its transfer
+buffer (`MCUMGR_TRANSPORT_NETBUF_SIZE` bytes of external RAM) is left out and the unit answers
+`rc` 8; so does firmware without the group.
+
+| Error | Code | Meaning |
+| --- | --- | --- |
+| `UNKNOWN` | 1 | An unexpected failure on the unit; logged there. |
+| `UNKNOWN_KIND` | 2 | No kind with that number is registered. |
+| `UNAVAILABLE` | 3 | The kind's volume is not mounted. |
+| `NOT_FOUND` | 4 | No such asset. |
+| `BAD_NAME` | 5 | The name is not valid for the kind. |
+| `DENIED` | 6 | The kind does not allow the operation (its `access` bits). |
+| `IN_USE` | 7 | The kind refuses the operation on that file now. |
+| `TOO_LARGE` | 8 | `len` above the kind's `max`, or data beyond `len`. |
+| `NO_SPACE` | 9 | The volume has no room for `len`, or filled up during the upload. |
+| `BAD_OFFSET` | 10 | `READ`: `off` past the end; the response carries `len`. `WRITE`: not the next offset; the response carries the one the unit expects as `off`. |
+| `BAD_TOKEN` | 11 | No upload is open, or the token, kind or name does not match it. |
+| `BUSY` | 12 | Another client has an upload open. |
+| `CRC_MISMATCH` | 13 | The received data does not match the `crc` of the first chunk. |
+| `IO_ERROR` | 14 | The file system failed to read, write, delete or rename. |
+| `NO_MEMORY` | 15 | No memory, or no free file slot. |
+
+SMP v1 clients get `rc` instead: `ENOENT` for `UNKNOWN_KIND` and `NOT_FOUND`, `EBADSTATE` for
+`UNAVAILABLE`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
+for `DENIED`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`, `ECORRUPT`
+for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
+
 ## Transports
 
 | Transport | Kconfig | Route |
@@ -124,8 +261,12 @@ feature, still serves the group and answers `NO_CARD`; firmware without the grou
 | CAN | `EERIE_LEAP_SMP_CAN` | Between units on the CDMP COM channel; see [cdmp.md](cdmp.md). |
 | BLE | `EERIE_LEAP_SMP_BLE` | From a central to this unit or, forwarded over CAN, to another unit; see [bluetooth.md](bluetooth.md). |
 
-Both transports share MCUmgr's packet pool, so a client keeps no more requests in flight than
-`mcumgr params` reports.
+Both transports share MCUmgr's packet pool, and requests and responses draw from it, so a client
+keeps fewer requests in flight than the `buf_count` that `mcumgr params` reports: a window of
+`buf_count` exhausts the pool. No packet exceeds `buf_size`, which the chunks of `config` and
+`assets` are sized from. BLE reports its window in the `info` characteristic
+(`EERIE_LEAP_SMP_BLE_REQUESTS_IN_FLIGHT`, 2 by default). Over CAN the rate of a transfer is the
+sending unit's `smp_bus_share_percent` (25 % by default, see [canbus.md](canbus.md)) of the bus.
 
 ## Kconfig
 
@@ -134,11 +275,14 @@ Both transports share MCUmgr's packet pool, so a client keeps no more requests i
 | `EERIE_LEAP_SMP` | n | MCUmgr server with the `os` group. Selects `MCUMGR`, `MCUMGR_GRP_OS`, `MCUMGR_GRP_OS_MCUMGR_PARAMS`, `ZCBOR`, `NET_BUF`, `CRC`, `EERIE_LEAP_RANDOM`, `EERIE_LEAP_THREADING`. The domain groups are only compiled with it. |
 | `EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS` | 5000 | Idle time after which a config transfer is abandoned. |
 | `EERIE_LEAP_SMP_NETWORK_MAX_DEVICES` | 1..254, 32 | Devices the `network` group can list. |
+| `EERIE_LEAP_SMP_ASSETS` | y | Serves the `assets` group. Depends on `EERIE_LEAP_ASSETS` and `EERIE_LEAP_CONTROLLER_MANAGEMENT`, and on `FS_FATFS_REENTRANT` when the file system is FAT (`FAT_FILESYSTEM_ELM`), which Zephyr leaves off. Selects `MCUMGR_SMP_CBOR_MIN_ENCODING_LEVEL_4` with `ZCBOR_CANONICAL`: `KINDS` nests four levels. |
+| `EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS` | 5000 | Idle time after which a download is closed or an upload abandoned and its staged file deleted. |
 | `MCUMGR_TRANSPORT_NETBUF_COUNT` | 6 | Packet pool size (rt_core default; boards may override). |
-| `MCUMGR_TRANSPORT_NETBUF_SIZE` | 1024 | Largest packet. |
+| `MCUMGR_TRANSPORT_NETBUF_SIZE` | 1024 | Largest packet. The `assets` group's transfer buffer has this size, and a `READ` chunk is a little smaller. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO` | 7 | MCUmgr handler thread, below sensor processing. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_CONTROLLER_ADC` | The calibration group pauses and resumes processing on this queue, which 2048 bytes do not cover. |
-| `EERIE_LEAP_CONTROLLER_MANAGEMENT` | n | Serves `config`, `device` and `files`. Depends on `EERIE_LEAP_SMP` and `EERIE_LEAP_DOMAIN_SYSTEM`; create it after every configuration manager is registered. |
+| `FS_LITTLEFS_NUM_FILES`, `FS_FATFS_NUM_FILES` | 6 with `EERIE_LEAP_SMP_ASSETS` | Open files of the file system the build uses (littlefs, FAT): a download and an upload stay open between requests, next to the log writer and the transient opens. rt_core's default. |
+| `EERIE_LEAP_CONTROLLER_MANAGEMENT` | n | Serves `config`, `device`, `files` and, with `EERIE_LEAP_SMP_ASSETS`, `assets`. Depends on `EERIE_LEAP_SMP` and `EERIE_LEAP_DOMAIN_SYSTEM`; create it after every configuration manager is registered. It serves the `AssetsManager` it is given, whose kinds may come and go; given none, `KINDS` lists nothing. |
 
 ## Writing a group
 
