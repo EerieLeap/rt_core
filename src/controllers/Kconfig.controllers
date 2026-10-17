@@ -10,8 +10,8 @@ config EERIE_LEAP_CONTROLLER_MANAGEMENT
     depends on EERIE_LEAP_SMP && EERIE_LEAP_DOMAIN_SYSTEM
     select EERIE_LEAP_THREADING
     help
-      Add EerieLeap Management Controller, serving the config, device and
-      files SMP groups.
+      Add EerieLeap Management Controller, serving the config, device,
+      files and assets SMP groups.
 
 config EERIE_LEAP_CONTROLLER_CANBUS
     bool "EerieLeap CANBus Controller"

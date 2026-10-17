@@ -79,9 +79,11 @@ public:
 
 using Entry = std::map<std::string, uint32_t>;
 using TextEntry = std::map<std::string, std::string>;
+using FlagEntry = std::map<std::string, bool>;
+using ListEntry = std::map<std::string, std::vector<std::string>>;
 
 // A decoded response body: unsigned values, floats, booleans, byte and text strings, one list of maps
-// of unsigned and text values, and the group error.
+// of unsigned, text, boolean and text list values, and the group error.
 struct Response {
     SmpHeader header;
     std::map<std::string, uint32_t> values;
@@ -94,6 +96,11 @@ struct Response {
     std::vector<Entry> entries;
     // The text values of the maps in `entries`, index for index.
     std::vector<TextEntry> entry_texts;
+    // Their boolean values and their lists of text values, index for index.
+    std::vector<FlagEntry> entry_flags;
+    std::vector<ListEntry> entry_lists;
+    // The number of maps in each list of the body, by key; says an empty list was there.
+    std::map<std::string, size_t> list_sizes;
     std::optional<uint32_t> error_group;
     std::optional<uint32_t> error;
 
@@ -141,8 +148,11 @@ inline uint8_t AdditionalInfo(const zcbor_state_t* state) {
     return static_cast<uint8_t>(*state->payload & 0x1F);
 }
 
-// Decodes a map of unsigned values into entry, and its text values into texts when given.
-inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry, TextEntry* texts = nullptr) {
+// Decodes a map of unsigned values into entry; its text values into texts, its booleans into flags
+// and its lists of text values into lists, when given.
+inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry, TextEntry* texts = nullptr, FlagEntry* flags = nullptr,
+    ListEntry* lists = nullptr) {
+
     if(!zcbor_map_start_decode(zsd))
         return false;
 
@@ -152,6 +162,34 @@ inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry, TextEntry* texts = nul
             return false;
 
         const std::string name(reinterpret_cast<const char*>(key.value), key.len);
+
+        if(flags != nullptr && MajorType(zsd) == 7) {
+            bool value = false;
+            if(!zcbor_bool_decode(zsd, &value))
+                return false;
+
+            (*flags)[name] = value;
+            continue;
+        }
+
+        if(lists != nullptr && MajorType(zsd) == 4) {
+            std::vector<std::string>& items = (*lists)[name];
+            if(!zcbor_list_start_decode(zsd))
+                return false;
+
+            while(!zcbor_array_at_end(zsd)) {
+                zcbor_string item{};
+                if(!zcbor_tstr_decode(zsd, &item))
+                    return false;
+
+                items.emplace_back(reinterpret_cast<const char*>(item.value), item.len);
+            }
+
+            if(!zcbor_list_end_decode(zsd))
+                return false;
+
+            continue;
+        }
 
         if(texts != nullptr && MajorType(zsd) == 3) {
             zcbor_string value{};
@@ -173,7 +211,8 @@ inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry, TextEntry* texts = nul
 }
 
 inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
-    ZCBOR_STATE_D(zsd, 4, body.data(), body.size(), 1, 0);
+    // Deep enough for the response map, a list, its maps and their lists.
+    ZCBOR_STATE_D(zsd, 5, body.data(), body.size(), 1, 0);
 
     if(!zcbor_map_start_decode(zsd))
         return false;
@@ -223,16 +262,23 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
             case 4: {
                 if(!zcbor_list_start_decode(zsd))
                     return false;
+                size_t size = 0;
                 while(!zcbor_array_at_end(zsd)) {
                     Entry entry;
                     TextEntry texts;
-                    if(!DecodeEntry(zsd, entry, &texts))
+                    FlagEntry flags;
+                    ListEntry lists;
+                    if(!DecodeEntry(zsd, entry, &texts, &flags, &lists))
                         return false;
                     response.entries.push_back(entry);
                     response.entry_texts.push_back(texts);
+                    response.entry_flags.push_back(flags);
+                    response.entry_lists.push_back(lists);
+                    size++;
                 }
                 if(!zcbor_list_end_decode(zsd))
                     return false;
+                response.list_sizes[name] = size;
                 break;
             }
             case 7: {

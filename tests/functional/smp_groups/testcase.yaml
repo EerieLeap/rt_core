@@ -11,3 +11,7 @@ common:
 
 tests:
   functional.smp_groups: {}
+  # A unit with management and assets that serves no assets group, as rt_daq builds today.
+  functional.smp_groups.no_assets:
+    extra_configs:
+      - CONFIG_EERIE_LEAP_SMP_ASSETS=n

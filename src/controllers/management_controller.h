@@ -14,6 +14,15 @@
 #include "domain/system_domain/smp/device_mgmt_group.h"
 #include "domain/system_domain/smp/files_mgmt_group.h"
 
+#ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
+#include "subsys/assets/smp/assets_mgmt_group.h"
+#endif
+
+// Without CONFIG_EERIE_LEAP_ASSETS the controller still takes the registry, to ignore it.
+namespace eerie_leap::subsys::assets {
+class AssetsManager;
+}
+
 namespace eerie_leap::controllers {
 
 using eerie_leap::subsys::threading::WorkQueueThread;
@@ -25,8 +34,12 @@ using eerie_leap::domain::configuration_domain::smp::ConfigMgmtGroup;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::domain::system_domain::smp::DeviceMgmtGroup;
 using eerie_leap::domain::system_domain::smp::FilesMgmtGroup;
+using eerie_leap::subsys::assets::AssetsManager;
+#ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
+using eerie_leap::subsys::assets::smp::AssetsMgmtGroup;
+#endif
 
-/** @brief Serves the SMP groups of every unit: `config`, `device` and `files`. */
+/** @brief Serves the SMP groups of every unit: `config`, `device`, `files` and, with assets, `assets`. */
 class ManagementController {
 private:
     std::shared_ptr<ConfigurationService> configuration_service_;
@@ -35,10 +48,16 @@ private:
     uint32_t build_number_;
     std::optional<SensorCapabilities> sensor_capabilities_;
     std::shared_ptr<const IFsService> sd_fs_service_;
+#ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
+    std::shared_ptr<AssetsManager> assets_manager_;
+#endif
 
     std::unique_ptr<ConfigMgmtGroup> config_mgmt_group_;
     std::unique_ptr<DeviceMgmtGroup> device_mgmt_group_;
     std::unique_ptr<FilesMgmtGroup> files_mgmt_group_;
+#ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
+    std::unique_ptr<AssetsMgmtGroup> assets_mgmt_group_;
+#endif
 
 public:
     /**
@@ -47,6 +66,8 @@ public:
      * @param sensor_capabilities What the device INFO reports of the sensor inputs; nothing without sensors.
      * @param sd_fs_service The SD card the `files` group lists; nullptr on a unit without one, which
      *        then answers NO_CARD.
+     * @param assets_manager The asset kinds the `assets` group serves; nullptr on a unit without
+     *        any, which then lists no kinds. Ignored without CONFIG_EERIE_LEAP_SMP_ASSETS.
      */
     ManagementController(
         std::shared_ptr<ConfigurationService> configuration_service,
@@ -54,7 +75,8 @@ public:
         std::shared_ptr<const ICdmpNetworkInfo> network_info,
         uint32_t build_number,
         std::optional<SensorCapabilities> sensor_capabilities = std::nullopt,
-        std::shared_ptr<const IFsService> sd_fs_service = nullptr);
+        std::shared_ptr<const IFsService> sd_fs_service = nullptr,
+        std::shared_ptr<AssetsManager> assets_manager = nullptr);
 
     int Initialize();
 };

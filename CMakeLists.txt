@@ -302,6 +302,11 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         list(FILTER SRC EXCLUDE REGEX "/smp/")
     endif()
 
+    # The assets glob also finds smp/, which is built only with its group.
+    if(NOT CONFIG_EERIE_LEAP_SMP_ASSETS)
+        list(FILTER SRC EXCLUDE REGEX "/subsys/assets/smp/")
+    endif()
+
     # The SD card service calls the disk access API, which only exists with DISK_ACCESS.
     if(NOT CONFIG_DISK_ACCESS)
         list(FILTER SRC EXCLUDE REGEX "/subsys/fs/services/sdmmc_service\\.cpp$")

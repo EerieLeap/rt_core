@@ -28,6 +28,26 @@ menu "EerieLeap SMP groups config"
         int "Devices the network group can list"
         default 32
         range 1 254
+
+    config EERIE_LEAP_SMP_ASSETS
+        bool "SMP assets group"
+        default y
+        depends on EERIE_LEAP_ASSETS && EERIE_LEAP_CONTROLLER_MANAGEMENT
+        depends on !FAT_FILESYSTEM_ELM || FS_FATFS_REENTRANT
+        # KINDS nests a list of maps holding a list: four levels with the response map.
+        select MCUMGR_SMP_CBOR_MIN_ENCODING_LEVEL_4 if ZCBOR_CANONICAL
+        help
+          Serves the asset kinds the unit registers in the SMP assets group (70): list,
+          download, upload and delete. Its file I/O runs on the configuration work queue
+          while other threads use the same volumes, so FAT needs FatFs reentrancy.
+
+    config EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS
+        int "Idle time after which an assets transfer is abandoned"
+        default 5000
+        depends on EERIE_LEAP_SMP_ASSETS
+        help
+          Closes the file of a download, or deletes the staged file of an upload, that the
+          client stopped sending requests for.
 endmenu
 
 config EERIE_LEAP_SMP_CAN
@@ -108,5 +128,22 @@ config MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO
 # rebuilds the ISR readers and may unwind an exception, which 2048 bytes do not cover.
 config MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE
     default 4096 if EERIE_LEAP_CONTROLLER_ADC
+
+endif
+
+# The assets group keeps a download and an upload open between requests, next to the log writer and
+# the transient opens of the asset stores. Module Kconfig is sourced before Zephyr's subsystems, so
+# these defaults win.
+if EERIE_LEAP_SMP_ASSETS && FILE_SYSTEM_LITTLEFS
+
+config FS_LITTLEFS_NUM_FILES
+    default 6
+
+endif
+
+if EERIE_LEAP_SMP_ASSETS && FAT_FILESYSTEM_ELM
+
+config FS_FATFS_NUM_FILES
+    default 6
 
 endif
