@@ -26,9 +26,14 @@
 #include "domain/sensor_domain/services/sensors_processing_service.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
+namespace eerie_leap::subsys::assets {
+class AssetsManager;
+}
+
 namespace eerie_leap::controllers {
 
 using eerie_leap::subsys::adc::IAdcManager;
+using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::gpio::IGpio;
 using eerie_leap::subsys::threading::IService;
@@ -66,6 +71,7 @@ private:
     std::shared_ptr<IAdcManager> adc_manager_;
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager_;
     std::shared_ptr<IFsService> sd_fs_service_;
+    std::shared_ptr<AssetsManager> assets_manager_;
 
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory_;
@@ -78,8 +84,14 @@ private:
     std::optional<WorkQueueTask<SensorsController>> restart_task_;
     // Set by Start(); a restart that failed leaves the service stopped, but a later apply retries it.
     std::atomic<bool> is_processing_requested_ = false;
+    // Whether this controller registered the sensor scripts with assets_manager_, and so unregisters them.
+    bool is_assets_registered_ = false;
 
     void RestartProcessing();
+    // Serves the sensor scripts as an asset kind. With CONFIG_EERIE_LEAP_ASSETS, a manager and an SD
+    // service only; registers nothing otherwise.
+    void RegisterAssets();
+    void UnregisterAssets();
 
 public:
     SensorsController(
@@ -93,7 +105,11 @@ public:
         // PHYSICAL_ANALOG sensors are only processed when both are provided.
         std::shared_ptr<IAdcManager> adc_manager = nullptr,
         std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
-        std::shared_ptr<IFsService> sd_fs_service = nullptr);
+        // The scripts directory of this volume is served as the SENSOR_SCRIPTS asset kind.
+        std::shared_ptr<IFsService> sd_fs_service = nullptr,
+        // With CONFIG_EERIE_LEAP_ASSETS: the registry the sensor scripts are registered with, once
+        // Initialize() succeeded, when there is an SD service too; ignored otherwise.
+        std::shared_ptr<AssetsManager> assets_manager = nullptr);
     ~SensorsController();
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);

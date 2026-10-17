@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
@@ -63,7 +64,12 @@ private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     LoggerFactory logger_factory_;
     std::shared_ptr<ILogger<SensorReading>> logger_;
-    StaticString<LogFileNaming::PATH_MAX_LENGTH> file_path_;   // of the open file
+    StaticString<LogFileNaming::PATH_MAX_LENGTH> file_path_;   // of the file last opened; the writer thread's
+
+    // The file the writer has open, for IsOpenFile() on other threads. Held for a copy or a compare
+    // of the path, never across file I/O.
+    mutable k_mutex open_file_mutex_;
+    StaticString<LogFileNaming::PATH_MAX_LENGTH> open_file_path_;
 
     // Set by a tick that ended the session, cleared by the next Start().
     std::atomic<bool> has_failed_ = false;
@@ -82,6 +88,8 @@ private:
     bool OpenLogFile(const std::chrono::system_clock::time_point& start_time);
     // Finalizes what it can and closes the open file; false when it could not be finalized.
     bool CloseLogFile(LogWriterTask& task);
+    void SetOpenFile(std::string_view path);
+    void ClearOpenFile();
     // The reason goes with IsActive = false only.
     static void PublishStatus(bool is_active, LoggingStatusReason reason = LoggingStatusReason::Stopped);
 
@@ -108,6 +116,13 @@ public:
      * RUNNING then, without a tick, until Stop() closes the file; the next Start() clears it.
      */
     [[nodiscard]] bool HasFailed() const { return has_failed_.load(); }
+
+    /**
+     * Whether @p path, relative to the volume, is the file the writer has open now, compared ASCII
+     * case-insensitively. A stopped writer, and one between two files of a rotation, has none. Any
+     * thread; takes a lock that is never held across file I/O.
+     */
+    [[nodiscard]] bool IsOpenFile(std::string_view path) const;
 
     /**
      * Test hook: replaces max_log_size_mb and EERIE_LEAP_LOG_MIN_FREE_SPACE_MB with byte counts

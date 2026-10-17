@@ -40,8 +40,13 @@
 #include "domain/canbus_com_domain/state_bridge/network_state_importer.h"
 #endif
 
+namespace eerie_leap::subsys::assets {
+class AssetsManager;
+}
+
 namespace eerie_leap::controllers {
 
+using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::WorkQueueTask;
@@ -109,6 +114,10 @@ public:
      * @param sd_fs_service The log volume; writer role only, required there.
      * @param time_service, sensor_readings_frame The log writer's; writer role only, required there.
      * @param tool_id The log header's tool ID, such as "rt_daq"; writer role only.
+     * @param assets_manager Writer role with CONFIG_EERIE_LEAP_ASSETS: the registry the log files are
+     *        registered with as the LOGS asset kind once Initialize() succeeded; the unregistration
+     *        is Teardown()'s. Null: not registered. The remote role writes no logs and registers
+     *        nothing.
      */
     LoggingController(
         std::shared_ptr<IFsService> fs_service,
@@ -120,7 +129,8 @@ public:
         std::shared_ptr<IFsService> sd_fs_service = nullptr,
         std::shared_ptr<ITimeService> time_service = nullptr,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame = nullptr,
-        std::string tool_id = {});
+        std::string tool_id = {},
+        std::shared_ptr<AssetsManager> assets_manager = nullptr);
 
     // Withdraws everything that refers to it, in an order that is safe while the bus threads and
     // the configuration and CDMP work queues run. The writer role stops logging first and waits for
@@ -188,6 +198,7 @@ private:
     std::shared_ptr<ITimeService> time_service_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     std::string tool_id_;
+    std::shared_ptr<AssetsManager> assets_manager_;
 
     // Built by Initialize(), dropped by Teardown().
     std::shared_ptr<LoggingControlConfigurationManager> logging_control_configuration_manager_;
@@ -224,6 +235,8 @@ private:
     // it from any state, and detached first.
     std::shared_ptr<DispatchGuard> guard_;
     bool is_handler_registered_ = false;
+    // Whether Build() registered the LOGS kind with assets_manager_, which Teardown() unregisters.
+    bool is_assets_registered_ = false;
     bool is_initialize_called_ = false;
     bool is_initialized_ = false;
     bool is_start_called_ = false;
@@ -243,6 +256,10 @@ private:
     // The update stop's UpdateHandler, inside its guard, on the storing thread: baselines for every
     // trigger, and for a sensors update the withdrawal of triggers whose sensor is gone.
     void OnConfigurationUpdated(ConfigurationService::Type type);
+    // Writer role with CONFIG_EERIE_LEAP_ASSETS, a manager and the log volume: serves the log files as
+    // the LOGS kind, reading and deleting them, but not the one being written. Does nothing otherwise.
+    void RegisterAssets();
+    void UnregisterAssets();
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     // From Teardown(): stops logging through the supervisor and waits for it.
     void StopLogWriter();

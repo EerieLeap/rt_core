@@ -1,7 +1,12 @@
 #include <array>
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <new>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -25,6 +30,39 @@ using eerie_leap::subsys::assets::HasAccess;
 using eerie_leap::subsys::assets::ToMask;
 
 using assets_test::MakeUnavailableStore;
+
+// Lets a test take the memory away: while set, every allocation through operator new fails as it
+// does when the heap is full. Replacement functions cannot be inline, so this is the only file of the
+// binary that defines them; the assets_fat suite builds asset_store.cpp alone.
+namespace {
+
+std::atomic<bool> g_fail_allocations{false};
+
+void* Allocate(size_t size) {
+    if(g_fail_allocations.load())
+        throw std::bad_alloc();
+
+    void* pointer = std::malloc(size == 0 ? 1 : size);
+    if(pointer == nullptr)
+        throw std::bad_alloc();
+
+    return pointer;
+}
+
+void* Allocate(size_t size, const std::nothrow_t&) noexcept {
+    return g_fail_allocations.load() ? nullptr : std::malloc(size == 0 ? 1 : size);
+}
+
+} // namespace
+
+void* operator new(size_t size) { return Allocate(size); }
+void* operator new[](size_t size) { return Allocate(size); }
+void* operator new(size_t size, const std::nothrow_t& tag) noexcept { return Allocate(size, tag); }
+void* operator new[](size_t size, const std::nothrow_t& tag) noexcept { return Allocate(size, tag); }
+void operator delete(void* pointer) noexcept { std::free(pointer); }
+void operator delete[](void* pointer) noexcept { std::free(pointer); }
+void operator delete(void* pointer, size_t) noexcept { std::free(pointer); }
+void operator delete[](void* pointer, size_t) noexcept { std::free(pointer); }
 
 namespace {
 
@@ -346,6 +384,35 @@ ZTEST(assets_manager, test_remove_referrers_removes_only_those_of_the_owner) {
 
     // Removing again is harmless.
     manager.RemoveReferrers(&can);
+}
+
+// A controller removes its referrers and its kind from its destructor, where an exception would end the
+// program, so neither may throw: not even when there is no memory to hold the referrers aside.
+ZTEST(assets_manager, test_unregistering_and_removing_referrers_never_throw) {
+    static_assert(std::is_nothrow_invocable_v<decltype(&AssetsManager::Unregister), AssetsManager&, AssetKind>);
+    static_assert(std::is_nothrow_invocable_v<decltype(&AssetsManager::RemoveReferrers), AssetsManager&, const void*>);
+
+    AssetsManager manager;
+    int owner = 0;
+    int other = 0;
+    const auto token = std::make_shared<int>(0);
+
+    manager.AddReferrer(&owner, [token](std::string_view path) { return path == "oil.lua"; });
+    manager.AddReferrer(&owner, [](std::string_view path) { return path == "boost.lua"; });
+    manager.AddReferrer(&other, [](std::string_view path) { return path == "dash.lua"; });
+    zassert_true(manager.Register(MakeProvider(AssetKind::IMAGES, "images")));
+    zassert_equal(token.use_count(), 2, "The referrer holds the token");
+
+    g_fail_allocations = true;
+    manager.RemoveReferrers(&owner);
+    manager.Unregister(AssetKind::IMAGES);
+    g_fail_allocations = false;
+
+    zassert_false(manager.IsReferenced("oil.lua"), "The owner's referrers are gone");
+    zassert_false(manager.IsReferenced("boost.lua"));
+    zassert_true(manager.IsReferenced("dash.lua"), "The other owner's referrer stays");
+    zassert_equal(token.use_count(), 1, "and the removed ones were destroyed");
+    zassert_true(manager.Find(AssetKind::IMAGES) == nullptr, "The kind is gone");
 }
 
 ZTEST(assets_manager, test_an_empty_referrer_is_ignored) {

@@ -16,8 +16,13 @@
 #include "domain/canbus_com_domain/services/canbus_com_service.h"
 #include "domain/canbus_com_domain/smp/network_mgmt_group.h"
 
+namespace eerie_leap::subsys::assets {
+class AssetsManager;
+}
+
 namespace eerie_leap::controllers {
 
+using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::subsys::threading::WorkQueueTask;
@@ -41,6 +46,7 @@ private:
     std::shared_ptr<WorkQueueThread> config_work_queue_thread_;
     std::shared_ptr<ConfigurationService> configuration_service_;
     std::shared_ptr<IFsService> sd_fs_service_;
+    std::shared_ptr<AssetsManager> assets_manager_;
 
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager_;
     std::shared_ptr<CanbusService> canbus_service_;
@@ -50,15 +56,25 @@ private:
     std::vector<std::shared_ptr<IService>> dependent_services_;
 
     std::optional<WorkQueueTask<CanbusController>> reconfigure_task_;
+    // Whether this controller registered the CAN scripts with assets_manager_, and so unregisters them.
+    bool is_assets_registered_ = false;
 
     void Reconfigure();
+    // Serves the CAN scripts as an asset kind. With CONFIG_EERIE_LEAP_ASSETS, a manager and an SD
+    // service only; registers nothing otherwise.
+    void RegisterAssets();
+    void UnregisterAssets();
 
 public:
     CanbusController(
         std::shared_ptr<IFsService> fs_service,
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
         std::shared_ptr<ConfigurationService> configuration_service,
-        std::shared_ptr<IFsService> sd_fs_service = nullptr);
+        // The scripts directory of this volume is served as the CAN_SCRIPTS asset kind.
+        std::shared_ptr<IFsService> sd_fs_service = nullptr,
+        // With CONFIG_EERIE_LEAP_ASSETS: the registry the CAN scripts are registered with, once
+        // Initialize() succeeded, when there is an SD service too; ignored otherwise.
+        std::shared_ptr<AssetsManager> assets_manager = nullptr);
     ~CanbusController();
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);

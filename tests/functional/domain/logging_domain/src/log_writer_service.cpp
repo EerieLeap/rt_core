@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -236,6 +237,51 @@ ZTEST(log_writer_service, test_SyncFollowsTheConfiguredInterval) {
     zassert_between_inclusive(stats.syncs, 2, 4,
         "1000 ms at a 300 ms interval is 3 syncs, give or take one tick (got %u)", stats.syncs);
     zassert_equal(stats.write_errors, 0, "a sync on an empty volume must not fail");
+}
+
+// What the assets group asks before it reads or deletes a log: a path relative to the volume, as
+// the group builds it from the store's directory and a file name. FAT folds ASCII case.
+ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
+    auto rig = MakeLogWriterRig();
+    const std::string other_path = std::string(LogFileNaming::LOGS_DIR) + "/log_data_20000101T000000Z_0000.mf4";
+
+    zassert_false(rig.log_writer_service->IsOpenFile(other_path), "a writer that never started has no file open");
+    zassert_false(rig.log_writer_service->IsOpenFile(""), "no path is the open file");
+
+    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
+    zassert_equal(files.size(), 1, "Start opens one file (found %zu)", files.size());
+    const std::string path = std::string(LogFileNaming::LOGS_DIR) + "/" + files[0];
+
+    zassert_true(rig.log_writer_service->IsOpenFile(path), "the file Start opened is open");
+
+    std::string upper_case = path;
+    std::ranges::transform(upper_case, upper_case.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    zassert_true(rig.log_writer_service->IsOpenFile(upper_case), "the path is compared ignoring case");
+
+    zassert_false(rig.log_writer_service->IsOpenFile(other_path), "another file is not the open one");
+    zassert_false(rig.log_writer_service->IsOpenFile(files[0]), "the path is relative to the volume, not to the directory");
+    zassert_false(rig.log_writer_service->IsOpenFile(LogFileNaming::LOGS_DIR), "the directory is not the open file");
+    zassert_false(rig.log_writer_service->IsOpenFile(""), "no path is the open file");
+
+    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+    zassert_false(rig.log_writer_service->IsOpenFile(path), "a stopped writer has no file open");
+    zassert_false(rig.log_writer_service->IsOpenFile(upper_case), "a stopped writer has no file open");
+
+    zassert_true(rig.log_writer_service->Start(), "a stopped writer starts again");
+    const auto next_files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
+    zassert_equal(next_files.size(), 2, "the second Start opens a second file (found %zu)", next_files.size());
+
+    size_t open_files = 0;
+    for(const auto& name : next_files) {
+        if(rig.log_writer_service->IsOpenFile(std::string(LogFileNaming::LOGS_DIR) + "/" + name))
+            open_files++;
+    }
+    zassert_equal(open_files, 1, "exactly one of the files is open (found %zu)", open_files);
+    zassert_false(rig.log_writer_service->IsOpenFile(path), "the first session's file is closed for good");
+
+    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 }
 
 // The header is synced at Start(), so a volume that refuses writes fails the Start instead of

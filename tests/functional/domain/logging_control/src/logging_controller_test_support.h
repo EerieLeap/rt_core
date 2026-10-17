@@ -73,6 +73,7 @@ namespace logging_controller_test {
 using namespace logging_control_test;
 using namespace canbus_com_loopback_test;
 
+using eerie_leap::controllers::AssetsManager;
 using eerie_leap::controllers::LoggingController;
 using eerie_leap::controllers::SensorsController;
 using eerie_leap::subsys::adc::AdcChannelHandle;
@@ -356,6 +357,8 @@ struct Parts {
     std::shared_ptr<IFsService> log_volume;
     bool has_time_service = true;
     bool has_frame = true;
+    // The registry the writer registers the log files with (CONFIG_EERIE_LEAP_ASSETS); null: none.
+    std::shared_ptr<AssetsManager> assets_manager;
 };
 
 // The controller of whichever role the binary is built for: the remote role ignores what only the
@@ -372,7 +375,8 @@ inline std::unique_ptr<LoggingController> MakeController(ControllerRig& rig, Par
             : (parts.has_log_volume ? std::shared_ptr<IFsService>(rig.fs_service) : nullptr),
         parts.has_time_service ? rig.time_service : nullptr,
         parts.has_frame ? rig.frame : nullptr,
-        kControllerToolId);
+        kControllerToolId,
+        std::move(parts.assets_manager));
 }
 
 // ======== What a trigger or a store does, seen from outside ========
@@ -645,7 +649,8 @@ inline std::unique_ptr<LoggingController> MakeController(ProcessingRig& rig, Par
         parts.has_log_volume ? rig.fs_service : nullptr,
         parts.has_time_service ? rig.time_service : nullptr,
         parts.has_frame ? rig.frame : nullptr,
-        kControllerToolId);
+        kControllerToolId,
+        std::move(parts.assets_manager));
 }
 
 // One job on the configuration queue that stores configurations through a manager (inline: the

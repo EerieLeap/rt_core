@@ -27,6 +27,16 @@
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #endif
 
+#if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
+#include <array>
+#include <string_view>
+
+#include "subsys/assets/asset_kind.h"
+#include "subsys/assets/asset_provider.h"
+#include "subsys/assets/asset_store.h"
+#include "subsys/assets/assets_manager.h"
+#endif
+
 #include "logging_controller.h"
 
 namespace eerie_leap::controllers {
@@ -42,6 +52,9 @@ using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
+#if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
+using eerie_leap::domain::logging_domain::services::LogFileNaming;
+#endif
 
 namespace config_services = eerie_leap::configuration::services;
 
@@ -80,6 +93,38 @@ LoggingTriggerSet::SelectorResolver MakeSelectorResolver(std::shared_ptr<Sensors
     };
 }
 
+#if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
+// The extension of a log file, in static storage as AssetProvider::extensions needs.
+constexpr std::array<std::string_view, 1> LOG_EXTENSIONS = {".mf4"};
+
+// What the writer adds to the prefix: "_YYYYMMDDTHHMMSSZ_NNNN.mf4".
+constexpr size_t LOG_NAME_SUFFIX_LENGTH = sizeof("_YYYYMMDDTHHMMSSZ_NNNN.mf4") - 1;
+
+// Whether the writer's file names pass AssetStore::IsValidName() for the LOGS kind: the longest one fits
+// the name length of the assets, and it holds only the characters a name may, not starting with a dot.
+constexpr bool IsLogPrefixValid(std::string_view prefix) {
+    if(prefix.size() + LOG_NAME_SUFFIX_LENGTH > CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH)
+        return false;
+
+    if(!prefix.empty() && prefix.front() == '.')
+        return false;
+
+    for(const char c : prefix) {
+        const bool is_name_character = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+            || c == '.' || c == '_' || c == '-';
+        if(!is_name_character)
+            return false;
+    }
+
+    return true;
+}
+
+static_assert(LOG_NAME_SUFFIX_LENGTH == 26, "The writer adds 26 characters to the prefix.");
+static_assert(IsLogPrefixValid(CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX),
+    "EERIE_LEAP_LOG_DATA_FILE_PREFIX plus the 26 characters the writer adds must be a valid asset name: "
+    "at most EERIE_LEAP_ASSETS_MAX_NAME_LENGTH bytes of [A-Za-z0-9._-], not starting with a dot.");
+#endif
+
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 // The log header's device ID. The writer's logger factory keeps the provider as long as the writer
 // lives, which a dependent of SensorsController can stretch past the controller, so it holds the COM
@@ -109,7 +154,8 @@ LoggingController::LoggingController(
     std::shared_ptr<IFsService> sd_fs_service,
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::string tool_id)
+    std::string tool_id,
+    std::shared_ptr<AssetsManager> assets_manager)
         : fs_service_(std::move(fs_service)),
         config_work_queue_thread_(std::move(config_work_queue_thread)),
         configuration_service_(std::move(configuration_service)),
@@ -120,6 +166,7 @@ LoggingController::LoggingController(
         time_service_(std::move(time_service)),
         sensor_readings_frame_(std::move(sensor_readings_frame)),
         tool_id_(std::move(tool_id)),
+        assets_manager_(std::move(assets_manager)),
         guard_(std::make_shared<DispatchGuard>(this)) {
 
     k_mutex_init(&trigger_set_lock_);
@@ -306,6 +353,9 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
             ConfigurationService::Type::LoggingControl, logging_control_configuration_manager_);
     }
 
+    // 9. Nothing after this can fail, so a controller that failed to initialize serves nothing.
+    RegisterAssets();
+
     return true;
 }
 
@@ -490,6 +540,52 @@ void LoggingController::OnConfigurationUpdated(ConfigurationService::Type type) 
         type == ConfigurationService::Type::Sensors ? MakeSelectorResolver(sensors_configuration_manager_) : nullptr);
 }
 
+void LoggingController::RegisterAssets() {
+#if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
+    using namespace eerie_leap::subsys::assets;
+
+    if(assets_manager_ == nullptr || sd_fs_service_ == nullptr || log_writer_service_ == nullptr)
+        return;
+
+    try {
+        AssetProvider provider;
+        provider.kind = AssetKind::LOGS;
+        provider.name = "logs";
+        provider.store = std::make_shared<AssetStore>(sd_fs_service_, LogFileNaming::LOGS_DIR);
+        provider.extensions = LOG_EXTENSIONS;
+        provider.access = ToMask(AssetAccess::READ) | ToMask(AssetAccess::DELETE);
+        // The logs are the writer's: no uploads.
+        provider.max_size = 0;
+
+        // The file being written is neither read nor deleted. The writer can outlive the controller, as
+        // the dependent service SensorsController keeps holds it, so it is held weakly.
+        provider.is_in_use = [weak_writer = std::weak_ptr<LogWriterService>(log_writer_service_), store = provider.store](
+            AssetAccess operation, std::string_view name) {
+
+            if(operation != AssetAccess::READ && operation != AssetAccess::DELETE)
+                return false;
+
+            const auto writer = weak_writer.lock();
+
+            return writer != nullptr && writer->IsOpenFile(store->GetPath(name));
+        };
+
+        is_assets_registered_ = assets_manager_->Register(std::move(provider));
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to register the logs as assets: %s", e.what());
+    }
+#endif
+}
+
+void LoggingController::UnregisterAssets() {
+#if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
+    if(assets_manager_ != nullptr && is_assets_registered_)
+        assets_manager_->Unregister(eerie_leap::subsys::assets::AssetKind::LOGS);
+#endif
+
+    is_assets_registered_ = false;
+}
+
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
 // Through the supervisor, so the wanted state is cleared and the dependent that SensorsController
@@ -541,6 +637,9 @@ void LoggingController::StopLogWriter() {
 // Also the failed-Initialize() path and the destructor, so each step tolerates a member that was
 // never built, and the whole can run again.
 void LoggingController::Teardown() {
+    // The log files are not served any more, so no request asks the writer about a file past this.
+    UnregisterAssets();
+
     // 0. No report runs after this: a store stops nothing, and the update handler's `this` is not
     //    used again. A report in its body is waited for.
     configuration_update_logging_stop_.reset();

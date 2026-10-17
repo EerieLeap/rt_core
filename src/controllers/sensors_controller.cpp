@@ -1,5 +1,8 @@
+#include <algorithm>
 #include <exception>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <zephyr/logging/log.h>
@@ -11,6 +14,14 @@
 #include "configuration/services/cbor_configuration_service.h"
 
 #include "subsys/random/rng.h"
+
+#ifdef CONFIG_EERIE_LEAP_ASSETS
+#include "subsys/assets/asset_kind.h"
+#include "subsys/assets/asset_store.h"
+#include "subsys/assets/assets_manager.h"
+#include "subsys/assets/script_asset_provider.h"
+#include "utilities/string/path_helpers.h"
+#endif
 
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_type.h"
@@ -33,6 +44,45 @@ namespace config_services = eerie_leap::configuration::services;
 
 LOG_MODULE_REGISTER(sensors_controller_logger);
 
+#ifdef CONFIG_EERIE_LEAP_ASSETS
+namespace {
+
+// Relative to the SD volume. The sensor scripts may also live elsewhere on it: a sensor's script_path
+// names any file there, and a script of the CAN scripts' directory is referred to just the same.
+constexpr const char* SENSOR_SCRIPTS_DIRECTORY = "scripts/sensors";
+
+// Whether the sensors configuration of @p manager has a sensor, enabled or not, that uses the script
+// at @p path. Holds the manager weakly, since the registry may outlive the controller. Runs on the
+// configuration work queue.
+eerie_leap::subsys::assets::AssetsManager::Referrer MakeSensorScriptReferrer(
+    const std::shared_ptr<SensorsConfigurationManager>& manager) {
+
+    return [weak_manager = std::weak_ptr<SensorsConfigurationManager>(manager)](std::string_view path) -> bool {
+        const auto sensors_manager = weak_manager.lock();
+        if(sensors_manager == nullptr)
+            return false;
+
+        try {
+            const auto sensors = sensors_manager->Get();
+            if(sensors == nullptr)
+                return false;
+
+            return std::ranges::any_of(*sensors, [path](const std::shared_ptr<Sensor>& sensor) {
+                return eerie_leap::utilities::string::PathHelpers::IsSameEntryIgnoringCase(
+                    path, sensor->configuration.script_path);
+            });
+        } catch(const std::exception& e) {
+            // Unknown is answered as referenced: a script that might be in use is not deleted.
+            LOG_ERR("Failed to read the sensors configuration for its scripts: %s", e.what());
+
+            return true;
+        }
+    };
+}
+
+} // namespace
+#endif
+
 SensorsController::SensorsController(
     std::shared_ptr<IFsService> fs_service,
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
@@ -43,7 +93,8 @@ SensorsController::SensorsController(
     std::shared_ptr<IGpio> gpio,
     std::shared_ptr<IAdcManager> adc_manager,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
-    std::shared_ptr<IFsService> sd_fs_service)
+    std::shared_ptr<IFsService> sd_fs_service,
+    std::shared_ptr<AssetsManager> assets_manager)
     : fs_service_(std::move(fs_service)),
       config_work_queue_thread_(std::move(config_work_queue_thread)),
       configuration_service_(std::move(configuration_service)),
@@ -53,9 +104,13 @@ SensorsController::SensorsController(
       gpio_(std::move(gpio)),
       adc_manager_(std::move(adc_manager)),
       adc_configuration_manager_(std::move(adc_configuration_manager)),
-      sd_fs_service_(std::move(sd_fs_service)) {}
+      sd_fs_service_(std::move(sd_fs_service)),
+      assets_manager_(std::move(assets_manager)) {}
 
 SensorsController::~SensorsController() {
+    // First, so that no request reaches the scripts, or the configuration, of a controller on its way out.
+    UnregisterAssets();
+
     // The ADC configuration manager is not ours and may outlive the handler's capture.
     if(adc_configuration_manager_ != nullptr)
         adc_configuration_manager_->RegisterConfigurationUpdatedHandler(nullptr);
@@ -131,7 +186,55 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
             restart_task_->Reschedule(K_NO_WAIT);
         });
 
+    // After the last point that can fail.
+    RegisterAssets();
+
     return 0;
+}
+
+void SensorsController::RegisterAssets() {
+#ifdef CONFIG_EERIE_LEAP_ASSETS
+    using namespace eerie_leap::subsys::assets;
+
+    if(assets_manager_ == nullptr || sd_fs_service_ == nullptr)
+        return;
+
+    try {
+        auto store = std::make_shared<AssetStore>(sd_fs_service_, SENSOR_SCRIPTS_DIRECTORY);
+
+        // The referrer comes first, so that the kind is never served without it.
+        assets_manager_->AddReferrer(this, MakeSensorScriptReferrer(sensors_configuration_manager_));
+
+        is_assets_registered_ = assets_manager_->Register(MakeScriptProvider(
+            AssetKind::SENSOR_SCRIPTS,
+            "sensor_scripts",
+            std::move(store),
+            CONFIG_EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE,
+            assets_manager_));
+
+        if(!is_assets_registered_)
+            assets_manager_->RemoveReferrers(this);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to register the sensor scripts as assets: %s", e.what());
+
+        assets_manager_->RemoveReferrers(this);
+    }
+#endif
+}
+
+void SensorsController::UnregisterAssets() {
+#ifdef CONFIG_EERIE_LEAP_ASSETS
+    if(assets_manager_ == nullptr)
+        return;
+
+    // The kind first: while it is served, its referrer stays.
+    if(is_assets_registered_) {
+        assets_manager_->Unregister(eerie_leap::subsys::assets::AssetKind::SENSOR_SCRIPTS);
+        is_assets_registered_ = false;
+    }
+
+    assets_manager_->RemoveReferrers(this);
+#endif
 }
 
 int SensorsController::Start() {

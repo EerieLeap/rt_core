@@ -12,6 +12,15 @@
 
 #include <zephyr/ztest.h>
 
+#ifdef CONFIG_EERIE_LEAP_ASSETS
+#include <string>
+
+#include "subsys/assets/asset_kind.h"
+#include "subsys/assets/asset_provider.h"
+#include "subsys/assets/asset_store.h"
+#include "subsys/assets/assets_manager.h"
+#endif
+
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
 #include "domain/system_domain/models/product_feature.h"
@@ -432,5 +441,199 @@ ZTEST(logging_controller_writer, test_TheDeviceIdProviderDoesNotKeepTheComServic
 
     zassert_true(weak_com.expired(), "Nothing of the controller holds the COM service");
 }
+
+#ifdef CONFIG_EERIE_LEAP_ASSETS
+
+// ======== The log files as an asset kind ========
+
+namespace {
+
+using eerie_leap::subsys::assets::AssetAccess;
+using eerie_leap::subsys::assets::AssetKind;
+using eerie_leap::subsys::assets::AssetProvider;
+using eerie_leap::subsys::assets::AssetStore;
+using eerie_leap::subsys::assets::ToMask;
+
+// A log name the writer could have given a file, which no file of a case has.
+constexpr const char* kOtherLogName = "log_data_20000101T000000Z_0000.mf4";
+
+// The name of the one log file on the volume; empty when there is none, or more than one.
+std::string TheLogFileName(FsService& fs_service) {
+    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
+        return {};
+
+    const auto names = fs_service.ListFiles(LogFileNaming::LOGS_DIR);
+
+    return names.size() == 1 ? names.front() : std::string();
+}
+
+// Builds and initializes the controller with a registry, with a trigger on "switch" stored first and a
+// logging configuration that logs it.
+std::shared_ptr<AssetsManager> StartWithAssets() {
+    auto assets = std::make_shared<AssetsManager>();
+
+    auto parts = F().MakeParts();
+    parts.assets_manager = assets;
+    zassert_equal(F().Build(std::move(parts)).Initialize(StoresTriggersOn({"switch"})), 0, "The controller initializes");
+    StoreLoggingConfiguration(*F().controller, {"switch"});
+
+    return assets;
+}
+
+} // namespace
+
+ZTEST(logging_controller_writer, test_TheLogsAreRegisteredOnceTheControllerIsInitialized) {
+    F().Open(false);
+    const auto assets = std::make_shared<AssetsManager>();
+    const auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+
+    auto parts = F().MakeParts();
+    parts.assets_manager = assets;
+    parts.log_volume = volume;
+    auto& controller = F().Build(std::move(parts));
+    zassert_true(assets->GetProviders().empty(), "Nothing is registered before Initialize()");
+    zassert_equal(controller.Initialize(), 0);
+
+    const auto provider = assets->Find(AssetKind::LOGS);
+    zassert_not_null(provider.get(), "The logs are registered once the controller is initialized");
+    zassert_equal(provider->kind, AssetKind::LOGS);
+    zassert_true(provider->name == "logs", "The kind's name");
+    zassert_equal(provider->extensions.size(), 1);
+    zassert_true(provider->extensions[0] == ".mf4", "An MDF 4 file");
+    zassert_equal(provider->access, ToMask(AssetAccess::READ) | ToMask(AssetAccess::DELETE), "Read and delete, no upload");
+    zassert_equal(provider->max_size, 0U, "A log is not uploaded");
+    zassert_not_null(provider->store.get());
+    zassert_true(provider->store->GetDirectory() == LogFileNaming::LOGS_DIR, "The directory the writer logs to");
+    zassert_true(static_cast<bool>(provider->is_in_use), "The file being written is not read or deleted");
+
+    zassert_true(F().rig->fs_service->Exists(LogFileNaming::LOGS_DIR), "The store creates its directory on a mounted volume");
+    zassert_equal(assets->GetProviders().size(), 1, "Only the logs are the controller's");
+
+    // The store is on the log volume the controller was given, not on its internal file system.
+    zassert_true(provider->store->IsAvailable());
+    volume->SetAvailable(false);
+    zassert_false(provider->store->IsAvailable(), "The store follows the log volume");
+    zassert_true(F().rig->fs_service->IsAvailable(), "and not the internal file system");
+    volume->SetAvailable(true);
+    zassert_true(provider->store->IsAvailable());
+}
+
+ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
+    F().Open(false);
+    StatusLog log;
+    const auto assets = StartWithAssets();
+    const auto writer = F().controller->GetLogWriterService();
+    const auto provider = assets->Find(AssetKind::LOGS);
+    zassert_not_null(provider.get());
+
+    zassert_false(provider->is_in_use(AssetAccess::READ, kOtherLogName), "No file is open before the first start");
+
+    PublishSensorValue("switch", 1.0F);
+    auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && entry->is_active, "A trigger starts the writer");
+    zassert_true(WaitUntil([&writer] { return writer->IsRunning(); }));
+
+    const std::string name = TheLogFileName(*F().rig->fs_service);
+    zassert_false(name.empty(), "The writer has one file open");
+
+    zassert_true(provider->is_in_use(AssetAccess::READ, name), "The file being written is not read");
+    zassert_true(provider->is_in_use(AssetAccess::DELETE, name), "and not deleted");
+    zassert_false(provider->is_in_use(AssetAccess::WRITE, name), "Nothing writes a log but the writer");
+    zassert_false(provider->is_in_use(AssetAccess::READ, kOtherLogName), "Another log is free to read");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, kOtherLogName), "and to delete");
+
+    PublishSensorValue("switch", 0.0F);
+    entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active, "A trigger stops the writer");
+    zassert_true(WaitUntil([&writer] { return writer->IsStopped(); }));
+
+    zassert_false(provider->is_in_use(AssetAccess::READ, name), "Once the writer stopped, nothing is in use");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, name));
+}
+
+ZTEST(logging_controller_writer, test_DestroyingTheControllerUnregistersTheLogs) {
+    F().Open(false);
+    StatusLog log;
+    const auto assets = StartWithAssets();
+    const auto writer = F().controller->GetLogWriterService();
+    const auto provider = assets->Find(AssetKind::LOGS);
+    zassert_not_null(provider.get());
+
+    PublishSensorValue("switch", 1.0F);
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && entry->is_active);
+    zassert_true(WaitUntil([&writer] { return writer->IsRunning(); }));
+    const std::string name = TheLogFileName(*F().rig->fs_service);
+    zassert_false(name.empty());
+    zassert_true(provider->is_in_use(AssetAccess::DELETE, name));
+
+    F().controller.reset();
+
+    zassert_is_null(assets->Find(AssetKind::LOGS).get(), "The logs are no longer served");
+    zassert_true(writer->IsStopped(), "The writer was stopped with the controller");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, name), "A provider found before refuses nothing once the writer closed the file");
+}
+
+// The controller keeps nothing of the registry alive: the registry owns the provider.
+ZTEST(logging_controller_writer, test_TheProviderDoesNotKeepTheRegistryAlive) {
+    F().Open(false);
+    auto assets = StartWithAssets();
+    const auto provider = assets->Find(AssetKind::LOGS);
+    zassert_not_null(provider.get());
+
+    F().controller.reset();
+    const std::weak_ptr<AssetsManager> weak_assets = assets;
+    assets.reset();
+
+    zassert_true(weak_assets.expired(), "Nothing the controller registered holds the registry");
+    zassert_false(provider->is_in_use(AssetAccess::READ, kOtherLogName), "A provider outliving its registry refuses nothing");
+}
+
+ZTEST(logging_controller_writer, test_AControllerThatFailedToInitializeRegistersNothing) {
+    F().Open(false);
+    const auto assets = std::make_shared<AssetsManager>();
+
+    auto parts = F().MakeParts();
+    parts.assets_manager = assets;
+    parts.has_time_service = false;
+    zassert_equal(F().Build(std::move(parts)).Initialize(), -1, "The writer needs a time service");
+    zassert_true(assets->GetProviders().empty(), "A refused controller registers nothing");
+    F().controller.reset();
+
+    // A queue that never ran: everything is built, then the supervisor refuses.
+    parts = F().MakeParts();
+    parts.assets_manager = assets;
+    parts.queue = std::make_shared<WorkQueueThread>("never_ran_assets", 4096, 5);
+    zassert_equal(F().Build(std::move(parts)).Initialize(), -1, "The supervisor needs a running queue");
+    zassert_true(assets->GetProviders().empty(), "and neither does one that failed after building the writer");
+    F().controller.reset();
+
+    zassert_true(assets->GetProviders().empty());
+}
+
+// A kind registered already stays with its owner: the controller serves nothing, and its teardown
+// must not withdraw the other's.
+ZTEST(logging_controller_writer, test_ALogsKindRegisteredAlreadyStaysWithItsOwner) {
+    F().Open(false);
+    const auto assets = std::make_shared<AssetsManager>();
+
+    AssetProvider other;
+    other.kind = AssetKind::LOGS;
+    other.name = "logs";
+    other.store = std::make_shared<AssetStore>(F().rig->fs_service, "other_logs");
+    zassert_true(assets->Register(std::move(other)));
+    const auto registered = assets->Find(AssetKind::LOGS);
+
+    auto parts = F().MakeParts();
+    parts.assets_manager = assets;
+    zassert_equal(F().Build(std::move(parts)).Initialize(), 0, "A kind registered already is no failure");
+    zassert_equal(assets->Find(AssetKind::LOGS).get(), registered.get(), "The first registration stays");
+
+    F().controller.reset();
+
+    zassert_equal(assets->Find(AssetKind::LOGS).get(), registered.get(), "and the controller's end withdraws nothing of it");
+}
+
+#endif // CONFIG_EERIE_LEAP_ASSETS
 
 #endif // CONFIG_EERIE_LEAP_DOMAIN_LOGGING

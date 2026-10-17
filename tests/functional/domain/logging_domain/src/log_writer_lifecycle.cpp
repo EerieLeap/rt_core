@@ -269,6 +269,45 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
         static_cast<unsigned long long>(stats.bytes), static_cast<unsigned long long>(total_bytes));
 }
 
+// The rotation closes the full file and opens the next one on the writer thread: the full file stops
+// being the open one, and the next file is.
+ZTEST(log_writer_lifecycle, test_IsOpenFileFollowsARotation) {
+    const auto sensors = MakeLoggedSensors();
+    auto rig = MakeLogWriterRig(sensors);
+    const std::string directory = LogFileNaming::LOGS_DIR;
+
+    rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 1024, 0);
+
+    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+
+    const auto first_files = rig.fs_service->ListFiles(directory);
+    zassert_equal(first_files.size(), 1, "Start opens one file (found %zu)", first_files.size());
+    const std::string first_path = directory + "/" + first_files[0];
+    zassert_true(rig.log_writer_service->IsOpenFile(first_path), "the first file is open");
+
+    // Published until the first rotation, then no more: a second one takes another kilobyte.
+    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] {
+        return rig.log_writer_service->GetStats().rotations >= 1;
+    }, 5000), "the frames must reach the size limit");
+
+    const auto files = rig.fs_service->ListFiles(directory);
+    zassert_equal(files.size(), 2, "one rotation leaves two files (found %zu)", files.size());
+
+    std::string second_path;
+    for(const auto& name : files) {
+        if((directory + "/" + name) != first_path)
+            second_path = directory + "/" + name;
+    }
+    zassert_false(second_path.empty(), "the rotation opened another file");
+
+    zassert_false(rig.log_writer_service->IsOpenFile(first_path), "the full file is closed");
+    zassert_true(rig.log_writer_service->IsOpenFile(second_path), "the next file is the open one");
+
+    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+    zassert_false(rig.log_writer_service->IsOpenFile(first_path), "a stopped writer has no file open");
+    zassert_false(rig.log_writer_service->IsOpenFile(second_path), "a stopped writer has no file open");
+}
+
 // The free-space minimum is checked again before each rotation: without it the session ends with
 // NoSpace, and the stop that follows finalizes the full file in the room that is left.
 ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSpace) {

@@ -95,4 +95,14 @@ menu "EerieLeap Sensor Domain config"
           arriving while the queue is full are dropped and counted. Each entry
           takes about 90 bytes of internal RAM; the queue only exists while an
           enabled CANBUS_RAW sensor is configured.
+
+    config EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE
+        int "Largest sensor script that can be uploaded"
+        range 1 1048576
+        default 65536
+        help
+          Largest Lua script, in bytes, that the sensor scripts of the assets
+          SMP group take; a larger upload is refused. A script is read into
+          memory whole when the sensors start, and the Lua states that run
+          scripts are limited by EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB.
 endmenu

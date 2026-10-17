@@ -1,0 +1,19 @@
+config EERIE_LEAP_DOMAIN_CANBUS
+    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_CANBUS
+    bool "EerieLeap CANBus Domain"
+    help
+      Add EerieLeap CANBus Domain.
+
+menu "EerieLeap CANBus Domain config"
+    depends on EERIE_LEAP_DOMAIN_CANBUS
+
+    config EERIE_LEAP_CAN_SCRIPT_MAX_SIZE
+        int "Largest CAN message script that can be uploaded"
+        range 1 1048576
+        default 65536
+        help
+          Largest Lua script, in bytes, that the CAN scripts of the assets SMP
+          group take; a larger upload is refused. A script is read into memory
+          whole when the CAN configuration is applied, and the Lua states that
+          run scripts are limited by EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB.
+endmenu

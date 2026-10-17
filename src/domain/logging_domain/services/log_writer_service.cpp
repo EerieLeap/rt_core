@@ -7,6 +7,8 @@
 #include <zephyr/logging/log.h>
 
 #include "subsys/random/rng.h"
+#include "subsys/threading/scoped_mutex.h"
+#include "utilities/string/path_helpers.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
 
 #include "log_file_naming.h"
@@ -21,6 +23,7 @@ namespace eerie_leap::domain::logging_domain::services {
 
 using namespace eerie_leap::subsys::random;
 using namespace eerie_leap::utilities::string;
+using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
@@ -42,7 +45,10 @@ LogWriterService::LogWriterService(
         fs_service_(std::move(fs_service)),
         logging_configuration_manager_(std::move(logging_configuration_manager)),
         time_service_(std::move(time_service)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)) {}
+        sensor_readings_frame_(std::move(sensor_readings_frame)) {
+
+    k_mutex_init(&open_file_mutex_);
+}
 
 void LogWriterService::SetLoggerFactory(LoggerFactory logger_factory) {
     logger_factory_ = std::move(logger_factory);
@@ -240,6 +246,9 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
         return false;
     }
 
+    // Before the file exists, so that no moment of it goes unreported; every failure below clears it.
+    SetOpenFile(file_path_.ToString());
+
     try {
         // Write mode keeps the stream seekable, which the MDF4 logger needs to finalize the file.
         fs_stream_buf_ = std::make_unique<FsServiceStreamBuf>(
@@ -249,6 +258,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
     } catch(const std::exception& e) {
         LOG_ERR("Failed to open the log file %s: %s", file_path_.CStr(), e.what());
         fs_stream_buf_.reset();
+        ClearOpenFile();
         return false;
     }
 
@@ -265,6 +275,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
         fs_stream_buf_->close();
         fs_stream_buf_.reset();
         fs_service_->DeleteFile(file_path_.ToString());
+        ClearOpenFile();
 
         return false;
     }
@@ -276,8 +287,11 @@ bool LogWriterService::CloseLogFile(LogWriterTask& task) {
     // The stream goes now, so the task must not look at it any more.
     task.stream_buf = nullptr;
 
-    if(fs_stream_buf_ == nullptr)
+    if(fs_stream_buf_ == nullptr) {
+        ClearOpenFile();
+
         return false;
+    }
 
     // Taken before finalizing, which rewrites blocks in place.
     task.closed_files_bytes += logger_->GetBytesWritten();
@@ -292,7 +306,28 @@ bool LogWriterService::CloseLogFile(LogWriterTask& task) {
     task.closed_files_stream_writes += fs_stream_buf_->GetWriteCallCount();
     fs_stream_buf_.reset();
 
+    // Once the file is closed and final, not while it is being finalized: a reader takes it from here.
+    ClearOpenFile();
+
     return is_finalized;
+}
+
+void LogWriterService::SetOpenFile(std::string_view path) {
+    ScopedMutex lock(open_file_mutex_);
+
+    open_file_path_ = StaticString<LogFileNaming::PATH_MAX_LENGTH>(path);
+}
+
+void LogWriterService::ClearOpenFile() {
+    ScopedMutex lock(open_file_mutex_);
+
+    open_file_path_.Clear();
+}
+
+bool LogWriterService::IsOpenFile(std::string_view path) const {
+    ScopedMutex lock(open_file_mutex_);
+
+    return PathHelpers::IsSameEntryIgnoringCase(path, open_file_path_.ToString());
 }
 
 std::optional<LoggingStatusReason> LogWriterService::RotateFile(LogWriterTask& task) {

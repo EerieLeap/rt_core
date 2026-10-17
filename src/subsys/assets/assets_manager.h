@@ -34,7 +34,8 @@ public:
     /** @return false, registering nothing, when the kind is registered already or the provider
      *          has no store. */
     bool Register(AssetProvider provider);
-    void Unregister(AssetKind kind);
+    /** @brief Never throws, so a destructor may call it. */
+    void Unregister(AssetKind kind) noexcept;
     /** @return The kind's provider; nullptr when none is registered. */
     [[nodiscard]] std::shared_ptr<const AssetProvider> Find(AssetKind kind) const;
     /** @return The registered providers, ordered by kind. */
@@ -43,8 +44,11 @@ public:
     /** @brief Adds a referrer for @p owner, any address that identifies it (usually the
      *         registering controller). */
     void AddReferrer(const void* owner, Referrer referrer);
-    /** @brief Removes every referrer of @p owner. */
-    void RemoveReferrers(const void* owner);
+    /**
+     * @brief Removes every referrer of @p owner. Never throws, so a destructor may call it: when
+     *        there is no memory to hold them aside, they are destroyed under the lock.
+     */
+    void RemoveReferrers(const void* owner) noexcept;
     /** @brief Whether some referrer refers to @p path. Referrers run without the lock held. */
     [[nodiscard]] bool IsReferenced(std::string_view path) const;
 

@@ -72,12 +72,6 @@ config EERIE_LEAP_DOMAIN_BLE
     help
       Add EerieLeap BLE Domain.
 
-config EERIE_LEAP_DOMAIN_CANBUS
-    depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_CANBUS
-    bool "EerieLeap CANBus Domain"
-    help
-      Add EerieLeap CANBus Domain.
-
 config EERIE_LEAP_DOMAIN_SCRIPT
     bool "EerieLeap Script Domain"
     help
@@ -99,6 +93,7 @@ rsource "src/subsys/gpio/Kconfig.gpio"
 rsource "src/subsys/smp/Kconfig.smp"
 
 rsource "src/domain/system_domain/Kconfig.system_domain"
+rsource "src/domain/canbus_domain/Kconfig.canbus_domain"
 rsource "src/domain/canbus_com_domain/Kconfig.canbus_com_domain"
 rsource "src/domain/adc_domain/Kconfig.adc_domain"
 rsource "src/domain/sensor_domain/Kconfig.sensor_domain"

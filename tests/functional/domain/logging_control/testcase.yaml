@@ -30,9 +30,12 @@ tests:
   # CMakeLists.txt globs control/ twice and de-duplicates it. logging_controller_writer.cpp and
   # logging_controller_writer_updates.cpp replace the two remote files, and the other cases run
   # where the domain and the controller both build control/. The log volume is the 1 MiB test
-  # filesystem, below the 16 MiB default minimum.
+  # filesystem, below the 16 MiB default minimum. This scenario has the assets registry, which the
+  # writer registers the log files with (the LOGS cases of logging_controller_writer.cpp); the others
+  # build the controller without it.
   functional.logging_control.writer_role:
     extra_configs:
+      - CONFIG_EERIE_LEAP_ASSETS=y
       - CONFIG_EERIE_LEAP_DOMAIN_LOGGING=y
       - CONFIG_EERIE_LEAP_LOG_MIN_FREE_SPACE_MB=0
       - CONFIG_EERIE_LEAP_MDF=y

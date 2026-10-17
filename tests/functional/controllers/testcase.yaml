@@ -11,3 +11,9 @@ common:
 
 tests:
   functional.controllers: {}
+  # With the assets registry: the sensor and CAN scripts are registered as asset kinds, as on a unit with
+  # an SD card (sensors_controller_assets.cpp, canbus_controller_assets.cpp). Without it the controllers
+  # take the registry argument and ignore it, as rt_core units that serve no assets build them.
+  functional.controllers.assets:
+    extra_configs:
+      - CONFIG_EERIE_LEAP_ASSETS=y

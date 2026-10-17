@@ -48,7 +48,7 @@ bool AssetsManager::Register(AssetProvider provider) {
     return true;
 }
 
-void AssetsManager::Unregister(AssetKind kind) {
+void AssetsManager::Unregister(AssetKind kind) noexcept {
     const size_t index = std::to_underlying(kind);
 
     if(index >= ASSET_KIND_COUNT)
@@ -101,18 +101,28 @@ void AssetsManager::AddReferrer(const void* owner, Referrer referrer) {
     referrers_.push_back({owner, std::move(shared)});
 }
 
-void AssetsManager::RemoveReferrers(const void* owner) {
+void AssetsManager::RemoveReferrers(const void* owner) noexcept {
     // Declared before the lock, so that the referrers are released after it: destroying one
     // destroys what it captured, which is not for the registry's lock to cover.
     std::vector<std::shared_ptr<const Referrer>> removed;
 
     ScopedMutex lock(mutex_);
 
-    removed.reserve(referrers_.size());
+    // Never throws out of here: controllers call this from their destructors. Without room for the
+    // list the referrers are destroyed under the lock instead, which only costs the promise above.
+    bool is_release_deferred = true;
+    try {
+        removed.reserve(referrers_.size());
+    } catch(...) {
+        is_release_deferred = false;
+    }
 
-    for(auto& entry : referrers_) {
-        if(entry.owner == owner)
-            removed.push_back(std::move(entry.referrer));
+    // The room is there, so the pushes below cannot allocate.
+    if(is_release_deferred) {
+        for(auto& entry : referrers_) {
+            if(entry.owner == owner)
+                removed.push_back(std::move(entry.referrer));
+        }
     }
 
     std::erase_if(referrers_, [owner](const ReferrerEntry& entry) { return entry.owner == owner; });
