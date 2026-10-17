@@ -9,3 +9,7 @@ project(functional_subsys_assets)
 file(GLOB_RECURSE TEST_SOURCES src/*.c src/*.cpp)
 
 target_sources(app PRIVATE ${TEST_SOURCES})
+
+# The block tests in src/asset_store.cpp record the calls the store makes into the file system through
+# wrappers of these.
+zephyr_link_libraries(-Wl,--wrap=fs_read,--wrap=fs_write,--wrap=fs_seek)

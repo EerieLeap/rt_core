@@ -3,3 +3,14 @@ config EERIE_LEAP_ASSETS
     select EERIE_LEAP_FS
     help
       Add EerieLeap Assets.
+
+menu "EerieLeap Assets config"
+    depends on EERIE_LEAP_ASSETS
+
+    config EERIE_LEAP_ASSETS_MAX_NAME_LENGTH
+        int "Longest asset name"
+        range 8 128
+        default 64
+        help
+          Longest asset name, in bytes.
+endmenu

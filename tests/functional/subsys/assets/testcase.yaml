@@ -10,4 +10,6 @@ common:
     - qemu_malta
 
 tests:
+  # On littlefs. The store tests (src/asset_store.cpp) run on a FAT volume too, in the
+  # functional.subsys.assets_fat suite, which compiles that file from here.
   functional.subsys.assets: {}

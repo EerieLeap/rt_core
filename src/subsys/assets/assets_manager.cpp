@@ -1,71 +1,140 @@
-#include "utilities/memory/memory_resource_manager.h"
+#include <algorithm>
+#include <utility>
+
+#include <zephyr/logging/log.h>
+
+#include "subsys/threading/scoped_mutex.h"
 
 #include "assets_manager.h"
 
 namespace eerie_leap::subsys::assets {
 
-using namespace eerie_leap::utilities::memory;
+LOG_MODULE_REGISTER(assets_manager_logger);
 
-AssetsManager::AssetsManager(std::shared_ptr<IFsService> fs_service, std::string_view assets_dir)
-    : fs_service_(std::move(fs_service)), assets_dir_(assets_dir) {
+using eerie_leap::subsys::threading::ScopedMutex;
 
-    if(!fs_service_->IsAvailable())
-        return;
-
-    if(assets_dir_.empty())
-        return;
-
-    if(!fs_service_->Exists(assets_dir_))
-        fs_service_->CreateDirectory(assets_dir_);
+AssetsManager::AssetsManager() {
+    k_mutex_init(&mutex_);
 }
 
-std::string AssetsManager::GetFullPath(std::string_view relative_path) const {
-    if(assets_dir_.empty())
-        return std::string(relative_path);
+bool AssetsManager::Register(AssetProvider provider) {
+    const size_t index = std::to_underlying(provider.kind);
 
-    return assets_dir_ + "/" + std::string(relative_path);
-}
+    if(index >= ASSET_KIND_COUNT) {
+        LOG_ERR("Asset kind %d is out of range.", static_cast<int>(index));
 
-bool AssetsManager::Save(std::string_view relative_path, std::span<const uint8_t> data) {
-    if(!fs_service_->IsAvailable())
         return false;
-
-    return fs_service_->WriteFile(GetFullPath(relative_path), data.data(), data.size(), false);
-}
-
-std::pmr::vector<uint8_t> AssetsManager::Load(std::string_view relative_path) {
-    if(!fs_service_->IsAvailable())
-        return {};
-
-    std::string full_path = GetFullPath(relative_path);
-
-    size_t file_size = fs_service_->GetFileSize(full_path).value_or(0);
-    if(file_size == 0) {
-        return {};
     }
 
-    auto buffer = std::pmr::vector<uint8_t>(file_size, Mrm::GetExtPmr());
-    size_t out_len = 0;
+    if(provider.store == nullptr) {
+        LOG_ERR("Asset kind %d has no store.", static_cast<int>(index));
 
-    if(!fs_service_->ReadFile(full_path, buffer.data(), file_size, out_len) || out_len == 0) {
-        return {};
+        return false;
     }
 
-    return buffer;
+    // Allocated before the lock is taken.
+    std::shared_ptr<const AssetProvider> shared = std::make_shared<AssetProvider>(std::move(provider));
+
+    ScopedMutex lock(mutex_);
+
+    if(providers_[index] != nullptr) {
+        LOG_ERR("Asset kind %d is registered already.", static_cast<int>(index));
+
+        return false;
+    }
+
+    providers_[index] = std::move(shared);
+
+    return true;
 }
 
-bool AssetsManager::Delete(std::string_view relative_path) {
-    if(!fs_service_->IsAvailable())
-        return false;
+void AssetsManager::Unregister(AssetKind kind) {
+    const size_t index = std::to_underlying(kind);
 
-    return fs_service_->DeleteFile(GetFullPath(relative_path));
+    if(index >= ASSET_KIND_COUNT)
+        return;
+
+    // Declared before the lock, so that it is released after it: the provider dies here when
+    // nobody else holds it, and what it captured is destroyed without the lock.
+    std::shared_ptr<const AssetProvider> removed;
+
+    ScopedMutex lock(mutex_);
+
+    removed = std::move(providers_[index]);
 }
 
-bool AssetsManager::Exists(std::string_view relative_path) const {
-    if(!fs_service_->IsAvailable())
-        return false;
+std::shared_ptr<const AssetProvider> AssetsManager::Find(AssetKind kind) const {
+    const size_t index = std::to_underlying(kind);
 
-    return fs_service_->Exists(GetFullPath(relative_path));
+    if(index >= ASSET_KIND_COUNT)
+        return nullptr;
+
+    ScopedMutex lock(mutex_);
+
+    return providers_[index];
+}
+
+std::vector<std::shared_ptr<const AssetProvider>> AssetsManager::GetProviders() const {
+    std::vector<std::shared_ptr<const AssetProvider>> providers;
+    providers.reserve(ASSET_KIND_COUNT);
+
+    ScopedMutex lock(mutex_);
+
+    for(const auto& provider : providers_) {
+        if(provider != nullptr)
+            providers.push_back(provider);
+    }
+
+    return providers;
+}
+
+void AssetsManager::AddReferrer(const void* owner, Referrer referrer) {
+    // A call through an empty function would throw.
+    if(!referrer)
+        return;
+
+    // Allocated before the lock is taken.
+    std::shared_ptr<const Referrer> shared = std::make_shared<Referrer>(std::move(referrer));
+
+    ScopedMutex lock(mutex_);
+
+    referrers_.push_back({owner, std::move(shared)});
+}
+
+void AssetsManager::RemoveReferrers(const void* owner) {
+    // Declared before the lock, so that the referrers are released after it: destroying one
+    // destroys what it captured, which is not for the registry's lock to cover.
+    std::vector<std::shared_ptr<const Referrer>> removed;
+
+    ScopedMutex lock(mutex_);
+
+    removed.reserve(referrers_.size());
+
+    for(auto& entry : referrers_) {
+        if(entry.owner == owner)
+            removed.push_back(std::move(entry.referrer));
+    }
+
+    std::erase_if(referrers_, [owner](const ReferrerEntry& entry) { return entry.owner == owner; });
+}
+
+bool AssetsManager::IsReferenced(std::string_view path) const {
+    std::vector<std::shared_ptr<const Referrer>> referrers;
+
+    {
+        ScopedMutex lock(mutex_);
+
+        referrers.reserve(referrers_.size());
+
+        for(const auto& entry : referrers_)
+            referrers.push_back(entry.referrer);
+    }
+
+    // A referrer may call back into the registry, and may be removed meanwhile: the copies keep
+    // it alive, and no lock is held.
+    return std::ranges::any_of(referrers, [path](const std::shared_ptr<const Referrer>& referrer) {
+        return (*referrer)(path);
+    });
 }
 
 } // namespace eerie_leap::subsys::assets
