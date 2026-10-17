@@ -61,7 +61,14 @@ public:
         std::vector<DirectoryEntry>& entries,
         size_t& count) const = 0;
 
+    /**
+     * @brief The size in bytes of the file at @p relative_path.
+     *
+     * @return std::nullopt when not mounted, for a bad path, when nothing is there, and for a
+     *         directory, whose size is no file size: littlefs leaves it undefined, FAT stores 0.
+     */
     virtual std::optional<size_t> GetFileSize(std::string_view relative_path) const = 0;
+
     virtual uint64_t GetTotalSpace() const = 0;
     virtual uint64_t GetUsedSpace() const = 0;
     virtual bool Format() = 0;

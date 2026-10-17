@@ -71,6 +71,19 @@ ZTEST(fs_service_fat, test_ListDirectory_lists_long_names_sizes_and_directories)
     zassert_equal(EntryNamed(entries, "lib").size, 0);
 }
 
+// FAT stores a size of 0 for a directory, which is no file size either.
+ZTEST(fs_service_fat, test_GetFileSize_fails_for_a_directory) {
+    auto* fs_service = GetFatService();
+
+    zassert_true(fs_service->CreateDirectory("scripts/lib"));
+    zassert_true(WriteText("scripts/oil.lua", "abc"));
+
+    zassert_false(fs_service->GetFileSize("scripts").has_value());
+    zassert_false(fs_service->GetFileSize("scripts/lib").has_value());
+    zassert_false(fs_service->GetFileSize("").has_value(), "The root of the volume is a directory too");
+    zassert_equal(fs_service->GetFileSize("scripts/oil.lua").value(), 3);
+}
+
 ZTEST(fs_service_fat, test_ListDirectory_lists_the_root) {
     auto* fs_service = GetFatService();
 

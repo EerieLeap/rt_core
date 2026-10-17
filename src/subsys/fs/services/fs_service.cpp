@@ -459,6 +459,12 @@ std::optional<size_t> FsService::GetFileSize(std::string_view relative_path) con
         return std::nullopt;
     }
 
+    // The size of a directory is no file size: littlefs leaves it undefined, FAT stores 0.
+    if(entry.type == FS_DIR_ENTRY_DIR) {
+        LOG_ERR("Path is a directory: %s.", full_path.String().CStr());
+        return std::nullopt;
+    }
+
     return entry.size;
 }
 

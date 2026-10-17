@@ -641,6 +641,19 @@ ZTEST(fs_service, test_GetFileSize_reports_zero_for_an_empty_file) {
     zassert_equal(fs_service->GetFileSize("test_GetFileSize_empty.txt").value(), 0);
 }
 
+// littlefs leaves the size of a directory undefined, so there is nothing to report for one.
+ZTEST(fs_service, test_GetFileSize_fails_for_a_directory) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(fs_service->CreateDirectory("test_GetFileSize_dir/nested"));
+    zassert_true(WriteText("test_GetFileSize_dir/file.txt", "abc"));
+
+    zassert_false(fs_service->GetFileSize("test_GetFileSize_dir").has_value());
+    zassert_false(fs_service->GetFileSize("test_GetFileSize_dir/nested").has_value());
+    zassert_false(fs_service->GetFileSize("").has_value(), "The root of the volume is a directory too");
+    zassert_equal(fs_service->GetFileSize("test_GetFileSize_dir/file.txt").value(), 3);
+}
+
 ZTEST(fs_service, test_GetTotalSpace_and_GetUsedSpace) {
     auto* fs_service = GetFsService();
 
