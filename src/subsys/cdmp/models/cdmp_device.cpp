@@ -13,8 +13,8 @@ CdmpDevice::CdmpDevice(
     uint16_t features,
     CdmpDeviceStatus status)
         : uid_(uid),
-        features_(features),
         protocol_version_(GetCurrentProtocolVersion()),
+        features_(features),
         status_machine_(std::make_shared<CdmpStatusMachine>(status)) {
 
     if(uid == 0)
