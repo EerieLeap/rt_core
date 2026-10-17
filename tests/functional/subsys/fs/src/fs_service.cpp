@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
+#include <zephyr/devicetree.h>
 #include <zephyr/ztest.h>
 
 #include "subsys/device_tree/dt_fs.h"
@@ -656,6 +657,44 @@ ZTEST(fs_service, test_GetTotalSpace_and_GetUsedSpace) {
     zassert_true(used_space_after_write > used_space);
     zassert_true(used_space_after_write <= total_space);
     zassert_equal(fs_service->GetTotalSpace(), total_space);
+}
+
+namespace {
+
+// The volume is the 1 MiB intfs0_partition, which littlefs divides into blocks of the flash's erase
+// size. They are its allocation units (f_frsize), where f_bsize is only the 16 byte prog size.
+constexpr uint64_t VOLUME_SIZE = DT_REG_SIZE(DT_NODELABEL(intfs0_partition));
+constexpr uint64_t ALLOCATION_UNIT = DT_PROP(DT_GPARENT(DT_NODELABEL(intfs0_partition)), erase_block_size);
+
+static_assert(VOLUME_SIZE % ALLOCATION_UNIT == 0, "The volume is a whole number of blocks");
+
+constexpr uint64_t RoundUp(uint64_t value, uint64_t unit) {
+    return (value + unit - 1) / unit * unit;
+}
+
+} // namespace
+
+ZTEST(fs_service, test_GetTotalSpace_is_the_size_of_the_volume) {
+    const uint64_t total_space = GetFsService()->GetTotalSpace();
+
+    zassert_equal(total_space, VOLUME_SIZE, "The service reports %llu bytes of a %llu byte volume",
+        static_cast<unsigned long long>(total_space), static_cast<unsigned long long>(VOLUME_SIZE));
+}
+
+// The files are larger than littlefs keeps inline in a directory, so each takes blocks of its own.
+ZTEST(fs_service, test_GetUsedSpace_grows_by_at_least_the_bytes_written_in_whole_blocks) {
+    auto* fs_service = GetFsService();
+
+    for(const size_t size : {size_t{5000}, size_t{64 * 1024}}) {
+        const uint64_t used_space = fs_service->GetUsedSpace();
+
+        zassert_true(WriteText("test_GetUsedSpace_" + std::to_string(size) + ".bin", MakeText(size)));
+
+        const uint64_t growth = fs_service->GetUsedSpace() - used_space;
+
+        zassert_true(growth >= RoundUp(size, ALLOCATION_UNIT), "%llu bytes took %llu bytes of space",
+            static_cast<unsigned long long>(size), static_cast<unsigned long long>(growth));
+    }
 }
 
 ZTEST(fs_service, test_Format) {

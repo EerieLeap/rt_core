@@ -476,7 +476,9 @@ uint64_t FsService::GetTotalSpace() const {
         return 0;
     }
 
-    return static_cast<uint64_t>(stat.f_blocks) * stat.f_bsize;
+    // f_blocks counts allocation units (f_frsize: a FAT cluster, a littlefs block); f_bsize is only
+    // the optimal transfer size.
+    return static_cast<uint64_t>(stat.f_blocks) * stat.f_frsize;
 }
 
 uint64_t FsService::GetUsedSpace() const {
@@ -493,7 +495,8 @@ uint64_t FsService::GetUsedSpace() const {
         return 0;
     }
 
-    return static_cast<uint64_t>(stat.f_blocks - stat.f_bfree) * stat.f_bsize;
+    // In allocation units, as in GetTotalSpace().
+    return static_cast<uint64_t>(stat.f_blocks - stat.f_bfree) * stat.f_frsize;
 }
 
 bool FsService::Format() {
