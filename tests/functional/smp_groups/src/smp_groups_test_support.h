@@ -123,6 +123,7 @@ public:
     bool Exists(std::string_view) const override { return false; }
     bool DeleteFile(std::string_view) override { return false; }
     bool DeleteRecursive(std::string_view) override { return false; }
+    int Rename(std::string_view, std::string_view) override { return -ENOTSUP; }
     std::vector<std::string> ListFiles(std::string_view) const override { return {}; }
     std::optional<size_t> GetFileSize(std::string_view) const override { return std::nullopt; }
     uint64_t GetTotalSpace() const override { return 0; }

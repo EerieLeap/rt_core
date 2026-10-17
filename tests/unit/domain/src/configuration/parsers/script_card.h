@@ -33,6 +33,7 @@ public:
     bool Exists(std::string_view relative_path) const override { return is_mounted && files.contains(relative_path); }
     bool DeleteFile(std::string_view) override { return false; }
     bool DeleteRecursive(std::string_view) override { return false; }
+    int Rename(std::string_view, std::string_view) override { return -ENOTSUP; }
     std::vector<std::string> ListFiles(std::string_view) const override { return {}; }
 
     int ListDirectory(std::string_view, size_t, size_t, std::vector<DirectoryEntry>& entries, size_t& count) const override {

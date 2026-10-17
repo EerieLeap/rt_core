@@ -8,9 +8,17 @@ Code: `src/subsys/fs/`, `src/subsys/assets/`.
 [device-tree.md](device-tree.md)): the entry itself, not a copy, because `fs_mount()` links it
 into the global mount list. Every path is relative to the mount point and limited to 256 bytes
 with the mount prefix. The interface (`IFsService`) offers `WriteFile` (overwrite or append),
-`ReadFile`, `OpenFile`, `CreateDirectory`, `Exists`, `DeleteFile`, `DeleteRecursive`,
-`ListFiles`, `ListDirectory` (a page of a directory's entries with their sizes and types),
-`GetFileSize`, `GetTotalSpace`, `GetUsedSpace` and `Format`. All calls hold one mutex per service.
+`ReadFile`, `OpenFile`, `CreateDirectory`, `Exists`, `DeleteFile`, `DeleteRecursive`, `Rename`
+(replaces a file at the target: atomic on littlefs, a delete and a rename on FAT; a missing source
+fails with `-ENOENT` before the target is touched), `ListFiles`, `ListDirectory` (a page of a
+directory's entries with their sizes and types), `GetFileSize` (of a file: a directory has none),
+`GetTotalSpace`, `GetUsedSpace` and `Format`. All calls hold one mutex per service.
+
+Zephyr's FAT rename deletes the target first, so a file renamed onto itself is lost. `Rename`
+therefore takes only plain paths, `A-Z a-z 0-9 . _ -` and `/` with no name ending in a dot, and
+refuses a pair that names one file ignoring ASCII case, both with `-EINVAL`: within that alphabet
+FAT and littlefs resolve a name as written, while FatFs folds other spellings onto one name (a
+backslash is a separator, trailing dots and spaces are dropped, a control byte ends the path).
 
 Two instances exist in the application:
 

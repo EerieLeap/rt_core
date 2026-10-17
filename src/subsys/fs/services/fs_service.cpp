@@ -326,6 +326,110 @@ bool FsService::DeleteDirectoryContents(FilesystemPath<PATH_BUFFER_SIZE>* full_p
     return true;
 }
 
+namespace {
+
+// The next name of a path. Empty names ("a//b", a trailing slash) and "." name nothing and are
+// skipped; the result is empty once the path is used up.
+std::string_view NextName(std::string_view& path) {
+    while(!path.empty()) {
+        const size_t end = std::min(path.find('/'), path.size());
+        const std::string_view name = path.substr(0, end);
+        path.remove_prefix(std::min(end + 1, path.size()));
+
+        if(!name.empty() && name != ".")
+            return name;
+    }
+
+    return {};
+}
+
+char ToLowerAscii(char c) {
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+// Whether two relative paths name the same entry on a volume that folds ASCII case, as FAT does.
+bool IsSameEntryIgnoringCase(std::string_view a, std::string_view b) {
+    while(true) {
+        const std::string_view name_a = NextName(a);
+        const std::string_view name_b = NextName(b);
+
+        if(!std::ranges::equal(name_a, name_b, [](char x, char y) { return ToLowerAscii(x) == ToLowerAscii(y); }))
+            return false;
+
+        if(name_a.empty())
+            return true;
+    }
+}
+
+bool IsPlainCharacter(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+        || c == '.' || c == '_' || c == '-';
+}
+
+// Whether a path is spelled so that FAT and littlefs resolve each of its names as it is written:
+// only the characters of IsPlainCharacter() and '/', and no name that ends in a dot but "." itself.
+// FatFs also reads a backslash as a separator, drops the trailing dots and spaces of a name and
+// ends a path at a control byte, which makes more spellings of one file than a comparison can know.
+bool IsPlainPath(std::string_view path) {
+    for(std::string_view name = NextName(path); !name.empty(); name = NextName(path)) {
+        if(name.back() == '.' || !std::ranges::all_of(name, IsPlainCharacter))
+            return false;
+    }
+
+    return true;
+}
+
+} // namespace
+
+int FsService::Rename(std::string_view from, std::string_view to) {
+    ScopedMutex lock(mutex_);
+
+    if(!IsMounted()) {
+        LOG_ERR("Filesystem not mounted.");
+        return -ENODEV;
+    }
+
+    // An empty path is the root of the volume, which can neither be renamed nor be replaced.
+    if(from.empty() || to.empty()) {
+        LOG_ERR("Empty paths are not allowed.");
+        return -EINVAL;
+    }
+
+    FilesystemPath<PATH_BUFFER_SIZE> from_path;
+    FilesystemPath<PATH_BUFFER_SIZE> to_path;
+    if(!TryBuildPath(from, from_path) || !TryBuildPath(to, to_path))
+        return -EINVAL;
+
+    // FatFs folds more spellings onto one name than the comparison below can know, so only plain
+    // ones go on.
+    if(!IsPlainPath(from) || !IsPlainPath(to)) {
+        LOG_ERR("Paths may hold only A-Z a-z 0-9 . _ - and /, and no name may end in a dot.");
+        return -EINVAL;
+    }
+
+    // FAT unlinks an existing target before it renames, so a file renamed onto itself, or onto its
+    // name in another case, would be deleted.
+    if(IsSameEntryIgnoringCase(from, to)) {
+        LOG_ERR("Source and target are the same file.");
+        return -EINVAL;
+    }
+
+    // FAT unlinks the target before it looks for the source as well: a missing source would cost
+    // the file it was meant to replace.
+    struct fs_dirent entry;
+    int rc = fs_stat(from_path.String().CStr(), &entry);
+    if(rc < 0) {
+        LOG_ERR("fs_stat failed on path: %s (%d).", from_path.String().CStr(), rc);
+        return rc;
+    }
+
+    rc = fs_rename(from_path.String().CStr(), to_path.String().CStr());
+    if(rc < 0)
+        LOG_ERR("fs_rename failed: %d.", rc);
+
+    return rc;
+}
+
 std::vector<std::string> FsService::ListFiles(std::string_view relative_path) const {
     ScopedMutex lock(mutex_);
 

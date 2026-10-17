@@ -618,6 +618,177 @@ ZTEST(fs_service, test_DeleteRecursive_fails_for_missing_directory) {
     zassert_equal(fs_service->ListFiles().size(), 1);
 }
 
+ZTEST(fs_service, test_Rename_moves_a_file_within_a_directory) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(fs_service->CreateDirectory("test_Rename_within"));
+    zassert_true(WriteText("test_Rename_within/old.txt", "abcdef"));
+
+    zassert_equal(fs_service->Rename("test_Rename_within/old.txt", "test_Rename_within/new.txt"), 0);
+
+    zassert_false(fs_service->Exists("test_Rename_within/old.txt"));
+    zassert_str_equal(ReadText("test_Rename_within/new.txt").c_str(), "abcdef");
+    zassert_equal(fs_service->ListFiles("test_Rename_within").size(), 1);
+}
+
+ZTEST(fs_service, test_Rename_moves_a_file_across_directories) {
+    auto* fs_service = GetFsService();
+    const std::string content = MakeText(2500);
+
+    zassert_true(fs_service->CreateDirectory("test_Rename_from"));
+    zassert_true(fs_service->CreateDirectory("test_Rename_to"));
+    zassert_true(WriteText("test_Rename_from/file.txt", content));
+
+    zassert_equal(fs_service->Rename("test_Rename_from/file.txt", "test_Rename_to/moved.txt"), 0);
+
+    zassert_false(fs_service->Exists("test_Rename_from/file.txt"));
+    zassert_equal(fs_service->ListFiles("test_Rename_from").size(), 0);
+    zassert_true(ReadText("test_Rename_to/moved.txt") == content);
+
+    zassert_equal(fs_service->Rename("test_Rename_to/moved.txt", "root.txt"), 0);
+
+    zassert_false(fs_service->Exists("test_Rename_to/moved.txt"));
+    zassert_true(ReadText("root.txt") == content);
+}
+
+ZTEST(fs_service, test_Rename_replaces_an_existing_target) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(WriteText("test_Rename_source.txt", "the new content"));
+    zassert_true(WriteText("test_Rename_target.txt", "the file that is replaced"));
+
+    zassert_equal(fs_service->Rename("test_Rename_source.txt", "test_Rename_target.txt"), 0);
+
+    zassert_false(fs_service->Exists("test_Rename_source.txt"));
+    zassert_str_equal(ReadText("test_Rename_target.txt").c_str(), "the new content");
+    zassert_equal(fs_service->ListFiles().size(), 1);
+}
+
+ZTEST(fs_service, test_Rename_a_missing_source_fails_and_changes_nothing) {
+    auto* fs_service = GetFsService();
+
+    zassert_equal(fs_service->Rename("test_Rename_missing.txt", "test_Rename_target.txt"), -ENOENT);
+    zassert_false(fs_service->Exists("test_Rename_target.txt"));
+    zassert_equal(fs_service->ListFiles().size(), 0);
+
+    // The file it would have replaced stays, though FAT deletes a target before it looks for the source.
+    zassert_true(WriteText("test_Rename_kept.txt", "kept"));
+
+    zassert_equal(fs_service->Rename("test_Rename_missing.txt", "test_Rename_kept.txt"), -ENOENT);
+    zassert_str_equal(ReadText("test_Rename_kept.txt").c_str(), "kept");
+    zassert_equal(fs_service->ListFiles().size(), 1);
+}
+
+ZTEST(fs_service, test_Rename_a_missing_target_directory_fails_and_keeps_the_source) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(WriteText("test_Rename_orphan.txt", "abc"));
+
+    zassert_equal(fs_service->Rename("test_Rename_orphan.txt", "test_Rename_missing_dir/orphan.txt"), -ENOENT);
+
+    zassert_str_equal(ReadText("test_Rename_orphan.txt").c_str(), "abc");
+    zassert_false(fs_service->Exists("test_Rename_missing_dir"));
+}
+
+// Zephyr's FAT rename deletes the target first, so a pair of paths naming one file must not reach
+// it. The service refuses such pairs on every volume, though littlefs keeps names that differ in
+// case apart.
+ZTEST(fs_service, test_Rename_rejects_the_same_file_in_any_spelling) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(fs_service->CreateDirectory("test_Rename_same"));
+    zassert_true(WriteText("test_Rename_same/file.txt", "abc"));
+
+    for(const char* to : {
+        "test_Rename_same/file.txt",
+        "test_Rename_same/FILE.txt",
+        "TEST_RENAME_SAME/File.TXT",
+        "test_Rename_same//file.txt",
+        "test_Rename_same/./file.txt",
+        "./test_Rename_same/file.txt",
+    }) {
+        zassert_equal(fs_service->Rename("test_Rename_same/file.txt", to), -EINVAL, "Renamed onto %s", to);
+        zassert_equal(fs_service->Rename(to, "test_Rename_same/file.txt"), -EINVAL, "Renamed from %s", to);
+        zassert_str_equal(ReadText("test_Rename_same/file.txt").c_str(), "abc");
+    }
+
+    zassert_equal(fs_service->ListFiles("test_Rename_same").size(), 1);
+}
+
+// FatFs reads a backslash as a separator, drops the trailing dots and spaces of a name and ends a
+// path at a control byte, so on FAT most of these name oil.lua itself. littlefs keeps them apart, but
+// the service refuses every spelling outside its plain alphabet on every volume.
+ZTEST(fs_service, test_Rename_rejects_names_outside_the_plain_alphabet) {
+    auto* fs_service = GetFsService();
+
+    const std::string_view oil = "test_Rename_alphabet/oil.lua";
+
+    zassert_true(fs_service->CreateDirectory("test_Rename_alphabet"));
+    zassert_true(WriteText(oil, "abc"));
+
+    for(const char* spelling : {
+        "test_Rename_alphabet\\oil.lua",
+        "test_Rename_alphabet/oil.lua.",
+        "test_Rename_alphabet/oil.lua..",
+        "test_Rename_alphabet/oil.lua ",
+        "test_Rename_alphabet/oil.lua. .",
+        "test_Rename_alphabet./oil.lua",
+        "test_Rename_alphabet /oil.lua",
+        "test_Rename_alphabet/oil.lua\001x",
+        "test_Rename_alphabet/oil v2.lua",
+        "test_Rename_alphabet/oil~1.lua",
+        "test_Rename_alphabet/oil.lua:x",
+        "test_Rename_alphabet/oil*.lua",
+        "test_Rename_alphabet/oil\303\251.lua",
+    }) {
+        zassert_equal(fs_service->Rename(oil, spelling), -EINVAL, "Renamed onto \"%s\"", spelling);
+        zassert_equal(fs_service->Rename(spelling, oil), -EINVAL, "Renamed from \"%s\"", spelling);
+        zassert_str_equal(ReadText(oil).c_str(), "abc");
+    }
+
+    zassert_equal(fs_service->ListFiles().size(), 1);
+    zassert_equal(fs_service->ListFiles("test_Rename_alphabet").size(), 1);
+}
+
+// The paths the asset store renames: a staged file of a directory with a leading dot onto an asset.
+ZTEST(fs_service, test_Rename_accepts_dots_dashes_and_underscores_in_names) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(fs_service->CreateDirectory(".assets_tmp"));
+    zassert_true(fs_service->CreateDirectory("images"));
+    zassert_true(WriteText(".assets_tmp/upload.part", "abc"));
+
+    zassert_equal(fs_service->Rename(".assets_tmp/upload.part", "images/Logo_v2-final.1.PNG"), 0);
+
+    zassert_false(fs_service->Exists(".assets_tmp/upload.part"));
+    zassert_str_equal(ReadText("images/Logo_v2-final.1.PNG").c_str(), "abc");
+}
+
+ZTEST(fs_service, test_Rename_rejects_absolute_parent_empty_and_overlong_paths) {
+    auto* fs_service = GetFsService();
+
+    zassert_true(WriteText("test_Rename_invalid.txt", "abc"));
+
+    zassert_equal(fs_service->Rename("/test_Rename_invalid.txt", "test_Rename_other.txt"), -EINVAL);
+    zassert_equal(fs_service->Rename("test_Rename_invalid.txt", "/test_Rename_other.txt"), -EINVAL);
+    zassert_equal(fs_service->Rename("../test_Rename_invalid.txt", "test_Rename_other.txt"), -EINVAL);
+    zassert_equal(fs_service->Rename("test_Rename_invalid.txt", "../test_Rename_other.txt"), -EINVAL);
+    zassert_equal(fs_service->Rename("test_Rename_invalid.txt", "dir/../../test_Rename_other.txt"), -EINVAL);
+    zassert_equal(fs_service->Rename("", "test_Rename_other.txt"), -EINVAL);
+    zassert_equal(fs_service->Rename("test_Rename_invalid.txt", ""), -EINVAL);
+    zassert_equal(fs_service->Rename("test_Rename_invalid.txt", std::string(300, 'a')), -EINVAL);
+
+    zassert_str_equal(ReadText("test_Rename_invalid.txt").c_str(), "abc");
+    zassert_false(fs_service->Exists("test_Rename_other.txt"));
+    zassert_equal(fs_service->ListFiles().size(), 1);
+}
+
+ZTEST(fs_service, test_Rename_unmounted_is_ENODEV) {
+    FsService orphan_service(nullptr);
+
+    zassert_equal(orphan_service.Rename("test_Rename_old.txt", "test_Rename_new.txt"), -ENODEV);
+}
+
 ZTEST(fs_service, test_GetFileSize) {
     auto* fs_service = GetFsService();
 

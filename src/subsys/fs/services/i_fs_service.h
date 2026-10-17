@@ -35,6 +35,27 @@ public:
     virtual bool Exists(std::string_view relative_path) const = 0;
     virtual bool DeleteFile(std::string_view relative_path) = 0;
     virtual bool DeleteRecursive(std::string_view relative_path) = 0;
+
+    /**
+     * @brief Renames @p from to @p to on this volume, replacing a file at @p to.
+     *
+     * On FAT the replacement is a delete followed by a rename (not atomic); on littlefs it is atomic.
+     * A missing @p from fails with -ENOENT before anything is touched, where FAT would delete @p to
+     * first.
+     *
+     * A path must be plain: '/' and A-Z a-z 0-9 . _ - only, and no name that ends in a dot ("." itself
+     * excepted). FatFs folds more spellings onto one name than a comparison of the two paths can know
+     * (it reads a backslash as a separator, drops the trailing dots and spaces of a name and ends a
+     * path at a control byte), and on FAT a file renamed onto itself is deleted. Within that alphabet
+     * both file systems resolve a name as it is written, and two names are the same file exactly when
+     * they are equal ignoring ASCII case.
+     *
+     * @return 0; -ENODEV when not mounted; -EINVAL for a bad path (empty, absolute, with a ".." name,
+     *         too long, or not plain), or when both paths name the same file ignoring ASCII case (FAT
+     *         would delete it); otherwise the negative errno of fs_rename().
+     */
+    virtual int Rename(std::string_view from, std::string_view to) = 0;
+
     virtual std::vector<std::string> ListFiles(std::string_view relative_path) const = 0;
 
     /**

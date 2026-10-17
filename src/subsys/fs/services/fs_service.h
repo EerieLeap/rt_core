@@ -57,6 +57,7 @@ public:
     bool Exists(std::string_view relative_path) const override;
     bool DeleteFile(std::string_view relative_path) override;
     bool DeleteRecursive(std::string_view relative_path) override;
+    int Rename(std::string_view from, std::string_view to) override;
     std::vector<std::string> ListFiles(std::string_view relative_path) const override;
     int ListDirectory(
         std::string_view relative_path,
