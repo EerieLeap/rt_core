@@ -7,7 +7,8 @@
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
 // Reads a USER sensor by calling the script's create_sensor_value(sensor_id), which returns the
-// value. Without the function the reading stays UNINITIALIZED.
+// value. Without the function a blank sensor (SensorRuntime::written_value) carries the value a
+// script last wrote, as a PROCESSED reading; any other reading stays UNINITIALIZED.
 class SensorReaderUserValueType : public SensorReaderBase {
 public:
     SensorReaderUserValueType(

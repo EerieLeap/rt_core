@@ -158,6 +158,17 @@ void SensorPipelineBuilder::BuildConditioner(SensorRuntime& runtime, std::span<c
         configuration.debounce_ms, configuration.input_mode, is_switch_on);
 }
 
+// After the expression and the script: a blank sensor is one they gave nothing to produce a value.
+void SensorPipelineBuilder::BindWrittenValue(SensorRuntime& runtime) const {
+    if(runtime.sensor->configuration.GetTraits().source != SensorSourceKind::SCRIPT)
+        return;
+
+    if(runtime.script.HasCreateValue() || runtime.script.HasPostProcess() || runtime.expression_evaluator != nullptr)
+        return;
+
+    runtime.written_value = sensor_readings_frame_->GetValueAddress(runtime.slot);
+}
+
 // Slots follow the configuration order, so a slot index is also the runtime's index.
 void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
     auto& runtimes = generation.runtimes;
@@ -220,6 +231,7 @@ std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
             BuildExpression(runtime);
             BuildScript(*generation, runtime);
             BuildConditioner(runtime, switch_states);
+            BindWrittenValue(runtime);
         }
 
         generation->runtimes.push_back(std::move(runtime));

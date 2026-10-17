@@ -88,8 +88,14 @@ public:
     // Runs the stages, conditions an indicator, commits the reading, and evaluates the sensors
     // derived from it. A failed reading is committed as it is and its dependents keep their
     // previous values. A change the conditioner holds is not committed now; the conditioner
-    // commits it once it has settled.
+    // commits it once it has settled. A reading that arrives PROCESSED (a blank USER sensor
+    // carrying what a script wrote past the stages and the conditioner) is committed as it is.
     void Process(const SensorRuntime& runtime, SensorReading& reading) {
+        if(reading.status == ReadingStatus::PROCESSED) {
+            Commit(runtime, reading);
+            return;
+        }
+
         Run(*processors_, runtime, reading);
 
         if(runtime.conditioner != nullptr && !runtime.conditioner->Offer(*this, runtime, reading))

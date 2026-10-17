@@ -44,10 +44,11 @@ Only the indicator types take a `debounce_ms` other than 0 or the `Toggle` mode.
 A virtual sensor without a sampling rate must reference at least one sensor, otherwise it would
 never update; its expression cannot use `x`, which it does not have. An enabled sensor's
 expression cannot reference a disabled sensor, which never has a value. A `USER_ANALOG` or
-`USER_INDICATOR` sensor needs no script: without `create_sensor_value` its readings have no value
-of their own, and other scripts set it with `update_sensor_value()`. Values and channels are
-checked against the unit: an ADC or GPIO channel must exist (the error names the channels the
-unit has), and with an SD card present a `script_path` must exist.
+`USER_INDICATOR` sensor needs no script: other scripts set it with `update_sensor_value()`, and
+when it has no script functions and no expression (a blank sensor) each tick carries the value
+last written ([scripting.md](scripting.md#functions-a-sensor-script-can-define)). Values and
+channels are checked against the unit: an ADC or GPIO channel must exist (the error names the
+channels the unit has), and with an SD card present a `script_path` must exist.
 
 When a client applies a configuration (the SMP `config` group), each CAN sensor's bus must also be
 configured in the CAN bus configuration the unit runs, and a signal sensor's frame and signal must
@@ -141,7 +142,8 @@ An indicator of any source (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_I
   polled sensor has its next sample. A source that sends nothing more, such as a CAN signal,
   settles at the end of the window. A switch keeps its value.
 - **Lua.** `update_sensor_value()` writes the frame directly (`UpdateReadingValue`), past the
-  debounce and the switch; the sensor's next commit replaces what it wrote.
+  debounce and the switch; the sensor's next commit replaces what it wrote, except a blank
+  `USER_*` sensor's, which carries it.
 - **Latency and cost.** A window delays every consumer of the sensor by its length: keep a
   button's short (20–30 ms) and CAN signals at 0. A conditioner is a delayable work item and a copy
   of the held reading, built with the generation on the default heap, since the timer walks it; a

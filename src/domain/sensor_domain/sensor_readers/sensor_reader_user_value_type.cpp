@@ -1,3 +1,4 @@
+#include <cmath>
 #include <stdexcept>
 
 #include "domain/sensor_domain/models/sensor_reading.h"
@@ -23,7 +24,15 @@ SensorReading SensorReaderUserValueType::Read(const TickContext& tick) {
 
     const auto& script = runtime_->script;
     if(!script.HasCreateValue()) {
-        reading.status = ReadingStatus::UNINITIALIZED;
+        // A blank sensor carries what a script last wrote, which went past every stage, so the
+        // reading is final. Otherwise it gets its value, if any, from the stages.
+        const float* written_value = runtime_->written_value;
+        if(written_value != nullptr && !std::isnan(*written_value)) {
+            reading.value = *written_value;
+            reading.status = ReadingStatus::PROCESSED;
+        } else {
+            reading.status = ReadingStatus::UNINITIALIZED;
+        }
 
         return reading;
     }

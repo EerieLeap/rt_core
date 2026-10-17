@@ -43,6 +43,11 @@ struct SensorRuntime {
     // Slots of the sensors the expression reads, resolved when the generation was built.
     std::vector<SensorSlot> input_slots;
 
+    // A USER sensor that nothing of its own gives a value (no create_sensor_value, no
+    // post_process_sensor_value, no expression): its slot's latest value, NaN for none, which
+    // scripts write with update_sensor_value. Its ticks carry that value. Null for every other sensor.
+    const float* written_value = nullptr;
+
     // DEPENDENT sensors that read this one, directly or through other dependents, in processing
     // order. Evaluated right after a reading of this sensor is committed.
     std::vector<const SensorRuntime*> dependents;

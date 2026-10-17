@@ -27,6 +27,7 @@ private:
     void BuildExpression(SensorRuntime& runtime) const;
     void BuildScript(SensorGeneration& generation, SensorRuntime& runtime) const;
     void BuildConditioner(SensorRuntime& runtime, std::span<const IndicatorSwitchState> switch_states) const;
+    void BindWrittenValue(SensorRuntime& runtime) const;
     void LinkDependents(SensorGeneration& generation) const;
 
 public:

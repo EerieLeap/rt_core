@@ -87,7 +87,7 @@ Available to sensor and CAN message scripts.
 
 | Function | Called | Meaning |
 | --- | --- | --- |
-| `create_sensor_value(sensor_id) -> number` | At the sampling rate of a `USER_ANALOG` or `USER_INDICATOR` sensor | Produces the reading, in place of an ADC or GPIO read. Without it the sensor keeps producing readings without a value. |
+| `create_sensor_value(sensor_id) -> number` | At the sampling rate of a `USER_ANALOG` or `USER_INDICATOR` sensor | Produces the reading, in place of an ADC or GPIO read. Without it, a sensor that has no `post_process_sensor_value` and no expression either (a blank sensor) carries the value a script last wrote with `update_sensor_value` at every tick, past the stages and the conditioner, so its dependents and the log follow what was written; until something is written, and for any other sensor without the function, the readings have no value of their own. |
 | `post_process_sensor_value(sensor_id, value) -> number \| nil` | Once per reading of any sensor type, after interpolation and after the expression | Receives the reading's current value (`nil` when it has none). A number replaces the value before it is committed; `nil` keeps it. A Lua error marks the reading `SCRIPT_FAILED`: it is committed with the error and its dependents keep their previous values. |
 
 A `USER_ANALOG` sensor that counts up:
