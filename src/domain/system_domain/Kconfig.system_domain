@@ -52,7 +52,8 @@ endmenu
 menu "EerieLeap unit features"
 
     # The 16-bit ProductFeature mask a unit reports (SMP device group, BLE advertisement, CDMP).
-    # Each follows the domains the build contains; a board can turn one off. DISPLAY is set by hand.
+    # Each follows the domains the build contains; a board can turn one off. DISPLAY, and STORAGE on a
+    # unit that does not log, are set by hand.
     config EERIE_LEAP_FEATURES_ANALOG_INPUTS
         bool "Analog inputs feature"
         default y if EERIE_LEAP_CONTROLLER_ADC
@@ -73,5 +74,12 @@ menu "EerieLeap unit features"
     config EERIE_LEAP_FEATURES_DISPLAY
         bool "Display feature"
         default n
+    config EERIE_LEAP_FEATURES_STORAGE
+        bool "Storage feature"
+        default y if EERIE_LEAP_DOMAIN_LOGGING
+        help
+          A unit with an SD service: it runs the Lua scripts a script_path names and its SMP files
+          group lists the card. Not whether a card is mounted, which the files group reports. A unit
+          that logs writes to the card, so it has one; another unit with an SD service sets it by hand.
 
 endmenu

@@ -105,8 +105,9 @@ work queue while the handler waits: paging keeps no state on the unit and holds 
 the directory does not change. `dir` is at most 128 bytes. Names are the card's FAT long names in
 its code page (437 by default), not UTF-8, so only ASCII names work in a `script_path`. A card is
 mounted when the unit starts; one put in later is mounted only while the SD monitor runs (see
-[filesystem.md](filesystem.md)). A unit without an SD service still serves the group and answers
-`NO_CARD`; firmware without the group answers `rc` 8 (`MGMT_ERR_ENOTSUP`).
+[filesystem.md](filesystem.md)). A unit without an SD service, which reports no `STORAGE`
+feature, still serves the group and answers `NO_CARD`; firmware without the group answers `rc` 8
+(`MGMT_ERR_ENOTSUP`).
 
 | Error | Code | Meaning |
 | --- | --- | --- |

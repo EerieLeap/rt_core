@@ -50,7 +50,8 @@ would otherwise be replaced by defaults on a unit booted without its card; a sen
 whose script is not there runs without it (the sensor pipeline logs a warning). A sensor's script is loaded when the
 pipeline is built, a CAN message's when the CAN configuration is parsed, so a card inserted
 later serves its scripts from the next configuration change or boot. A unit without an SD
-service checks no `script_path` and runs no script.
+service, which reports no `STORAGE` feature ([system.md](system.md#unit-features)), checks no
+`script_path` and runs no script.
 
 ### Hosting
 

@@ -13,7 +13,8 @@ enum class ProductFeature : uint16_t {
     CANBUS = 1 << 2,
     LOGGING = 1 << 3,
     BLUETOOTH = 1 << 4,
-    DISPLAY = 1 << 5
+    DISPLAY = 1 << 5,
+    STORAGE = 1 << 6
 };
 
 constexpr uint16_t ToMask(ProductFeature feature) {
@@ -51,6 +52,10 @@ constexpr uint16_t GetBuildFeatures() {
 
     #if CONFIG_EERIE_LEAP_FEATURES_DISPLAY
         features |= ToMask(ProductFeature::DISPLAY);
+    #endif
+
+    #if CONFIG_EERIE_LEAP_FEATURES_STORAGE
+        features |= ToMask(ProductFeature::STORAGE);
     #endif
 
     return features;

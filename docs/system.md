@@ -31,6 +31,7 @@ the domains the build contains; a board can turn one off. `BUILD_FEATURES` is th
 | `EERIE_LEAP_FEATURES_LOGGING` | 3 | y with `EERIE_LEAP_DOMAIN_LOGGING`. |
 | `EERIE_LEAP_FEATURES_BLUETOOTH` | 4 | y with `EERIE_LEAP_DOMAIN_BLE`. |
 | `EERIE_LEAP_FEATURES_DISPLAY` | 5 | n; set by hand. |
+| `EERIE_LEAP_FEATURES_STORAGE` | 6 | y with `EERIE_LEAP_DOMAIN_LOGGING`, whose log writer needs a card; a unit with an SD service and no logging sets it by hand. It says the unit has an SD service, so it runs the scripts a `script_path` names ([scripting.md](scripting.md)) and its `files` group lists the card ([smp.md](smp.md)); whether a card is mounted is runtime state, which the `files` group reports as `NO_CARD`. |
 
 The bits follow the build and enable no code. The one runtime bit is LOGGING on CDMP, which a unit
 sends only while it has a log writer (see [cdmp.md](cdmp.md)); the SMP `device` group reports what
