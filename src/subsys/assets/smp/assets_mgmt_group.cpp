@@ -11,6 +11,7 @@
 #include <zephyr/sys/crc.h>
 
 #include "utilities/memory/memory_resource_manager.h"
+#include "subsys/random/rng.h"
 
 #include "assets_mgmt_group.h"
 
@@ -19,6 +20,7 @@ LOG_MODULE_REGISTER(assets_mgmt_group, LOG_LEVEL_INF);
 namespace eerie_leap::subsys::assets::smp {
 
 using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::subsys::random::Rng;
 using eerie_leap::subsys::smp::SmpDecodeRequest;
 using eerie_leap::subsys::smp::SmpGroupId;
 using eerie_leap::subsys::smp::SmpMapKey;
@@ -80,8 +82,7 @@ const mgmt_handler AssetsMgmtGroup::HANDLERS[] = {
     {.mh_read = Dispatch<&AssetsMgmtGroup::HandleKinds>, .mh_write = nullptr},
     {.mh_read = Dispatch<&AssetsMgmtGroup::HandleList>, .mh_write = nullptr},
     {.mh_read = Dispatch<&AssetsMgmtGroup::HandleRead>, .mh_write = nullptr},
-    // WRITE is not served yet: MCUmgr answers ENOTSUP.
-    {.mh_read = nullptr, .mh_write = nullptr},
+    {.mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleWrite>},
     {.mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleDelete>},
 };
 
@@ -113,10 +114,17 @@ AssetsMgmtGroup::~AssetsMgmtGroup() {
         k_sem_give(&job_done_);
     }
 
-    if(idle_task_.has_value())
+    // The idle task re-arms itself when it runs: a run that began before is_stopping_ was set may
+    // do it after the first cancel (a reschedule with a delay ignores a cancel that is under way), so
+    // it is cancelled again, and a run after that finds the flag.
+    if(idle_task_.has_value()) {
         idle_task_->Cancel();
+        idle_task_->Cancel();
+    }
 
-    // The open file, if any, closes with the read session.
+    // Nothing runs on the group any more. An upload that is open leaves no staged file behind; the
+    // file of a download closes with the read session.
+    AbortUpload();
 }
 
 bool AssetsMgmtGroup::Initialize() {
@@ -160,6 +168,10 @@ int AssetsMgmtGroup::HandleList(smp_streamer* ctxt) {
 
 int AssetsMgmtGroup::HandleRead(smp_streamer* ctxt) {
     return RunJob(Command::READ, ctxt);
+}
+
+int AssetsMgmtGroup::HandleWrite(smp_streamer* ctxt) {
+    return RunJob(Command::WRITE, ctxt);
 }
 
 int AssetsMgmtGroup::HandleDelete(smp_streamer* ctxt) {
@@ -211,27 +223,35 @@ int AssetsMgmtGroup::ExecuteJob(const Job& job) {
             return ExecuteList(job.ctxt);
         case Command::READ:
             return ExecuteRead(job.ctxt);
+        case Command::WRITE:
+            return ExecuteWrite(job.ctxt);
         case Command::DELETE:
             return ExecuteDelete(job.ctxt);
-        case Command::WRITE:
-            break;
     }
 
     return MGMT_ERR_ENOTSUP;
 }
 
 WorkQueueTaskResult AssetsMgmtGroup::ProcessIdle() {
-    if(!read_session_.reader.IsOpen())
+    // Not armed again once the group is destroyed.
+    if(is_stopping_)
         return {};
 
-    const int64_t idle_ms = k_uptime_get() - read_session_.last_activity_ms;
-    if(idle_ms < SESSION_TIMEOUT_MS)
-        return {.reschedule = true, .delay = K_MSEC(SESSION_TIMEOUT_MS - idle_ms)};
+    const int64_t now_ms = k_uptime_get();
 
-    LOG_INF("Assets read session timed out at byte %u.", static_cast<unsigned>(read_session_.crc_end));
-    CloseReadSession();
+    if(read_session_.reader.IsOpen() && now_ms - read_session_.last_activity_ms >= SESSION_TIMEOUT_MS) {
+        LOG_INF("Assets read session timed out at byte %u.", static_cast<unsigned>(read_session_.crc_end));
+        CloseReadSession();
+    }
 
-    return {};
+    ExpireUpload(now_ms);
+
+    // Whichever session expires first.
+    const int64_t delay_ms = GetIdleDelayMs(now_ms);
+    if(delay_ms == INT64_MAX)
+        return {};
+
+    return {.reschedule = true, .delay = K_MSEC(delay_ms)};
 }
 
 int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
@@ -424,6 +444,255 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     return MGMT_RETURN_CHECK(ok);
 }
 
+int AssetsMgmtGroup::ExecuteWrite(smp_streamer* ctxt) {
+    uint32_t kind = 0;
+    uint32_t offset = 0;
+    uint32_t length = 0;
+    uint32_t crc = 0;
+    uint32_t token = 0;
+    zcbor_string name{};
+    zcbor_string data{};
+    std::array keys = {
+        SmpMapKey("kind", zcbor_uint32_decode, &kind),
+        SmpMapKey("name", zcbor_tstr_decode, &name),
+        SmpMapKey("off", zcbor_uint32_decode, &offset),
+        SmpMapKey("data", zcbor_bstr_decode, &data),
+        SmpMapKey("len", zcbor_uint32_decode, &length),
+        SmpMapKey("crc", zcbor_uint32_decode, &crc),
+        SmpMapKey("tok", zcbor_uint32_decode, &token),
+    };
+
+    if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found || !keys[1].found || !keys[2].found || !keys[3].found)
+        return MGMT_ERR_EINVAL;
+
+    if(offset == 0 && (!keys[4].found || !keys[5].found))
+        return MGMT_ERR_EINVAL;
+
+    // An upload that its client left is no upload by now, whoever asks.
+    ExpireUpload(k_uptime_get());
+
+    const std::string_view asset_name = ToView(name);
+    const std::span<const uint8_t> chunk(data.value, data.len);
+    const bool has_token = keys[6].found;
+
+    if(offset == 0)
+        return WriteFirstChunk(ctxt, kind, asset_name, length, crc, has_token, token, chunk);
+
+    return WriteNextChunk(ctxt, kind, asset_name, offset, has_token, token, chunk);
+}
+
+int AssetsMgmtGroup::WriteFirstChunk(smp_streamer* ctxt, uint32_t kind, std::string_view name, uint32_t length,
+    uint32_t crc, bool has_token, uint32_t token, std::span<const uint8_t> chunk) {
+
+    std::shared_ptr<const AssetProvider> provider;
+
+    const Error error = CheckTarget(kind, name, AssetAccess::WRITE, provider);
+    if(error != Error::OK)
+        return Fail(ctxt, error);
+
+    if(length > provider->max_size || chunk.size() > length)
+        return Fail(ctxt, Error::TOO_LARGE);
+
+    const uint32_t chunk_crc = crc32_ieee(chunk.data(), chunk.size());
+
+    // The answer to a file of one chunk got lost: it is stored, and the client learns so, whatever
+    // else is going on and whether the file is in use by now.
+    if(!has_token && IsStoredFirstChunkRepeat(*provider, name, length, crc, chunk.size(), chunk_crc))
+        return RespondToWrite(ctxt, last_commit_.length, last_commit_.token);
+
+    // Asked before an upload that is open is looked at: what this check throws or refuses is no
+    // reason to touch another client's upload.
+    if(provider->is_in_use && provider->is_in_use(AssetAccess::WRITE, name))
+        return Fail(ctxt, Error::IN_USE);
+
+    if(upload_.writer.IsOpen()) {
+        if(!has_token || token != upload_.token) {
+            // A client whose answer got lost sends its first request again, and gets that answer.
+            if(!IsFirstChunkRepeat(kind, name, length, crc, chunk.size(), chunk_crc))
+                return Fail(ctxt, Error::BUSY);
+
+            upload_.last_activity_ms = k_uptime_get();
+            OnActivity();
+
+            return RespondToWrite(ctxt, upload_.received, upload_.token);
+        }
+
+        // The owner starts over. What it sent goes, and so does the room it held: the volume is
+        // asked for the room after that.
+        AbortUpload();
+    }
+
+    // No upload is open, and only one is ever staged: a staged file is one that a card pulled in the
+    // middle of an upload, say, left behind. It still counts as used.
+    provider->store->RemoveStaged();
+
+    if(length > provider->store->GetFreeSpace())
+        return Fail(ctxt, Error::NO_SPACE);
+
+    // Everything that can throw comes before the staged file is opened.
+    upload_.kind = provider->kind;
+    upload_.name.assign(name);
+
+    const int rc = provider->store->BeginWrite(name, upload_.writer);
+    if(rc < 0) {
+        ResetUpload();
+
+        return Fail(ctxt, ToError(rc));
+    }
+
+    uint32_t new_token = 0;
+    while(new_token == 0)
+        new_token = Rng::Get<uint32_t>();
+
+    upload_.token = new_token;
+    upload_.length = length;
+    upload_.declared_crc = crc;
+    upload_.crc = 0;
+    upload_.received = 0;
+    upload_.first_length = chunk.size();
+    upload_.first_crc = chunk_crc;
+    upload_.last_activity_ms = k_uptime_get();
+
+    return AcceptChunk(ctxt, provider, 0, chunk, chunk_crc);
+}
+
+int AssetsMgmtGroup::WriteNextChunk(smp_streamer* ctxt, uint32_t kind, std::string_view name, uint32_t offset,
+    bool has_token, uint32_t token, std::span<const uint8_t> chunk) {
+
+    const uint32_t chunk_crc = crc32_ieee(chunk.data(), chunk.size());
+
+    if(!IsUploadOf(kind, name, has_token, token)) {
+        // The answer to the last chunk got lost: the file is stored, and the client learns so.
+        if(IsLastChunkRepeat(kind, name, has_token, token, offset, chunk.size(), chunk_crc))
+            return RespondToWrite(ctxt, last_commit_.length, 0);
+
+        return Fail(ctxt, Error::BAD_TOKEN);
+    }
+
+    // The kind, or its volume, may have gone since the upload began.
+    const auto provider = FindProvider(kind);
+    if(provider == nullptr) {
+        AbortUpload();
+
+        return Fail(ctxt, Error::UNKNOWN_KIND);
+    }
+
+    if(!provider->store->IsAvailable()) {
+        AbortUpload();
+
+        return Fail(ctxt, Error::UNAVAILABLE);
+    }
+
+    // A client whose response got lost learns where to resume.
+    if(offset != upload_.received)
+        return Fail(ctxt, Error::BAD_OFFSET, "off", static_cast<uint32_t>(upload_.received));
+
+    if(chunk.size() > upload_.length - upload_.received) {
+        AbortUpload();
+
+        return Fail(ctxt, Error::TOO_LARGE);
+    }
+
+    return AcceptChunk(ctxt, provider, offset, chunk, chunk_crc);
+}
+
+int AssetsMgmtGroup::AcceptChunk(smp_streamer* ctxt, const std::shared_ptr<const AssetProvider>& provider,
+    uint32_t offset, std::span<const uint8_t> chunk, uint32_t chunk_crc) {
+
+    // The staged file does not outlive an exception either.
+    try {
+        const int rc = upload_.writer.Append(chunk);
+        if(rc != 0) {
+            AbortUpload();
+
+            return Fail(ctxt, ToWriteError(rc));
+        }
+
+        upload_.crc = crc32_ieee_update(upload_.crc, chunk.data(), chunk.size());
+        upload_.received += chunk.size();
+        upload_.last_activity_ms = k_uptime_get();
+
+        if(upload_.received < upload_.length) {
+            OnActivity();
+
+            return RespondToWrite(ctxt, upload_.received, offset == 0 ? upload_.token : 0);
+        }
+
+        return FinishUpload(ctxt, *provider, offset, chunk.size(), chunk_crc);
+    } catch(...) {
+        AbortUpload();
+
+        throw;
+    }
+}
+
+int AssetsMgmtGroup::FinishUpload(smp_streamer* ctxt, const AssetProvider& provider, uint32_t offset,
+    size_t chunk_length, uint32_t chunk_crc) {
+
+    if(upload_.crc != upload_.declared_crc) {
+        AbortUpload();
+
+        return Fail(ctxt, Error::CRC_MISMATCH);
+    }
+
+    // The file may have gone into use since the first chunk, and the rename replaces it.
+    if(provider.is_in_use && provider.is_in_use(AssetAccess::WRITE, upload_.name)) {
+        AbortUpload();
+
+        return Fail(ctxt, Error::IN_USE);
+    }
+
+    // FatFs has no open-file locking: a file that is replaced while it is open corrupts the volume.
+    // A download of the file goes on with the new one when its next request comes, and the CRC it
+    // ends with tells the client that the data it holds is a mix.
+    if(MayBeReadSessionOf(upload_.kind, upload_.name))
+        CloseReadSession();
+
+    InvalidateCheckpoint(upload_.kind, upload_.name);
+
+    // Closes the writer, and deletes the staged file when it fails.
+    const int rc = upload_.writer.Commit();
+    if(rc != 0) {
+        ResetUpload();
+
+        return Fail(ctxt, ToWriteError(rc));
+    }
+
+    const uint32_t token = upload_.token;
+    const size_t length = upload_.length;
+
+    // The file is stored: failing to remember it must not fail the answer.
+    last_commit_.token = 0;
+
+    try {
+        last_commit_.name = upload_.name;
+        last_commit_.kind = upload_.kind;
+        last_commit_.length = length;
+        last_commit_.declared_crc = upload_.declared_crc;
+        last_commit_.offset = offset;
+        last_commit_.chunk_length = chunk_length;
+        last_commit_.chunk_crc = chunk_crc;
+        last_commit_.time_ms = k_uptime_get();
+        last_commit_.token = token;
+    } catch(const std::bad_alloc&) {
+        // A last chunk sent again then gets BAD_TOKEN, and the client finds the file with a LIST.
+    }
+
+    ResetUpload();
+
+    return RespondToWrite(ctxt, length, offset == 0 ? token : 0);
+}
+
+int AssetsMgmtGroup::RespondToWrite(smp_streamer* ctxt, size_t offset, uint32_t token) {
+    zcbor_state_t* zse = ctxt->writer->zs;
+    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, static_cast<uint32_t>(offset));
+
+    if(ok && token != 0)
+        ok = zcbor_tstr_put_lit(zse, "tok") && zcbor_uint32_put(zse, token);
+
+    return MGMT_RETURN_CHECK(ok);
+}
+
 int AssetsMgmtGroup::ExecuteDelete(smp_streamer* ctxt) {
     uint32_t kind = 0;
     zcbor_string name{};
@@ -457,6 +726,9 @@ int AssetsMgmtGroup::ExecuteDelete(smp_streamer* ctxt) {
         CloseReadSession();
 
     InvalidateCheckpoint(provider->kind, asset_name);
+
+    // The file is gone: a chunk sent again must not be taken for one that stored it.
+    InvalidateLastCommit(provider->kind, asset_name);
 
     if(!store.Delete(asset_name))
         return Fail(ctxt, Error::IO_ERROR);
@@ -652,11 +924,107 @@ void AssetsMgmtGroup::InvalidateCheckpoint(AssetKind kind, std::string_view name
         checkpoint_.is_valid = false;
 }
 
+bool AssetsMgmtGroup::IsUploadOf(uint32_t kind, std::string_view name, bool has_token, uint32_t token) const {
+    return upload_.writer.IsOpen() && has_token && token == upload_.token
+        && std::to_underlying(upload_.kind) == kind && upload_.name == name;
+}
+
+bool AssetsMgmtGroup::IsFirstChunkRepeat(uint32_t kind, std::string_view name, size_t length, uint32_t crc,
+    size_t chunk_length, uint32_t chunk_crc) const {
+
+    // Nothing was accepted after the first chunk.
+    return upload_.writer.IsOpen() && std::to_underlying(upload_.kind) == kind && upload_.name == name
+        && upload_.length == length && upload_.declared_crc == crc && upload_.first_length == chunk_length
+        && upload_.first_crc == chunk_crc && upload_.received == upload_.first_length;
+}
+
+bool AssetsMgmtGroup::IsStoredFirstChunkRepeat(const AssetProvider& provider, std::string_view name, size_t length,
+    uint32_t crc, size_t chunk_length, uint32_t chunk_crc) const {
+
+    // The upload had one chunk, which is this one, and ended not long ago.
+    if(last_commit_.token == 0 || last_commit_.offset != 0 || last_commit_.kind != provider.kind
+        || last_commit_.name != name || last_commit_.length != length || last_commit_.declared_crc != crc
+        || last_commit_.chunk_length != chunk_length || last_commit_.chunk_crc != chunk_crc
+        || k_uptime_get() - last_commit_.time_ms >= SESSION_TIMEOUT_MS) {
+
+        return false;
+    }
+
+    // And the file is still there as it was stored: not deleted since by someone else, say.
+    return provider.store->GetSize(name) == length;
+}
+
+bool AssetsMgmtGroup::IsLastChunkRepeat(uint32_t kind, std::string_view name, bool has_token, uint32_t token,
+    uint32_t offset, size_t chunk_length, uint32_t chunk_crc) const {
+
+    return last_commit_.token != 0 && has_token && token == last_commit_.token
+        && std::to_underlying(last_commit_.kind) == kind && last_commit_.name == name
+        && last_commit_.offset == offset && last_commit_.chunk_length == chunk_length
+        && last_commit_.chunk_crc == chunk_crc && k_uptime_get() - last_commit_.time_ms < SESSION_TIMEOUT_MS;
+}
+
+void AssetsMgmtGroup::InvalidateLastCommit(AssetKind kind, std::string_view name) {
+    if(last_commit_.token != 0 && last_commit_.kind == kind && EqualsIgnoreCase(last_commit_.name, name))
+        last_commit_.token = 0;
+}
+
+void AssetsMgmtGroup::AbortUpload() {
+    // Closes the staged file and deletes it; nothing when no upload is open.
+    upload_.writer.Abort();
+    ResetUpload();
+}
+
+void AssetsMgmtGroup::ResetUpload() {
+    upload_.kind = {};
+    upload_.name.clear();
+    upload_.token = 0;
+    upload_.length = 0;
+    upload_.declared_crc = 0;
+    upload_.crc = 0;
+    upload_.received = 0;
+    upload_.first_length = 0;
+    upload_.first_crc = 0;
+    upload_.last_activity_ms = 0;
+}
+
+void AssetsMgmtGroup::ExpireUpload(int64_t now_ms) {
+    if(!upload_.writer.IsOpen() || now_ms - upload_.last_activity_ms < SESSION_TIMEOUT_MS)
+        return;
+
+    LOG_INF("Assets upload timed out at byte %u of %u.", static_cast<unsigned>(upload_.received),
+        static_cast<unsigned>(upload_.length));
+    AbortUpload();
+}
+
+AssetsMgmtGroup::Error AssetsMgmtGroup::ToWriteError(int rc) {
+    // FAT reports a full volume as a short write, which AssetWriter takes for -ENOSPC.
+    return rc == -ENOSPC ? Error::NO_SPACE : Error::IO_ERROR;
+}
+
+int64_t AssetsMgmtGroup::GetIdleDelayMs(int64_t now_ms) const {
+    int64_t delay_ms = INT64_MAX;
+
+    if(read_session_.reader.IsOpen()) {
+        delay_ms = std::min(delay_ms,
+            std::max<int64_t>(0, SESSION_TIMEOUT_MS - (now_ms - read_session_.last_activity_ms)));
+    }
+
+    if(upload_.writer.IsOpen()) {
+        delay_ms = std::min(delay_ms,
+            std::max<int64_t>(0, SESSION_TIMEOUT_MS - (now_ms - upload_.last_activity_ms)));
+    }
+
+    return delay_ms;
+}
+
 void AssetsMgmtGroup::OnActivity() {
     if(is_stopping_)
         return;
 
-    idle_task_->Reschedule(K_MSEC(SESSION_TIMEOUT_MS));
+    // Armed for the session that expires first, so a session does not outlive its time by the other's.
+    const int64_t delay_ms = GetIdleDelayMs(k_uptime_get());
+    if(delay_ms != INT64_MAX)
+        idle_task_->Reschedule(K_MSEC(delay_ms));
 }
 
 int AssetsMgmtGroup::TranslateError(uint16_t error) {

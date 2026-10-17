@@ -26,8 +26,9 @@ target_include_directories(app PRIVATE
   ${ZEPHYR_BASE}/subsys/mgmt/mcumgr/transport/include
 )
 
-# The assets group tests count the bytes the group reads from its files and the files it closes by
-# wrappers of fs_read() and fs_close(), which are defined in the test of the group.
+# The assets group tests count the bytes the group reads from its files and the files it closes, and make
+# a write fail, by wrappers of fs_read(), fs_close() and fs_write(), which are defined in the test of
+# the group.
 if(CONFIG_EERIE_LEAP_SMP_ASSETS)
-  zephyr_link_libraries(-Wl,--wrap=fs_read,--wrap=fs_close)
+  zephyr_link_libraries(-Wl,--wrap=fs_read,--wrap=fs_close,--wrap=fs_write)
 endif()
