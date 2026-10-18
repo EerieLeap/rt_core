@@ -127,7 +127,7 @@ ZTEST(adc_sample_set, test_Acquire_samples_each_adc_once_and_fills_every_slot) {
 }
 
 ZTEST(adc_sample_set, test_Acquire_is_one_request_per_tick_on_the_emulator) {
-    auto adc = processing_test_support::MakeEmulator();
+    const auto adc = processing_test_support::MakeEmulator();
     zassert_true(adc->Initialize());
     processing_test_support::DriveConstant(*adc, 1, 1000);
     processing_test_support::DriveConstant(*adc, 3, 2000);

@@ -285,7 +285,7 @@ struct NetworkFixture {
 ZTEST_SUITE(cdmp_network, NULL, NULL, NULL, ResetLoopbackDevice, NULL);
 
 ZTEST(cdmp_network, test_snapshot_is_empty_without_peers) {
-    NetworkFixture fixture;
+    const NetworkFixture fixture;
     std::array<CdmpDeviceInfo, 4> devices{};
 
     zassert_equal(fixture.service.GetNetworkDevices(devices), 0);
@@ -973,8 +973,8 @@ ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
     CdmpDeviceStatus seen_new = CdmpDeviceStatus::ONLINE;
     int calls = 0;
 
-    int handler_id = service.RegisterStatusChangedHandler([&](CdmpDeviceStatus old_status,
-                                                              CdmpDeviceStatus new_status) {
+    const int handler_id = service.RegisterStatusChangedHandler([&](CdmpDeviceStatus old_status,
+                                                                    CdmpDeviceStatus new_status) {
         seen_old = old_status;
         seen_new = new_status;
         calls++;
@@ -993,14 +993,14 @@ ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
 }
 
 ZTEST(cdmp_service, test_network_snapshot_starts_empty) {
-    CdmpService service(DISPLAY_FEATURES, OWN_UID);
+    const CdmpService service(DISPLAY_FEATURES, OWN_UID);
     std::array<CdmpDeviceInfo, 4> devices{};
 
     zassert_equal(service.GetNetworkDevices(devices), 0);
 }
 
 ZTEST(cdmp_service, test_device_info_follows_the_features_of_the_device) {
-    CdmpService service(DISPLAY_FEATURES, OWN_UID);
+    const CdmpService service(DISPLAY_FEATURES, OWN_UID);
 
     zassert_equal(service.GetDeviceInfo().features, DISPLAY_FEATURES);
 

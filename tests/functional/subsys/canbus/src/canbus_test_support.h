@@ -74,7 +74,7 @@ public:
 
     [[nodiscard]] size_t Count() {
         k_mutex_lock(&lock_, K_FOREVER);
-        size_t count = frames_.size();
+        const size_t count = frames_.size();
         k_mutex_unlock(&lock_);
 
         return count;

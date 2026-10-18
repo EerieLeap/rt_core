@@ -76,7 +76,7 @@ public:
     }
 
     bool Stop() override {
-        if(auto action = std::exchange(on_stop, nullptr))
+        if(const auto action = std::exchange(on_stop, nullptr))
             action();
 
         state_ = ServiceState::STOPPED;
@@ -86,7 +86,7 @@ public:
     }
 
     bool Start() override {
-        if(auto action = std::exchange(on_start, nullptr))
+        if(const auto action = std::exchange(on_start, nullptr))
             action();
 
         state_ = ServiceState::RUNNING;
@@ -142,8 +142,8 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
 
     const auto sensors_manager = controller.GetConfigurationManager();
 
-    StatusRecorder recorder;
-    auto device_id = std::make_shared<std::atomic<uint8_t>>(5);
+    const StatusRecorder recorder;
+    const auto device_id = std::make_shared<std::atomic<uint8_t>>(5);
     auto& supervisor = AttachSupervisor(rig, sensors_manager, true, [device_id] {
         return device_id->load();
     });
@@ -239,11 +239,11 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
 
     const auto sensors_manager = controller.GetConfigurationManager();
 
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig, sensors_manager, true);
     EnableSensorLogging(rig, std::vector{ first, second, third });
 
-    auto fake = std::make_shared<FakeDependent>();
+    const auto fake = std::make_shared<FakeDependent>();
     fake->on_start = [&supervisor] {
         supervisor.RequestStop(ILoggingControl::kAllUnits);
     };
@@ -298,7 +298,7 @@ ZTEST(sensors_apply_while_logging, test_ASessionThatFailsDuringASensorsRestartIs
 
     const auto sensors_manager = controller.GetConfigurationManager();
 
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig, sensors_manager);
     const auto probes = ProbeLoggerFactory::Make(
         MakeStoredSensorsFactory(sensors_manager, rig.logging_configuration_manager)
@@ -306,8 +306,8 @@ ZTEST(sensors_apply_while_logging, test_ASessionThatFailsDuringASensorsRestartIs
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
 
     // Fails the session from inside the restart, before the writer's dependent is stopped.
-    auto saw_failure = std::make_shared<std::atomic<bool>>(false);
-    auto fake = std::make_shared<FakeDependent>();
+    const auto saw_failure = std::make_shared<std::atomic<bool>>(false);
+    const auto fake = std::make_shared<FakeDependent>();
     fake->on_stop = [probes, writer = rig.log_writer_service, saw_failure] {
         probes->Current()->refuse_next_reading = true;
         *saw_failure = WaitFor(

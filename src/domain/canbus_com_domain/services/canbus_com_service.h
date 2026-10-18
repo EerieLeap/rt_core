@@ -162,7 +162,7 @@ public:
 
         cdmp_service_->GetCommandService()->RegisterCommandHandler(
             std::to_underlying(command_code), [callback](uint8_t _, std::span<const uint8_t> data) {
-                bool result = callback(data.empty() ? std::nullopt : std::optional<TRequest>(data));
+                const bool result = callback(data.empty() ? std::nullopt : std::optional<TRequest>(data));
 
                 return CdmpCommandResult{ result ? CdmpResultCode::SUCCESS : CdmpResultCode::FAILURE, {} };
             }

@@ -351,7 +351,7 @@ ZTEST(thread, test_threads_run_independently_of_each_other) {
     for(auto& thread : threads)
         thread.Join();
 
-    for(auto& worker : workers)
+    for(const auto& worker : workers)
         zassert_equal(worker.Exits(), 1);
 }
 

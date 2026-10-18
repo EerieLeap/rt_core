@@ -20,14 +20,14 @@ void SystemInfo::PrintThreadInfo(int cpu) {
 }
 
 static const char* stack_info_thread_name_filter = nullptr;
-[[maybe_unused]] static void PrintStackInfoCallback(thread_analyzer_info* info) {
+[[maybe_unused]] static void PrintStackInfoCallback(const thread_analyzer_info* info) {
     if(stack_info_thread_name_filter != nullptr && strcmp(stack_info_thread_name_filter, info->name) != 0) {
         return;
     }
 
     // Print stack usage information
     constexpr size_t PERCENT_MULTIPLIER = 100U;
-    size_t used_percent = (info->stack_used * PERCENT_MULTIPLIER) / info->stack_size;
+    const size_t used_percent = (info->stack_used * PERCENT_MULTIPLIER) / info->stack_size;
 
     LOG_INF(
         "  %-14s: Unused %zu Usage %zu / %zu (%zu %%)", info->name, info->stack_size - info->stack_used,
@@ -76,7 +76,7 @@ void SystemInfo::PrintStackInfo(int cpu, const char* thread_name) {
 }
 
 static const char* cpu_info_thread_name_filter = nullptr;
-[[maybe_unused]] static void PrintCpuInfoCallback(thread_analyzer_info* info) {
+[[maybe_unused]] static void PrintCpuInfoCallback(const thread_analyzer_info* info) {
     if(cpu_info_thread_name_filter != nullptr && strcmp(cpu_info_thread_name_filter, info->name) != 0)
         return;
 
@@ -107,7 +107,7 @@ static void PrintHeapStats(sys_heap* heap) {
     sys_memory_stats stats;
     sys_heap_runtime_stats_get(heap, &stats);
 
-    size_t used_percent = (stats.allocated_bytes * 100U) / (stats.free_bytes + stats.allocated_bytes);
+    const size_t used_percent = (stats.allocated_bytes * 100U) / (stats.free_bytes + stats.allocated_bytes);
 
     LOG_INF(
         "  %-14p: Unused %zu Usage %zu / %zu (%zu %%), Max Alloc %zu", heap, stats.free_bytes, stats.allocated_bytes,
@@ -120,7 +120,7 @@ void SystemInfo::PrintHeapInfo() {
 #ifdef EERIE_LEAP_HEAP_INFO_SUPPORTED
     sys_heap** heap_p;
 
-    int heaps_count = sys_heap_array_get(&heap_p);
+    const int heaps_count = sys_heap_array_get(&heap_p);
     LOG_INF("Heap analyze, there are %d heaps allocated at addrs:", heaps_count);
 
     for(int i = 0; i < heaps_count; ++i)

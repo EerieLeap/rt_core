@@ -52,16 +52,16 @@ ZTEST_SUITE(canbus_controller, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(canbus_controller, test_a_configuration_update_takes_effect_after_the_delay) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
 
-    auto work_queue = std::make_shared<WorkQueueThread>("canbus_test_config_wq", 6144, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("canbus_test_config_wq", 6144, 5);
     zassert_true(work_queue->Initialize());
 
     CanbusController controller(fs_service, work_queue, nullptr);
     zassert_equal(controller.Initialize(), 0);
 
-    auto service = std::make_shared<FakeDependentService>();
+    const auto service = std::make_shared<FakeDependentService>();
     controller.RegisterDependentService(service);
 
     const auto manager = controller.GetConfigurationManager();
@@ -87,17 +87,17 @@ ZTEST(canbus_controller, test_a_configuration_update_takes_effect_after_the_dela
 // holds with any delay, since the report comes before the CAN manager's own handler.
 ZTEST(canbus_controller, test_a_task_queued_when_the_configuration_is_stored_runs_before_the_reconfiguration) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
 
-    auto work_queue = std::make_shared<WorkQueueThread>("canbus_test_order_wq", 6144, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("canbus_test_order_wq", 6144, 5);
     zassert_true(work_queue->Initialize());
 
-    auto configuration_service = std::make_shared<ConfigurationService>();
+    const auto configuration_service = std::make_shared<ConfigurationService>();
     CanbusController controller(fs_service, work_queue, configuration_service);
     zassert_equal(controller.Initialize(), 0);
 
-    auto service = std::make_shared<FakeDependentService>();
+    const auto service = std::make_shared<FakeDependentService>();
     controller.RegisterDependentService(service);
 
     // What the queued task saw: the dependents' stops when it ran, -1 until it did.
@@ -105,7 +105,7 @@ ZTEST(canbus_controller, test_a_task_queued_when_the_configuration_is_stored_run
         std::atomic<int> stops_when_run = -1;
         std::atomic<int> reports = 0;
     };
-    auto seen = std::make_shared<Seen>();
+    const auto seen = std::make_shared<Seen>();
     configuration_service->RegisterConfigurationStoredHandler([seen, service, work_queue](ConfigurationService::Type) {
         seen->reports++;
         work_queue->Run([seen, service] {

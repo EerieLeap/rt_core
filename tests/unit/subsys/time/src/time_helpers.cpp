@@ -20,7 +20,7 @@ const std::regex kTimestampPattern(R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{1,
 ZTEST_SUITE(time_helpers, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(time_helpers, test_GetFormattedString_matches_expected_pattern) {
-    auto formatted_time = TimeHelpers::GetFormattedString(TimeHelpers::FromMilliseconds(1761106217000ms));
+    const auto formatted_time = TimeHelpers::GetFormattedString(TimeHelpers::FromMilliseconds(1761106217000ms));
 
     zassert_not_equal(formatted_time.size(), 0);
     zassert_true(std::regex_match(formatted_time, kTimestampPattern), "unexpected format: %s", formatted_time.c_str());
@@ -34,15 +34,15 @@ ZTEST(time_helpers, test_GetFormattedString_appends_millisecond_remainder) {
 }
 
 ZTEST(time_helpers, test_GetFormattedString_ignores_sub_millisecond_precision) {
-    auto base = TimeHelpers::FromNanoseconds(1761106217123000000ns);
-    auto skewed = TimeHelpers::FromNanoseconds(1761106217123999999ns);
+    const auto base = TimeHelpers::FromNanoseconds(1761106217123000000ns);
+    const auto skewed = TimeHelpers::FromNanoseconds(1761106217123999999ns);
 
     zassert_true(TimeHelpers::GetFormattedString(base) == TimeHelpers::GetFormattedString(skewed));
 }
 
 ZTEST(time_helpers, test_GetFormattedString_differs_for_different_days) {
-    auto day = TimeHelpers::FromMilliseconds(1761106217000ms);
-    auto next_day = TimeHelpers::FromMilliseconds(1761106217000ms + 24h);
+    const auto day = TimeHelpers::FromMilliseconds(1761106217000ms);
+    const auto next_day = TimeHelpers::FromMilliseconds(1761106217000ms + 24h);
 
     zassert_true(TimeHelpers::GetFormattedString(day) != TimeHelpers::GetFormattedString(next_day));
 }
@@ -58,7 +58,7 @@ ZTEST(time_helpers, test_ToMilliseconds_truncates_towards_epoch) {
 }
 
 ZTEST(time_helpers, test_FromMilliseconds_round_trips) {
-    for(auto value : { 0ms, 1ms, 999ms, 1000ms, 1761106217000ms })
+    for(const auto value : { 0ms, 1ms, 999ms, 1000ms, 1761106217000ms })
         zassert_equal(TimeHelpers::ToMilliseconds(TimeHelpers::FromMilliseconds(value)).count(), value.count());
 }
 
@@ -68,12 +68,12 @@ ZTEST(time_helpers, test_ToNanoseconds_returns_duration_since_epoch) {
 }
 
 ZTEST(time_helpers, test_FromNanoseconds_round_trips) {
-    for(auto value : { 0ns, 1ns, 999ns, 1000ns, 1761106217123456789ns })
+    for(const auto value : { 0ns, 1ns, 999ns, 1000ns, 1761106217123456789ns })
         zassert_equal(TimeHelpers::ToNanoseconds(TimeHelpers::FromNanoseconds(value)).count(), value.count());
 }
 
 ZTEST(time_helpers, test_millisecond_and_nanosecond_conversions_agree) {
-    auto tp = TimeHelpers::FromMilliseconds(1761106217123ms);
+    const auto tp = TimeHelpers::FromMilliseconds(1761106217123ms);
 
     zassert_equal(TimeHelpers::ToNanoseconds(tp).count(), TimeHelpers::ToMilliseconds(tp).count() * 1000000);
 }
@@ -109,13 +109,13 @@ ZTEST(time_helpers, test_MeasureExecutionTimeUs_invokes_the_callable) {
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_returns_non_negative_duration) {
-    auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {});
+    const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {});
 
     zassert_true(elapsed_us >= 0.0f, "measured %f us", (double)elapsed_us);
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_measures_busy_work) {
-    auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {
+    const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {
         k_busy_wait(5000);
     });
 
@@ -128,7 +128,7 @@ ZTEST(time_helpers, test_MeasureExecutionTimeUs_can_be_called_repeatedly) {
     for(int i = 0; i < 3; ++i) {
         int calls = 0;
 
-        auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([&calls]() {
+        const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([&calls]() {
             ++calls;
         });
 

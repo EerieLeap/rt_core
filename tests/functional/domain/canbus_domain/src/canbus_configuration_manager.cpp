@@ -20,7 +20,7 @@ namespace {
 
 std::shared_ptr<CanbusConfigurationManager> CreateManager() {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
 
     return std::make_shared<CanbusConfigurationManager>(
@@ -33,7 +33,7 @@ std::shared_ptr<CanbusConfigurationManager> CreateManager() {
 ZTEST_SUITE(canbus_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(canbus_configuration_manager, test_CanbusConfigurationManager_ApplyCborConfiguration_reports_why_it_rejects) {
-    auto manager = CreateManager();
+    const auto manager = CreateManager();
 
     int notifications = 0;
     manager->RegisterConfigurationUpdatedHandler([&notifications] {

@@ -118,7 +118,7 @@ AdcConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const Cbo
             configured_channel_count, channel_count_
         );
 
-        auto default_channel_configuration = make_shared_pmr<AdcChannelConfiguration>(
+        const auto default_channel_configuration = make_shared_pmr<AdcChannelConfiguration>(
             mr, AdcDefaultConfiguration::CreateCalibrator(mr)
         );
         configuration->channel_configurations->resize(channel_count_, default_channel_configuration);

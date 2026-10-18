@@ -94,7 +94,7 @@ ZTEST(fs_service_stream_buf, test_write_creates_missing_parent_directories) {
 
 ZTEST(fs_service_stream_buf, test_destructor_closes_the_file) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_destructor.txt";
+    const std::string file_path = "test_destructor.txt";
 
     {
         FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
@@ -109,7 +109,7 @@ ZTEST(fs_service_stream_buf, test_destructor_closes_the_file) {
 
 ZTEST(fs_service_stream_buf, test_write_mode_truncates_existing_file) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_truncate.txt";
+    const std::string file_path = "test_truncate.txt";
 
     zassert_true(WriteText(file_path, "0123456789"));
 
@@ -126,7 +126,7 @@ ZTEST(fs_service_stream_buf, test_write_mode_truncates_existing_file) {
 
 ZTEST(fs_service_stream_buf, test_append_mode_keeps_existing_content) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_append.txt";
+    const std::string file_path = "test_append.txt";
 
     zassert_true(WriteText(file_path, "abc"));
 
@@ -142,7 +142,7 @@ ZTEST(fs_service_stream_buf, test_append_mode_keeps_existing_content) {
 
 ZTEST(fs_service_stream_buf, test_overflow_writes_single_character) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_overflow.txt";
+    const std::string file_path = "test_overflow.txt";
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
 
@@ -154,7 +154,7 @@ ZTEST(fs_service_stream_buf, test_overflow_writes_single_character) {
 
 ZTEST(fs_service_stream_buf, test_sync_flushes_written_data) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_sync.txt";
+    const std::string file_path = "test_sync.txt";
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
     std::ostream stream(&stream_buf);
@@ -167,10 +167,10 @@ ZTEST(fs_service_stream_buf, test_sync_flushes_written_data) {
 
 ZTEST(fs_service_stream_buf, test_read_returns_whole_file) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_read.bin";
+    const std::string file_path = "test_read.bin";
 
     // Larger than the internal read buffer so a single request cannot be served from it.
-    auto content = MakeText(10000);
+    const auto content = MakeText(10000);
     zassert_true(WriteText(file_path, content));
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Read);
@@ -185,9 +185,9 @@ ZTEST(fs_service_stream_buf, test_read_returns_whole_file) {
 
 ZTEST(fs_service_stream_buf, test_underflow_refills_the_read_buffer) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_underflow.bin";
+    const std::string file_path = "test_underflow.bin";
 
-    auto content = MakeText(9000);
+    const auto content = MakeText(9000);
     zassert_true(WriteText(file_path, content));
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Read);
@@ -207,7 +207,7 @@ ZTEST(fs_service_stream_buf, test_underflow_refills_the_read_buffer) {
 // Mirrors how the MDF writer patches the header once the payload length is known.
 ZTEST(fs_service_stream_buf, test_seek_rewrites_beginning_of_file) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_seek_rewrite.txt";
+    const std::string file_path = "test_seek_rewrite.txt";
 
     {
         FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
@@ -225,16 +225,16 @@ ZTEST(fs_service_stream_buf, test_seek_rewrites_beginning_of_file) {
 
 ZTEST(fs_service_stream_buf, test_seek_from_end_reports_file_size) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_seek_end.txt";
+    const std::string file_path = "test_seek_end.txt";
 
     zassert_true(WriteText(file_path, "0123456789"));
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Read);
 
-    auto end_position = stream_buf.pubseekoff(0, std::ios_base::end, std::ios_base::in);
+    const auto end_position = stream_buf.pubseekoff(0, std::ios_base::end, std::ios_base::in);
     zassert_equal(static_cast<std::streamoff>(end_position), 10);
 
-    auto tail_position = stream_buf.pubseekoff(-4, std::ios_base::end, std::ios_base::in);
+    const auto tail_position = stream_buf.pubseekoff(-4, std::ios_base::end, std::ios_base::in);
     zassert_equal(static_cast<std::streamoff>(tail_position), 6);
 
     std::array<char, 4> tail = {};
@@ -244,7 +244,7 @@ ZTEST(fs_service_stream_buf, test_seek_from_end_reports_file_size) {
 
 ZTEST(fs_service_stream_buf, test_seek_to_position_restarts_reading) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_seek_pos.txt";
+    const std::string file_path = "test_seek_pos.txt";
 
     zassert_true(WriteText(file_path, "0123456789"));
 
@@ -252,7 +252,7 @@ ZTEST(fs_service_stream_buf, test_seek_to_position_restarts_reading) {
 
     zassert_equal(stream_buf.sbumpc(), '0');
 
-    auto position = stream_buf.pubseekpos(4, std::ios_base::in);
+    const auto position = stream_buf.pubseekpos(4, std::ios_base::in);
     zassert_equal(static_cast<std::streamoff>(position), 4);
     zassert_equal(stream_buf.sbumpc(), '4');
 }
@@ -260,7 +260,7 @@ ZTEST(fs_service_stream_buf, test_seek_to_position_restarts_reading) {
 // The buffer filled by underflow() must not be skipped by the bulk read path.
 ZTEST(fs_service_stream_buf, test_buffered_and_bulk_reads_stay_in_sync) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_mixed_reads.bin";
+    const std::string file_path = "test_mixed_reads.bin";
 
     auto content = MakeText(6000);
     zassert_true(WriteText(file_path, content));
@@ -283,7 +283,7 @@ ZTEST(fs_service_stream_buf, test_buffered_and_bulk_reads_stay_in_sync) {
 // std::istream::seekg is not linkable on every supported platform, hence the streambuf API.
 ZTEST(fs_service_stream_buf, test_seek_from_current_accounts_for_the_read_buffer) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_seek_cur.bin";
+    const std::string file_path = "test_seek_cur.bin";
 
     auto content = MakeText(6000);
     zassert_true(WriteText(file_path, content));
@@ -325,7 +325,7 @@ ZTEST(fs_service_stream_buf, test_buffered_writes_reach_the_file_on_sync) {
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
-    std::string file_path = "test_buffered_sync.bin";
+    const std::string file_path = "test_buffered_sync.bin";
 
     auto content = MakeText(100);
 
@@ -350,7 +350,7 @@ ZTEST(fs_service_stream_buf, test_close_flushes_the_put_area) {
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
-    std::string file_path = "test_close_flush.txt";
+    const std::string file_path = "test_close_flush.txt";
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
 
@@ -367,7 +367,7 @@ ZTEST(fs_service_stream_buf, test_write_larger_than_the_buffer_is_written_direct
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
-    std::string file_path = "test_direct_write.bin";
+    const std::string file_path = "test_direct_write.bin";
 
     auto head = MakeText(10);
     auto body = MakeText(kWriteBufferSize + 1);
@@ -396,7 +396,7 @@ ZTEST(fs_service_stream_buf, test_seek_flushes_before_moving) {
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
-    std::string file_path = "test_seek_flush.bin";
+    const std::string file_path = "test_seek_flush.bin";
 
     auto content = MakeText(1000);
     const std::string patch = "ABCDEFGH";
@@ -419,7 +419,7 @@ ZTEST(fs_service_stream_buf, test_seek_flushes_before_moving) {
     auto expected = content;
     expected.replace(0, patch.size(), patch);
 
-    auto read_back = ReadText(file_path);
+    const auto read_back = ReadText(file_path);
     zassert_equal(read_back.size(), expected.size(), "the rewrite must not change the file size");
     zassert_true(read_back == expected, "the patch must land at the seeked position, after the earlier bytes");
 }
@@ -429,7 +429,7 @@ ZTEST(fs_service_stream_buf, test_seek_flushes_before_moving) {
 // with a 0 buffer, so both branches run under twister.
 ZTEST(fs_service_stream_buf, test_unbuffered_when_the_buffer_size_is_zero) {
     auto* fs_service = GetFsService();
-    std::string file_path = "test_unbuffered.txt";
+    const std::string file_path = "test_unbuffered.txt";
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
 
@@ -453,8 +453,8 @@ ZTEST(fs_service_stream_buf, test_short_write_on_a_full_volume_is_reported) {
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
-    std::string file_path = "test_full_volume.bin";
-    std::string filler_path = "test_full_volume_filler.bin";
+    const std::string file_path = "test_full_volume.bin";
+    const std::string filler_path = "test_full_volume_filler.bin";
 
     // Opened before the fill so the open itself cannot fail for lack of space.
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);

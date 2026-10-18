@@ -35,8 +35,8 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 ZTEST_SUITE(sensors_parser, NULL, NULL, NULL, NULL, NULL);
 
 std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
-    auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
+    const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
+    const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
     auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
 
@@ -51,9 +51,9 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
-        { 3.3, 200.0 } };
-    auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
+    const std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 },
+        { 2.5, 162.0 }, { 3.3, 200.0 } };
+    const auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
     auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
 
@@ -152,26 +152,28 @@ void sensors_parser_CompareSensors(
 }
 
 ZTEST(sensors_parser, test_CborSerializeDeserialize) {
-    auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
+    const auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
 
     auto sensors = sensors_parser_GetTestSensors();
 
-    auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
+    const auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
     auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
 
     sensors_parser_CompareSensors(sensors, deserialized_sensors);
 }
 
 ZTEST(sensors_parser, test_Deserialize_orders_an_unordered_calibration_table) {
-    auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
+    const auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
 
-    auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = sensors_parser_GetTestSensors();
     auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
 
     for(auto& sensor_config : serialized_sensors->CborSensorConfig_m)
         std::ranges::reverse(sensor_config.configuration.calibration_table.float32float);
 
-    auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
+    const auto deserialized_sensors = sensors_cbor_parser->Deserialize(
+        Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16
+    );
 
     for(const auto& sensor : deserialized_sensors) {
         if(!sensor->configuration.HasInterpolation())
@@ -242,7 +244,7 @@ ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_voltage) {
 ZTEST(sensors_parser, test_Deserialize_reads_the_connection_string_strictly) {
     SensorsCborParser parser(nullptr);
 
-    auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "engine_rpm");
+    const auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "engine_rpm");
     sensor->configuration.type = SensorType::CANBUS_ANALOG;
     sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 1, 100, "rpm");
 
@@ -437,7 +439,7 @@ ZTEST(sensors_parser, test_conditioning_survives_Serialize_and_Deserialize) {
     SensorsCborParser parser(nullptr);
     auto sensors = sensors_parser_GetConditionedSensors();
 
-    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+    const auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
     const auto& button = FindSensorConfig(*serialized_sensors, "button").configuration;
     zassert_equal(button.debounce_ms, 30);
@@ -473,7 +475,7 @@ ZTEST(sensors_parser, test_conditioning_survives_a_round_trip_through_cbor_bytes
 ZTEST(sensors_parser, test_a_sensor_built_in_code_encodes_the_default_conditioning) {
     SensorsCborParser parser(nullptr);
     CborSerializer<CborSensorsConfig> serializer;
-    auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = sensors_parser_GetTestSensors();
 
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
     for(const auto& sensor_config : serialized_sensors->CborSensorConfig_m) {

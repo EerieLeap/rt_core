@@ -270,7 +270,7 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
         k_sem done;
         std::unique_ptr<ConfigurationUpdateLoggingStop> stop;
     };
-    auto destruction = std::make_shared<Destruction>();
+    const auto destruction = std::make_shared<Destruction>();
     k_sem_init(&destruction->done, 0, 1);
     destruction->stop = std::move(F().stop);
 
@@ -348,7 +348,7 @@ ZTEST(configuration_update_logging_stop, test_StartBeforeInitializeFailsAndStart
 }
 
 ZTEST(configuration_update_logging_stop, test_AQueueThatDoesNotRunFailsToInitialize) {
-    auto never_ran = std::make_shared<WorkQueueThread>("never_ran_update_stop", 4096, 5);
+    const auto never_ran = std::make_shared<WorkQueueThread>("never_ran_update_stop", 4096, 5);
     ConfigurationUpdateLoggingStop stop(F().service, never_ran, F().control, F().sender);
 
     zassert_false(stop.Initialize(), "The broadcast needs a queue that runs");

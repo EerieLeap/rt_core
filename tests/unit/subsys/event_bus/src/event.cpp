@@ -27,7 +27,7 @@ constexpr uint32_t k_source_two = 0xA002;
 ZTEST_SUITE(event_bus_event, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_event, test_an_event_keeps_its_type_and_source) {
-    TestEvent event{ .source_id = k_source_one, .type = TestEventType::Beta, .payload = {} };
+    const TestEvent event{ .source_id = k_source_one, .type = TestEventType::Beta, .payload = {} };
 
     zassert_equal(event.type, TestEventType::Beta);
     zassert_true(event.payload.empty());
@@ -71,7 +71,7 @@ ZTEST(event_bus_event, test_the_payload_variant_keeps_int_and_uint32_apart) {
 ZTEST(event_bus_event, test_an_event_handler_receives_the_event_by_reference) {
     const TestEvent* observed = nullptr;
 
-    EventHandler<TestEventType, TestPayloadType> handler = [&observed](const TestEvent& event) {
+    const EventHandler<TestEventType, TestPayloadType> handler = [&observed](const TestEvent& event) {
         observed = &event;
     };
 

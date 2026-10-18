@@ -86,7 +86,7 @@ public:
                 return table.back().value;
         }
 
-        auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
+        const auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
             return val < d.voltage;
         });
 
@@ -96,7 +96,7 @@ public:
             ? 0
             : std::min(static_cast<size_t>(std::distance(table.begin(), it)) - 1, last_segment);
 
-        float dx = voltage - table[i].voltage;
+        const float dx = voltage - table[i].voltage;
 
         return coefficients_[i].a + coefficients_[i].b * dx + coefficients_[i].c * dx * dx
             + coefficients_[i].d * dx * dx * dx;

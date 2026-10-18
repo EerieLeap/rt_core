@@ -10,7 +10,7 @@ using eerie_leap::subsys::event_bus::AcceptanceCache;
 ZTEST_SUITE(event_bus_acceptance_cache, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_acceptance_cache, test_an_empty_cache_knows_no_key) {
-    AcceptanceCache<4> cache;
+    const AcceptanceCache<4> cache;
 
     zassert_false(cache.Find(0).has_value());
     zassert_false(cache.Find(7).has_value());

@@ -15,7 +15,7 @@ void CdmpStatusMachine::SetStatus(CdmpDeviceStatus new_status, bool force) {
     if(new_status == status_)
         return;
 
-    CdmpDeviceStatus old_status = status_;
+    const CdmpDeviceStatus old_status = status_;
 
     if(!force && !CanTransitionTo(new_status)) {
         LOG_WRN(
@@ -40,7 +40,7 @@ int CdmpStatusMachine::RegisterStatusChangeHandler(StatusChangeCallback callback
         if(id > max_id)
             max_id = id;
     }
-    int new_id = max_id + 1;
+    const int new_id = max_id + 1;
 
     status_change_callbacks_[new_id] = callback;
     return new_id;
@@ -51,13 +51,13 @@ void CdmpStatusMachine::UnregisterStatusChangeHandler(int callback_id) {
 }
 
 bool CdmpStatusMachine::CanTransitionTo(CdmpDeviceStatus new_status) const {
-    auto current_status = GetCurrentStatus();
+    const auto current_status = GetCurrentStatus();
 
     return IsValidTransition(current_status, new_status);
 }
 
 bool CdmpStatusMachine::IsOperational() const {
-    auto current_status = GetCurrentStatus();
+    const auto current_status = GetCurrentStatus();
 
     return current_status == CdmpDeviceStatus::ONLINE || current_status == CdmpDeviceStatus::CLAIMING;
 }

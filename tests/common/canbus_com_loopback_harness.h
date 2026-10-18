@@ -94,10 +94,10 @@ public:
 
     Harness() {
         DtFs::InitInternalFs();
-        auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+        const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
         zassert_true(fs_service->Format());
 
-        auto configuration_manager = std::make_shared<CanbusConfigurationManager>(
+        const auto configuration_manager = std::make_shared<CanbusConfigurationManager>(
             std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service), nullptr
         );
         zassert_true(configuration_manager->Update(ComConfiguration()));

@@ -23,8 +23,8 @@ std::unique_ptr<uint8_t[]> TextBlockBase::Serialize() const {
     auto buffer = SerializeBase();
     uint64_t offset = GetBaseSize();
 
-    auto text_size = GetPaddedTextSize();
-    auto text_char_array = StringHelpers::ToPaddedCharArray(text_, text_size, '\0');
+    const auto text_size = GetPaddedTextSize();
+    const auto text_char_array = StringHelpers::ToPaddedCharArray(text_, text_size, '\0');
     std::copy(text_char_array.get(), text_char_array.get() + text_size, buffer.get() + offset);
     offset += text_size;
 

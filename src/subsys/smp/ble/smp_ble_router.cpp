@@ -24,7 +24,7 @@ struct SmpBleUserData {
 
 static_assert(sizeof(SmpBleUserData) <= CONFIG_MCUMGR_TRANSPORT_NETBUF_USER_DATA_SIZE);
 
-SmpBleUserData& UserData(net_buf& packet) {
+SmpBleUserData& UserData(const net_buf& packet) {
     return *static_cast<SmpBleUserData*>(net_buf_user_data(&packet));
 }
 

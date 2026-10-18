@@ -145,7 +145,7 @@ struct Readings {
     std::vector<std::optional<float>> values;
 
     uint32_t Add(std::string_view id, std::optional<float> value) {
-        auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
+        const auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
         sensors.push_back(sensor);
         values.push_back(value);
 

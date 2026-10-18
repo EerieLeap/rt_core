@@ -89,8 +89,8 @@ ZTEST(cbor_size_builder, test_AddSize) {
 }
 
 ZTEST(cbor_size_builder, test_AddOptional_pointer) {
-    uint64_t value = 0x10000;
-    auto size_func = [](uint64_t item) {
+    const uint64_t value = 0x10000;
+    const auto size_func = [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     };
 
@@ -101,8 +101,8 @@ ZTEST(cbor_size_builder, test_AddOptional_pointer) {
 }
 
 ZTEST(cbor_size_builder, test_AddOptional_flag) {
-    uint64_t value = 0x10000;
-    auto size_func = [](uint64_t item) {
+    const uint64_t value = 0x10000;
+    const auto size_func = [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     };
 
@@ -129,7 +129,7 @@ ZTEST(cbor_size_builder, test_implicit_size_t_conversion) {
     CborSizeBuilder builder;
     builder.AddUint(24).AddBool(true);
 
-    size_t size = builder;
+    const size_t size = builder;
 
     zassert_equal(size, builder.Build());
     zassert_equal(size, 3);
@@ -139,7 +139,7 @@ ZTEST(cbor_size_builder, test_matches_calculator_for_composite_structure) {
     static constexpr char kId[] = "sensor_1";
     static constexpr char kUnit[] = "celsius";
 
-    size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart()
+    const size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart()
         + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kId))
         + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kUnit)) + CborSizeCalc::SizeOfUint(1000)
         + CborSizeCalc::SizeOfFloat(0.5F) + CborSizeCalc::SizeOfBool(true);

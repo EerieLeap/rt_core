@@ -36,7 +36,7 @@ SdmmcService::~SdmmcService() {
 }
 
 bool SdmmcService::Initialize() {
-    bool mounted = FsService::Initialize();
+    const bool mounted = FsService::Initialize();
     atomic_set(&sd_card_present_, mounted ? 1 : 0);
 
     if(!mounted)

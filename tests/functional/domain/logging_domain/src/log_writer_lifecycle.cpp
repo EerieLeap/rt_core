@@ -27,9 +27,9 @@ using rt_core_test::MemoryStreamBuf;
 namespace {
 
 // The bytes StartLogging() writes for the rig's sensors: what a file holds before its first record.
-uint64_t GetHeaderSize(LogWriterRig& rig) {
+uint64_t GetHeaderSize(const LogWriterRig& rig) {
     MemoryStreamBuf stream;
-    auto logger = rig.logger_factory();
+    const auto logger = rig.logger_factory();
     zassert_true(
         logger->StartLogging(stream, rig.time_service->GetCurrentTime()), "the header could not be written to memory"
     );
@@ -78,7 +78,7 @@ ZTEST_SUITE(log_writer_lifecycle, NULL, NULL, ResetAfterTest, NULL, NULL);
 
 ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     supervisor.RequestStart(ILoggingControl::kAllUnits);
@@ -124,7 +124,7 @@ ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
 ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     const auto probes = ProbeLoggerFactory::Make(rig.logger_factory);
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
@@ -186,10 +186,10 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
 ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors, false);
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
-    auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
+    const auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
     rig.log_writer_service->SetLoggerFactory([probe] {
         return probe;
     });
@@ -231,7 +231,7 @@ ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
 }
 
 ZTEST(log_writer_lifecycle, test_StartFailsWithoutTheMinimumFreeSpace) {
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
     const uint64_t total_bytes = rig.fs_service->GetTotalSpace();
 
     rig.log_writer_service->SetSizeLimitsForTesting(0, total_bytes + 1);
@@ -251,7 +251,7 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
 
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     // About three ticks of the frames below per file.
@@ -370,7 +370,7 @@ ZTEST(log_writer_lifecycle, test_IsOpenFileFollowsARotation) {
 ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSpace) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     const auto probes = ProbeLoggerFactory::Make(rig.logger_factory);
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
@@ -417,7 +417,7 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
 ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     supervisor.RequestStart(ILoggingControl::kAllUnits);
@@ -500,7 +500,7 @@ ZTEST(log_writer_lifecycle, test_StopWaitsForARunningTickAndFinalizes) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
 
-    auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
+    const auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
     rig.log_writer_service->SetLoggerFactory([probe] {
         return probe;
     });

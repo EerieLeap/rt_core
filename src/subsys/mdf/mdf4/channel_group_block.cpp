@@ -105,7 +105,7 @@ void ChannelGroupBlock::AddChannel(std::shared_ptr<ChannelBlock> channel) {
     data_bytes_ += channel->GetDataSizeBytes();
 
     if(links_.GetLink(LinkType::ChannelFirst)) {
-        auto first_channel = std::dynamic_pointer_cast<ChannelBlock>(links_.GetLink(LinkType::ChannelFirst));
+        const auto first_channel = std::dynamic_pointer_cast<ChannelBlock>(links_.GetLink(LinkType::ChannelFirst));
         first_channel->LinkBlock(std::move(channel));
     } else {
         links_.SetLink(LinkType::ChannelFirst, channel);
@@ -114,7 +114,7 @@ void ChannelGroupBlock::AddChannel(std::shared_ptr<ChannelBlock> channel) {
 
 void ChannelGroupBlock::LinkBlock(std::shared_ptr<ChannelGroupBlock> next_block) {
     auto* last = this;
-    while(auto next = last->links_.GetLink(LinkType::ChannelGroupNext))
+    while(const auto next = last->links_.GetLink(LinkType::ChannelGroupNext))
         last = static_cast<ChannelGroupBlock*>(next.get());
 
     last->links_.SetLink(LinkType::ChannelGroupNext, std::move(next_block));

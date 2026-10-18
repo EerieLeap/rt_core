@@ -256,7 +256,7 @@ uint32_t LoggingController::GetUnitUid() const {
 bool LoggingController::HasDependencies() const {
     bool has_all = true;
 
-    auto require = [&has_all](bool is_present, const char* what) {
+    const auto require = [&has_all](bool is_present, const char* what) {
         if(!is_present) {
             LOG_ERR("The logging controller needs %s.", what);
             has_all = false;

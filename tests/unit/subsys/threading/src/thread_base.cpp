@@ -73,42 +73,42 @@ private:
 ZTEST_SUITE(thread_base, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(thread_base, test_constructor_keeps_name_and_stack_size) {
-    ProbeThreadBase thread("worker", STACK_SIZE, 5);
+    const ProbeThreadBase thread("worker", STACK_SIZE, 5);
 
     zassert_equal(thread.Name(), std::string("worker"));
     zassert_equal(thread.StackSize(), STACK_SIZE);
 }
 
 ZTEST(thread_base, test_constructor_maps_preemptive_priority_to_positive) {
-    ProbeThreadBase from_positive("preemptive_positive", STACK_SIZE, 7, false);
-    ProbeThreadBase from_negative("preemptive_negative", STACK_SIZE, -7, false);
+    const ProbeThreadBase from_positive("preemptive_positive", STACK_SIZE, 7, false);
+    const ProbeThreadBase from_negative("preemptive_negative", STACK_SIZE, -7, false);
 
     zassert_equal(from_positive.Priority(), 7);
     zassert_equal(from_negative.Priority(), 7);
 }
 
 ZTEST(thread_base, test_constructor_maps_cooperative_priority_to_negative) {
-    ProbeThreadBase from_positive("cooperative_positive", STACK_SIZE, 7, true);
-    ProbeThreadBase from_negative("cooperative_negative", STACK_SIZE, -7, true);
+    const ProbeThreadBase from_positive("cooperative_positive", STACK_SIZE, 7, true);
+    const ProbeThreadBase from_negative("cooperative_negative", STACK_SIZE, -7, true);
 
     zassert_equal(from_positive.Priority(), -7);
     zassert_equal(from_negative.Priority(), -7);
 }
 
 ZTEST(thread_base, test_constructor_keeps_priority_zero_cooperative) {
-    ProbeThreadBase thread("cooperative_zero", STACK_SIZE, 0, true);
+    const ProbeThreadBase thread("cooperative_zero", STACK_SIZE, 0, true);
 
     zassert_true(thread.Priority() < 0, "priority %d is preemptive", thread.Priority());
 }
 
 ZTEST(thread_base, test_constructor_defaults_to_preemptive) {
-    ProbeThreadBase thread("defaulted", STACK_SIZE, 3);
+    const ProbeThreadBase thread("defaulted", STACK_SIZE, 3);
 
     zassert_true(thread.Priority() > 0);
 }
 
 ZTEST(thread_base, test_GetStack_is_null_before_initialization) {
-    ProbeThreadBase thread("unstarted", STACK_SIZE, 5);
+    const ProbeThreadBase thread("unstarted", STACK_SIZE, 5);
 
     zassert_is_null(thread.GetStack());
 }
@@ -172,7 +172,7 @@ ZTEST(thread_base, test_destructor_does_not_free_an_unallocated_stack) {
     TrackingMemoryResource resource;
 
     {
-        ProbeThreadBase thread("never_initialized", STACK_SIZE, 5, false, &resource);
+        const ProbeThreadBase thread("never_initialized", STACK_SIZE, 5, false, &resource);
     }
 
     zassert_equal(resource.allocations, 0);

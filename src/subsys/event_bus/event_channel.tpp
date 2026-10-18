@@ -48,7 +48,7 @@ EventChannel<TEventType, TPayloadType>::Subscribe(TEventType type, FilterType fi
     ScopedMutex guard(subscribers_mutex_);
 
     try {
-        size_t id = next_id_++;
+        size_t const id = next_id_++;
         auto subscription = std::make_shared<Subscription<TEventType, TPayloadType>>(id, type, filter, std::move(handler));
 
         subscribers_[type].push_back(std::move(subscription));
@@ -67,12 +67,12 @@ bool EventChannel<TEventType, TPayloadType>::Unsubscribe(SubscriptionHandle<TEve
 
     ScopedMutex guard(subscribers_mutex_);
 
-    auto it = subscribers_.find(handle.GetEventType());
+    const auto it = subscribers_.find(handle.GetEventType());
     if(it == subscribers_.end())
         return false;
 
     auto& subscribers = it->second;
-    auto subscription_it = std::find_if(subscribers.begin(), subscribers.end(),
+    const auto subscription_it = std::find_if(subscribers.begin(), subscribers.end(),
         [&handle](const auto& sub) {
             return sub->id == handle.GetId();
     });
@@ -99,12 +99,12 @@ AnySubscription EventChannel<TEventType, TPayloadType>::SubscribeErased(
             if(!filter)
                 return true;
 
-            PayloadView view(event.payload);
+            PayloadView const view(event.payload);
 
             return filter(view);
         },
         [handler = std::move(handler)](const EventMessage& event) {
-            PayloadView view(event.payload);
+            PayloadView const view(event.payload);
 
             handler(view);
         });
@@ -131,7 +131,7 @@ bool EventChannel<TEventType, TPayloadType>::Accepts(const EventMessage& event) 
     // filter that throws propagates, as it does out of Dispatch().
     ScopedMutex guard(subscribers_mutex_);
 
-    auto it = subscribers_.find(event.type);
+    const auto it = subscribers_.find(event.type);
     if(it == subscribers_.end())
         return false;
 
@@ -234,7 +234,7 @@ void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event)
     {
         ScopedMutex guard(subscribers_mutex_);
 
-        if(auto it = subscribers_.find(event.type); it != subscribers_.end()) {
+        if(const auto it = subscribers_.find(event.type); it != subscribers_.end()) {
             for(const auto& subscription : it->second) {
                 if(!subscription->filter(event))
                     continue;
@@ -247,7 +247,7 @@ void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event)
         }
     }
 
-    auto deliver = [this, &event](const SubscriptionPtr<TEventType, TPayloadType>& subscription) {
+    const auto deliver = [this, &event](const SubscriptionPtr<TEventType, TPayloadType>& subscription) {
         try {
             subscription->handler(event);
         } catch (const std::exception& e) {

@@ -38,7 +38,7 @@ ZTEST(reflection_caller_name, test_GetCallerName_distinguishes_functions) {
 }
 
 ZTEST(reflection_caller_name, test_GetCallerName_identifies_the_enclosing_function) {
-    std::string_view name = FirstCaller().name;
+    const std::string_view name = FirstCaller().name;
 
     // An empty name means the location was captured outside a function body.
     zassert_false(name.empty());

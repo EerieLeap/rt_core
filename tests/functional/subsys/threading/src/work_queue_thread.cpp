@@ -37,7 +37,7 @@ struct TaskProbe {
 };
 
 WorkQueueTaskResult ProbeHandler(TaskProbe* probe) {
-    atomic_val_t previous_runs = atomic_inc(&probe->runs);
+    const atomic_val_t previous_runs = atomic_inc(&probe->runs);
     k_sem_give(&probe->finished);
 
     return { .reschedule = previous_runs < probe->reschedules, .delay = K_MSEC(5) };
@@ -190,7 +190,7 @@ ZTEST(work_queue_thread, test_Schedule_defers_the_handler_by_the_requested_delay
     TaskProbe probe;
     auto task = queue_thread->CreateTask(ProbeHandler, &probe);
 
-    int64_t started_at = k_uptime_get();
+    const int64_t started_at = k_uptime_get();
     task.Schedule(K_MSEC(150));
 
     zassert_true(probe.WaitForRun(SYNC_TIMEOUT_MS));
@@ -329,7 +329,7 @@ ZTEST(work_queue_thread, test_the_destructor_drains_and_stops_the_queue_thread) 
 ZTEST(work_queue_thread, test_Stop_releases_the_runner_task_state) {
     auto queue_thread = MakeQueueThread("wq_released");
 
-    auto tracker = std::make_shared<int>(0);
+    const auto tracker = std::make_shared<int>(0);
     k_sem done;
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 

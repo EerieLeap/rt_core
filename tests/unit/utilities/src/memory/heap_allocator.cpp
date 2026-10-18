@@ -151,7 +151,7 @@ ZTEST(heap_allocator, test_reallocate_null_allocates) {
 ZTEST(heap_allocator, test_is_stateless_and_always_equal) {
     HeapAllocator<uint32_t> a;
     HeapAllocator<uint32_t> b;
-    HeapAllocator<uint8_t> rebound(a);
+    const HeapAllocator<uint8_t> rebound(a);
 
     zassert_true(a == b);
     zassert_false(a != b);
@@ -202,13 +202,13 @@ ZTEST(heap_allocator, test_make_shared_ext) {
     ResetTracked();
 
     {
-        auto tracked = make_shared_ext<Tracked>(7);
+        const auto tracked = make_shared_ext<Tracked>(7);
 
         zassert_not_null(tracked.get());
         zassert_equal(tracked->value, 7);
         zassert_equal(Tracked::live, 1);
 
-        auto copy = tracked;
+        const auto copy = tracked;
         zassert_equal(copy.use_count(), 2);
         zassert_equal(Tracked::live, 1);
     }
@@ -247,7 +247,7 @@ ZTEST(heap_allocator, test_make_unique_ext_is_movable) {
 ZTEST(heap_allocator, test_make_unique_ext_rethrows_constructor_failure) {
     bool threw = false;
     try {
-        auto value = make_unique_ext<ThrowingCtor>();
+        const auto value = make_unique_ext<ThrowingCtor>();
         (void)value;
     } catch(const std::runtime_error&) {
         threw = true;
@@ -257,7 +257,7 @@ ZTEST(heap_allocator, test_make_unique_ext_rethrows_constructor_failure) {
 }
 
 ZTEST(heap_allocator, test_ext_deleter_ignores_null) {
-    ext_unique_ptr<Tracked> empty;
+    const ext_unique_ptr<Tracked> empty;
 
     zassert_is_null(empty.get());
 }

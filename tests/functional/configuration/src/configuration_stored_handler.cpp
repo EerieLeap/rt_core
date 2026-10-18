@@ -113,7 +113,7 @@ struct Recorder {
 };
 
 std::vector<uint8_t> Encode(uint64_t device_id, uint32_t build_number = 0) {
-    CborSystemConfig config{ .device_id = device_id, .build_number = build_number };
+    const CborSystemConfig config{ .device_id = device_id, .build_number = build_number };
     std::vector<uint8_t> bytes(64);
     size_t size = 0;
     zassert_equal(cbor_encode_CborSystemConfig(bytes.data(), bytes.size(), &config, &size), 0);
@@ -180,7 +180,7 @@ Fixture& F() {
 ZTEST_SUITE(configuration_stored_handler, NULL, NULL, Before, After, NULL);
 
 ZTEST(configuration_stored_handler, test_AnUpdateReportsItsTypeOnTheStoringThread) {
-    auto manager = F().Register(Type::Canbus);
+    const auto manager = F().Register(Type::Canbus);
 
     zassert_true(manager->Update(TestConfiguration{ .device_id = 7, .build_number = 1 }));
 
@@ -205,7 +205,7 @@ ZTEST(configuration_stored_handler, test_TheStoreIsDoneWhenTheHandlerRuns) {
 }
 
 ZTEST(configuration_stored_handler, test_AnApplyThroughTheServiceReportsItsType) {
-    auto manager = F().Register(Type::Adc);
+    const auto manager = F().Register(Type::Adc);
 
     zassert_true(F().service->ApplyCborConfiguration(Type::Adc, Encode(9)));
 
@@ -217,7 +217,7 @@ ZTEST(configuration_stored_handler, test_AnApplyThroughTheServiceReportsItsType)
 
 // rt_daq's `logging reapply-sensors` applies through the manager, not the service.
 ZTEST(configuration_stored_handler, test_AnApplyThatBypassesTheServiceReportsItsType) {
-    auto manager = F().Register(Type::Sensors);
+    const auto manager = F().Register(Type::Sensors);
 
     zassert_true(manager->ApplyCborConfiguration(Encode(10)));
 
@@ -227,7 +227,7 @@ ZTEST(configuration_stored_handler, test_AnApplyThatBypassesTheServiceReportsIts
 }
 
 ZTEST(configuration_stored_handler, test_AnAdoptReportsItsType) {
-    auto manager = F().Register(Type::Ui);
+    const auto manager = F().Register(Type::Ui);
 
     zassert_true(manager->AdoptForTest(11));
 
@@ -238,7 +238,7 @@ ZTEST(configuration_stored_handler, test_AnAdoptReportsItsType) {
 }
 
 ZTEST(configuration_stored_handler, test_UpdateOwnSettingStoresAndReportsNothing) {
-    auto manager = F().Register(Type::Display);
+    const auto manager = F().Register(Type::Display);
 
     zassert_true(manager->UpdateOwnSetting(TestConfiguration{ .device_id = 12 }));
 
@@ -250,7 +250,7 @@ ZTEST(configuration_stored_handler, test_UpdateOwnSettingStoresAndReportsNothing
 }
 
 ZTEST(configuration_stored_handler, test_ARejectedApplyReportsNothing) {
-    auto manager = F().Register();
+    const auto manager = F().Register();
 
     const std::vector<uint8_t> malformed = { 0xFF, 0x01, 0x02 };
     zassert_false(F().service->ApplyCborConfiguration(Type::System, malformed), "Malformed CBOR");
@@ -266,7 +266,7 @@ ZTEST(configuration_stored_handler, test_ARejectedApplyReportsNothing) {
 }
 
 ZTEST(configuration_stored_handler, test_LoadingAndTheDefaultReportNothing) {
-    auto manager = F().Register();
+    const auto manager = F().Register();
 
     zassert_not_null(manager->Get(true).get(), "The stored default loads");
     zassert_not_null(manager->Get().get());
@@ -277,7 +277,7 @@ ZTEST(configuration_stored_handler, test_LoadingAndTheDefaultReportNothing) {
 }
 
 ZTEST(configuration_stored_handler, test_TheSameBytesStoredAgainReportAgain) {
-    auto manager = F().Register();
+    const auto manager = F().Register();
     const auto bytes = Encode(5);
 
     zassert_true(manager->ApplyCborConfiguration(bytes));
@@ -289,7 +289,7 @@ ZTEST(configuration_stored_handler, test_TheSameBytesStoredAgainReportAgain) {
 ZTEST(configuration_stored_handler, test_AManagerRegisteredAfterTheHandlerReports) {
     F().service->RegisterConfigurationStoredHandler(F().recorder->Handler());
 
-    auto manager = F().MakeManager();
+    const auto manager = F().MakeManager();
     F().service->RegisterCborConfigurationManager(Type::LoggingControl, manager);
 
     zassert_true(manager->Update(TestConfiguration{ .device_id = 3 }));
@@ -300,8 +300,8 @@ ZTEST(configuration_stored_handler, test_AManagerRegisteredAfterTheHandlerReport
 }
 
 ZTEST(configuration_stored_handler, test_ARefusedSecondManagerOfATypeIsNotWired) {
-    auto first = F().Register(Type::System);
-    auto second = F().MakeManager();
+    const auto first = F().Register(Type::System);
+    const auto second = F().MakeManager();
     F().service->RegisterCborConfigurationManager(Type::System, second);
 
     zassert_true(second->Update(TestConfiguration{ .device_id = 2 }));
@@ -312,8 +312,8 @@ ZTEST(configuration_stored_handler, test_ARefusedSecondManagerOfATypeIsNotWired)
 }
 
 ZTEST(configuration_stored_handler, test_AClearedHandlerIsNotCalledAndASecondReplacesTheFirst) {
-    auto manager = F().Register();
-    auto second = std::make_shared<Recorder>();
+    const auto manager = F().Register();
+    const auto second = std::make_shared<Recorder>();
 
     F().service->RegisterConfigurationStoredHandler(second->Handler());
     zassert_true(manager->Update(TestConfiguration{ .device_id = 6 }));
@@ -326,7 +326,7 @@ ZTEST(configuration_stored_handler, test_AClearedHandlerIsNotCalledAndASecondRep
 }
 
 ZTEST(configuration_stored_handler, test_AHandlerThatThrowsDoesNotFailTheStore) {
-    auto manager = F().MakeManager();
+    const auto manager = F().MakeManager();
     F().service->RegisterCborConfigurationManager(Type::System, manager);
     F().service->RegisterConfigurationStoredHandler([](Type) {
         throw std::runtime_error("The handler failed.");
@@ -346,7 +346,7 @@ ZTEST(configuration_stored_handler, test_AHandlerThatThrowsDoesNotFailTheStore) 
 ZTEST(configuration_stored_handler, test_AManagerThatIsNotRegisteredReportsNothing) {
     F().service->RegisterConfigurationStoredHandler(F().recorder->Handler());
 
-    auto manager = F().MakeManager();
+    const auto manager = F().MakeManager();
     zassert_true(manager->Update(TestConfiguration{ .device_id = 15 }));
 
     zassert_equal(F().recorder->Get().size(), 0U);
@@ -354,7 +354,7 @@ ZTEST(configuration_stored_handler, test_AManagerThatIsNotRegisteredReportsNothi
 
 // The handler a manager holds reaches the service's slot, not the service.
 ZTEST(configuration_stored_handler, test_AManagerThatOutlivesItsServiceStillStores) {
-    auto manager = F().Register();
+    const auto manager = F().Register();
     F().service->RegisterConfigurationStoredHandler(nullptr);
     F().service.reset();
 

@@ -120,7 +120,7 @@ private:
             return std::nullopt;
         }
 
-        size_t buffer_size = *file_size;
+        const size_t buffer_size = *file_size;
         std::pmr::vector<uint8_t> buffer(buffer_size, Mrm::GetExtPmr());
         size_t out_len = 0;
 
@@ -257,7 +257,7 @@ public:
         task_load_.instance = this;
         k_work_init(&task_load_.work, WorkTaskLoad);
 
-        auto funcs = cbor::CborTraitRegistry::Get<T>();
+        const auto funcs = cbor::CborTraitRegistry::Get<T>();
         serializer_ = std::make_unique<cbor::CborSerializer<T>>();
 
         if(!fs_service_->Exists(configuration_dir_))

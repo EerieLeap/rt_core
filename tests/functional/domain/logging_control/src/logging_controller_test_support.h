@@ -438,7 +438,7 @@ struct Parts {
 
 // The controller of whichever role the binary is built for: the remote role ignores what only the
 // writer uses.
-inline std::unique_ptr<LoggingController> MakeController(ControllerRig& rig, Parts parts) {
+inline std::unique_ptr<LoggingController> MakeController(const ControllerRig& rig, Parts parts) {
     return std::make_unique<LoggingController>(
         parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service, std::move(parts.queue),
         std::move(parts.configuration_service), parts.has_sensors_manager ? rig.sensors_manager : nullptr,
@@ -724,7 +724,7 @@ public:
 
 // The controller of whichever role the binary is built for, on real processing, with the rig's
 // configuration service unless the case gives its own.
-inline std::unique_ptr<LoggingController> MakeController(ProcessingRig& rig, Parts parts) {
+inline std::unique_ptr<LoggingController> MakeController(const ProcessingRig& rig, Parts parts) {
     return std::make_unique<LoggingController>(
         parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service, std::move(parts.queue),
         parts.uses_own_service ? std::move(parts.configuration_service) : rig.configuration_service,

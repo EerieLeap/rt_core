@@ -43,15 +43,15 @@ std::unique_ptr<uint8_t[]> IdBlock::Serialize() const {
 
     uint64_t offset = 0;
 
-    auto id_char_array = StringHelpers::ToPaddedCharArray(id_, 8);
+    const auto id_char_array = StringHelpers::ToPaddedCharArray(id_, 8);
     std::copy(id_char_array.get(), id_char_array.get() + 8, buffer.get() + offset);
     offset += 8;
 
-    auto version_str_char_array = StringHelpers::ToPaddedCharArray(version_str_, 8);
+    const auto version_str_char_array = StringHelpers::ToPaddedCharArray(version_str_, 8);
     std::copy(version_str_char_array.get(), version_str_char_array.get() + 8, buffer.get() + offset);
     offset += 8;
 
-    auto program_id_char_array = StringHelpers::ToPaddedCharArray(program_id_, 8);
+    const auto program_id_char_array = StringHelpers::ToPaddedCharArray(program_id_, 8);
     std::copy(program_id_char_array.get(), program_id_char_array.get() + 8, buffer.get() + offset);
     offset += 8;
 

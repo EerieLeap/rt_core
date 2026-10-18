@@ -38,7 +38,7 @@ LogCounter& LogCounter::Get() {
 }
 
 void LogCounter::Watch(const char* source_name) {
-    SpinGuard guard(lock_);
+    const SpinGuard guard(lock_);
 
     source_name_ = source_name;
     count_ = 0;
@@ -48,13 +48,13 @@ size_t LogCounter::Count() {
     // Returns once the log thread has processed everything logged so far.
     log_flush();
 
-    SpinGuard guard(lock_);
+    const SpinGuard guard(lock_);
 
     return count_;
 }
 
 void LogCounter::Add(const char* source_name) {
-    SpinGuard guard(lock_);
+    const SpinGuard guard(lock_);
 
     if(source_name_ != nullptr && source_name != nullptr && std::strcmp(source_name, source_name_) == 0)
         count_++;

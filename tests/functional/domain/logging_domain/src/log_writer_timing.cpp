@@ -50,7 +50,7 @@ ZTEST(log_writer_timing, test_TwentyMillisecondTicksKeepTheirPhase) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors, false);
     StoreLoggingConfiguration(rig, interval_ms);
-    auto probe = AttachProbe(rig, *sensors[0]);
+    const auto probe = AttachProbe(rig, *sensors[0]);
 
     const int64_t interval_ticks = MsToTicks(interval_ms);
     const int64_t start_ticks = k_uptime_ticks();
@@ -93,7 +93,7 @@ ZTEST(log_writer_timing, test_AFullDrainBringsTheNextTickForward) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors, false);
     StoreLoggingConfiguration(rig, interval_ms);
-    auto probe = AttachProbe(rig, *sensors[0]);
+    const auto probe = AttachProbe(rig, *sensors[0]);
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");

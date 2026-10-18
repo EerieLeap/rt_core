@@ -373,7 +373,7 @@ size_t CountFreeControllerFilters() {
         filter_ids.push_back(filter_id);
     }
 
-    for(int id : filter_ids)
+    for(const int id : filter_ids)
         can_remove_rx_filter(LoopbackDevice(), id);
 
     return filter_ids.size();

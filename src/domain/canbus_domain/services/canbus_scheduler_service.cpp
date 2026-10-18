@@ -46,7 +46,7 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
         auto can_frame_data = task->can_frame_builder->Build(*task->message_configuration);
 
         for(const auto& processor : *task->can_frame_processors) {
-            auto processed_data = processor->Process(*task->message_configuration, can_frame_data);
+            const auto processed_data = processor->Process(*task->message_configuration, can_frame_data);
 
             if(!processed_data.empty())
                 can_frame_data = processed_data;
@@ -70,7 +70,7 @@ std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(
     uint8_t bus_channel,
     std::shared_ptr<CanMessageConfiguration> message_configuration
 ) {
-    auto canbus = canbus_service_->GetCanbus(bus_channel);
+    const auto canbus = canbus_service_->GetCanbus(bus_channel);
     const auto* channel_configuration = canbus_service_->GetChannelConfiguration(bus_channel);
     if(canbus == nullptr || channel_configuration == nullptr) {
         LOG_ERR("Failed to create task for Frame ID: %d", message_configuration->frame_id);
@@ -111,7 +111,7 @@ void CanbusSchedulerService::CancelTasks() {
 }
 
 bool CanbusSchedulerService::DoStart() {
-    auto canbus_configuration = canbus_configuration_manager_->Get();
+    const auto canbus_configuration = canbus_configuration_manager_->Get();
 
     for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
         for(const auto& message_configuration : channel_configuration.message_configurations) {
@@ -164,7 +164,7 @@ bool CanbusSchedulerService::DoResume() {
 }
 
 void CanbusSchedulerService::InitializeScript(const CanMessageConfiguration& message_configuration) {
-    auto lua_script = message_configuration.lua_script;
+    const auto lua_script = message_configuration.lua_script;
 
     if(lua_script == nullptr)
         return;

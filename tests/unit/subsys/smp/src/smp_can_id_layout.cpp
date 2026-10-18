@@ -24,7 +24,7 @@ ZTEST(smp_can_id_layout, test_target_filter_accepts_any_source) {
     constexpr SmpCanIdLayout layout(0x1E000000);
     constexpr uint32_t filter_id = layout.GetTargetFilterId(0x07);
 
-    auto matches = [&](uint32_t id) {
+    const auto matches = [&](uint32_t id) {
         return (id & SmpCanIdLayout::TARGET_FILTER_MASK) == filter_id;
     };
 

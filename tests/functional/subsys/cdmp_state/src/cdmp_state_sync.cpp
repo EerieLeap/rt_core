@@ -20,7 +20,7 @@ constexpr uint8_t OTHER_SOURCE_ID = 7;
 /** @brief Expects the three resends of @p change, 50, 100 and 200 ms apart. */
 void ExpectResends(Harness& harness, const RecordedFrame& change) {
     int64_t previous_ms = change.received_ms;
-    for(int backoff : { 50, 100, 200 }) {
+    for(const int backoff : { 50, 100, 200 }) {
         auto resend = harness.bus.Wait(STATE_CHANGE, IsFrom(OWN_ID));
         zassert_true(resend.has_value(), "Resent after %d ms", backoff);
         zassert_true(resend->data == change.data, "A resend carries the same version and data");
@@ -177,7 +177,7 @@ ZTEST_F(cdmp_state_sync, test_unicast_sync_request_replays_records_and_answers) 
     zassert_true(harness.State()->SetLocalState(TYPE_B + 1, Bytes{ 0x03 }));
 
     harness.BringOnline();
-    for(uint8_t version : { 1, 3, 4 }) {
+    for(const uint8_t version : { 1, 3, 4 }) {
         auto notification = harness.WaitForNotification();
         zassert_true(notification.has_value());
         zassert_equal(notification->version, version);
@@ -189,7 +189,7 @@ ZTEST_F(cdmp_state_sync, test_unicast_sync_request_replays_records_and_answers) 
     harness.SendAsPeer(COMMAND, SyncRequestFrame(OWN_ID, 0x42));
 
     std::vector<uint32_t> replay_sequences;
-    for(uint8_t state_type : { TYPE_A, static_cast<uint8_t>(TYPE_B + 1) }) {
+    for(const uint8_t state_type : { TYPE_A, static_cast<uint8_t>(TYPE_B + 1) }) {
         auto frame = harness.bus.Wait(STATE_CHANGE, IsFrom(OWN_ID));
         zassert_true(frame.has_value(), "The unit replays every record it holds");
 
@@ -292,7 +292,7 @@ ZTEST_F(cdmp_state_sync, test_records_survive_a_restart) {
 
     harness.BringOnline();
 
-    for(uint8_t state_type : { TYPE_A, TYPE_B }) {
+    for(const uint8_t state_type : { TYPE_A, TYPE_B }) {
         auto notification = harness.WaitForNotification();
         zassert_true(notification.has_value(), "The records outlive the stop");
         zassert_equal(notification->state_type, state_type);

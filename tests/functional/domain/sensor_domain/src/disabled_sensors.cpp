@@ -63,7 +63,7 @@ constexpr std::array<std::string_view, 4> kDisabledIds = { "analog", "indicator"
 
 // input (polled) -> dependent, next to the disabled sensors.
 Fixture MakeFixture() {
-    auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
+    const auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
     indicator->configuration.type = SensorType::PHYSICAL_INDICATOR;
     indicator->configuration.channel = 0;
 
@@ -137,7 +137,7 @@ ZTEST(disabled_sensors, test_a_disabled_dependent_is_not_evaluated_when_its_inpu
     const auto fixture = MakeFixture();
     const auto time_service = MakeTimeService();
 
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
     ReadingPipeline pipeline(fixture.frame, processors, time_service);
 
@@ -157,11 +157,11 @@ ZTEST(disabled_sensors, test_a_disabled_dependent_is_not_evaluated_when_its_inpu
 }
 
 ZTEST(disabled_sensors, test_a_disabled_sensor_never_gets_a_reading_while_the_others_run) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
-    auto adc = std::make_shared<FakeAdc>(4);
-    auto adc_manager = MakeAdcManager(adc);
-    auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
+    const auto adc = std::make_shared<FakeAdc>(4);
+    const auto adc_manager = MakeAdcManager(adc);
+    const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
     zassert_true(adc_configuration_manager->Update(
         *MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } }))
     ));
@@ -172,7 +172,7 @@ ZTEST(disabled_sensors, test_a_disabled_sensor_never_gets_a_reading_while_the_ot
         Disabled(MakeVirtualSensor("disabled_virtual", "enabled_virtual + 1", 20)),
     };
 
-    auto rig = MakeProcessingRig(
+    const auto rig = MakeProcessingRig(
         fs_service, adc_manager, adc_configuration_manager,
         {
             disabled[0],

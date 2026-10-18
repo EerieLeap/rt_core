@@ -142,7 +142,7 @@ void CanFrameRouter::OnFrameReceived(size_t route_index, const CanFrame& frame) 
 }
 
 void CanFrameRouter::WorkHandler(k_work* work) {
-    auto* pending_work = CONTAINER_OF(work, PendingWork, work);
+    const auto* pending_work = CONTAINER_OF(work, PendingWork, work);
     pending_work->router->ProcessPendingFrames();
 }
 

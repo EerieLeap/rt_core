@@ -14,7 +14,7 @@ using namespace script_assets_test;
 ZTEST_SUITE(canbus_controller_assets, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(canbus_controller_assets, test_the_can_scripts_are_registered_with_what_the_kind_needs) {
-    auto rig = MakeRig("can_assets_descriptor_wq");
+    const auto rig = MakeRig("can_assets_descriptor_wq");
 
     auto controller = MakeCanbusController(rig, rig.sd, rig.assets);
     zassert_true(rig.assets->GetProviders().empty(), "Nothing is registered before Initialize()");
@@ -46,7 +46,7 @@ ZTEST(canbus_controller_assets, test_the_can_scripts_are_registered_with_what_th
 }
 
 ZTEST(canbus_controller_assets, test_nothing_is_registered_without_an_sd_service_or_a_manager) {
-    auto rig = MakeRig("can_assets_missing_wq");
+    const auto rig = MakeRig("can_assets_missing_wq");
     WriteScript(*rig.fs_service, kCanScript);
 
     {
@@ -70,7 +70,7 @@ ZTEST(canbus_controller_assets, test_nothing_is_registered_without_an_sd_service
 }
 
 ZTEST(canbus_controller_assets, test_a_script_is_referenced_by_any_message_on_any_channel) {
-    auto rig = MakeRig("can_assets_referrer_wq");
+    const auto rig = MakeRig("can_assets_referrer_wq");
     for(const char* script : { kCanScript, kDisabledCanScript, kCanScriptInSensorDirectory })
         WriteScript(*rig.fs_service, script);
 
@@ -105,7 +105,7 @@ ZTEST(canbus_controller_assets, test_a_script_is_referenced_by_any_message_on_an
 }
 
 ZTEST(canbus_controller_assets, test_only_deleting_a_referenced_script_is_refused) {
-    auto rig = MakeRig("can_assets_in_use_wq");
+    const auto rig = MakeRig("can_assets_in_use_wq");
     WriteScript(*rig.fs_service, kCanScript);
     WriteScript(*rig.fs_service, kDisabledCanScript);
 
@@ -141,7 +141,7 @@ ZTEST(canbus_controller_assets, test_only_deleting_a_referenced_script_is_refuse
 // A sensor may use a script from the CAN scripts' directory and a CAN message one from the sensors':
 // each kind asks every referrer, not its own controller's alone.
 ZTEST(canbus_controller_assets, test_a_script_of_either_kind_is_kept_while_either_controller_uses_it) {
-    auto rig = MakeRig("can_assets_cross_wq");
+    const auto rig = MakeRig("can_assets_cross_wq");
     WriteScript(*rig.fs_service, kSensorScriptInCanDirectory);
     WriteScript(*rig.fs_service, kCanScriptInSensorDirectory);
 
@@ -192,7 +192,7 @@ ZTEST(canbus_controller_assets, test_destroying_the_controller_withdraws_the_kin
         "A provider found before keeps working, and refuses nothing"
     );
 
-    std::weak_ptr<AssetsManager> weak_assets = rig.assets;
+    const std::weak_ptr<AssetsManager> weak_assets = rig.assets;
     rig.assets.reset();
 
     zassert_true(weak_assets.expired(), "Nothing the controller registered holds the registry");

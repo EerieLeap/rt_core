@@ -27,7 +27,7 @@ void BlockingTxCallback(const device*, int, void* user_data) {
 bool BlockTxThread() {
     k_sem_reset(&tx_release);
 
-    can_frame frame = { .id = 0x7F0, .dlc = 0, .flags = 0 };
+    const can_frame frame = { .id = 0x7F0, .dlc = 0, .flags = 0 };
     if(can_send(LoopbackDevice(), &frame, K_NO_WAIT, BlockingTxCallback, &tx_release) != 0)
         return false;
 
@@ -99,7 +99,7 @@ ZTEST(canbus_send, test_blocked_send_does_not_hold_the_bus_lock) {
     k_sleep(K_MSEC(20));
 
     const int64_t start = k_uptime_get();
-    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x7F3), [](const CanFrame&) {});
+    const int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x7F3), [](const CanFrame&) {});
     const int64_t elapsed = k_uptime_get() - start;
 
     zassert_true(id > 0);

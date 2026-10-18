@@ -157,7 +157,7 @@ void CdmpCommandService::ProcessRequestFrame(std::span<const uint8_t> frame_data
 void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMessage& command) {
     if(command.command_code == std::to_underlying(CdmpServiceCommandCode::STATUS_REQUEST)) {
         // Status request is allowed even when device is not online
-        CdmpCommandResponseStatusMessage message(
+        const CdmpCommandResponseStatusMessage message(
             device_->GetDeviceId(), command.transaction_id, CdmpResultCode::SUCCESS, device_->GetStatus(),
             device_->GetProtocolVersion(), device_->GetHealthStatus()
         );
@@ -165,7 +165,7 @@ void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMess
         NotifyCommandHandler(command);
         SendCommandResponse(command.target_device_id, message);
     } else if(device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
-        auto handler = service_command_handlers_.find(command.command_code);
+        const auto handler = service_command_handlers_.find(command.command_code);
         if(handler == service_command_handlers_.end()) {
             NotifyCommandHandler(command);
             return;
@@ -305,7 +305,7 @@ uint8_t CdmpCommandService::SendCommand(
         if(command_code == 0)
             throw std::runtime_error("Command code 0 is not allowed");
 
-        uint8_t transaction_id = transaction_service_->StartTransaction(
+        const uint8_t transaction_id = transaction_service_->StartTransaction(
             target_device_id, command_code, CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS, callback
         );
 

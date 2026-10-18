@@ -202,7 +202,7 @@ ZTEST(logging_command_handler, test_DestroyingTheHandlerWaitsForACallInProgress)
         k_sem done;
         std::shared_ptr<LoggingCommandHandler> handler;
     };
-    auto destruction = std::make_shared<Destruction>();
+    const auto destruction = std::make_shared<Destruction>();
     k_sem_init(&destruction->done, 0, 1);
     destruction->handler = std::move(F().handler);
 
@@ -271,7 +271,8 @@ struct Signals {
     }
 };
 
-std::weak_ptr<int> RegisterBlockingHandler(Fixture& fixture, const std::shared_ptr<Signals>& signals, bool result) {
+std::weak_ptr<int>
+RegisterBlockingHandler(const Fixture& fixture, const std::shared_ptr<Signals>& signals, bool result) {
     auto sentinel = std::make_shared<int>(0);
     std::weak_ptr<int> weak_sentinel = sentinel;
 
@@ -293,7 +294,7 @@ std::weak_ptr<int> RegisterBlockingHandler(Fixture& fixture, const std::shared_p
 } // namespace
 
 ZTEST(logging_command_handler, test_AHandlerUnsetDuringItsCallFinishesThatCall) {
-    auto signals = std::make_shared<Signals>();
+    const auto signals = std::make_shared<Signals>();
     const auto weak_sentinel = RegisterBlockingHandler(F(), signals, true);
     zassert_false(weak_sentinel.expired(), "the registered handler holds the sentinel");
 
@@ -325,14 +326,14 @@ ZTEST(logging_command_handler, test_AHandlerUnsetDuringItsCallFinishesThatCall) 
 }
 
 ZTEST(logging_command_handler, test_AHandlerReplacedDuringItsCallFinishesThatCall) {
-    auto signals = std::make_shared<Signals>();
+    const auto signals = std::make_shared<Signals>();
     const auto weak_sentinel = RegisterBlockingHandler(F(), signals, true);
 
     const uint8_t transaction = F().SendRequest({ 0x01 });
     zassert_equal(k_sem_take(&signals->entered, Ms(k_wait_ms)), 0, "The handler must be called");
 
     // The second handler answers FAILURE at once.
-    auto replacement_calls = std::make_shared<std::atomic<int>>(0);
+    const auto replacement_calls = std::make_shared<std::atomic<int>>(0);
     const int64_t start_ms = k_uptime_get();
     F().harness.com->SetCommandHandler<CanbusComLoggingCommand>(
         CanbusComCommandCode::LOGGING, [replacement_calls](std::optional<CanbusComLoggingCommand>) {

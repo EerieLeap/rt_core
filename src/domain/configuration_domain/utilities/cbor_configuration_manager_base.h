@@ -54,22 +54,22 @@ private:
 
     // Takes over the parsed allocation instead of moving it into a new one.
     static std::shared_ptr<TConfiguration> Share(eerie_memory::pmr_unique_ptr<TConfiguration> configuration) {
-        auto deleter = configuration.get_deleter();
-        std::pmr::polymorphic_allocator<> control_block_allocator(deleter.get_memory_resource());
+        const auto deleter = configuration.get_deleter();
+        const std::pmr::polymorphic_allocator<> control_block_allocator(deleter.get_memory_resource());
 
         return std::shared_ptr<TConfiguration>(configuration.release(), deleter, control_block_allocator);
     }
 
     std::shared_ptr<TConfiguration> CurrentConfiguration() const {
-        eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
+        const eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
 
         return configuration_;
     }
 
     void SetConfiguration(std::shared_ptr<TConfiguration> configuration) {
-        auto current = configuration;
+        const auto current = configuration;
         {
-            eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
+            const eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
             configuration_.swap(configuration);
         }
 
@@ -108,7 +108,7 @@ private:
 
         std::shared_ptr<const StoredHandler> handler;
         {
-            eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
+            const eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
             handler = stored_handler_;
         }
 
@@ -262,7 +262,7 @@ public:
         if(handler)
             slot = std::make_shared<const StoredHandler>(std::move(handler));
 
-        eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
+        const eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
         stored_handler_.swap(slot);
         // The previous handler is released after the lock, by whoever drops it last.
     }
@@ -272,7 +272,7 @@ public:
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
         LOG_MODULE_DECLARE(configuration_manager_logger);
 
-        auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
+        const auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
         if(cbor_config == nullptr) {
             SetReason(reason, "Malformed CBOR");
             return false;

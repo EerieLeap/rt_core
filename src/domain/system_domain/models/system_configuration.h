@@ -31,9 +31,9 @@ struct SystemConfiguration {
         build_number(other.build_number) {}
 
     std::string GetFormattedHwVersion() const {
-        uint8_t hw_version_major = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR;
-        uint8_t hw_version_minor = CONFIG_EERIE_LEAP_HW_VERSION_MINOR;
-        uint16_t hw_version_patch = CONFIG_EERIE_LEAP_HW_VERSION_PATCH;
+        const uint8_t hw_version_major = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR;
+        const uint8_t hw_version_minor = CONFIG_EERIE_LEAP_HW_VERSION_MINOR;
+        const uint16_t hw_version_patch = CONFIG_EERIE_LEAP_HW_VERSION_PATCH;
 
         char version_str[32];
         snprintf(version_str, sizeof(version_str), "%u.%u.%u", hw_version_major, hw_version_minor, hw_version_patch);
@@ -42,9 +42,9 @@ struct SystemConfiguration {
     }
 
     std::string GetFormattedSwVersion() const {
-        uint8_t sw_version_major = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR;
-        uint8_t sw_version_minor = CONFIG_EERIE_LEAP_SW_VERSION_MINOR;
-        uint16_t sw_version_patch = CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
+        const uint8_t sw_version_major = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR;
+        const uint8_t sw_version_minor = CONFIG_EERIE_LEAP_SW_VERSION_MINOR;
+        const uint16_t sw_version_patch = CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
 
         char version_str[32];
         snprintf(

@@ -133,7 +133,7 @@ ZTEST(logging_network_state, test_from_event_maps_the_status) {
 }
 
 ZTEST(logging_network_state, test_from_event_ignores_events_without_a_status) {
-    LoggingEventsChannel::EventMessage empty{ .type = LoggingEventType::StatusUpdated };
+    const LoggingEventsChannel::EventMessage empty{ .type = LoggingEventType::StatusUpdated };
     zassert_false(LoggingNetworkState::FromEvent(empty, Active()).has_value(), "No IsActive");
 
     LoggingEventsChannel::EventMessage wrong_type = empty;

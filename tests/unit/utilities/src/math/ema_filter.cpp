@@ -85,7 +85,7 @@ ZTEST(ema_filter, test_step_response_never_overshoots) {
 
     int32_t previous = 0;
     for(int i = 0; i < 128; ++i) {
-        int32_t current = filter.Filter(1000, 3);
+        const int32_t current = filter.Filter(1000, 3);
 
         zassert_true(current >= previous, "filter went backwards at step %d", i);
         zassert_true(current <= 1000, "filter overshot at step %d", i);
@@ -100,8 +100,8 @@ ZTEST(ema_filter, test_larger_k2_reacts_slower) {
     EmaFilter<int32_t> fast(0);
     EmaFilter<int32_t> slow(0);
 
-    int32_t fast_value = RunSteps(fast, 1000, 1, 3);
-    int32_t slow_value = RunSteps(slow, 1000, 5, 3);
+    const int32_t fast_value = RunSteps(fast, 1000, 1, 3);
+    const int32_t slow_value = RunSteps(slow, 1000, 5, 3);
 
     zassert_true(fast_value > slow_value);
     zassert_equal(fast_value, 875);
@@ -112,7 +112,7 @@ ZTEST(ema_filter, test_smooths_alternating_input) {
     EmaFilter<int32_t> filter(0);
 
     for(int i = 0; i < 200; ++i) {
-        int32_t value = filter.Filter((i % 2 == 0) ? 100 : -100, 3);
+        const int32_t value = filter.Filter((i % 2 == 0) ? 100 : -100, 3);
 
         zassert_between_inclusive(value, -25, 25, "unsmoothed output %d at step %d", value, i);
     }

@@ -50,21 +50,21 @@ struct ObservedReading {
 } // namespace
 
 ZTEST(adc_apply_restart, test_ApplyCborConfiguration_restarts_processing_with_the_new_calibrator) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
     DriveConstant(*adc, 0, 1000);
 
     // Calibrator A takes the reading as it is; B recorded 2.5 V for a true 5 V input, so it doubles.
     auto calibrator_a = MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } });
-    auto calibrator_b = MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 2.5F } });
+    const auto calibrator_b = MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 2.5F } });
     const float volts_a = calibrator_a->InterpolateToCalibratedRange(1.0F);
     const float volts_b = calibrator_b->InterpolateToCalibratedRange(1.0F);
     constexpr float tolerance = 0.02F;
     zassert_true(volts_b - volts_a > 0.5F, "A and B must be told apart");
 
-    auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
+    const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
     zassert_true(
         adc_configuration_manager->Update(*MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, calibrator_a))
     );
@@ -77,7 +77,7 @@ ZTEST(adc_apply_restart, test_ApplyCborConfiguration_restarts_processing_with_th
         adc_manager->GetChannelCount()
     );
 
-    auto config_thread = std::make_shared<WorkQueueThread>("adc_apply_config", 4096, 5);
+    const auto config_thread = std::make_shared<WorkQueueThread>("adc_apply_config", 4096, 5);
     zassert_true(config_thread->Initialize());
 
     Restarter restarter{ .processing_service = rig.processing_service };
@@ -96,13 +96,13 @@ ZTEST(adc_apply_restart, test_ApplyCborConfiguration_restarts_processing_with_th
     zassert_not_null(generation_a.get());
     zassert_not_null(generation_a->adc_configuration.get());
     zassert_equal(generation_a->adc_configuration, adc_configuration_manager->Get());
-    std::weak_ptr<const AdcCalibrator> calibrator_a_weak =
+    const std::weak_ptr<const AdcCalibrator> calibrator_a_weak =
         generation_a->adc_configuration->channel_configurations->at(0)->calibrator;
 
     // Every committed reading, told apart by its tick's timestamp.
     std::array<ObservedReading, 256> observed;
     size_t observed_count = 0;
-    auto observe_until = [&](size_t count, int timeout_ms) {
+    const auto observe_until = [&](size_t count, int timeout_ms) {
         const int64_t end = k_uptime_get() + timeout_ms;
         while(k_uptime_get() < end && observed_count < count) {
             const auto reading = rig.frame->TryGetReading("analog");

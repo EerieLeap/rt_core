@@ -128,7 +128,7 @@ ZTEST(smp_can_pacer, test_default_pacer_never_sends) {
 }
 
 ZTEST(smp_can_pacer, test_invalid_parameters_are_rejected) {
-    auto rejects = [](uint32_t frame_time_ns, uint8_t share, uint32_t burst) {
+    const auto rejects = [](uint32_t frame_time_ns, uint8_t share, uint32_t burst) {
         try {
             SmpCanPacer pacer(frame_time_ns, share, burst);
             (void)pacer;

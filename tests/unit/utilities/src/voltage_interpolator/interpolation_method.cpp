@@ -28,7 +28,8 @@ ZTEST(interpolation_method, test_GetInterpolationMethod_from_name) {
 }
 
 ZTEST(interpolation_method, test_name_round_trip) {
-    for(auto method : { InterpolationMethod::NONE, InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE })
+    for(const auto method :
+        { InterpolationMethod::NONE, InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE })
         zassert_equal(GetInterpolationMethod(GetInterpolationMethodName(method)), method);
 }
 

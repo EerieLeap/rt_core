@@ -36,10 +36,10 @@ std::shared_ptr<TestBlock> MakeBlock(const std::string& id, uint64_t payload_siz
 ZTEST_SUITE(mdf_serialization, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(mdf_serialization, test_ResolveAddressLaysBlocksOutInDepthFirstOrder) {
-    auto root = MakeBlock("RT", 8);   // 32 bytes
-    auto first = MakeBlock("AA", 16); // 40 bytes
-    auto second = MakeBlock("BB", 0); // 24 bytes
-    auto nested = MakeBlock("CC", 0); // 24 bytes
+    const auto root = MakeBlock("RT", 8);   // 32 bytes
+    const auto first = MakeBlock("AA", 16); // 40 bytes
+    const auto second = MakeBlock("BB", 0); // 24 bytes
+    const auto nested = MakeBlock("CC", 0); // 24 bytes
 
     first->AddChild(nested);
     root->AddChild(first);
@@ -55,10 +55,10 @@ ZTEST(mdf_serialization, test_ResolveAddressLaysBlocksOutInDepthFirstOrder) {
 }
 
 ZTEST(mdf_serialization, test_ResolveAddressVisitsSharedChildOnce) {
-    auto root = MakeBlock("RT");
-    auto first = MakeBlock("AA");
-    auto second = MakeBlock("BB");
-    auto shared = MakeBlock("SH");
+    const auto root = MakeBlock("RT");
+    const auto first = MakeBlock("AA");
+    const auto second = MakeBlock("BB");
+    const auto shared = MakeBlock("SH");
 
     first->AddChild(shared);
     second->AddChild(shared);
@@ -75,12 +75,12 @@ ZTEST(mdf_serialization, test_ResolveAddressVisitsSharedChildOnce) {
 // A *_next sibling comes after every child of the block before it, which is the order the
 // recursive traversal produced when the next link was the last child.
 ZTEST(mdf_serialization, test_NextChainIsLaidOutAfterTheChildren) {
-    auto root = MakeBlock("RT");
-    auto first = MakeBlock("AA");
-    auto first_child = MakeBlock("AC");
-    auto second = MakeBlock("BB");
-    auto second_child = MakeBlock("BC");
-    auto third = MakeBlock("CC");
+    const auto root = MakeBlock("RT");
+    const auto first = MakeBlock("AA");
+    const auto first_child = MakeBlock("AC");
+    const auto second = MakeBlock("BB");
+    const auto second_child = MakeBlock("BC");
+    const auto third = MakeBlock("CC");
 
     root->AddChild(first);
     first->AddChild(first_child);
@@ -120,9 +120,9 @@ ZTEST(mdf_serialization, test_NextChainIsLaidOutAfterTheChildren) {
 
 // The VLSD channel group a CAN channel points at is also a sibling on the channel group chain.
 ZTEST(mdf_serialization, test_ChainTraversalsTerminateOnAChildThatIsAlsoASibling) {
-    auto head = MakeBlock("AA");
-    auto sibling = MakeBlock("BB");
-    auto last = MakeBlock("CC");
+    const auto head = MakeBlock("AA");
+    const auto sibling = MakeBlock("BB");
+    const auto last = MakeBlock("CC");
 
     head->AddChild(sibling);
     head->SetNext(sibling);
@@ -145,10 +145,10 @@ ZTEST(mdf_serialization, test_ChainTraversalsTerminateOnAChildThatIsAlsoASibling
 }
 
 ZTEST(mdf_serialization, test_WriteToStreamPlacesEveryBlockAtItsResolvedAddress) {
-    auto root = MakeBlock("RT");
-    auto first = MakeBlock("AA");
-    auto second = MakeBlock("BB");
-    auto shared = MakeBlock("SH");
+    const auto root = MakeBlock("RT");
+    const auto first = MakeBlock("AA");
+    const auto second = MakeBlock("BB");
+    const auto shared = MakeBlock("SH");
 
     first->AddChild(shared);
     second->AddChild(shared);
@@ -174,8 +174,8 @@ ZTEST(mdf_serialization, test_WriteToStreamPlacesEveryBlockAtItsResolvedAddress)
 }
 
 ZTEST(mdf_serialization, test_ResetClearsTheWholeTree) {
-    auto root = MakeBlock("RT");
-    auto child = MakeBlock("AA");
+    const auto root = MakeBlock("RT");
+    const auto child = MakeBlock("AA");
     root->AddChild(child);
 
     root->ResolveAddress(64);
@@ -196,8 +196,8 @@ ZTEST(mdf_serialization, test_ResetClearsTheWholeTree) {
 
 ZTEST(mdf_serialization, test_ResetTerminatesOnCircularReferences) {
     // A channel referencing a VLSD channel group that chains back to the channel forms a cycle.
-    auto first = MakeBlock("AA");
-    auto second = MakeBlock("BB");
+    const auto first = MakeBlock("AA");
+    const auto second = MakeBlock("BB");
     first->AddChild(second);
     second->AddChild(first);
 
@@ -218,8 +218,8 @@ ZTEST(mdf_serialization, test_ResetTerminatesOnCircularReferences) {
 }
 
 ZTEST(mdf_serialization, test_ResolveAndWriteCanBeRepeated) {
-    auto root = MakeBlock("RT");
-    auto child = MakeBlock("AA");
+    const auto root = MakeBlock("RT");
+    const auto child = MakeBlock("AA");
     root->AddChild(child);
 
     auto first_stream = MakeStream();
@@ -236,7 +236,7 @@ ZTEST(mdf_serialization, test_ResolveAndWriteCanBeRepeated) {
 }
 
 ZTEST(mdf_serialization, test_WriteToStreamThrowsOnShortWrite) {
-    auto root = MakeBlock("RT");
+    const auto root = MakeBlock("RT");
     root->ResolveAddress(0);
 
     LimitedStreamBuf stream(BLOCK_HEADER_SIZE - 1);
@@ -264,8 +264,8 @@ ZTEST(mdf_serialization, test_RewriteToStreamRequiresAPreviousWrite) {
 }
 
 ZTEST(mdf_serialization, test_RewriteToStreamPatchesInPlace) {
-    auto root = MakeBlock("RT");
-    auto data_block = std::make_shared<DataBlock>();
+    const auto root = MakeBlock("RT");
+    const auto data_block = std::make_shared<DataBlock>();
     root->AddChild(data_block);
 
     root->ResolveAddress(0);
@@ -315,7 +315,7 @@ ZTEST(mdf_serialization, test_BlockLinksTrackFixedAndExtraLinks) {
     zassert_equal(links.GetLinksSizeBytes(), 2 * LINK_SIZE);
     zassert_is_null(links.GetLink(TestLink::First).get());
 
-    auto first = MakeBlock("AA");
+    const auto first = MakeBlock("AA");
     links.SetLink(TestLink::First, first);
     zassert_equal(links.GetLink(TestLink::First), std::static_pointer_cast<IBlock>(first));
 
@@ -348,7 +348,7 @@ ZTEST(mdf_serialization, test_BlockLinksRejectAnOutOfRangeLinkType) {
 ZTEST(mdf_serialization, test_BlockLinksSerializeAddresses) {
     BlockLinks<TestLink, 2> links;
 
-    auto first = MakeBlock("AA");
+    const auto first = MakeBlock("AA");
     first->ResolveAddress(256);
     links.SetLink(TestLink::First, first);
 
@@ -374,7 +374,7 @@ ZTEST(mdf_serialization, test_BlockLinksRejectUnresolvedAddresses) {
 }
 
 ZTEST(mdf_serialization, test_EmptyBlockLinksHaveNoLinkArea) {
-    BlockLinksEmpty links;
+    const BlockLinksEmpty links;
 
     zassert_equal(links.Count(), 0);
     zassert_equal(links.GetLinksSizeBytes(), 0);

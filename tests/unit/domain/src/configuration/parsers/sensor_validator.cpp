@@ -139,7 +139,7 @@ CanbusConfiguration MakeCanbusConfiguration() {
     CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
     channel.bus_channel = 0;
 
-    auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+    const auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
     message->frame_id = 0x7E0;
 
     CanSignalConfiguration signal(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -181,7 +181,7 @@ ZTEST(sensor_validator, test_user_sensor_types_are_valid) {
 }
 
 ZTEST(sensor_validator, test_none_sentinel_and_unknown_sensor_types_are_invalid) {
-    for(auto type :
+    for(const auto type :
         { SensorType::NONE, SensorType::COUNT, static_cast<SensorType>(9999), static_cast<SensorType>(UINT32_MAX) })
         zassert_false(Validates(type), "Accepted invalid sensor type %u.", static_cast<unsigned>(type));
 }
@@ -194,7 +194,7 @@ ZTEST(sensor_validator, test_every_type_validates_with_its_update_method) {
     zassert_true(Validates(SensorType::VIRTUAL_INDICATOR, 100));
 
     // Without a sampling rate a virtual sensor is evaluated when an input commits.
-    auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
+    const auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
     dependent->configuration.expression = "other_sensor * 2";
     zassert_false(Validate({ MakeSensor("other_sensor", SensorType::PHYSICAL_ANALOG, 100), dependent }).has_value());
     zassert_true(Validates(SensorType::CANBUS_RAW, std::nullopt));
@@ -205,9 +205,9 @@ ZTEST(sensor_validator, test_every_type_validates_with_its_update_method) {
 ZTEST(sensor_validator, test_sensor_that_would_never_update_is_rejected) {
     // Polled sensors without a sampling rate resolve to no update method at all; a virtual sensor
     // without one needs an input to be evaluated after ("1 + 1" has none).
-    for(auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::VIRTUAL_INDICATOR,
+    for(const auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::VIRTUAL_INDICATOR,
             SensorType::USER_ANALOG, SensorType::USER_INDICATOR }) {
-        auto error = Validate({ MakeSensor("sensor_1", type, std::nullopt) });
+        const auto error = Validate({ MakeSensor("sensor_1", type, std::nullopt) });
         zassert_true(
             Contains(error, "must have a sampling rate"), "Accepted type %u without a sampling rate.",
             static_cast<unsigned>(type)
@@ -215,8 +215,8 @@ ZTEST(sensor_validator, test_sensor_that_would_never_update_is_rejected) {
     }
 
     // CAN bus sensors with one would be scheduled, and the scheduler has no CAN reader.
-    for(auto type : { SensorType::CANBUS_RAW, SensorType::CANBUS_ANALOG, SensorType::CANBUS_INDICATOR }) {
-        auto error = Validate({ MakeSensor("sensor_1", type, 100) });
+    for(const auto type : { SensorType::CANBUS_RAW, SensorType::CANBUS_ANALOG, SensorType::CANBUS_INDICATOR }) {
+        const auto error = Validate({ MakeSensor("sensor_1", type, 100) });
         zassert_true(
             Contains(error, "do not support a sampling rate"), "Accepted CAN type %u with a sampling rate.",
             static_cast<unsigned>(type)
@@ -234,7 +234,7 @@ ZTEST(sensor_validator, test_invalid_sampling_rate_is_rejected) {
 }
 
 ZTEST(sensor_validator, test_duplicate_sensor_ids_are_rejected) {
-    auto error = Validate(
+    const auto error = Validate(
         { MakeSensor("sensor_1", SensorType::USER_ANALOG, 100), MakeSensor("sensor_2", SensorType::USER_ANALOG, 100),
             MakeSensor("sensor_1", SensorType::USER_INDICATOR, 100) }
     );
@@ -249,7 +249,7 @@ ZTEST(sensor_validator, test_sensor_id_hash_collisions_are_rejected) {
     constexpr std::string_view second = "sensor_39328";
     zassert_equal(StringHelpers::GetHash(first), StringHelpers::GetHash(second), "Test IDs must collide");
 
-    auto error = Validate(
+    const auto error = Validate(
         { MakeSensor(first, SensorType::USER_ANALOG, 100), MakeSensor(second, SensorType::USER_ANALOG, 100) }
     );
 
@@ -265,7 +265,7 @@ ZTEST(sensor_validator, test_invalid_sensor_id_message_names_the_sensor) {
 }
 
 ZTEST(sensor_validator, test_metadata_limits_are_in_bytes_and_include_the_limit) {
-    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    const auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
     sensor->metadata.name.assign(32, 'n');
     sensor->metadata.unit.assign(32, 'u');
     sensor->metadata.description.assign(128, 'd');
@@ -296,7 +296,7 @@ ZTEST(sensor_validator, test_metadata_limits_are_in_bytes_and_include_the_limit)
 }
 
 ZTEST(sensor_validator, test_channel_out_of_range_names_the_channels_of_the_unit) {
-    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    const auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
 
     analog->configuration.channel = 4;
     AssertRejection(
@@ -316,7 +316,7 @@ ZTEST(sensor_validator, test_channel_out_of_range_names_the_channels_of_the_unit
         Rejected("analog", "Channel value is out of range. This unit has no ADC channels.")
     );
 
-    auto indicator = MakeSensor("indicator", SensorType::PHYSICAL_INDICATOR, std::nullopt);
+    const auto indicator = MakeSensor("indicator", SensorType::PHYSICAL_INDICATOR, std::nullopt);
     indicator->configuration.channel = 8;
     AssertRejection(
         ValidateOn({ indicator }, 8, 4),
@@ -369,7 +369,7 @@ ZTEST(sensor_validator, test_connection_string_is_read_strictly) {
 }
 
 ZTEST(sensor_validator, test_calibration_table_holds_at_most_50_finite_points_with_distinct_voltages) {
-    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    const auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
     auto& calibration_table = analog->configuration.calibration_table;
 
     calibration_table.clear();
@@ -401,8 +401,8 @@ ZTEST(sensor_validator, test_calibration_table_holds_at_most_50_finite_points_wi
 }
 
 ZTEST(sensor_validator, test_expression_of_a_sensor_without_an_input_cannot_use_x) {
-    for(auto type : { SensorType::VIRTUAL_ANALOG, SensorType::VIRTUAL_INDICATOR }) {
-        auto sensor = MakeSensor("derived", type, 100);
+    for(const auto type : { SensorType::VIRTUAL_ANALOG, SensorType::VIRTUAL_INDICATOR }) {
+        const auto sensor = MakeSensor("derived", type, 100);
         sensor->configuration.expression = "x + 1";
 
         AssertRejection(
@@ -410,11 +410,11 @@ ZTEST(sensor_validator, test_expression_of_a_sensor_without_an_input_cannot_use_
         );
     }
 
-    for(auto type : { SensorType::PHYSICAL_ANALOG, SensorType::PHYSICAL_INDICATOR, SensorType::CANBUS_ANALOG,
+    for(const auto type : { SensorType::PHYSICAL_ANALOG, SensorType::PHYSICAL_INDICATOR, SensorType::CANBUS_ANALOG,
             SensorType::CANBUS_INDICATOR, SensorType::USER_ANALOG, SensorType::USER_INDICATOR }) {
         const auto sampling_rate_ms = SensorTypeTraits::Of(type).allows_sampling_rate ? std::optional<int>(100)
                                                                                       : std::nullopt;
-        auto sensor = MakeSensor("sensor_1", type, sampling_rate_ms);
+        const auto sensor = MakeSensor("sensor_1", type, sampling_rate_ms);
         sensor->configuration.expression = "x * 2";
 
         zassert_false(Validate({ sensor }).has_value(), "Rejected x for type %u.", static_cast<unsigned>(type));
@@ -465,10 +465,10 @@ ZTEST(sensor_validator, test_can_sources_must_name_a_configured_bus_message_and_
 }
 
 ZTEST(sensor_validator, test_metadata_error_names_the_sensor) {
-    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    const auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
     sensor->metadata.name.assign(33, 'n');
 
-    auto error = Validate({ sensor });
+    const auto error = Validate({ sensor });
     zassert_true(Contains(error, "Sensor name"));
     zassert_true(Contains(error, "Sensor ID: sensor_1"));
 }
@@ -486,35 +486,35 @@ ZTEST(sensor_validator, test_sensor_count_limit) {
 }
 
 ZTEST(sensor_validator, test_invalid_expression_is_rejected_with_its_message) {
-    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    const auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
     sensor->configuration.expression = "x +";
 
-    auto error = Validate({ sensor });
+    const auto error = Validate({ sensor });
     zassert_true(Contains(error, "Sensor ID: sensor_1"));
     zassert_true(Contains(error, "Invalid expression"));
 }
 
 ZTEST(sensor_validator, test_expression_referencing_an_unknown_sensor_is_rejected) {
-    auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
+    const auto dependent = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
     dependent->configuration.expression = "other_sensor * 2";
 
-    auto error = Validate({ dependent });
+    const auto error = Validate({ dependent });
     zassert_true(Contains(error, "Sensor ID: derived"));
     zassert_true(Contains(error, "unknown sensor other_sensor"));
 }
 
 ZTEST(sensor_validator, test_expression_rules_follow_the_type) {
-    auto raw = MakeSensor("raw", SensorType::CANBUS_RAW, std::nullopt);
+    const auto raw = MakeSensor("raw", SensorType::CANBUS_RAW, std::nullopt);
     raw->configuration.expression = "x * 2";
     zassert_true(Contains(Validate({ raw }), "does not support expression"));
 
-    auto virtual_sensor = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, 100);
+    const auto virtual_sensor = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, 100);
     virtual_sensor->configuration.expression.clear();
     zassert_true(Contains(Validate({ virtual_sensor }), "must have expression"));
 }
 
 ZTEST(sensor_validator, test_interpolation_rules_follow_the_type) {
-    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    const auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
     analog->configuration.calibration_table = { { 0.0F, 0.0F } };
     zassert_true(Contains(Validate({ analog }), "at least 2 points"));
 
@@ -522,16 +522,16 @@ ZTEST(sensor_validator, test_interpolation_rules_follow_the_type) {
     analog->configuration.calibration_table.clear();
     zassert_true(Contains(Validate({ analog }), "must have interpolation"));
 
-    auto indicator = MakeSensor("indicator", SensorType::PHYSICAL_INDICATOR, std::nullopt);
+    const auto indicator = MakeSensor("indicator", SensorType::PHYSICAL_INDICATOR, std::nullopt);
     indicator->configuration.interpolation_method = InterpolationMethod::LINEAR;
     indicator->configuration.calibration_table = { { 0.0F, 0.0F }, { 1.0F, 1.0F } };
     zassert_true(Contains(Validate({ indicator }), "does not support interpolation"));
 }
 
 ZTEST(sensor_validator, test_expression_of_an_enabled_sensor_cannot_read_a_disabled_sensor) {
-    auto input = Disabled(MakeSensor("input", SensorType::USER_ANALOG, 100));
+    const auto input = Disabled(MakeSensor("input", SensorType::USER_ANALOG, 100));
 
-    auto derived = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
+    const auto derived = MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt);
     derived->configuration.expression = "input * 2";
 
     // A disabled input never gets a value, so the expression would never be evaluated.
@@ -543,14 +543,14 @@ ZTEST(sensor_validator, test_expression_of_an_enabled_sensor_cannot_read_a_disab
     AssertRejection(Validate({ input, derived }), expected);
 
     // Also next to the sensor's own input value.
-    auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
+    const auto analog = MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100);
     analog->configuration.expression = "x * 2 + input";
     AssertRejection(Validate({ input, analog }), Rejected("analog", "Expression references disabled sensor input."));
 }
 
 ZTEST(sensor_validator, test_a_disabled_sensor_may_read_any_sensor) {
-    auto input = MakeSensor("input", SensorType::USER_ANALOG, 100);
-    auto derived = Disabled(MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt));
+    const auto input = MakeSensor("input", SensorType::USER_ANALOG, 100);
+    const auto derived = Disabled(MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt));
     derived->configuration.expression = "input * 2";
 
     zassert_false(Validate({ input, derived }).has_value(), "A disabled sensor reading an enabled one was rejected");
@@ -577,7 +577,7 @@ ZTEST(sensor_validator, test_a_disabled_sensor_is_validated_like_an_enabled_one)
         Contains(Validate({ Disabled(MakeSensor("sensor_1", SensorType::NONE, 100)) }), "Invalid sensor type")
     );
 
-    auto analog = Disabled(MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100));
+    const auto analog = Disabled(MakeSensor("analog", SensorType::PHYSICAL_ANALOG, 100));
     analog->configuration.channel = 4;
     AssertRejection(
         ValidateOn({ analog }, 8, 4),
@@ -588,11 +588,11 @@ ZTEST(sensor_validator, test_a_disabled_sensor_is_validated_like_an_enabled_one)
     analog->configuration.calibration_table = { { 0.0F, 0.0F }, { 0.0F, 1.0F } };
     AssertRejection(Validate({ analog }), Rejected("analog", "Calibration voltages must be unique."));
 
-    auto unfinished = Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100));
+    const auto unfinished = Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100));
     unfinished->configuration.expression = "x +";
     zassert_true(Contains(Validate({ unfinished }), "Invalid expression"));
 
-    auto unknown = Disabled(MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt));
+    const auto unknown = Disabled(MakeSensor("derived", SensorType::VIRTUAL_ANALOG, std::nullopt));
     unknown->configuration.expression = "other_sensor * 2";
     AssertRejection(Validate({ unknown }), Rejected("derived", "Expression references unknown sensor other_sensor."));
 
@@ -601,7 +601,7 @@ ZTEST(sensor_validator, test_a_disabled_sensor_is_validated_like_an_enabled_one)
         Rejected("can_1", "Sensor must have CAN bus signal name.")
     );
 
-    auto long_name = Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100));
+    const auto long_name = Disabled(MakeSensor("sensor_1", SensorType::USER_ANALOG, 100));
     long_name->metadata.name.assign(33, 'n');
     zassert_true(Contains(Validate({ long_name }), "Sensor name must be at most 32 bytes"));
 
@@ -630,7 +630,7 @@ ZTEST(sensor_validator, test_an_enabled_can_signal_sensor_cannot_read_a_disabled
     canbus_configuration.channel_configurations.at(0).message_configurations.front()->is_enabled = false;
 
     // The frame router treats a disabled message as absent, so the sensor would never read.
-    for(auto type : { SensorType::CANBUS_ANALOG, SensorType::CANBUS_INDICATOR }) {
+    for(const auto type : { SensorType::CANBUS_ANALOG, SensorType::CANBUS_INDICATOR }) {
         AssertRejection(
             CanbusSourcesRejection({ MakeCanSensor(type, 0, 0x7E0, "rpm") }, canbus_configuration),
             Rejected("can_1", "CAN message 0x7E0 on bus 0 is disabled.")
@@ -702,7 +702,7 @@ Conditioned(std::shared_ptr<Sensor> sensor, uint32_t debounce_ms, IndicatorInput
 } // namespace
 
 ZTEST(sensor_validator, test_conditioning_is_accepted_on_every_indicator_type) {
-    for(auto type : { SensorType::PHYSICAL_INDICATOR, SensorType::VIRTUAL_INDICATOR, SensorType::CANBUS_INDICATOR,
+    for(const auto type : { SensorType::PHYSICAL_INDICATOR, SensorType::VIRTUAL_INDICATOR, SensorType::CANBUS_INDICATOR,
             SensorType::USER_INDICATOR }) {
         const auto error = Validate({ Conditioned(MakeValidSensor(type), 30, IndicatorInputMode::Toggle) });
         zassert_false(error.has_value(), "Type %u: %s", static_cast<unsigned>(type), error.value_or("").c_str());
@@ -710,7 +710,7 @@ ZTEST(sensor_validator, test_conditioning_is_accepted_on_every_indicator_type) {
 }
 
 ZTEST(sensor_validator, test_conditioning_on_a_type_that_is_not_an_indicator_is_rejected) {
-    for(auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::CANBUS_RAW,
+    for(const auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::CANBUS_RAW,
             SensorType::CANBUS_ANALOG, SensorType::USER_ANALOG }) {
         const auto debounced = Conditioned(MakeValidSensor(type), 1, IndicatorInputMode::Level);
         AssertRejection(
@@ -752,7 +752,7 @@ ZTEST(sensor_validator, test_debounce_is_capped_at_60_seconds) {
 }
 
 ZTEST(sensor_validator, test_unknown_input_mode_is_rejected) {
-    for(auto input_mode : { IndicatorInputMode::Count, static_cast<IndicatorInputMode>(UINT32_MAX) }) {
+    for(const auto input_mode : { IndicatorInputMode::Count, static_cast<IndicatorInputMode>(UINT32_MAX) }) {
         AssertRejection(
             Validate({ Conditioned(MakeValidSensor(SensorType::PHYSICAL_INDICATOR), 0, input_mode) }),
             Rejected("sensor_1", "Invalid indicator input mode.")
@@ -770,7 +770,7 @@ namespace {
 
 // The error with a scripted sensor on this card, or nothing when it validates.
 std::optional<std::string> ValidateScriptOn(ScriptCard& card, std::string_view script_path) {
-    auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
+    const auto sensor = MakeSensor("sensor_1", SensorType::USER_ANALOG, 100);
     sensor->configuration.script_path = script_path;
 
     try {

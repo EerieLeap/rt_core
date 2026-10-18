@@ -69,7 +69,7 @@ std::pmr::vector<uint8_t> ConfigurationService::GetCborConfiguration(Type type) 
 }
 
 StoredCborInfo ConfigurationService::GetCborConfigurationInfo(Type type) const {
-    auto it = cbor_configuration_managers_.find(type);
+    const auto it = cbor_configuration_managers_.find(type);
 
     return it != cbor_configuration_managers_.end() ? it->second.manager->GetCborConfigurationInfo() : StoredCborInfo{};
 }
@@ -101,7 +101,7 @@ bool ConfigurationService::IsRegistered(Type type) const {
 }
 
 size_t ConfigurationService::GetMaxCborSize(Type type) const {
-    auto it = cbor_configuration_managers_.find(type);
+    const auto it = cbor_configuration_managers_.find(type);
 
     return it != cbor_configuration_managers_.end() ? it->second.max_cbor_size : 0;
 }

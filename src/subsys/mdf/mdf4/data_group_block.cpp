@@ -55,7 +55,7 @@ void DataGroupBlock::ClearChannelGroups() {
 
 void DataGroupBlock::LinkBlock(std::shared_ptr<DataGroupBlock> next_block) {
     auto* last = this;
-    while(auto next = last->links_.GetLink(LinkType::DataGroupNext))
+    while(const auto next = last->links_.GetLink(LinkType::DataGroupNext))
         last = static_cast<DataGroupBlock*>(next.get());
 
     last->links_.SetLink(LinkType::DataGroupNext, std::move(next_block));

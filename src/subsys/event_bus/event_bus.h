@@ -78,7 +78,7 @@ inline EventBus::EventBus(std::string bus_name, int k_stack_size, int priority) 
 inline EventBus::~EventBus() {
     // Channels outlive a stack-allocated bus in the tests; leaving them pointing at
     // it would dangle on the next publish.
-    size_t count = channel_count_.load(std::memory_order_acquire);
+    const size_t count = channel_count_.load(std::memory_order_acquire);
     for(size_t i = 0; i < count; ++i)
         channels_[i]->OnRegistered(nullptr);
 }
@@ -113,7 +113,7 @@ inline int EventBus::RegisterChannel(IEventChannel& channel) {
         return -EEXIST;
     }
 
-    size_t count = channel_count_.load(std::memory_order_relaxed);
+    const size_t count = channel_count_.load(std::memory_order_relaxed);
     if(count == k_max_bus_channels) {
         LOG_ERR(
             "'%s' cannot register channel '%s', all %u slots are taken", bus_name_.c_str(), channel.GetName(),
@@ -151,7 +151,7 @@ inline threading::WorkQueueTaskResult EventBus::ProcessEventWork(EventBusTask* t
         }
     } release{ task->processing_semaphore };
 
-    size_t count = task->channel_count->load(std::memory_order_acquire);
+    const size_t count = task->channel_count->load(std::memory_order_acquire);
 
     // Round-robin one event at a time, so a busy channel cannot starve its peers.
     bool dispatched = true;

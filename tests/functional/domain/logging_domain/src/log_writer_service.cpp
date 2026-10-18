@@ -254,7 +254,7 @@ ZTEST(log_writer_service, test_FailingSensorIsLoggedInvalidUntilItRecovers) {
 ZTEST(log_writer_service, test_SyncFollowsTheConfiguredInterval) {
     static_assert(CONFIG_EERIE_LEAP_LOG_SYNC_INTERVAL_MS == 300, "the suite configures a 300 ms sync interval");
 
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
 
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
     k_sleep(K_MSEC(1000));
@@ -272,7 +272,7 @@ ZTEST(log_writer_service, test_SyncFollowsTheConfiguredInterval) {
 // What the assets group asks before it reads or deletes a log: a path relative to the volume, as
 // the group builds it from the store's directory and a file name. FAT folds ASCII case.
 ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
     const std::string other_path = std::string(LogFileNaming::LOGS_DIR) + "/log_data_20000101T000000Z_0000.mf4";
 
     zassert_false(rig.log_writer_service->IsOpenFile(other_path), "a writer that never started has no file open");
@@ -321,7 +321,7 @@ ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
 // The header is synced at Start(), so a volume that refuses writes fails the Start instead of
 // a tick an interval later, and no empty file is left behind.
 ZTEST(log_writer_service, test_StartFailsWhenTheHeaderCannotReachTheVolume) {
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
     const std::string filler_path = "start_fill.bin";
 
     // Created before the fill so that Start() gets as far as the file, not just the directory.

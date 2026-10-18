@@ -139,7 +139,7 @@ public:
 ZTEST_SUITE(disabled_can_message, NULL, NULL, NULL, ResetLoopbackDevice, NULL);
 
 ZTEST(disabled_can_message, test_a_disabled_message_is_stored_and_reloaded_as_disabled) {
-    auto manager = MakeConfigurationManager(MakeFormattedFsService());
+    const auto manager = MakeConfigurationManager(MakeFormattedFsService());
 
     // Decoded from flash, not the instance Update() kept.
     const auto reloaded = manager->Get(true);
@@ -163,17 +163,17 @@ ZTEST(disabled_can_message, test_a_disabled_message_is_stored_and_reloaded_as_di
 }
 
 ZTEST(disabled_can_message, test_the_script_of_a_disabled_message_is_not_loaded) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
     static constexpr std::string_view script = "function process_can_frame(frame_id, data) return data end";
     zassert_true(fs_service->WriteFile("frame.lua", script.data(), script.size()));
 
     auto configuration = MakeConfiguration();
-    for(auto& message : configuration.channel_configurations.at(kBus).message_configurations)
+    for(const auto& message : configuration.channel_configurations.at(kBus).message_configurations)
         message->script_path = "frame.lua";
 
     CanbusConfigurationCborParser parser(fs_service);
-    auto cbor_config = parser.Serialize(configuration);
+    const auto cbor_config = parser.Serialize(configuration);
     auto parsed = parser.Deserialize(Mrm::GetDefaultPmr(), *cbor_config);
 
     const auto& messages = parsed->channel_configurations.at(kBus).message_configurations;
@@ -186,8 +186,8 @@ ZTEST(disabled_can_message, test_the_scheduler_does_not_send_a_disabled_message)
     FrameCounter enabled_frames;
     FrameCounter disabled_frames;
 
-    auto configuration_manager = MakeConfigurationManager(MakeFormattedFsService());
-    auto canbus_service = std::make_shared<CanbusService>(
+    const auto configuration_manager = MakeConfigurationManager(MakeFormattedFsService());
+    const auto canbus_service = std::make_shared<CanbusService>(
         [](uint8_t bus_channel) {
             return bus_channel == kBus ? LoopbackDevice() : nullptr;
         },
@@ -211,7 +211,7 @@ ZTEST(disabled_can_message, test_the_scheduler_does_not_send_a_disabled_message)
     zassert_true(enabled_handler_id > 0, "Frame handler rejected: %d", enabled_handler_id);
     zassert_true(disabled_handler_id > 0, "Frame handler rejected: %d", disabled_handler_id);
 
-    auto scheduler = std::make_shared<CanbusSchedulerService>(
+    const auto scheduler = std::make_shared<CanbusSchedulerService>(
         configuration_manager, canbus_service, std::make_shared<SensorReadingsFrame>()
     );
     zassert_true(scheduler->Initialize());

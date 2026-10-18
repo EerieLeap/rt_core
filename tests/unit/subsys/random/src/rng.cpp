@@ -120,13 +120,13 @@ ZTEST(rng, test_RandomWord_rejects_non_integer_types) {
 }
 
 ZTEST(rng, test_Get_writes_every_requested_byte) {
-    auto unwritten = FindUnwrittenByte(false);
+    const auto unwritten = FindUnwrittenByte(false);
 
     zassert_equal(unwritten, MAX_PAYLOAD, "payload byte %u was never written", (unsigned int)unwritten);
 }
 
 ZTEST(rng, test_Get_secure_writes_every_requested_byte) {
-    auto unwritten = FindUnwrittenByte(true);
+    const auto unwritten = FindUnwrittenByte(true);
 
     zassert_equal(unwritten, MAX_PAYLOAD, "payload byte %u was never written", (unsigned int)unwritten);
 }
@@ -134,7 +134,7 @@ ZTEST(rng, test_Get_secure_writes_every_requested_byte) {
 ZTEST(rng, test_Get_does_not_write_outside_the_requested_length) {
     constexpr size_t lengths[] = { 1, 2, 3, 4, 5, 7, 8, 15, 16, 33, MAX_PAYLOAD };
 
-    for(auto length : lengths) {
+    for(const auto length : lengths) {
         GuardedBuffer buffer;
 
         Rng::Get(buffer.payload(), length);
@@ -173,7 +173,7 @@ ZTEST(rng, test_Get_secure_covers_every_bit) {
 }
 
 ZTEST(rng, test_Get_returns_varying_values) {
-    auto first = Rng::Get<uint32_t>();
+    const auto first = Rng::Get<uint32_t>();
 
     bool differs = false;
     for(int i = 0; i < 32 && !differs; ++i)

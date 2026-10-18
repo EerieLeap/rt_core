@@ -12,8 +12,8 @@ using SubscribeResult = LiveDataService::SubscribeResult;
 ZTEST_SUITE(live_data_service, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(live_data_service, test_capacity_follows_the_notification_size) {
-    auto notifier = std::make_shared<FakeNotifier>();
-    Readings readings;
+    const auto notifier = std::make_shared<FakeNotifier>();
+    const Readings readings;
     LiveDataService service(notifier, readings.frame);
 
     notifier->SetMaxSize(244);
@@ -27,8 +27,8 @@ ZTEST(live_data_service, test_capacity_follows_the_notification_size) {
 }
 
 ZTEST(live_data_service, test_subscription_is_limited_to_one_notification) {
-    auto notifier = std::make_shared<FakeNotifier>();
-    Readings readings;
+    const auto notifier = std::make_shared<FakeNotifier>();
+    const Readings readings;
     LiveDataService service(notifier, readings.frame);
     const std::array<uint32_t, 3> hashes = { 1, 2, 3 };
 
@@ -44,7 +44,7 @@ ZTEST(live_data_service, test_subscription_is_limited_to_one_notification) {
 }
 
 ZTEST(live_data_service, test_samples_carry_values_by_subscription_position) {
-    auto notifier = std::make_shared<FakeNotifier>();
+    const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     const uint32_t first = readings.Add("first", 1.5F);
     const uint32_t pending = readings.Add("pending", std::nullopt);
@@ -73,7 +73,7 @@ ZTEST(live_data_service, test_period_is_at_least_the_minimum) {
     zassert_equal(LiveDataService::ClampPeriod(10), LiveDataService::MIN_PERIOD_MS);
     zassert_equal(LiveDataService::ClampPeriod(200), 200);
 
-    auto notifier = std::make_shared<FakeNotifier>();
+    const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     LiveDataService service(notifier, readings.frame);
     notifier->on_notified = [&service]() {
@@ -91,7 +91,7 @@ ZTEST(live_data_service, test_period_is_at_least_the_minimum) {
 }
 
 ZTEST(live_data_service, test_one_notification_in_flight) {
-    auto notifier = std::make_shared<FakeNotifier>();
+    const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     LiveDataService service(notifier, readings.frame);
 
@@ -111,7 +111,7 @@ ZTEST(live_data_service, test_one_notification_in_flight) {
 }
 
 ZTEST(live_data_service, test_sample_without_a_buffer_is_dropped) {
-    auto notifier = std::make_shared<FakeNotifier>();
+    const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     LiveDataService service(notifier, readings.frame);
     notifier->SetResult(-ENOMEM);
@@ -128,7 +128,7 @@ ZTEST(live_data_service, test_sample_without_a_buffer_is_dropped) {
 }
 
 ZTEST(live_data_service, test_unsubscribe_stops_sampling) {
-    auto notifier = std::make_shared<FakeNotifier>();
+    const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     LiveDataService service(notifier, readings.frame);
     notifier->on_notified = [&service]() {

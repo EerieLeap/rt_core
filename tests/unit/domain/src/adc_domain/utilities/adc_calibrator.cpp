@@ -82,7 +82,7 @@ ZTEST(adc_calibrator, test_InterpolateToInputRange_is_monotonic) {
     float previous = calibrator.InterpolateToInputRange(0.0F);
 
     for(int step = 1; step <= 100; ++step) {
-        float value = calibrator.InterpolateToInputRange(kAdcMaxVolts * step / 100.0F);
+        const float value = calibrator.InterpolateToInputRange(kAdcMaxVolts * step / 100.0F);
 
         zassert_true(value >= previous, "value dropped at step %d", step);
         previous = value;
@@ -164,10 +164,10 @@ ZTEST(adc_calibrator, test_GetInterpolationMethod) {
 }
 
 ZTEST(adc_calibrator, test_GetCalibrationTable_returns_the_original_table) {
-    auto table = MakeTable({ { 0.0F, 0.0F }, { 3.0F, 3.3F } });
+    const auto table = MakeTable({ { 0.0F, 0.0F }, { 3.0F, 3.3F } });
     AdcCalibrator calibrator(InterpolationMethod::LINEAR, table);
 
-    auto retrieved = calibrator.GetCalibrationTable();
+    const auto retrieved = calibrator.GetCalibrationTable();
 
     zassert_equal(retrieved.get(), table.get());
     zassert_equal(retrieved->size(), 2);
@@ -198,13 +198,13 @@ ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_inverts_the_calibration)
 ZTEST(adc_calibrator, test_normalized_table_is_sorted) {
     // Ordered by voltage, the measured column falls, so the interpolators' key does too until the
     // constructor sorts it; a binary search on the unsorted key would pick the wrong segment.
-    auto table = MakeTable({ { 1.0F, 4.0F }, { 2.0F, 3.0F }, { 3.0F, 2.0F }, { 4.0F, 1.0F } });
+    const auto table = MakeTable({ { 1.0F, 4.0F }, { 2.0F, 3.0F }, { 3.0F, 2.0F }, { 4.0F, 1.0F } });
 
-    for(auto method : { InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE }) {
+    for(const auto method : { InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE }) {
         AdcCalibrator calibrator(method, table, kIdentityRange);
 
-        for(float measured : { 1.0F, 1.5F, 2.0F, 2.5F, 3.0F, 3.5F, 4.0F }) {
-            float result = calibrator.InterpolateToCalibratedRange(measured);
+        for(const float measured : { 1.0F, 1.5F, 2.0F, 2.5F, 3.0F, 3.5F, 4.0F }) {
+            const float result = calibrator.InterpolateToCalibratedRange(measured);
 
             zassert_within(
                 result, 5.0F - measured, 0.01F, "method %d: measured %f mapped to %f instead of %f",
@@ -215,16 +215,16 @@ ZTEST(adc_calibrator, test_normalized_table_is_sorted) {
 }
 
 ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_passes_through_calibration_points) {
-    auto table = MakeTable(
+    const auto table = MakeTable(
         { { 0.501F, 0.469F }, { 1.0F, 0.968F }, { 2.0F, 1.970F }, { 3.002F, 2.98F }, { 5.0F, 5.0F } }
     );
 
-    for(auto method : { InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE }) {
+    for(const auto method : { InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE }) {
         AdcCalibrator calibrator(method, table);
 
         for(const auto& point : *table) {
             // What the ADC pin sees when the unit measures point.value at the sensor input.
-            float result = calibrator.InterpolateToCalibratedRange(calibrator.GetRange().ToAdcVolts(point.value));
+            const float result = calibrator.InterpolateToCalibratedRange(calibrator.GetRange().ToAdcVolts(point.value));
 
             zassert_between_inclusive(
                 result, point.voltage - 0.01F, point.voltage + 0.01F,
@@ -251,12 +251,12 @@ ZTEST(adc_calibrator, test_InterpolateToCalibratedRange_clamps_like_the_calibrat
 
     zassert_true(kTopReading > range.adc_max_v);
 
-    auto table = MakeTable(
+    const auto table = MakeTable(
         { { 0.0F, range.ToSensorVolts(-0.02F) }, { 2.5F, range.ToSensorVolts(1.6F) },
             { 5.0F, range.ToSensorVolts(kTopReading) } }
     );
 
-    for(auto method : { InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE }) {
+    for(const auto method : { InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE }) {
         AdcCalibrator calibrator(method, table, range);
 
         zassert_within(

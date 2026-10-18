@@ -618,14 +618,14 @@ size_t CdmpStateService::GetRemoteStates(uint8_t state_type, std::span<CdmpRemot
 }
 
 std::span<CdmpStateService::RemoteRecord> CdmpStateService::SourceRecords(uint8_t source) {
-    auto range = std::ranges::equal_range(RemoteRecords(), source, {}, &RemoteRecord::source);
+    const auto range = std::ranges::equal_range(RemoteRecords(), source, {}, &RemoteRecord::source);
 
     return { range.begin(), range.end() };
 }
 
 CdmpStateService::LocalRecord* CdmpStateService::FindLocalRecord(uint8_t state_type) {
-    auto records = LocalRecords();
-    auto it = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type);
+    const auto records = LocalRecords();
+    const auto it = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type);
 
     return it != records.end() && it->state_type == state_type ? &*it : nullptr;
 }
@@ -633,8 +633,8 @@ CdmpStateService::LocalRecord* CdmpStateService::FindLocalRecord(uint8_t state_t
 CdmpStateService::LocalRecord* CdmpStateService::AddLocalRecord(uint8_t state_type) {
     if(local_count_ == local_records_.size()) {
         // A withdrawal still waiting for acknowledgements gives way; the digest covers it.
-        auto records = LocalRecords();
-        auto withdrawn = std::ranges::find(records, true, &LocalRecord::is_withdrawn);
+        const auto records = LocalRecords();
+        const auto withdrawn = std::ranges::find(records, true, &LocalRecord::is_withdrawn);
         if(withdrawn == records.end())
             return nullptr;
 
@@ -642,7 +642,7 @@ CdmpStateService::LocalRecord* CdmpStateService::AddLocalRecord(uint8_t state_ty
         local_count_--;
     }
 
-    auto records = LocalRecords();
+    const auto records = LocalRecords();
     const auto index = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type) - records.begin();
     const auto first = local_records_.begin();
     const auto position = first + index;
@@ -697,8 +697,8 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
     ScopedMutex guard(records_lock_);
 
     const uint8_t source = message.source_device_id;
-    auto records = RemoteRecords();
-    auto it = std::ranges::lower_bound(
+    const auto records = RemoteRecords();
+    const auto it = std::ranges::lower_bound(
         records, std::pair(source, message.state_type), {}, [](const RemoteRecord& record) {
             return std::pair(record.source, record.state_type);
         }
@@ -756,8 +756,8 @@ void CdmpStateService::RemoveFromAcknowledgementSets(uint8_t peer_id, std::optio
         if(version.has_value() && record.version != version.value())
             continue;
 
-        auto unacknowledged = std::span(record.unacknowledged).first(record.unacknowledged_count);
-        auto it = std::ranges::find(unacknowledged, peer_id);
+        const auto unacknowledged = std::span(record.unacknowledged).first(record.unacknowledged_count);
+        const auto it = std::ranges::find(unacknowledged, peer_id);
         if(it == unacknowledged.end())
             continue;
 
@@ -769,8 +769,8 @@ void CdmpStateService::RemoveFromAcknowledgementSets(uint8_t peer_id, std::optio
 }
 
 void CdmpStateService::FreeAcknowledgedWithdrawals() {
-    auto records = LocalRecords();
-    auto freed = std::ranges::remove_if(records, [](const LocalRecord& record) {
+    const auto records = LocalRecords();
+    const auto freed = std::ranges::remove_if(records, [](const LocalRecord& record) {
         return record.is_withdrawn && !record.is_announce_pending && record.unacknowledged_count == 0;
     });
 
@@ -792,14 +792,14 @@ void CdmpStateService::ScheduleRetransmission(int64_t now) {
 
 template<typename TPredicate>
 void CdmpStateService::RemoveRemoteRecords(TPredicate predicate) {
-    auto records = RemoteRecords();
+    const auto records = RemoteRecords();
 
     for(const auto& record : records) {
         if(predicate(record))
             changed_types_.set(record.state_type);
     }
 
-    auto removed = std::ranges::remove_if(records, predicate);
+    const auto removed = std::ranges::remove_if(records, predicate);
     if(removed.empty())
         return;
 

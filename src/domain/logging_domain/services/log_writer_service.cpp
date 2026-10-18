@@ -231,7 +231,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
     file_path_.Clear();
 
     for(int i = 0; i < 10; i++) {
-        auto new_file_path = LogFileNaming::GetFilePath(
+        const auto new_file_path = LogFileNaming::GetFilePath(
             LogFileNaming::LOGS_DIR, CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX, start_time, Rng::Get<uint16_t>(),
             logger_->GetFileExtension()
         );

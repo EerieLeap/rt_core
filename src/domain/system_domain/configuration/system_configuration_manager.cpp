@@ -20,7 +20,7 @@ SystemConfigurationManager::SystemConfigurationManager(
     if(!LoadOrCreateDefault())
         return;
 
-    auto configuration = Get();
+    const auto configuration = Get();
 
     LOG_INF(
         "HW Version: %s, SW Version: %s", configuration->GetFormattedHwVersion().c_str(),
@@ -30,7 +30,7 @@ SystemConfigurationManager::SystemConfigurationManager(
 }
 
 bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
-    auto configuration = Get();
+    const auto configuration = Get();
     if(configuration == nullptr)
         return false;
 

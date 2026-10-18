@@ -51,7 +51,7 @@ TestEvent MakeEvent(TestEventType type, uint32_t source_id) {
 ZTEST_SUITE(event_bus_event_filter, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_event_filter, test_AcceptAllFilter_accepts_every_event) {
-    AcceptAllFilter<TestEventType, TestPayloadType> filter;
+    const AcceptAllFilter<TestEventType, TestPayloadType> filter;
 
     zassert_true(filter(MakeEvent(TestEventType::Alpha, k_source_one)));
     zassert_true(filter(MakeEvent(TestEventType::Beta, k_source_two)));
@@ -59,7 +59,7 @@ ZTEST(event_bus_event_filter, test_AcceptAllFilter_accepts_every_event) {
 }
 
 ZTEST(event_bus_event_filter, test_a_custom_filter_selects_events_by_source) {
-    SourceFilter filter{ k_source_one };
+    const SourceFilter filter{ k_source_one };
 
     zassert_true(filter(MakeEvent(TestEventType::Alpha, k_source_one)));
     zassert_false(filter(MakeEvent(TestEventType::Alpha, k_source_two)));

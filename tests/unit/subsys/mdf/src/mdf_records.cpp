@@ -80,7 +80,7 @@ CanFrame MakeCanFrame(size_t payload_size) {
 ZTEST_SUITE(mdf_records, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(mdf_records, test_RecordWriterWritesEveryValueAtItsChannelOffset) {
-    auto group = MakeGroup(2, 0x0102);
+    const auto group = MakeGroup(2, 0x0102);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::UnsignedIntegerLe, 64));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::SignedIntegerLe, 32));
@@ -104,7 +104,7 @@ ZTEST(mdf_records, test_RecordWriterWritesEveryValueAtItsChannelOffset) {
 }
 
 ZTEST(mdf_records, test_RecordWriterSupportsEveryValueType) {
-    auto group = MakeGroup(1, 1);
+    const auto group = MakeGroup(1, 1);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::SignedIntegerLe, 32));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::SignedIntegerLe, 64));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::UnsignedIntegerLe, 32));
@@ -131,7 +131,7 @@ ZTEST(mdf_records, test_RecordWriterSupportsEveryValueType) {
 }
 
 ZTEST(mdf_records, test_RecordWriterCountsCycles) {
-    auto group = MakeGroup(1, 1);
+    const auto group = MakeGroup(1, 1);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
 
     RecordWriter writer(*group);
@@ -146,7 +146,7 @@ ZTEST(mdf_records, test_RecordWriterCountsCycles) {
 }
 
 ZTEST(mdf_records, test_RecordWriterIssuesOneWritePerRecord) {
-    auto group = MakeGroup(1, 1);
+    const auto group = MakeGroup(1, 1);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 64));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
@@ -164,7 +164,7 @@ ZTEST(mdf_records, test_RecordWriterIssuesOneWritePerRecord) {
 }
 
 ZTEST(mdf_records, test_RecordWriterRejectsWrongValueCountAndType) {
-    auto group = MakeGroup(1, 1);
+    const auto group = MakeGroup(1, 1);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
     group->AddChannel(MakeChannel(ChannelBlock::DataType::UnsignedIntegerLe, 64));
 
@@ -218,7 +218,7 @@ ZTEST(mdf_records, test_RecordWriterRejectsWrongValueCountAndType) {
 }
 
 ZTEST(mdf_records, test_RecordWriterThrowsOnAShortWrite) {
-    auto group = MakeGroup(1, 1);
+    const auto group = MakeGroup(1, 1);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
 
     RecordWriter writer(*group);
@@ -256,7 +256,7 @@ ZTEST(mdf_records, test_RecordWriterRejectsLayoutsBeyondItsLimits) {
         "a 65 byte record exceeds the %zu byte buffer", RecordWriter::kMaxRecordBytes
     );
 
-    auto largest = MakeGroup(8, 1);
+    const auto largest = MakeGroup(8, 1);
     for(size_t i = 0; i < 7; i++)
         largest->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 64));
     zassert_equal(
@@ -283,12 +283,12 @@ ZTEST(mdf_records, test_RecordWriterRejectsLayoutsBeyondItsLimits) {
 }
 
 ZTEST(mdf_records, test_RecordWriterWritesTheInvalidationByteAfterTheData) {
-    auto group = MakeGroup(1, 9);
+    const auto group = MakeGroup(1, 9);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 64));
-    auto value = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
+    const auto value = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
     value->SetInvalidationBit(0);
     group->AddChannel(value);
-    auto raw = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
+    const auto raw = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
     raw->SetInvalidationBit(1);
     group->AddChannel(raw);
     group->AddChannel(MakeChannel(ChannelBlock::DataType::SignedIntegerLe, 32));
@@ -324,8 +324,8 @@ ZTEST(mdf_records, test_RecordWriterWritesTheInvalidationByteAfterTheData) {
 }
 
 ZTEST(mdf_records, test_RecordWriterRejectsAMaskBitNoChannelUses) {
-    auto group = MakeGroup(1, 1);
-    auto value = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
+    const auto group = MakeGroup(1, 1);
+    const auto value = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
     value->SetInvalidationBit(0);
     group->AddChannel(value);
     group->SetInvalidationBytes(1);
@@ -347,7 +347,7 @@ ZTEST(mdf_records, test_RecordWriterRejectsAMaskBitNoChannelUses) {
         "bit 8 lies past the group's one invalidation byte"
     );
 
-    auto plain_group = MakeGroup(1, 2);
+    const auto plain_group = MakeGroup(1, 2);
     plain_group->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
     RecordWriter plain_writer(*plain_group);
     zassert_true(
@@ -363,9 +363,9 @@ ZTEST(mdf_records, test_RecordWriterRejectsAMaskBitNoChannelUses) {
 
 ZTEST(mdf_records, test_RecordWriterInvalidationLimits) {
     // One byte holds the bits of eight channels.
-    auto eight_bits = MakeGroup(1, 1);
+    const auto eight_bits = MakeGroup(1, 1);
     for(uint32_t i = 0; i < 8; i++) {
-        auto channel = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
+        const auto channel = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
         channel->SetInvalidationBit(i);
         eight_bits->AddChannel(channel);
     }
@@ -379,7 +379,7 @@ ZTEST(mdf_records, test_RecordWriterInvalidationLimits) {
     zassert_equal(AsBytes(written).back(), 0xFF, "every one of the eight channels can be invalid");
 
     auto ninth_bit = MakeGroup(1, 2);
-    auto channel = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
+    const auto channel = MakeChannel(ChannelBlock::DataType::FloatLe, 32);
     channel->SetInvalidationBit(8);
     ninth_bit->AddChannel(channel);
     ninth_bit->SetInvalidationBytes(1);
@@ -415,8 +415,8 @@ ZTEST(mdf_records, test_RecordWriterInvalidationLimits) {
 }
 
 ZTEST(mdf_records, test_CanRecordWriterLayout) {
-    auto group = MakeCanGroup(2, 0x0506);
-    auto vlsd_group = MakeVlsdGroup(2, 0x0304);
+    const auto group = MakeCanGroup(2, 0x0506);
+    const auto vlsd_group = MakeVlsdGroup(2, 0x0304);
     CanRecordWriter writer(*group, *vlsd_group, MdfDataType::Float64, 8);
 
     zassert_equal(writer.GetRecordSizeBytes(), 2 + TIME_SIZE + CAN_FRAME_SIZE);
@@ -452,12 +452,12 @@ ZTEST(mdf_records, test_CanRecordWriterLayout) {
 }
 
 ZTEST(mdf_records, test_CanRecordWriterIssuesOneWritePerFrame) {
-    auto group = MakeCanGroup(1, 2);
-    auto vlsd_group = MakeVlsdGroup(1, 1);
+    const auto group = MakeCanGroup(1, 2);
+    const auto vlsd_group = MakeVlsdGroup(1, 1);
     CanRecordWriter writer(*group, *vlsd_group, MdfDataType::Float64, 8);
 
     WriteCountingStreamBuf stream;
-    for(size_t payload_size : { size_t{ 0 }, size_t{ 8 }, size_t{ 64 } })
+    for(const size_t payload_size : { size_t{ 0 }, size_t{ 8 }, size_t{ 64 } })
         writer.Write(stream, MakeCanFrame(payload_size), 0.0, 1);
 
     zassert_equal(stream.WriteCount(), 3, "each frame and its payload must reach the stream in a single sputn()");
@@ -468,8 +468,8 @@ ZTEST(mdf_records, test_CanRecordWriterIssuesOneWritePerFrame) {
 }
 
 ZTEST(mdf_records, test_CanRecordWriterOffsetsAccumulate) {
-    auto group = MakeCanGroup(1, 2);
-    auto vlsd_group = MakeVlsdGroup(1, 1);
+    const auto group = MakeCanGroup(1, 2);
+    const auto vlsd_group = MakeVlsdGroup(1, 1);
     CanRecordWriter writer(*group, *vlsd_group, MdfDataType::Float64, 8);
 
     auto stream = MakeStream();
@@ -498,8 +498,8 @@ ZTEST(mdf_records, test_CanRecordWriterOffsetsAccumulate) {
 }
 
 ZTEST(mdf_records, test_CanRecordWriterThrowsWhenTheOffsetNoLongerFitsFourBytes) {
-    auto group = MakeCanGroup(1, 2, 4);
-    auto vlsd_group = MakeVlsdGroup(1, 1);
+    const auto group = MakeCanGroup(1, 2, 4);
+    const auto vlsd_group = MakeVlsdGroup(1, 1);
     CanRecordWriter writer(*group, *vlsd_group, MdfDataType::Float64, 4);
 
     // The last payload whose successor still starts inside the 32 bit range.
@@ -528,8 +528,8 @@ ZTEST(mdf_records, test_CanRecordWriterThrowsWhenTheOffsetNoLongerFitsFourBytes)
     zassert_equal(group->GetCycleCount(), 1);
     zassert_equal(vlsd_group->GetCycleCount(), 1);
 
-    auto wide_group = MakeCanGroup(1, 2, 8);
-    auto wide_vlsd_group = MakeVlsdGroup(1, 1);
+    const auto wide_group = MakeCanGroup(1, 2, 8);
+    const auto wide_vlsd_group = MakeVlsdGroup(1, 1);
     CanRecordWriter wide_writer(*wide_group, *wide_vlsd_group, MdfDataType::Float64, 8);
     wide_writer.Reset(start);
 
@@ -540,8 +540,8 @@ ZTEST(mdf_records, test_CanRecordWriterThrowsWhenTheOffsetNoLongerFitsFourBytes)
 }
 
 ZTEST(mdf_records, test_CanRecordWriterThrowsOnAShortWrite) {
-    auto group = MakeCanGroup(1, 2);
-    auto vlsd_group = MakeVlsdGroup(1, 1);
+    const auto group = MakeCanGroup(1, 2);
+    const auto vlsd_group = MakeVlsdGroup(1, 1);
     CanRecordWriter writer(*group, *vlsd_group, MdfDataType::Float64, 8);
 
     LimitedStreamBuf stream(10);
@@ -621,6 +621,6 @@ ZTEST(mdf_records, test_CanWriterRejectsAGroupBuiltForAnotherLayout) {
         "a writer must not accept a group whose time and offset widths differ from its own"
     );
 
-    CanRecordWriter matching(*can_group, *vlsd_group, MdfDataType::Float64, 4);
+    const CanRecordWriter matching(*can_group, *vlsd_group, MdfDataType::Float64, 4);
     zassert_equal(matching.GetVlsdOffset(), 0, "the matching layout is accepted");
 }

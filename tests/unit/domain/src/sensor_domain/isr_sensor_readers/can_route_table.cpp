@@ -94,7 +94,7 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
     }
 
     for(size_t i = 0; i < kSignalCount; i++) {
-        auto sensor = std::make_shared<Sensor>(std::allocator_arg, mr, "can_" + std::to_string(i));
+        const auto sensor = std::make_shared<Sensor>(std::allocator_arg, mr, "can_" + std::to_string(i));
         sensor->configuration.type = SensorType::CANBUS_ANALOG;
         sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(
             mr, kBus, kSignalsFrameId, "sig_" + std::to_string(i)
@@ -103,7 +103,7 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
         fixture.sensors.push_back(sensor);
     }
 
-    auto raw = std::make_shared<Sensor>(std::allocator_arg, mr, "raw");
+    const auto raw = std::make_shared<Sensor>(std::allocator_arg, mr, "raw");
     raw->configuration.type = SensorType::CANBUS_RAW;
     raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(mr, kBus, kRawFrameId);
     raw->configuration.UpdateConnectionString();
@@ -124,7 +124,7 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
 } // namespace
 
 ZTEST(can_route_table, test_Build_groups_the_sensors_of_a_frame_into_one_route) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
@@ -153,7 +153,7 @@ ZTEST(can_route_table, test_Build_groups_the_sensors_of_a_frame_into_one_route) 
 }
 
 ZTEST(can_route_table, test_Build_leaves_out_a_sensor_whose_signal_is_not_configured) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, [](uint8_t, uint32_t, uint32_t) {
@@ -165,7 +165,7 @@ ZTEST(can_route_table, test_Build_leaves_out_a_sensor_whose_signal_is_not_config
 }
 
 ZTEST(can_route_table, test_Build_leaves_out_disabled_sensors) {
-    auto fixture = MakeFixture({ "can_3", "raw" });
+    const auto fixture = MakeFixture({ "can_3", "raw" });
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
@@ -182,7 +182,7 @@ ZTEST(can_route_table, test_Build_leaves_out_disabled_sensors) {
 }
 
 ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
@@ -261,7 +261,7 @@ ZTEST(can_route_table, test_Dispatch_hands_a_raw_sensor_the_frame_itself) {
 }
 
 ZTEST(can_route_table, test_Dispatch_ignores_an_empty_frame) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());

@@ -53,7 +53,7 @@ public:
 
         T* new_p = allocate(new_n);
 
-        size_t copy_count = (old_n < new_n) ? old_n : new_n;
+        const size_t copy_count = (old_n < new_n) ? old_n : new_n;
 
         if constexpr(std::is_trivially_copyable_v<T>) {
             memcpy(new_p, p, copy_count * sizeof(T));

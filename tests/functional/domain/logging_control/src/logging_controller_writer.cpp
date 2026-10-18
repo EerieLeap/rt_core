@@ -249,7 +249,7 @@ ZTEST(logging_controller_writer, test_ACdmpStartIsAcceptedAndShared) {
 // log. It is set before the first heartbeat, polled once a second, and cleared with the controller.
 ZTEST(logging_controller_writer, test_TheLoggingFeatureFollowsTheLogVolume) {
     F().Open(true);
-    auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+    const auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
     const auto com = F().harness->com;
     zassert_false(HasFeature(com->GetFeatures(), ProductFeature::LOGGING), "Cleared until a writer exists");
 
@@ -289,7 +289,7 @@ ZTEST(logging_controller_writer, test_TheLoggingFeatureFollowsTheLogVolume) {
 
 ZTEST(logging_controller_writer, test_WithoutAnAvailableLogVolumeTheFeatureStartsCleared) {
     F().Open(true);
-    auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+    const auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
     volume->SetAvailable(false);
     const auto com = F().harness->com;
 
@@ -401,7 +401,7 @@ ZTEST(logging_controller_writer, test_DestroyingWhileLoggingStopsTheWriter) {
     zassert_equal(entry->reason, LoggingStatusReason::Stopped);
 
     // A sensors restart still holds the dependent: it must not bring the writer back.
-    auto result = std::make_shared<std::atomic<int>>(-1);
+    const auto result = std::make_shared<std::atomic<int>>(-1);
     TestConfigQueue()->Run([dependent, result] {
         result->store(dependent->Start() ? 1 : 0);
     });
@@ -431,7 +431,7 @@ ZTEST(logging_controller_writer, test_DestroyingOnTheConfigurationQueueStopsTheW
         std::unique_ptr<LoggingController> controller;
         k_sem done;
     };
-    auto context = std::make_shared<Context>();
+    const auto context = std::make_shared<Context>();
     k_sem_init(&context->done, 0, 1);
     context->controller = std::move(F().controller);
 

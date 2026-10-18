@@ -194,7 +194,7 @@ struct StateFixture {
             CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET };
 
         std::vector<CanFilter> filters;
-        for(uint32_t offset : recorded_offsets) {
+        for(const uint32_t offset : recorded_offsets) {
             const CanFilter filter = can_id_manager->GetReceiveFilter(
                 CanId::Standard(can_id_manager->GetBaseCanId() + offset)
             );
@@ -219,7 +219,7 @@ struct StateFixture {
     }
 
     ~StateFixture() {
-        for(int handler_id : bus_handler_ids)
+        for(const int handler_id : bus_handler_ids)
             (*canbus)->RemoveFrameReceivedHandler(handler_id);
 
         // Queued work must run while the services exist; after the stop it does nothing.
@@ -375,7 +375,7 @@ ZTEST(cdmp_state, test_newer_version_replaces_and_older_is_ignored) {
     fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
     zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }));
 
-    for(uint8_t version : { 5, 6, 5 }) {
+    for(const uint8_t version : { 5, 6, 5 }) {
         auto acknowledgement = fixture.WaitForAcknowledgement();
         zassert_true(acknowledgement.has_value(), "Every notification is acknowledged");
         zassert_equal(acknowledgement->version, version);
@@ -477,7 +477,7 @@ ZTEST(cdmp_state, test_notifications_are_ignored_while_offline) {
 }
 
 ZTEST(cdmp_state, test_digest_covers_own_records_in_type_order) {
-    StateFixture fixture;
+    const StateFixture fixture;
     zassert_equal(fixture.device->GetStateDigest(), 0, "No records, digest 0");
 
     // The parameters the spec names: polynomial 0x07, initial value 0, no reflection, no final XOR.
@@ -511,7 +511,7 @@ ZTEST(cdmp_state, test_digest_covers_own_records_in_type_order) {
 }
 
 ZTEST(cdmp_state, test_invalid_local_states_are_rejected) {
-    StateFixture fixture;
+    const StateFixture fixture;
 
     zassert_false(fixture.state->SetLocalState(0, Bytes{ 0x01 }), "Type 0 is invalid");
     zassert_false(fixture.state->SetLocalState(TYPE_A, Bytes{ 1, 2, 3, 4, 5, 6 }), "At most 5 data bytes");
@@ -519,7 +519,7 @@ ZTEST(cdmp_state, test_invalid_local_states_are_rejected) {
 }
 
 ZTEST(cdmp_state, test_local_records_fill_up_and_withdrawals_give_way) {
-    StateFixture fixture;
+    const StateFixture fixture;
 
     for(size_t i = 0; i < CONFIG_EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS; i++)
         zassert_true(fixture.state->SetLocalState(TYPE_A + i, Bytes{ 0x01 }));

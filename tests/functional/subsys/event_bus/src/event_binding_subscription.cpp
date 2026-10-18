@@ -116,7 +116,7 @@ void PublishValue(BindingPayloadType selector_key, EventData selector, float val
 ZTEST_SUITE(event_binding_subscription, NULL, SetUpBindingTestChannels, ResetBindingTestChannels, NULL, NULL);
 
 ZTEST(event_binding_subscription, test_a_binding_to_None_does_not_subscribe) {
-    HandlerProbe probe;
+    const HandlerProbe probe;
     auto binding = ValueBinding();
     binding.channel = EventChannelId::None;
 
@@ -124,7 +124,7 @@ ZTEST(event_binding_subscription, test_a_binding_to_None_does_not_subscribe) {
 }
 
 ZTEST(event_binding_subscription, test_a_binding_to_an_unregistered_channel_does_not_subscribe) {
-    HandlerProbe probe;
+    const HandlerProbe probe;
     auto binding = ValueBinding();
 
     binding.channel = EventChannelId::Navigation;
@@ -136,8 +136,8 @@ ZTEST(event_binding_subscription, test_a_binding_to_an_unregistered_channel_does
 
 // Unfiltered, it would take every sensor's value.
 ZTEST(event_binding_subscription, test_a_selector_that_cannot_select_does_not_subscribe) {
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(SelectedBinding(BindingPayloadType::Id, 1.5), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(SelectedBinding(BindingPayloadType::Id, 1.5), probe.Handler());
 
     zassert_is_null(subscription.get());
 
@@ -152,10 +152,10 @@ ZTEST(event_binding_subscription, test_an_empty_handler_does_not_subscribe) {
 
 ZTEST(event_binding_subscription, test_a_refused_subscription_is_null) {
     auto& channels = RegisterBindingTestChannels();
-    HandlerProbe probe;
+    const HandlerProbe probe;
 
     channels.primary.refuse_next = true;
-    auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
+    const auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
 
     zassert_is_null(subscription.get());
     zassert_false(channels.primary.refuse_next, "The null did not come from the channel's refusal.");
@@ -166,8 +166,8 @@ ZTEST(event_binding_subscription, test_a_refused_subscription_is_null) {
 }
 
 ZTEST(event_binding_subscription, test_the_bound_payload_value_reaches_the_handler) {
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
     zassert_not_null(subscription.get());
 
     PublishValue(BindingPayloadType::Id, uint32_t{ 1 }, 42.5F);
@@ -178,8 +178,8 @@ ZTEST(event_binding_subscription, test_the_bound_payload_value_reaches_the_handl
 }
 
 ZTEST(event_binding_subscription, test_an_event_without_the_payload_key_does_not_reach_the_handler) {
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
     zassert_not_null(subscription.get());
 
     PublishSync(
@@ -191,8 +191,8 @@ ZTEST(event_binding_subscription, test_an_event_without_the_payload_key_does_not
 
 ZTEST(event_binding_subscription, test_the_binding_honours_the_event_type) {
     auto& channels = RegisterBindingTestChannels();
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
     zassert_not_null(subscription.get());
 
     PublishSync(channels.primary, BindingEventType::Other, { { BindingPayloadType::Value, 1.0F } });
@@ -203,8 +203,8 @@ ZTEST(event_binding_subscription, test_the_binding_honours_the_event_type) {
 }
 
 ZTEST(event_binding_subscription, test_a_text_selector_matches_the_hashed_id) {
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(
         SelectedBinding(BindingPayloadType::Id, std::pmr::string("left")), probe.Handler()
     );
     zassert_not_null(subscription.get());
@@ -217,8 +217,8 @@ ZTEST(event_binding_subscription, test_a_text_selector_matches_the_hashed_id) {
 }
 
 ZTEST(event_binding_subscription, test_an_integer_selector_matches_an_int_or_uint32_id) {
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(SelectedBinding(BindingPayloadType::Id, 7), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(SelectedBinding(BindingPayloadType::Id, 7), probe.Handler());
     zassert_not_null(subscription.get());
 
     PublishValue(BindingPayloadType::Id, 7);
@@ -230,8 +230,8 @@ ZTEST(event_binding_subscription, test_an_integer_selector_matches_an_int_or_uin
 }
 
 ZTEST(event_binding_subscription, test_a_bool_selector_matches_a_bool_entry) {
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(SelectedBinding(BindingPayloadType::Flag, true), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(SelectedBinding(BindingPayloadType::Flag, true), probe.Handler());
     zassert_not_null(subscription.get());
 
     PublishValue(BindingPayloadType::Flag, false);
@@ -243,10 +243,10 @@ ZTEST(event_binding_subscription, test_a_bool_selector_matches_a_bool_entry) {
 
 // What puts the selector under the subscriber lock: the channel receives it as its filter.
 ZTEST(event_binding_subscription, test_the_selector_is_the_channel_filter) {
-    auto& channels = RegisterBindingTestChannels();
-    HandlerProbe probe;
+    const auto& channels = RegisterBindingTestChannels();
+    const HandlerProbe probe;
 
-    auto selected = SubscribeEventBinding(
+    const auto selected = SubscribeEventBinding(
         SelectedBinding(BindingPayloadType::Id, std::pmr::string("left")), probe.Handler()
     );
     zassert_not_null(selected.get());
@@ -263,14 +263,14 @@ ZTEST(event_binding_subscription, test_the_selector_is_the_channel_filter) {
     zassert_false(channels.primary.last_filter(FakeView(right)));
     zassert_false(channels.primary.last_filter(FakeView(without_id)));
 
-    auto unconditional = SubscribeEventBinding(ValueBinding(), probe.Handler());
+    const auto unconditional = SubscribeEventBinding(ValueBinding(), probe.Handler());
     zassert_not_null(unconditional.get());
     zassert_false(channels.primary.last_had_filter);
 }
 
 ZTEST(event_binding_subscription, test_destroying_the_subscription_unsubscribes) {
-    HandlerProbe removed;
-    HandlerProbe observer;
+    const HandlerProbe removed;
+    const HandlerProbe observer;
 
     auto subscription = SubscribeEventBinding(ValueBinding(), removed.Handler());
     zassert_not_null(subscription.get());
@@ -280,7 +280,7 @@ ZTEST(event_binding_subscription, test_destroying_the_subscription_unsubscribes)
 
     subscription.reset();
 
-    auto observing = SubscribeEventBinding(ValueBinding(), observer.Handler());
+    const auto observing = SubscribeEventBinding(ValueBinding(), observer.Handler());
     zassert_not_null(observing.get());
 
     PublishValue(BindingPayloadType::Id, uint32_t{ 1 });
@@ -291,8 +291,8 @@ ZTEST(event_binding_subscription, test_destroying_the_subscription_unsubscribes)
 
 ZTEST(event_binding_subscription, test_an_async_publish_reaches_the_handler_on_the_bus_thread) {
     auto& channels = RegisterBindingTestChannels();
-    HandlerProbe probe;
-    auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
+    const HandlerProbe probe;
+    const auto subscription = SubscribeEventBinding(ValueBinding(), probe.Handler());
     zassert_not_null(subscription.get());
 
     channels.primary.PublishAsync(

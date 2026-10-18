@@ -31,7 +31,7 @@ std::vector<std::string> Names(const ExpressionEvaluator& evaluator) {
 } // namespace
 
 ZTEST(expression_evaluator, test_Evaluate_x_returns_x) {
-    auto evaluator = Make("x");
+    const auto evaluator = Make("x");
 
     zassert_true(evaluator.UsesInput());
     zassert_equal(evaluator.Evaluate(8.0F).value(), 8.0F);
@@ -61,8 +61,8 @@ ZTEST(expression_evaluator, test_invalid_expression_is_a_compile_error_with_a_po
 }
 
 ZTEST(expression_evaluator, test_Evaluate_without_x_fails_when_expression_uses_x) {
-    auto with_x = Make("x * 2");
-    auto without_x = Make("2 * 3");
+    const auto with_x = Make("x * 2");
+    const auto without_x = Make("2 * 3");
 
     zassert_false(with_x.Evaluate().has_value());
     zassert_false(without_x.UsesInput());
@@ -73,8 +73,8 @@ ZTEST(expression_evaluator, test_Evaluate_without_x_fails_when_expression_uses_x
 ZTEST(expression_evaluator, test_Evaluate_fails_while_a_variable_is_unbound) {
     auto evaluator = Make("(x - 8 * var_d) / f");
 
-    float var_d = 2.0F;
-    float f = 2.0F;
+    const float var_d = 2.0F;
+    const float f = 2.0F;
 
     zassert_false(evaluator.Evaluate(80.0F).has_value());
     zassert_true(evaluator.BindVariable("var_d", &var_d));
@@ -85,7 +85,7 @@ ZTEST(expression_evaluator, test_Evaluate_fails_while_a_variable_is_unbound) {
 
 ZTEST(expression_evaluator, test_BindVariable_rejects_unknown_names_x_and_null) {
     auto evaluator = Make("x + y");
-    float value = 1.0F;
+    const float value = 1.0F;
 
     zassert_false(evaluator.BindVariable("z", &value));
     zassert_false(evaluator.BindVariable("x", &value), "x is the input, not a bound variable");
@@ -94,7 +94,7 @@ ZTEST(expression_evaluator, test_BindVariable_rejects_unknown_names_x_and_null) 
 }
 
 ZTEST(expression_evaluator, test_NaN_propagates_to_the_caller) {
-    auto evaluator = Make("sqrt(x)");
+    const auto evaluator = Make("sqrt(x)");
 
     const auto value = evaluator.Evaluate(-1.0F);
     zassert_true(value.has_value());
@@ -125,9 +125,9 @@ ZTEST(expression_evaluator, test_evaluators_are_independent) {
     auto evaluator_1 = Make("(x + y) * 4");
     auto evaluator_2 = Make("(x - 8 * y) / f");
 
-    float y_1 = 2.0F;
-    float y_2 = 2.0F;
-    float f = 2.0F;
+    const float y_1 = 2.0F;
+    const float y_2 = 2.0F;
+    const float f = 2.0F;
     evaluator_1.BindVariable("y", &y_1);
     evaluator_2.BindVariable("y", &y_2);
     evaluator_2.BindVariable("f", &f);

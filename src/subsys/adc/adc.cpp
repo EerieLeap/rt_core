@@ -145,7 +145,7 @@ bool Adc::Probe() {
 
     adc_sequence sequence = MakeSequence(0, first_mask, 1);
     uint32_t cycles = 0;
-    int err = Read(sequence, &cycles);
+    const int err = Read(sequence, &cycles);
 
     if(err < 0) {
         if(err == -ENOTSUP && oversampling_[0] != 0)
@@ -307,7 +307,7 @@ int Adc::SampleScan(const AdcSampleRequest& request, size_t count, uint16_t& rem
         const auto chunk = static_cast<uint16_t>(std::min<int>(remaining, CONFIG_EERIE_LEAP_ADC_BURST_CHUNK));
 
         const adc_sequence sequence = MakeSequence(first_channel, mask, chunk);
-        int err = Read(sequence);
+        const int err = Read(sequence);
         if(err < 0)
             return err;
 
@@ -338,7 +338,7 @@ void Adc::SampleEach(const AdcSampleRequest& request, size_t count, uint16_t sam
             const auto chunk = static_cast<uint16_t>(std::min(remaining, chunk_size));
 
             const adc_sequence sequence = MakeSequence(channel, mask, chunk);
-            int err = Read(sequence);
+            const int err = Read(sequence);
             if(err < 0) {
                 MarkError(request.results[i], err);
                 break;

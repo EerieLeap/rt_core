@@ -180,7 +180,7 @@ ZTEST_F(smp_files_group, test_empty_request_lists_the_root) {
     zassert_equal(without_body.entries.size(), 2);
     zassert_str_equal(without_body.entry_texts[0].at("name").c_str(), "scripts");
 
-    auto empty_map = harness.client.Read(SmpGroupId::FILES, LIST);
+    const auto empty_map = harness.client.Read(SmpGroupId::FILES, LIST);
 
     zassert_true(empty_map.IsOk());
     zassert_equal(empty_map.entries.size(), 2);
@@ -239,7 +239,7 @@ ZTEST_F(smp_files_group, test_offset_past_the_end_lists_nothing) {
     Harness& harness = *fixture->harness;
     harness.card->directories["scripts"] = { File("a.lua", 1), File("b.lua", 2), File("c.lua", 3) };
 
-    auto response = harness.List("scripts", 10);
+    const auto response = harness.List("scripts", 10);
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("total"), 3);
@@ -251,7 +251,7 @@ ZTEST_F(smp_files_group, test_an_empty_directory_has_no_entries) {
     Harness& harness = *fixture->harness;
     harness.card->directories["scripts"] = {};
 
-    auto response = harness.List("scripts");
+    const auto response = harness.List("scripts");
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("total"), 0);
@@ -333,7 +333,7 @@ ZTEST_F(smp_files_group, test_a_listing_that_cannot_be_stored_is_no_memory) {
 ZTEST_F(smp_files_group, test_a_malformed_request_is_invalid) {
     Harness& harness = *fixture->harness;
 
-    auto response = harness.client.Read(SmpGroupId::FILES, LIST, CborMap().Put("dir", 7).Build());
+    const auto response = harness.client.Read(SmpGroupId::FILES, LIST, CborMap().Put("dir", 7).Build());
 
     zassert_equal(response.Value("rc"), MGMT_ERR_EINVAL);
 }
@@ -342,7 +342,7 @@ ZTEST_F(smp_files_group, test_unregistered_group_is_not_supported) {
     Harness& harness = *fixture->harness;
     harness.group->Unregister();
 
-    auto response = harness.List("scripts");
+    const auto response = harness.List("scripts");
 
     zassert_equal(response.Value("rc"), MGMT_ERR_ENOTSUP, "As firmware without the group answers");
 }

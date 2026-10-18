@@ -132,7 +132,7 @@ CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const 
                 && !message_configuration->script_path.empty()
                 && sd_fs_service_->Exists(message_configuration->script_path)) {
 
-                size_t script_size = sd_fs_service_->GetFileSize(message_configuration->script_path).value_or(0);
+                const size_t script_size = sd_fs_service_->GetFileSize(message_configuration->script_path).value_or(0);
 
                 if(script_size != 0) {
                     std::pmr::vector<uint8_t> buffer(script_size, Mrm::GetExtPmr());
@@ -148,9 +148,9 @@ CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const 
             channel_configuration.message_configurations.push_back(std::move(message_configuration));
         }
 
-        bool res = configuration->channel_configurations
-                       .emplace(channel_configuration.bus_channel, std::move(channel_configuration))
-                       .second;
+        const bool res = configuration->channel_configurations
+                             .emplace(channel_configuration.bus_channel, std::move(channel_configuration))
+                             .second;
 
         if(!res)
             throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(channel_configuration.bus_channel));

@@ -56,7 +56,7 @@ std::shared_ptr<Sensor> MakeVirtualSensor(std::string_view id) {
     return sensor;
 }
 
-std::shared_ptr<SensorsConfigurationManager> MakeSensorsManager(LogWriterRig& rig) {
+std::shared_ptr<SensorsConfigurationManager> MakeSensorsManager(const LogWriterRig& rig) {
     return std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>(
             "sensors_config", rig.fs_service, rig.config_work_queue
@@ -72,7 +72,7 @@ ZTEST_SUITE(log_writer_supervisor, NULL, NULL, ResetAfterTest, NULL, NULL);
 // A start while running and a stop while stopped do nothing.
 ZTEST(log_writer_supervisor, test_ARequestStartsAndStopsTheWriter) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     zassert_false(supervisor.IsActive(), "nothing has been reported yet");
@@ -124,7 +124,7 @@ ZTEST(log_writer_supervisor, test_ARequestStartsAndStopsTheWriter) {
 // not it changes anything (L9).
 ZTEST(log_writer_supervisor, test_ALoggingCommandFromAnotherUnitIsARequest) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     zassert_true(supervisor.HandleLoggingCommand(true), "a start is accepted");
@@ -155,7 +155,7 @@ ZTEST(log_writer_supervisor, test_ALoggingCommandFromAnotherUnitIsARequest) {
 // and start, stop leaves the writer stopped. None of them waits.
 ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
@@ -203,7 +203,7 @@ ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
 ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     const auto probes = ProbeLoggerFactory::Make(rig.logger_factory);
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
@@ -264,7 +264,7 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
 ZTEST(log_writer_supervisor, test_AFailedSessionIsStoppedOnTheConfigurationWorkQueue) {
     FailingRig failing;
     auto& rig = failing.rig;
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
@@ -322,7 +322,7 @@ ZTEST(log_writer_supervisor, test_AFailedSessionIsStoppedOnTheConfigurationWorkQ
 ZTEST(log_writer_supervisor, test_AStartOfAFailedSessionStopsItAndStartsANewFile) {
     FailingRig failing;
     auto& rig = failing.rig;
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
@@ -360,7 +360,7 @@ ZTEST(log_writer_supervisor, test_AStartOfAFailedSessionStopsItAndStartsANewFile
 ZTEST(log_writer_supervisor, test_AFailureEventAfterANewStartStopsNothing) {
     FailingRig failing;
     auto& rig = failing.rig;
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     // Before the supervisor, so its handler sees each held event only once the blocker lets it go.
     StatusBlocker blocker;
     auto& supervisor = AttachSupervisor(rig);
@@ -431,7 +431,7 @@ ZTEST(log_writer_supervisor, test_AFailureEventAfterANewStartStopsNothing) {
 ZTEST(log_writer_supervisor, test_AStartStopsAFailedSessionTheFailureCheckCouldNotStop) {
     FailingRig failing;
     auto& rig = failing.rig;
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
@@ -468,7 +468,7 @@ ZTEST(log_writer_supervisor, test_AStartStopsAFailedSessionTheFailureCheckCouldN
 ZTEST(log_writer_supervisor, test_AStartThatCannotStopTheFailedSessionStartsNothing) {
     FailingRig failing;
     auto& rig = failing.rig;
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
@@ -503,7 +503,7 @@ ZTEST(log_writer_supervisor, test_AStartThatCannotStopTheFailedSessionStartsNoth
 // starts it later.
 ZTEST(log_writer_supervisor, test_AFailedStartLeavesLoggingStopped) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     const auto dependent = supervisor.GetDependentService();
 
@@ -521,7 +521,7 @@ ZTEST(log_writer_supervisor, test_AFailedStartLeavesLoggingStopped) {
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
     // What a sensors restart does with a dependent it stopped.
-    auto is_started = std::make_shared<std::atomic<bool>>(false);
+    const auto is_started = std::make_shared<std::atomic<bool>>(false);
     rig.config_work_queue->Run([dependent, is_started] {
         *is_started = dependent->Start();
     });
@@ -537,7 +537,7 @@ ZTEST(log_writer_supervisor, test_AFailedStartLeavesLoggingStopped) {
 // A stored logging configuration restarts only a running writer.
 ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAStoppedWriterStopped) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     StoreLoggingConfiguration(rig, 50);
@@ -565,7 +565,7 @@ ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAStoppedWriterStopped
 ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAFailedWriterStopped) {
     FailingRig failing;
     auto& rig = failing.rig;
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
@@ -577,7 +577,7 @@ ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAFailedWriterStopped)
         std::atomic<bool> saw_failure = false;
         std::atomic<bool> is_stored = false;
     };
-    auto context = std::make_shared<Context>();
+    const auto context = std::make_shared<Context>();
     k_sem_init(&context->entered, 0, 1);
 
     // Holds the queue until the session failed, then stores; the supervisor's run comes after it.
@@ -613,11 +613,11 @@ ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAFailedWriterStopped)
 // it, so no restart follows.
 ZTEST(log_writer_supervisor, test_AStartInTheRunOfAStoredConfigurationOpensOneFile) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
     // One job does both, so the task's next run finds the restart due and the start pending.
-    auto is_stored = std::make_shared<std::atomic<bool>>(false);
+    const auto is_stored = std::make_shared<std::atomic<bool>>(false);
     rig.config_work_queue->Run([&supervisor, is_stored, manager = rig.logging_configuration_manager] {
         *is_stored = TryStoreLoggingConfiguration(*manager, 50);
         supervisor.RequestStart(ILoggingControl::kAllUnits);
@@ -642,10 +642,10 @@ ZTEST(log_writer_supervisor, test_AStartInTheRunOfAStoredConfigurationOpensOneFi
 // A pending run is dropped, not waited for, and the subscription goes with the supervisor.
 ZTEST(log_writer_supervisor, test_DestroyingWithAPendingRequestStartsNothing) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
-    auto& channel = LoggingEventsChannel::GetInstance();
+    const auto& channel = LoggingEventsChannel::GetInstance();
     const auto generation = channel.GetSubscriptionGeneration();
 
     zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
@@ -674,12 +674,12 @@ ZTEST(log_writer_supervisor, test_DestroyingWithAPendingRequestStartsNothing) {
 // wanted state, not the supervisor, so it still stops and starts the writer afterwards.
 ZTEST(log_writer_supervisor, test_DestroyingWhileTheTaskRunsWaitsForIt) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
     const auto dependent = supervisor.GetDependentService();
 
     // A factory that takes its time, so the destructor arrives in the middle of the start.
-    auto entered = std::make_shared<k_sem>();
+    const auto entered = std::make_shared<k_sem>();
     k_sem_init(entered.get(), 0, 1);
     rig.log_writer_service->SetLoggerFactory([entered, inner = rig.logger_factory] {
         k_sem_give(entered.get());
@@ -712,7 +712,7 @@ ZTEST(log_writer_supervisor, test_DestroyingWhileTheTaskRunsWaitsForIt) {
         std::atomic<bool> is_stopped = false;
         std::atomic<bool> is_started = false;
     };
-    auto results = std::make_shared<Results>();
+    const auto results = std::make_shared<Results>();
     rig.config_work_queue->Run([dependent, results] {
         results->is_stopped = dependent->Stop();
         results->is_started = dependent->Start();
@@ -781,7 +781,7 @@ ZTEST(log_writer_supervisor, test_AHandlerClearedDuringItsCallFinishesThatCall) 
         std::atomic<int> calls = 0;
         std::atomic<bool> is_stored = false;
     };
-    auto signals = std::make_shared<Signals>();
+    const auto signals = std::make_shared<Signals>();
     k_sem_init(&signals->entered, 0, 1);
     k_sem_init(&signals->release, 0, 1);
 
@@ -821,9 +821,9 @@ ZTEST(log_writer_supervisor, test_AHandlerClearedDuringItsCallFinishesThatCall) 
 // request and, when it goes, leaves the manager's updated handler alone: it never registered one.
 ZTEST(log_writer_supervisor, test_ASupervisorThatFailedToInitializeDoesNothing) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
 
-    auto handler_calls = std::make_shared<std::atomic<int>>(0);
+    const auto handler_calls = std::make_shared<std::atomic<int>>(0);
     rig.logging_configuration_manager->RegisterConfigurationUpdatedHandler([handler_calls] {
         (*handler_calls)++;
     });
@@ -856,7 +856,7 @@ ZTEST(log_writer_supervisor, test_ASupervisorThatFailedToInitializeDoesNothing) 
 // Kconfig, the device ID from its provider, the stored sensors and their configuration's CRC.
 ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
 
     const auto sensors_manager = MakeSensorsManager(rig);
     const std::vector<std::shared_ptr<Sensor>> sensors = { MakeVirtualSensor("logged_virtual") };
@@ -910,7 +910,7 @@ ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
 // logged; without a provider the device ID is 0.
 ZTEST(log_writer_supervisor, test_ARejectedSensorsConfigurationIsLoggedWithoutAHash) {
     auto rig = MakeLogWriterRig();
-    StatusRecorder recorder;
+    const StatusRecorder recorder;
 
     const std::vector<uint8_t> garbage(16, 0xFF);
     zassert_true(

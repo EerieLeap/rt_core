@@ -38,14 +38,14 @@ zcbor_map_decode_key_val SmpMapKey(std::string_view key, bool (*decoder)(zcbor_s
 }
 
 /** @brief Decodes the request map into @p keys; unknown keys are skipped. */
-inline bool SmpDecodeRequest(smp_streamer* ctxt, std::span<zcbor_map_decode_key_val> keys) {
+inline bool SmpDecodeRequest(const smp_streamer* ctxt, std::span<zcbor_map_decode_key_val> keys) {
     size_t decoded = 0;
 
     return zcbor_map_decode_bulk(ctxt->reader->zs, keys.data(), keys.size(), &decoded) == 0;
 }
 
 /** @brief Appends a group error (SMP v2 `err`, or `rc` for SMP v1 clients) to the response. */
-inline int SmpAddGroupError(smp_streamer* ctxt, SmpGroupId group, uint16_t error) {
+inline int SmpAddGroupError(const smp_streamer* ctxt, SmpGroupId group, uint16_t error) {
     return smp_add_cmd_err(ctxt->writer->zs, std::to_underlying(group), error) ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
 

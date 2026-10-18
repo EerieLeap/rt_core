@@ -12,7 +12,7 @@ std::string MetadataBlock::EscapeXml(std::string_view text) {
     std::string escaped;
     escaped.reserve(text.size());
 
-    for(char character : text) {
+    for(const char character : text) {
         switch(character) {
             case '&':
                 escaped += "&amp;";

@@ -59,7 +59,7 @@ Bytes Encode(const LoggingControlConfiguration& configuration) {
     LoggingControlConfigurationCborParser parser;
     CborSerializer<CborLoggingControlConfig> serializer;
 
-    auto cbor_config = parser.Serialize(configuration);
+    const auto cbor_config = parser.Serialize(configuration);
     const auto bytes = serializer.Serialize(*cbor_config);
 
     return Bytes(bytes.begin(), bytes.end());
@@ -228,7 +228,7 @@ ZTEST(logging_control_configuration_parser, test_MoreTriggersThanTheSchemaAllows
     // 0*16: the sixteenth decodes, the seventeenth does not.
     const Bytes trigger = { 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF };
 
-    auto build = [&trigger](size_t count) {
+    const auto build = [&trigger](size_t count) {
         Bytes bytes = { 0x9F, 0x9F };
         for(size_t i = 0; i < count; i++)
             bytes.insert(bytes.end(), trigger.begin(), trigger.end());

@@ -290,7 +290,7 @@ ZTEST(smp_calibration_group, test_a_new_job_starts_after_stop) {
 }
 
 ZTEST(smp_calibration_group, test_read_before_the_first_result) {
-    auto adc = std::make_shared<GatedAdc>();
+    const auto adc = std::make_shared<GatedAdc>();
     Harness harness(adc);
 
     zassert_true(harness.Start(0).IsOk());
@@ -357,7 +357,7 @@ ZTEST(smp_calibration_group, test_read_and_stop_without_a_job_are_rejected) {
 ZTEST(smp_calibration_group, test_start_without_a_channel_is_invalid) {
     Harness harness;
 
-    auto response = harness.client.Write(SmpGroupId::CALIBRATION, Id(Command::START), CborMap().Build());
+    const auto response = harness.client.Write(SmpGroupId::CALIBRATION, Id(Command::START), CborMap().Build());
     zassert_false(response.IsOk());
     zassert_equal(response.Value("rc"), MGMT_ERR_EINVAL);
     zassert_false(harness.calibration_service->IsRunning());

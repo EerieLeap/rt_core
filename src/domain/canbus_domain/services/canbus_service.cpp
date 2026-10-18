@@ -30,7 +30,7 @@ void CanbusService::Configure() {
     for(const auto& [_, handler] : configuration_reset_handlers_)
         handler();
 
-    auto canbus_configuration = canbus_configuration_manager_->Get();
+    const auto canbus_configuration = canbus_configuration_manager_->Get();
 
     std::unordered_map<uint8_t, std::unique_ptr<Canbus>> canbuses;
     canbuses.reserve(canbus_proxies_.size());
@@ -53,7 +53,7 @@ void CanbusService::Configure() {
         }
 
         if(!canbuses.contains(bus_channel)) {
-            CanbusConfig canbus_config(
+            const CanbusConfig canbus_config(
                 canbus_device, channel_configuration.type, channel_configuration.bitrate,
                 channel_configuration.data_bitrate
             );
@@ -91,7 +91,7 @@ void CanbusService::Configure() {
 
         auto canbus_instance = canbuses.at(bus_channel).get();
 
-        CanbusConfig canbus_config(
+        const CanbusConfig canbus_config(
             canbus_device, channel_configuration.type, channel_configuration.bitrate, channel_configuration.data_bitrate
         );
 
@@ -152,7 +152,7 @@ std::shared_ptr<const CanbusConfiguration> CanbusService::GetConfiguration() con
 }
 
 const CanChannelConfiguration* CanbusService::GetChannelConfiguration(uint8_t bus_channel) const {
-    auto canbus_configuration = canbus_configuration_manager_->Get();
+    const auto canbus_configuration = canbus_configuration_manager_->Get();
 
     if(!canbus_configuration->channel_configurations.contains(bus_channel))
         return nullptr;
@@ -166,7 +166,7 @@ CanbusService::GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) c
     if(channel_configuration == nullptr)
         return nullptr;
 
-    auto message_configuration = std::ranges::find_if(
+    const auto message_configuration = std::ranges::find_if(
         channel_configuration->message_configurations,
         [frame_id](const std::shared_ptr<CanMessageConfiguration>& message_configuration) {
             return message_configuration->frame_id == frame_id;
@@ -184,7 +184,7 @@ namespace {
 // A detected bitrate is a stored configuration: it is reported like any other (the logging update
 // stop stops logging on every unit once the unit has started).
 void StoreBitrate(CanbusConfigurationManager& manager, uint8_t bus_channel, uint32_t bitrate) {
-    auto canbus_configuration = manager.Get();
+    const auto canbus_configuration = manager.Get();
 
     if(!canbus_configuration->channel_configurations.contains(bus_channel)) {
         LOG_ERR("Failed to update bitrate for unknown bus channel %d.", bus_channel);
@@ -220,7 +220,7 @@ void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const 
 }
 
 int CanbusService::RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler) {
-    int handler_id = configuration_reset_next_handler_id_++;
+    const int handler_id = configuration_reset_next_handler_id_++;
     configuration_reset_handlers_.try_emplace(handler_id, std::move(handler));
 
     return handler_id;
@@ -231,7 +231,7 @@ bool CanbusService::UnregisterConfigurationResetHandler(int handler_id) {
 }
 
 int CanbusService::RegisterConfigurationUpdatedHandler(CanbusServiceUpdatedHandler handler) {
-    int handler_id = configuration_updated_next_handler_id_++;
+    const int handler_id = configuration_updated_next_handler_id_++;
     configuration_updated_handlers_.try_emplace(handler_id, std::move(handler));
 
     return handler_id;

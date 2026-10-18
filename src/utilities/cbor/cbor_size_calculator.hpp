@@ -79,7 +79,7 @@ public:
      * Calculate CBOR encoding size for text string (tstr)
      */
     static size_t SizeOfTstr(const zcbor_string& str) {
-        size_t len = str.len;
+        const size_t len = str.len;
         return SizeOfLength(len) + len;
     }
 

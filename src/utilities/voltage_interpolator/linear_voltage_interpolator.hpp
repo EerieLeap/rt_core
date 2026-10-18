@@ -44,12 +44,12 @@ public:
         else if(upper == table.end())
             --upper;
 
-        auto lower = upper - 1;
+        const auto lower = upper - 1;
 
-        float x0 = lower->voltage;
-        float x1 = upper->voltage;
-        float y0 = lower->value;
-        float y1 = upper->value;
+        const float x0 = lower->voltage;
+        const float x1 = upper->voltage;
+        const float y0 = lower->value;
+        const float y1 = upper->value;
 
         float ratio = 0.0f;
         if(x1 != x0)

@@ -500,7 +500,7 @@ ZTEST(asset_store, test_load_of_a_directory_returns_empty) {
 // The size of a directory is undefined on littlefs, so it can be anything, and a size that no buffer
 // can hold must give an empty result, not an exception out of the vector.
 ZTEST(asset_store, test_load_of_a_size_no_buffer_can_hold_returns_empty) {
-    auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
     AssetStore store(scripted, kAssetsDir);
     const auto blob = MakeBlob(100, 6);
 
@@ -529,7 +529,7 @@ ZTEST(asset_store, test_load_of_a_size_no_buffer_can_hold_returns_empty) {
 // The size is read first and the content after, so a file that changed in between must not come
 // back as a mixture of the two.
 ZTEST(asset_store, test_load_of_a_file_whose_size_changed_returns_empty) {
-    auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
     AssetStore store(scripted, kAssetsDir);
     auto blob = MakeBlob(1000, 4);
 
@@ -696,7 +696,7 @@ ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
 // volume is reported unavailable while it is still mounted, as an SD card is that was pulled while its
 // monitor is off: each operation has to stop at the question.
 ZTEST(asset_store, test_every_operation_asks_whether_the_volume_is_available) {
-    auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
     AssetStore store(scripted, kAssetsDir);
 
     zassert_true(store.Save("there.bin", MakeBlob(16)));
@@ -999,7 +999,7 @@ ZTEST(asset_store, test_list_of_the_volume_root_skips_the_staging_directory) {
 
 // The volume is reported unavailable while it is still mounted, so ListDirectory() would list it.
 ZTEST(asset_store, test_list_of_an_unavailable_volume_is_ENODEV) {
-    auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
     AssetStore store(scripted, kAssetsDir);
 
     zassert_true(WriteBlob("test_assets/a.bin", 1));
@@ -1630,7 +1630,7 @@ ZTEST(asset_store, test_move_assignment_aborts_the_write_it_replaces) {
 }
 
 ZTEST(asset_store, test_commit_that_cannot_rename_deletes_the_staged_file) {
-    auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
     AssetStore store(scripted, kAssetsDir);
     const auto original = MakeBlob(400, 2);
 
@@ -1654,7 +1654,7 @@ ZTEST(asset_store, test_commit_that_cannot_rename_deletes_the_staged_file) {
 }
 
 ZTEST(asset_store, test_commit_that_cannot_create_the_directory_deletes_the_staged_file) {
-    auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
     AssetStore store(scripted, kAssetsDir);
 
     zassert_true(GetFsService()->DeleteFile(kAssetsDir));

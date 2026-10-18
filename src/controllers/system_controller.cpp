@@ -25,7 +25,7 @@ SystemController::SystemController(
     config_work_queue_thread_(std::move(config_work_queue_thread)) {}
 
 int SystemController::Initialize() {
-    auto system_config_service = std::make_unique<config_services::CborConfigurationService<CborSystemConfig>>(
+    const auto system_config_service = std::make_unique<config_services::CborConfigurationService<CborSystemConfig>>(
         SYSTEM_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
     );
     system_configuration_manager_ = make_shared_pmr<SystemConfigurationManager>(

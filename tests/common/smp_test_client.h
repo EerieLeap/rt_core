@@ -67,7 +67,7 @@ public:
     CborMap& Put(std::string_view key, std::span<const uint32_t> values) {
         bool ok = zcbor_tstr_encode_ptr(states_, key.data(), key.size())
             && zcbor_list_start_encode(states_, values.size());
-        for(uint32_t value : values)
+        for(const uint32_t value : values)
             ok = ok && zcbor_uint32_put(states_, value);
 
         zassert_true(ok && zcbor_list_end_encode(states_, values.size()));
@@ -109,28 +109,28 @@ struct Response {
     std::optional<uint32_t> error;
 
     [[nodiscard]] uint32_t Value(const std::string& key) const {
-        auto it = values.find(key);
+        const auto it = values.find(key);
         zassert_true(it != values.end(), "Response has no \"%s\"", key.c_str());
         return it->second;
     }
 
     [[nodiscard]] uint64_t WideValue(const std::string& key) const {
-        if(auto it = values.find(key); it != values.end())
+        if(const auto it = values.find(key); it != values.end())
             return it->second;
 
-        auto it = wide_values.find(key);
+        const auto it = wide_values.find(key);
         zassert_true(it != wide_values.end(), "Response has no \"%s\"", key.c_str());
         return it->second;
     }
 
     [[nodiscard]] float Float(const std::string& key) const {
-        auto it = floats.find(key);
+        const auto it = floats.find(key);
         zassert_true(it != floats.end(), "Response has no float \"%s\"", key.c_str());
         return it->second;
     }
 
     [[nodiscard]] bool Flag(const std::string& key) const {
-        auto it = flags.find(key);
+        const auto it = flags.find(key);
         zassert_true(it != flags.end(), "Response has no boolean \"%s\"", key.c_str());
         return it->second;
     }

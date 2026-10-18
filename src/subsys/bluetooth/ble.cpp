@@ -87,7 +87,7 @@ int Ble::StartAdvertising() {
 void Ble::RestartAdvertisingWorkHandler(struct k_work* work) {
     bt_le_adv_stop();
 
-    int err = bt_le_adv_start(
+    const int err = bt_le_adv_start(
         advertising_params_, ad_.empty() ? nullptr : ad_.data(), ad_.size(), sd_.empty() ? nullptr : sd_.data(),
         sd_.size()
     );
@@ -118,12 +118,12 @@ bt_conn* Ble::AcquireActiveConn() {
 // ========================
 
 void Ble::UpdateDataLength(bt_conn* conn) {
-    struct bt_conn_le_data_len_param my_data_len = {
+    struct bt_conn_le_data_len_param const my_data_len = {
         .tx_max_len = BT_GAP_DATA_LEN_MAX,
         .tx_max_time = BT_GAP_DATA_TIME_MAX,
     };
 
-    int err = bt_conn_le_data_len_update(conn, &my_data_len);
+    const int err = bt_conn_le_data_len_update(conn, &my_data_len);
     if(err) {
         LOG_ERR("data_len_update failed (err %d)", err);
     }
@@ -177,9 +177,9 @@ void Recycled() {
     Ble::StartAdvertising();
 }
 
-void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
-    double connection_interval_ms = interval * 1.25;
-    uint16_t supervision_timeout_ms = timeout * 10;
+void ParamertersUpdated(const bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
+    const double connection_interval_ms = interval * 1.25;
+    const uint16_t supervision_timeout_ms = timeout * 10;
 
     LOG_INF(
         "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms", connection_interval_ms,
@@ -189,11 +189,11 @@ void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint
 
 // NOTE: Any logging from this callback will cause a crash,
 // thus it's disabled.
-void DataLengthUpdated(bt_conn* conn, bt_conn_le_data_len_info* info) {
-    uint16_t tx_len = info->tx_max_len;
-    uint16_t tx_time = info->tx_max_time;
-    uint16_t rx_len = info->rx_max_len;
-    uint16_t rx_time = info->rx_max_time;
+void DataLengthUpdated(const bt_conn* conn, const bt_conn_le_data_len_info* info) {
+    const uint16_t tx_len = info->tx_max_len;
+    const uint16_t tx_time = info->tx_max_time;
+    const uint16_t rx_len = info->rx_max_len;
+    const uint16_t rx_time = info->rx_max_time;
 
     LOG_INF("Data length updated. Length %d/%d bytes, time %d/%d us", tx_len, rx_len, tx_time, rx_time);
 }
@@ -251,7 +251,7 @@ void Ble::SecurityUpdateWorkHandler(struct k_work* work) {
         return;
     }
 
-    int sec_err = bt_conn_set_security(conn, BT_SECURITY_L2);
+    const int sec_err = bt_conn_set_security(conn, BT_SECURITY_L2);
     if(sec_err)
         LOG_ERR("Failed to set security (err %d)", sec_err);
     else

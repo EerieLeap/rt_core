@@ -130,7 +130,7 @@ ZTEST(cdmp_transaction, test_stop_cancels_pending_transactions) {
 
     zassert_equal(fixture.transactions->GetPendingTransactionCount(), 0);
     zassert_equal(fixture.results.size(), 2);
-    for(auto result_code : fixture.results)
+    for(const auto result_code : fixture.results)
         zassert_equal(result_code, CdmpResultCode::CANCELLED);
 
     // Stopped, the timeout task no longer runs, so a new transaction stays pending.

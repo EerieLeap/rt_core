@@ -156,7 +156,7 @@ bool RemoteLoggingControl::Initialize() {
             is_active_ = false;
             is_unavailable_ = false;
             {
-                ScopedSpinlock lock(targets_lock_);
+                const ScopedSpinlock lock(targets_lock_);
                 is_status_reassert_due_ = false;
                 restarted_devices_.reset();
             }
@@ -188,7 +188,7 @@ bool RemoteLoggingControl::HandleLoggingCommand(bool is_start) {
     // wanted start.
     bool is_dropped = false;
     {
-        ScopedSpinlock lock(targets_lock_);
+        const ScopedSpinlock lock(targets_lock_);
 
         for(auto& target : targets_) {
             if(target.wanted == Request::Start) {
@@ -235,7 +235,7 @@ void RemoteLoggingControl::Submit(uint32_t target_uid, Request request) {
 
     bool is_taken = true;
     {
-        ScopedSpinlock lock(targets_lock_);
+        const ScopedSpinlock lock(targets_lock_);
 
         if(target_uid == kAllUnits) {
             // The broadcast reaches every unit, so it replaces what any target wanted.
@@ -299,7 +299,7 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
     std::bitset<256> restarted;
     bool is_status_reassert_due;
     {
-        ScopedSpinlock lock(targets_lock_);
+        const ScopedSpinlock lock(targets_lock_);
 
         targets = targets_;
         for(auto& target : targets_)
@@ -454,7 +454,7 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
 
     // 4. What was held or delivered, for the slots no request changed meanwhile.
     {
-        ScopedSpinlock lock(targets_lock_);
+        const ScopedSpinlock lock(targets_lock_);
 
         for(size_t i = 1; i < targets.size(); i++) {
             if(targets_[i].uid == targets[i].uid
@@ -488,7 +488,7 @@ void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMess
     // by OnLoggingUnitRestarted().
     if(!is_active && reason == LoggingStatusReason::Stopped && is_unavailable_) {
         {
-            ScopedSpinlock lock(targets_lock_);
+            const ScopedSpinlock lock(targets_lock_);
             is_status_reassert_due_ = true;
         }
         task_->Reschedule(K_NO_WAIT);
@@ -503,7 +503,7 @@ void RemoteLoggingControl::OnLoggingUnitRestarted(uint8_t device_id) {
     // A send already due covers it, nothing wanted sends nothing, and one run sends one start to a
     // unit for any number of reports.
     {
-        ScopedSpinlock lock(targets_lock_);
+        const ScopedSpinlock lock(targets_lock_);
         restarted_devices_.set(device_id);
     }
     task_->Reschedule(K_NO_WAIT);

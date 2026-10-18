@@ -21,11 +21,11 @@ void CoredumpReporter::PrintHexChunk(const uint8_t* data, size_t len) {
     char line[(kBytesPerLine * 2) + 1];
 
     for(size_t offset = 0; offset < len; offset += kBytesPerLine) {
-        size_t line_bytes = (len - offset < kBytesPerLine) ? (len - offset) : kBytesPerLine;
+        const size_t line_bytes = (len - offset < kBytesPerLine) ? (len - offset) : kBytesPerLine;
         size_t pos = 0;
 
         for(size_t i = 0; i < line_bytes; i++) {
-            uint8_t byte = data[offset + i];
+            const uint8_t byte = data[offset + i];
             line[pos++] = kHexDigits[(byte >> 4) & 0xF];
             line[pos++] = kHexDigits[byte & 0xF];
         }
@@ -39,7 +39,7 @@ void CoredumpReporter::PrintStoredDump() {
     if(coredump_query(COREDUMP_QUERY_HAS_STORED_DUMP, nullptr) != 1)
         return;
 
-    int size = coredump_query(COREDUMP_QUERY_GET_STORED_DUMP_SIZE, nullptr);
+    const int size = coredump_query(COREDUMP_QUERY_GET_STORED_DUMP_SIZE, nullptr);
     if(size <= 0)
         return;
 
@@ -60,7 +60,7 @@ void CoredumpReporter::PrintStoredDump() {
     while(remaining > 0) {
         copy.length = (remaining < kCopyChunkSize) ? remaining : kCopyChunkSize;
 
-        int copied = coredump_cmd(COREDUMP_CMD_COPY_STORED_DUMP, &copy);
+        const int copied = coredump_cmd(COREDUMP_CMD_COPY_STORED_DUMP, &copy);
         if(copied <= 0) {
             printk("#CD:ERROR CANNOT DUMP#\n");
             return;

@@ -68,14 +68,14 @@ Fixture MakeFixture() {
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
 
-    auto gpio = std::make_shared<GpioSimulator>();
+    const auto gpio = std::make_shared<GpioSimulator>();
     gpio->Initialize();
 
-    auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
+    const auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
     indicator->configuration.type = SensorType::PHYSICAL_INDICATOR;
     indicator->configuration.channel = 0;
 
-    std::vector<std::shared_ptr<Sensor>> sensors = {
+    const std::vector<std::shared_ptr<Sensor>> sensors = {
         indicator,
         MakeVirtual("doubled", "indicator * 2"),
         MakeVirtual("doubled_plus", "doubled + 1"),
@@ -86,7 +86,7 @@ Fixture MakeFixture() {
     fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame)
                              .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
     fixture.pipeline = std::make_shared<ReadingPipeline>(fixture.frame, processors, fixture.time_service);
 
@@ -100,7 +100,7 @@ Fixture MakeFixture() {
 } // namespace
 
 ZTEST(dependent_sensors, test_builder_links_dependents_transitively_in_processing_order) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     const auto& indicator = fixture.Runtime("indicator");
     const auto& doubled = fixture.Runtime("doubled");

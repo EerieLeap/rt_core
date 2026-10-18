@@ -77,11 +77,11 @@ WaitForResultAfter(const CalibrationService& service, uint32_t after_sequence) {
 } // namespace
 
 ZTEST(calibration_service, test_Start_pauses_and_samples) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
     DriveConstant(*adc, 1, 1500);
 
-    auto paused_service = std::make_shared<RecordingService>();
+    const auto paused_service = std::make_shared<RecordingService>();
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, paused_service);
     zassert_true(calibration_service.Initialize());
@@ -132,11 +132,11 @@ ZTEST(calibration_service, test_Start_pauses_and_samples) {
 }
 
 ZTEST(calibration_service, test_Start_fails_when_pause_is_refused) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
     // Another owner has it paused or stopped.
-    auto paused_service = std::make_shared<RecordingService>();
+    const auto paused_service = std::make_shared<RecordingService>();
     paused_service->is_pause_accepted = false;
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, paused_service);
@@ -163,10 +163,10 @@ ZTEST(calibration_service, test_Start_fails_when_pause_is_refused) {
 }
 
 ZTEST(calibration_service, test_Start_rejects_a_channel_the_unit_does_not_have) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
-    auto paused_service = std::make_shared<RecordingService>();
+    const auto paused_service = std::make_shared<RecordingService>();
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, paused_service);
     zassert_true(calibration_service.Initialize());
@@ -194,10 +194,10 @@ ZTEST(calibration_service, test_Start_rejects_a_channel_the_unit_does_not_have) 
 }
 
 ZTEST(calibration_service, test_Stop_tolerates_a_resumed_service) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
-    auto paused_service = std::make_shared<RecordingService>();
+    const auto paused_service = std::make_shared<RecordingService>();
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, paused_service);
     zassert_true(calibration_service.Initialize());
@@ -226,11 +226,11 @@ ZTEST(calibration_service, test_Stop_tolerates_a_resumed_service) {
 }
 
 ZTEST(calibration_service, test_SetServiceToPause_applies_to_the_next_job) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
-    auto first_service = std::make_shared<RecordingService>();
-    auto second_service = std::make_shared<RecordingService>();
+    const auto first_service = std::make_shared<RecordingService>();
+    const auto second_service = std::make_shared<RecordingService>();
 
     // Constructed before the service it pauses exists, as AdcController may be.
     CalibrationService calibration_service(MakeTimeService(), adc_manager, nullptr);
@@ -257,10 +257,10 @@ ZTEST(calibration_service, test_SetServiceToPause_applies_to_the_next_job) {
 
 // Start() runs on the MCUmgr work queue, which catches nothing: a pause that throws is a busy one.
 ZTEST(calibration_service, test_Start_is_refused_when_pause_throws) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
-    auto paused_service = std::make_shared<RecordingService>();
+    const auto paused_service = std::make_shared<RecordingService>();
     paused_service->is_pause_throwing = true;
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, paused_service);
@@ -280,10 +280,10 @@ ZTEST(calibration_service, test_Start_is_refused_when_pause_throws) {
 
 // So does Stop(), also from the destructor: a resume that throws still ends the job.
 ZTEST(calibration_service, test_Stop_ends_the_job_when_resume_throws) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
-    auto paused_service = std::make_shared<RecordingService>();
+    const auto paused_service = std::make_shared<RecordingService>();
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, paused_service);
     zassert_true(calibration_service.Initialize());
@@ -308,8 +308,8 @@ ZTEST(calibration_service, test_Stop_ends_the_job_when_resume_throws) {
 
 // The latest result always belongs to the channel GetChannel() reports.
 ZTEST(calibration_service, test_Start_drops_the_previous_jobs_result) {
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
 
     CalibrationService calibration_service(MakeTimeService(), adc_manager, nullptr);
     zassert_true(calibration_service.Initialize());

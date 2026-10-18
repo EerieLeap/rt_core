@@ -115,7 +115,7 @@ const Bytes k_float_selector = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00,
 ZTEST_SUITE(logging_control_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(logging_control_configuration_manager, test_TheDefaultHasNoTriggers) {
-    auto manager = MakeManager(FormattedFs());
+    const auto manager = MakeManager(FormattedFs());
 
     const auto configuration = manager->Get();
     zassert_not_null(configuration.get(), "A unit that never stored triggers has the default");
@@ -127,23 +127,23 @@ ZTEST(logging_control_configuration_manager, test_TheDefaultHasNoTriggers) {
 }
 
 ZTEST(logging_control_configuration_manager, test_StoredTriggersSurviveARestart) {
-    auto fs_service = FormattedFs();
+    const auto fs_service = FormattedFs();
     const auto expected = MakeConfiguration(MixedTriggers());
 
     {
-        auto manager = MakeManager(fs_service);
+        const auto manager = MakeManager(fs_service);
         zassert_true(manager->Update(expected));
         AssertSame(expected, *manager->Get());
     }
 
     // A second manager on the same file system loads what the first stored.
-    auto restarted = MakeManager(fs_service);
+    const auto restarted = MakeManager(fs_service);
     zassert_true(restarted->GetCborConfigurationInfo().is_applied);
     AssertSame(expected, *restarted->Get());
 }
 
 ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefused) {
-    auto manager = MakeManager(FormattedFs());
+    const auto manager = MakeManager(FormattedFs());
     const auto good = MakeConfiguration({ SensorTrigger("a") });
     zassert_true(manager->Update(good));
     const auto stored = manager->GetCborConfigurationInfo();
@@ -177,11 +177,11 @@ ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefuse
 }
 
 ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEachStore) {
-    auto fs_service = FormattedFs();
-    auto calls = std::make_shared<std::atomic<int>>(0);
-    auto thread = std::make_shared<std::atomic<k_tid_t>>(nullptr);
+    const auto fs_service = FormattedFs();
+    const auto calls = std::make_shared<std::atomic<int>>(0);
+    const auto thread = std::make_shared<std::atomic<k_tid_t>>(nullptr);
 
-    auto manager = MakeManager(fs_service);
+    const auto manager = MakeManager(fs_service);
     zassert_equal(calls->load(), 0, "Loading, or creating the default, calls nobody");
 
     manager->RegisterConfigurationUpdatedHandler([calls, thread] {
@@ -198,9 +198,9 @@ ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEach
     zassert_equal(calls->load(), 1);
 
     // An apply on the configuration work queue, as SMP does it.
-    auto done = std::make_shared<k_sem>();
+    const auto done = std::make_shared<k_sem>();
     k_sem_init(done.get(), 0, 1);
-    auto is_applied = std::make_shared<std::atomic<bool>>(false);
+    const auto is_applied = std::make_shared<std::atomic<bool>>(false);
     TestConfigQueue()->Run([manager, done, is_applied] {
         is_applied->store(manager->ApplyCborConfiguration(k_valid));
         k_sem_give(done.get());
@@ -219,7 +219,7 @@ ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEach
 // calling it: the clear returns at once, the call in progress finishes on its own reference to the
 // handler, and the next store calls nothing.
 ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFinishesThatCall) {
-    auto manager = MakeManager(FormattedFs());
+    const auto manager = MakeManager(FormattedFs());
 
     struct Signals {
         k_sem entered;
@@ -228,7 +228,7 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
         std::atomic<int> calls = 0;
         std::atomic<bool> is_stored = false;
     };
-    auto signals = std::make_shared<Signals>();
+    const auto signals = std::make_shared<Signals>();
     k_sem_init(&signals->entered, 0, 1);
     k_sem_init(&signals->release, 0, 1);
     k_sem_init(&signals->stored, 0, 1);
@@ -272,9 +272,9 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
 // Rebuilding the triggers allocates and can throw. The configuration is stored by then, so the
 // store reports success, and the next store calls the handler again.
 ZTEST(logging_control_configuration_manager, test_AHandlerThatThrowsDoesNotFailTheStore) {
-    auto manager = MakeManager(FormattedFs());
+    const auto manager = MakeManager(FormattedFs());
 
-    auto calls = std::make_shared<std::atomic<int>>(0);
+    const auto calls = std::make_shared<std::atomic<int>>(0);
     manager->RegisterConfigurationUpdatedHandler([calls] {
         (*calls)++;
 

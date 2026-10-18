@@ -53,11 +53,11 @@ void AssertSubMillisecondResolution() {
 ZTEST_SUITE(boot_elapsed_time_provider, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(boot_elapsed_time_provider, test_GetTime_returns_valid_elapsed_time) {
-    std::shared_ptr<ITimeProvider> time_provider = std::make_shared<BootElapsedTimeProvider>();
+    const std::shared_ptr<ITimeProvider> time_provider = std::make_shared<BootElapsedTimeProvider>();
 
-    auto current_time1 = time_provider->GetTime();
+    const auto current_time1 = time_provider->GetTime();
     k_msleep(1);
-    auto current_time2 = time_provider->GetTime();
+    const auto current_time2 = time_provider->GetTime();
 
     zassert_true(current_time2 - current_time1 >= 1ms);
     zassert_true(current_time2 - current_time1 <= kSleepSlack);
@@ -66,9 +66,9 @@ ZTEST(boot_elapsed_time_provider, test_GetTime_returns_valid_elapsed_time) {
 ZTEST(boot_elapsed_time_provider, test_GetTime_tracks_the_kernel_uptime) {
     BootElapsedTimeProvider time_provider;
 
-    auto uptime_before = k_uptime_get();
-    auto reported = TimeHelpers::ToMilliseconds(time_provider.GetTime()).count();
-    auto uptime_after = k_uptime_get();
+    const auto uptime_before = k_uptime_get();
+    const auto reported = TimeHelpers::ToMilliseconds(time_provider.GetTime()).count();
+    const auto uptime_after = k_uptime_get();
 
     zassert_between_inclusive(reported, uptime_before, uptime_after);
 }
@@ -78,7 +78,7 @@ ZTEST(boot_elapsed_time_provider, test_GetTime_is_monotonic) {
 
     auto previous = time_provider.GetTime();
     for(int i = 0; i < 16; ++i) {
-        auto current = time_provider.GetTime();
+        const auto current = time_provider.GetTime();
 
         zassert_true(current >= previous, "time went backwards at iteration %d", i);
 
@@ -89,9 +89,9 @@ ZTEST(boot_elapsed_time_provider, test_GetTime_is_monotonic) {
 ZTEST(boot_elapsed_time_provider, test_GetTime_advances_by_the_slept_amount) {
     BootElapsedTimeProvider time_provider;
 
-    auto before = time_provider.GetTime();
+    const auto before = time_provider.GetTime();
     k_msleep(20);
-    auto after = time_provider.GetTime();
+    const auto after = time_provider.GetTime();
 
     zassert_true(after - before >= 20ms);
     zassert_true(after - before <= 20ms + kSleepSlack);
@@ -107,7 +107,7 @@ ZTEST(boot_elapsed_time_provider, test_independent_instances_agree) {
 ZTEST_SUITE(rtc_provider, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(rtc_provider, test_GetTime_is_at_or_after_the_rtc_epoch) {
-    std::shared_ptr<ITimeProvider> time_provider = std::make_shared<RtcProvider>();
+    const std::shared_ptr<ITimeProvider> time_provider = std::make_shared<RtcProvider>();
 
     zassert_true(TimeHelpers::ToMilliseconds(time_provider->GetTime()) >= kRtcEpoch);
 }
@@ -116,7 +116,7 @@ ZTEST(rtc_provider, test_GetTime_offsets_the_boot_elapsed_time_by_the_epoch) {
     RtcProvider rtc_provider;
     BootElapsedTimeProvider boot_provider;
 
-    auto offset = rtc_provider.GetTime() - boot_provider.GetTime();
+    const auto offset = rtc_provider.GetTime() - boot_provider.GetTime();
 
     zassert_true(abs(offset - kRtcEpoch) <= 10ms);
 }
@@ -126,7 +126,7 @@ ZTEST(rtc_provider, test_GetTime_is_monotonic) {
 
     auto previous = rtc_provider.GetTime();
     for(int i = 0; i < 16; ++i) {
-        auto current = rtc_provider.GetTime();
+        const auto current = rtc_provider.GetTime();
 
         zassert_true(current >= previous, "time went backwards at iteration %d", i);
 
@@ -137,17 +137,17 @@ ZTEST(rtc_provider, test_GetTime_is_monotonic) {
 ZTEST(rtc_provider, test_GetTime_advances_by_the_slept_amount) {
     RtcProvider rtc_provider;
 
-    auto before = rtc_provider.GetTime();
+    const auto before = rtc_provider.GetTime();
     k_msleep(20);
-    auto after = rtc_provider.GetTime();
+    const auto after = rtc_provider.GetTime();
 
     zassert_true(after - before >= 20ms);
     zassert_true(after - before <= 20ms + kSleepSlack);
 }
 
 ZTEST(rtc_provider, test_GetTime_is_ahead_of_the_boot_elapsed_time) {
-    std::shared_ptr<ITimeProvider> rtc_provider = std::make_shared<RtcProvider>();
-    std::shared_ptr<ITimeProvider> boot_provider = std::make_shared<BootElapsedTimeProvider>();
+    const std::shared_ptr<ITimeProvider> rtc_provider = std::make_shared<RtcProvider>();
+    const std::shared_ptr<ITimeProvider> boot_provider = std::make_shared<BootElapsedTimeProvider>();
 
     zassert_true(rtc_provider->GetTime() > boot_provider->GetTime());
 }

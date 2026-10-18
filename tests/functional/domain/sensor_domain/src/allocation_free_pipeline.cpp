@@ -76,7 +76,7 @@ struct Pipeline {
 Pipeline MakePipeline() {
     Pipeline pipeline;
 
-    auto time_service = std::make_shared<TimeService>(
+    const auto time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
     pipeline.time_service = time_service;
@@ -86,30 +86,30 @@ Pipeline MakePipeline() {
     pipeline.gpio = std::make_shared<GpioSimulator>();
     pipeline.gpio->Initialize();
 
-    auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
+    const auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
     indicator->configuration.type = SensorType::PHYSICAL_INDICATOR;
     indicator->configuration.channel = 0;
     indicator->configuration.sampling_rate_ms = 100;
     indicator->configuration.expression = "x";
 
-    auto derived = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "derived");
+    const auto derived = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "derived");
     derived->configuration.type = SensorType::VIRTUAL_ANALOG;
     derived->configuration.sampling_rate_ms = 100;
     derived->configuration.expression = "indicator * 2 + 1";
 
-    auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
+    const auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
     raw->configuration.type = SensorType::CANBUS_RAW;
 
     // Evaluated after every indicator commit, without a timer.
-    auto dependent = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "dependent");
+    const auto dependent = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "dependent");
     dependent->configuration.type = SensorType::VIRTUAL_ANALOG;
     dependent->configuration.expression = "indicator + derived";
 
     // Sampled through the emulated ADC, with its channel pinned to 1 V.
-    auto analog = processing_test_support::MakeAnalogSensor("analog", 0, 100);
+    const auto analog = processing_test_support::MakeAnalogSensor("analog", 0, 100);
 
     pipeline.adc = processing_test_support::MakeEmulator();
-    auto adc_manager = processing_test_support::MakeAdcManager(pipeline.adc);
+    const auto adc_manager = processing_test_support::MakeAdcManager(pipeline.adc);
     processing_test_support::DriveConstant(*pipeline.adc, 0, 1000);
 
     pipeline.sensors = { indicator, derived, raw, dependent, analog };
@@ -195,7 +195,7 @@ void RunConsumers(Pipeline& pipeline) {
 
 ZTEST(allocation_free_pipeline, test_counting_allocator_is_in_use) {
     const size_t before = GetAllocationCount();
-    auto block = std::make_unique<uint8_t[]>(32);
+    const auto block = std::make_unique<uint8_t[]>(32);
 
     zassert_equal(
         GetAllocationCount() - before, 1, "The replaced operator new must count, or the test below proves nothing"
@@ -259,17 +259,17 @@ ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) 
     events::RegisterSensorEvents();
 
     // The sentinel is in the last slot; see sensor_events_test_support.h.
-    auto a = events::MakeSensor("alloc_a");
-    auto b = events::MakeSensor("alloc_b");
-    auto sentinel = events::MakeSensor("alloc_sentinel");
+    const auto a = events::MakeSensor("alloc_a");
+    const auto b = events::MakeSensor("alloc_b");
+    const auto sentinel = events::MakeSensor("alloc_sentinel");
     const std::vector<std::shared_ptr<Sensor>> sensors{ a, b, sentinel };
 
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
     frame->Configure(sensors);
 
-    auto a_recorder = std::make_shared<events::Recorder>();
-    auto b_recorder = std::make_shared<events::Recorder>();
-    auto sentinel_recorder = std::make_shared<events::Recorder>();
+    const auto a_recorder = std::make_shared<events::Recorder>();
+    const auto b_recorder = std::make_shared<events::Recorder>();
+    const auto sentinel_recorder = std::make_shared<events::Recorder>();
     auto a_binding = events::Bind(*a, a_recorder);
     auto b_binding = events::Bind(*b, b_recorder);
     auto sentinel_binding = events::Bind(*sentinel, sentinel_recorder);
@@ -357,36 +357,36 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     constexpr int kSettleMs = 50;
     constexpr size_t k_rounds = 10;
 
-    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+    const auto work_queue_thread = std::make_shared<WorkQueueThread>(
         "conditioning_alloc", CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
         CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
     );
     zassert_true(work_queue_thread->Initialize());
 
-    auto time_service = std::make_shared<TimeService>(
+    const auto time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
 
-    auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_button");
+    const auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_button");
     button->configuration.type = SensorType::PHYSICAL_INDICATOR;
     button->configuration.channel = 0;
     button->configuration.debounce_ms = kDebounceMs;
     button->configuration.input_mode = IndicatorInputMode::Toggle;
 
-    auto probe = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_probe");
+    const auto probe = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_probe");
     probe->configuration.type = SensorType::VIRTUAL_ANALOG;
     probe->configuration.expression = "cond_alloc_button";
 
     const std::vector<std::shared_ptr<Sensor>> sensors{ button, probe };
-    auto generation = SensorPipelineBuilder(nullptr, frame)
-                          .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    const auto generation = SensorPipelineBuilder(nullptr, frame)
+                                .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
     zassert_not_null(generation->runtimes[0].conditioner.get());
 
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(frame));
     processors->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
-    auto pipeline = std::make_shared<ReadingPipeline>(frame, processors, time_service, work_queue_thread);
+    const auto pipeline = std::make_shared<ReadingPipeline>(frame, processors, time_service, work_queue_thread);
 
     Feed feed{};
     k_work_init(&feed.work, Feed::Handler);

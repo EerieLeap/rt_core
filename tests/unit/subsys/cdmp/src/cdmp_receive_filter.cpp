@@ -75,7 +75,7 @@ size_t CountFreeControllerFilters() {
         filter_ids.push_back(filter_id);
     }
 
-    for(int id : filter_ids)
+    for(const int id : filter_ids)
         can_remove_rx_filter(ReceiveFilterLoopbackDevice(), id);
 
     return filter_ids.size();
@@ -100,7 +100,7 @@ struct ReceiveFilterFixture {
     }
 
     ~ReceiveFilterFixture() {
-        for(int handler_id : handler_ids)
+        for(const int handler_id : handler_ids)
             (*canbus)->RemoveFrameReceivedHandler(handler_id);
     }
 

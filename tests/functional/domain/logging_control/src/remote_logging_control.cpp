@@ -552,7 +552,7 @@ ZTEST(remote_logging_control, test_DestroyingWhileASendRunsWaitsForIt) {
         k_sem done;
         std::unique_ptr<RemoteLoggingControl> control;
     };
-    auto destruction = std::make_shared<Destruction>();
+    const auto destruction = std::make_shared<Destruction>();
     k_sem_init(&destruction->done, 0, 1);
     destruction->control = std::move(F().control);
 

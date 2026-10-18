@@ -141,7 +141,7 @@ ZTEST_F(smp_can_transport, test_stale_slot_is_reclaimed_after_the_timeout) {
 
 ZTEST_F(smp_can_transport, test_forwarded_request_and_its_response) {
     Harness& harness = *fixture->harness;
-    auto sink = std::make_shared<RecordingSink>();
+    const auto sink = std::make_shared<RecordingSink>();
     harness.transport->SetResponseSink(sink);
 
     const Bytes request = MakeEchoRequest("forwarded", 14);
@@ -220,7 +220,7 @@ ZTEST_F(smp_can_transport, test_rebind_moves_to_the_new_address) {
     zassert_false(harness.peers.WaitPacket(FIRST_PEER, 300).has_value(), "The old address is released");
 
     harness.SendPacket(FIRST_PEER, MakeEchoRequest("new", 18), new_address);
-    auto response = harness.peers.WaitPacket(FIRST_PEER);
+    const auto response = harness.peers.WaitPacket(FIRST_PEER);
     zassert_true(IsEchoResponse(response, "new", 18));
     zassert_equal(harness.peers.GetLastSource(), new_address, "The response comes from the new address");
 }

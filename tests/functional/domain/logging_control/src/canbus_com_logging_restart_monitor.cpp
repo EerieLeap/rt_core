@@ -155,7 +155,7 @@ struct Fixture {
 };
 
 // Polls the unit's device table until @p device_id is in it, or is not.
-bool WaitForTableEntry(Harness& harness, uint8_t device_id, bool is_present) {
+bool WaitForTableEntry(const Harness& harness, uint8_t device_id, bool is_present) {
     const int64_t deadline = k_uptime_get() + FRAME_TIMEOUT_MS;
     while(harness.IsInDeviceTable(device_id) != is_present) {
         if(k_uptime_get() >= deadline)
@@ -722,7 +722,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AHandlerThatThrowsDoesNotSkipTheH
             k_sem_init(&received, 0, K_SEM_MAX_LIMIT);
         }
     };
-    auto heartbeats = std::make_shared<Heartbeats>();
+    const auto heartbeats = std::make_shared<Heartbeats>();
     const int handler_id = F().harness.com->RegisterHeartbeatHandler([heartbeats](const CdmpHeartbeatMessage&) {
         k_sem_give(&heartbeats->received);
     });

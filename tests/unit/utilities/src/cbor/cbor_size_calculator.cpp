@@ -45,8 +45,8 @@ ZTEST(cbor_size_calculator, test_SizeOfUint_boundaries) {
 ZTEST(cbor_size_calculator, test_SizeOfUint_matches_zcbor) {
     const uint64_t values[] = { 0, 23, 24, 0xFF, 0x100, 0xFFFF, 0x10000, 0xFFFFFFFFULL, 0x100000000ULL, UINT64_MAX };
 
-    for(uint64_t value : values) {
-        size_t encoded = EncodedSize([value](zcbor_state_t* state) {
+    for(const uint64_t value : values) {
+        const size_t encoded = EncodedSize([value](zcbor_state_t* state) {
             return zcbor_uint64_put(state, value);
         });
 
@@ -75,8 +75,8 @@ ZTEST(cbor_size_calculator, test_SizeOfInt_negative) {
 ZTEST(cbor_size_calculator, test_SizeOfInt_matches_zcbor) {
     const int64_t values[] = { 0, 23, 24, -1, -24, -25, -256, -257, -65536, -65537, INT64_MAX, INT64_MIN };
 
-    for(int64_t value : values) {
-        size_t encoded = EncodedSize([value](zcbor_state_t* state) {
+    for(const int64_t value : values) {
+        const size_t encoded = EncodedSize([value](zcbor_state_t* state) {
             return zcbor_int64_put(state, value);
         });
 
@@ -126,7 +126,7 @@ ZTEST(cbor_size_calculator, test_SizeOfTstr_matches_zcbor) {
 
     for(const char* value : values) {
         auto zstr = CborHelpers::ToZcborString(value);
-        size_t encoded = EncodedSize([&zstr](zcbor_state_t* state) {
+        const size_t encoded = EncodedSize([&zstr](zcbor_state_t* state) {
             return zcbor_tstr_encode(state, &zstr);
         });
 
@@ -175,9 +175,9 @@ ZTEST(cbor_size_calculator, test_SizeOfArrayUniform) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfArray_with_size_func) {
-    std::vector<uint64_t> items{ 1, 24, 0x10000 };
+    const std::vector<uint64_t> items{ 1, 24, 0x10000 };
 
-    size_t size = CborSizeCalc::SizeOfArray(items, [](uint64_t item) {
+    const size_t size = CborSizeCalc::SizeOfArray(items, [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     });
 
@@ -185,9 +185,9 @@ ZTEST(cbor_size_calculator, test_SizeOfArray_with_size_func) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfArray_empty) {
-    std::vector<uint64_t> items;
+    const std::vector<uint64_t> items;
 
-    size_t size = CborSizeCalc::SizeOfArray(items, [](uint64_t item) {
+    const size_t size = CborSizeCalc::SizeOfArray(items, [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     });
 
@@ -200,7 +200,7 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArrayMarkers) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray) {
-    size_t size = CborSizeCalc::SizeOfIndefiniteArray(3, [](size_t index) {
+    const size_t size = CborSizeCalc::SizeOfIndefiniteArray(3, [](size_t index) {
         return CborSizeCalc::SizeOfUint(index);
     });
 
@@ -210,11 +210,11 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray) {
 ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray_matches_zcbor) {
     static constexpr char kName[] = "sensor_1";
 
-    size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart() + CborSizeCalc::SizeOfUint(42)
+    const size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart() + CborSizeCalc::SizeOfUint(42)
         + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kName)) + CborSizeCalc::SizeOfBool(true);
 
-    size_t encoded = EncodedSize([](zcbor_state_t* state) {
-        auto name = CborHelpers::ToZcborString(kName);
+    const size_t encoded = EncodedSize([](zcbor_state_t* state) {
+        const auto name = CborHelpers::ToZcborString(kName);
         return zcbor_list_start_encode(state, 3)
             && zcbor_uint64_put(state, 42)
             && zcbor_tstr_encode(state, &name)
@@ -241,13 +241,13 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteMap_matches_zcbor) {
     static constexpr char kKey[] = "unit";
     static constexpr char kValue[] = "celsius";
 
-    size_t expected = CborSizeCalc::SizeOfIndefiniteMapStart()
+    const size_t expected = CborSizeCalc::SizeOfIndefiniteMapStart()
         + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kKey))
         + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kValue));
 
-    size_t encoded = EncodedSize([](zcbor_state_t* state) {
-        auto key = CborHelpers::ToZcborString(kKey);
-        auto value = CborHelpers::ToZcborString(kValue);
+    const size_t encoded = EncodedSize([](zcbor_state_t* state) {
+        const auto key = CborHelpers::ToZcborString(kKey);
+        const auto value = CborHelpers::ToZcborString(kValue);
         return zcbor_map_start_encode(state, 1)
             && zcbor_tstr_encode(state, &key)
             && zcbor_tstr_encode(state, &value)
@@ -258,11 +258,11 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteMap_matches_zcbor) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfOptional_pointer) {
-    uint64_t value = 24;
+    const uint64_t value = 24;
     const uint64_t* present = &value;
     const uint64_t* absent = nullptr;
 
-    auto size_func = [](uint64_t item) {
+    const auto size_func = [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     };
 
@@ -271,8 +271,8 @@ ZTEST(cbor_size_calculator, test_SizeOfOptional_pointer) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfOptional_flag) {
-    uint64_t value = 24;
-    auto size_func = [](uint64_t item) {
+    const uint64_t value = 24;
+    const auto size_func = [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     };
 

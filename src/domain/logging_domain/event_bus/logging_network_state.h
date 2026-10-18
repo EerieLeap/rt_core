@@ -88,7 +88,7 @@ struct LoggingNetworkState {
         if(std::ranges::any_of(states, &State::IsActive))
             return State(true);
 
-        auto failed = std::ranges::find_if(states, [](const State& state) {
+        const auto failed = std::ranges::find_if(states, [](const State& state) {
             return IsFailure(state.GetReason());
         });
 

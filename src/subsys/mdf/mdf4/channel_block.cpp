@@ -70,7 +70,7 @@ void ChannelBlock::SetConversion(std::shared_ptr<ChannelConversionBlock> convers
 
 void ChannelBlock::LinkBlock(std::shared_ptr<ChannelBlock> next_block) {
     auto* last = this;
-    while(auto next = last->links_.GetLink(LinkType::ChannelNext))
+    while(const auto next = last->links_.GetLink(LinkType::ChannelNext))
         last = static_cast<ChannelBlock*>(next.get());
 
     last->links_.SetLink(LinkType::ChannelNext, std::move(next_block));

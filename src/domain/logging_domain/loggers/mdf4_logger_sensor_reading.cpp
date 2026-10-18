@@ -209,7 +209,7 @@ std::optional<std::string> Mdf4LoggerSensorReading::ToMdfFormula(std::string_vie
     if(!uses_input)
         return std::nullopt;
 
-    auto token_text = [](const FormulaToken& token) -> std::string_view {
+    const auto token_text = [](const FormulaToken& token) -> std::string_view {
         return token.kind == FormulaToken::Kind::Input ? "X" : token.text;
     };
 
@@ -276,7 +276,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
         if(!sensor.is_enabled)
             return nullptr;
 
-        auto sensor_configuration = configuration.sensor_configurations.find(sensor.id_hash);
+        const auto sensor_configuration = configuration.sensor_configurations.find(sensor.id_hash);
         if(sensor_configuration == configuration.sensor_configurations.end()
             || !sensor_configuration->second.is_enabled)
             return nullptr;
@@ -293,7 +293,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
 
     SetFileMetadata(configuration, metadata);
 
-    auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
+    const auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
         mdf4::SourceInformationBlock::SourceType::IoDevice, mdf4::SourceInformationBlock::BusType::None
     );
     source_information->SetName(mdf4_file_->GetOrCreateTextBlock("Eerie Leap Sensor"));
@@ -334,10 +334,10 @@ void Mdf4LoggerSensorReading::AddValueTarget(
 
     const std::string sensor_id(sensor.id);
 
-    auto channel_group = mdf4_file_->CreateChannelGroup(next_record_id_++, sensor_id);
+    const auto channel_group = mdf4_file_->CreateChannelGroup(next_record_id_++, sensor_id);
     channel_group->AddSourceInformation(source_information);
 
-    auto value_channel = mdf4_file_->CreateDataChannel(
+    const auto value_channel = mdf4_file_->CreateDataChannel(
         channel_group, MdfDataType::Float32, sensor_id, std::string(sensor.metadata.unit), true
     );
 
@@ -355,7 +355,7 @@ void Mdf4LoggerSensorReading::AddValueTarget(
         .value_invalid_mask = 1U << value_channel->GetInvalidationBitPosition() };
 
     if(has_raw_value_channel) {
-        auto raw_channel = mdf4_file_->CreateDataChannel(
+        const auto raw_channel = mdf4_file_->CreateDataChannel(
             channel_group, MdfDataType::Float32, sensor_id + ".raw", "", true
         );
         target.raw_value_invalid_mask = 1U << raw_channel->GetInvalidationBitPosition();
@@ -376,8 +376,10 @@ void Mdf4LoggerSensorReading::AddValueTarget(
 void Mdf4LoggerSensorReading::AddCanFrameTarget(const Sensor& sensor) {
     const std::string sensor_id(sensor.id);
 
-    auto vlsd_channel_group = mdf4_file_->CreateVLSDChannelGroup(next_record_id_++);
-    auto channel_group = mdf4_file_->CreateCanDataFrameChannelGroup(vlsd_channel_group, next_record_id_++, sensor_id);
+    const auto vlsd_channel_group = mdf4_file_->CreateVLSDChannelGroup(next_record_id_++);
+    const auto channel_group = mdf4_file_->CreateCanDataFrameChannelGroup(
+        vlsd_channel_group, next_record_id_++, sensor_id
+    );
 
     const auto comment = GetSensorComment(sensor);
     if(!comment.empty())
@@ -502,7 +504,7 @@ bool Mdf4LoggerSensorReading::LogReading(
     if(stream_ == nullptr)
         return false;
 
-    auto entry = targets_.find(reading.sensor_id_hash);
+    const auto entry = targets_.find(reading.sensor_id_hash);
     if(entry == targets_.end())
         return false;
 

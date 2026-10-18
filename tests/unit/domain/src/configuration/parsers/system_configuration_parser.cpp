@@ -32,7 +32,7 @@ ZTEST(system_configuration_parser, test_CborSerializeDeserialize) {
 
     auto system_configuration = system_configuration_parser_GetTestConfiguration();
 
-    auto serialized_system_configuration = system_configuration_cbor_parser.Serialize(system_configuration);
+    const auto serialized_system_configuration = system_configuration_cbor_parser.Serialize(system_configuration);
     auto deserialized_system_configuration = system_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_system_configuration.get()
     );

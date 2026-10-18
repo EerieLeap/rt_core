@@ -37,7 +37,7 @@ CdmpDeviceInfo MakeDevice(uint8_t device_id) {
 ZTEST_SUITE(smp_device_group, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
-    auto network_info = std::make_shared<FakeNetworkInfo>();
+    const auto network_info = std::make_shared<FakeNetworkInfo>();
     network_info->self = {
         .device_id = 7,
         .uid = 0xCAFEBABE,
@@ -48,7 +48,7 @@ ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
     group.Register();
     SmpTestClient client;
 
-    auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
+    const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("product"), 4660);
@@ -69,7 +69,7 @@ ZTEST(smp_device_group, test_info_without_cdmp_has_no_identity) {
     group.Register();
     SmpTestClient client;
 
-    auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
+    const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
 
     zassert_true(response.IsOk());
     zassert_true(response.Has("product"));
@@ -85,7 +85,7 @@ ZTEST(smp_device_group, test_info_reports_the_sensor_inputs) {
     group.Register();
     SmpTestClient client;
 
-    auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
+    const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("build"), BUILD_NUMBER);
@@ -117,7 +117,7 @@ ZTEST(smp_device_group, test_only_one_instance_is_registered) {
 ZTEST_SUITE(smp_network_group, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(smp_network_group, test_devices_lists_the_network) {
-    auto network_info = std::make_shared<FakeNetworkInfo>();
+    const auto network_info = std::make_shared<FakeNetworkInfo>();
     network_info->devices = { MakeDevice(2), MakeDevice(5), MakeDevice(9) };
     NetworkMgmtGroup group(network_info);
     group.Register();
@@ -137,20 +137,20 @@ ZTEST(smp_network_group, test_devices_lists_the_network) {
 }
 
 ZTEST(smp_network_group, test_empty_request_lists_from_the_first_device) {
-    auto network_info = std::make_shared<FakeNetworkInfo>();
+    const auto network_info = std::make_shared<FakeNetworkInfo>();
     network_info->devices = { MakeDevice(4) };
     NetworkMgmtGroup group(network_info);
     group.Register();
     SmpTestClient client;
 
-    auto response = client.Read(SmpGroupId::NETWORK, std::to_underlying(NetworkMgmtGroup::Command::DEVICES), {});
+    const auto response = client.Read(SmpGroupId::NETWORK, std::to_underlying(NetworkMgmtGroup::Command::DEVICES), {});
 
     zassert_true(response.IsOk());
     zassert_equal(response.entries.size(), 1);
 }
 
 ZTEST(smp_network_group, test_a_large_network_is_paged) {
-    auto network_info = std::make_shared<FakeNetworkInfo>();
+    const auto network_info = std::make_shared<FakeNetworkInfo>();
     for(uint8_t id = 1; id <= 50; id++)
         network_info->devices.push_back(MakeDevice(id));
     NetworkMgmtGroup group(network_info);

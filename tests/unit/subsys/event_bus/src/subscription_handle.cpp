@@ -21,7 +21,7 @@ using TestSubscriptionHandle = SubscriptionHandle<TestEventType>;
 ZTEST_SUITE(event_bus_subscription_handle, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_subscription_handle, test_a_new_handle_is_valid_and_keeps_its_id_and_event_type) {
-    TestSubscriptionHandle handle(3, TestEventType::Beta);
+    const TestSubscriptionHandle handle(3, TestEventType::Beta);
 
     zassert_equal(handle.GetId(), static_cast<size_t>(3));
     zassert_equal(handle.GetEventType(), TestEventType::Beta);
@@ -49,7 +49,7 @@ ZTEST(event_bus_subscription_handle, test_Invalidate_can_be_repeated) {
 
 ZTEST(event_bus_subscription_handle, test_moving_a_handle_transfers_the_validity_to_the_destination) {
     TestSubscriptionHandle source(5, TestEventType::Gamma);
-    TestSubscriptionHandle moved(std::move(source));
+    const TestSubscriptionHandle moved(std::move(source));
 
     zassert_true(moved.IsValid());
     zassert_equal(moved.GetId(), static_cast<size_t>(5));
@@ -61,7 +61,7 @@ ZTEST(event_bus_subscription_handle, test_moving_an_invalidated_handle_keeps_the
     TestSubscriptionHandle source(5, TestEventType::Gamma);
     source.Invalidate();
 
-    TestSubscriptionHandle moved(std::move(source));
+    const TestSubscriptionHandle moved(std::move(source));
 
     zassert_false(moved.IsValid());
     zassert_equal(moved.GetId(), static_cast<size_t>(5));

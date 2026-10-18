@@ -35,7 +35,7 @@ MakeConfiguration(CanbusType type, bool is_extended_id, uint32_t frame_id, uint3
     channel.bitrate = bitrate;
     channel.is_extended_id = is_extended_id;
 
-    auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+    const auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
     message->frame_id = frame_id;
     message->name = "EL_FRAME_0";
     message->message_size = 8;
@@ -115,7 +115,7 @@ ZTEST(canbus_configuration_validator, test_unsupported_bitrate_is_rejected) {
 }
 
 ZTEST(canbus_configuration_validator, test_none_sentinel_and_unknown_canbus_types_are_invalid) {
-    for(auto type :
+    for(const auto type :
         { CanbusType::NONE, CanbusType::COUNT, static_cast<CanbusType>(200), static_cast<CanbusType>(UINT8_MAX) })
         zassert_false(
             Validates(MakeConfiguration(type, false, 0x123)), "Accepted invalid CAN bus type %u.",
@@ -160,12 +160,12 @@ ZTEST(canbus_configuration_validator, test_smp_base_must_be_extended_with_clear_
 ZTEST(canbus_configuration_validator, test_smp_bus_share_must_be_a_percentage) {
     auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
 
-    for(uint8_t share : { 0, 101, UINT8_MAX }) {
+    for(const uint8_t share : { 0, 101, UINT8_MAX }) {
         configuration.com_configuration.smp_bus_share_percent = share;
         zassert_false(Validates(configuration), "Accepted bus share %u %%.", static_cast<unsigned>(share));
     }
 
-    for(uint8_t share : { 1, 100 }) {
+    for(const uint8_t share : { 1, 100 }) {
         configuration.com_configuration.smp_bus_share_percent = share;
         zassert_true(Validates(configuration), "Rejected bus share %u %%.", static_cast<unsigned>(share));
     }
@@ -244,7 +244,7 @@ ZTEST(canbus_configuration_validator, test_a_disabled_message_cannot_share_a_fra
         auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
         auto& messages = configuration.channel_configurations.at(0).message_configurations;
 
-        auto duplicate = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+        const auto duplicate = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
         duplicate->frame_id = 0x123;
         duplicate->name = "EL_FRAME_1";
         duplicate->message_size = 8;

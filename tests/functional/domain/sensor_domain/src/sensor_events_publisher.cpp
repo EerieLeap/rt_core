@@ -105,8 +105,8 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
         std::atomic<int> sentinel{ 0 };
     };
 
-    auto calls = std::make_shared<FilterCalls>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto calls = std::make_shared<FilterCalls>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
 
     // The only subscriber on the channel, so Accepts() reaches its filter for every sensor; with an
     // earlier subscriber that accepts the sentinel, any_of would stop before it.
@@ -148,9 +148,9 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
 ZTEST(sensor_events_publisher, test_a_selector_filtered_subscriber_receives_only_its_sensor) {
     Rig rig("selector");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto b_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
@@ -172,8 +172,8 @@ ZTEST(sensor_events_publisher, test_a_selector_filtered_subscriber_receives_only
 ZTEST(sensor_events_publisher, test_a_subscription_added_after_the_cache_was_filled_is_honoured_at_the_next_tick) {
     Rig rig("late");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
     // Nobody wants a yet, so the tick caches it as rejected.
@@ -191,9 +191,9 @@ ZTEST(sensor_events_publisher, test_a_subscription_added_after_the_cache_was_fil
 ZTEST(sensor_events_publisher, test_a_sensor_whose_last_binding_goes_is_asked_again_and_no_longer_published) {
     Rig rig("dropped");
 
-    auto a_calls = std::make_shared<std::atomic<int>>(0);
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_calls = std::make_shared<std::atomic<int>>(0);
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
 
     // Takes only the sentinel and counts how often it is asked about a. Subscribed before a's
     // binding, so Accepts() reaches it for a before any_of stops at the binding.
@@ -235,8 +235,8 @@ ZTEST(sensor_events_publisher, test_a_sensor_whose_last_binding_goes_is_asked_ag
 ZTEST(sensor_events_publisher, test_values_committed_across_ticks_arrive_in_order) {
     Rig rig("order");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
@@ -254,10 +254,10 @@ ZTEST(sensor_events_publisher, test_values_committed_across_ticks_arrive_in_orde
 ZTEST(sensor_events_publisher, test_Replay_publishes_the_latest_value_of_every_accepted_sensor_once) {
     Rig rig("replay");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto b_recorder = std::make_shared<Recorder>();
-    auto d_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto d_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription d_binding = Bind(*rig.d, d_recorder);
@@ -295,8 +295,8 @@ ZTEST(sensor_events_publisher, test_Replay_publishes_the_latest_value_of_every_a
 ZTEST(sensor_events_publisher, test_Replay_reaches_a_sensor_bound_after_it_was_cached_as_rejected) {
     Rig rig("replay_late");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
     // a is cached as rejected, and then nothing commits it again: only the replay can bring it.
@@ -320,8 +320,8 @@ ZTEST(sensor_events_publisher, test_Replay_reaches_a_sensor_bound_after_it_was_c
 ZTEST(sensor_events_publisher, test_readings_without_a_value_are_not_published) {
     Rig rig("no_value");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
@@ -356,11 +356,11 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
 
     Rig rig("throws");
 
-    auto throws = std::make_shared<std::atomic<int>>(0);
-    auto least_unused = std::make_shared<std::atomic<size_t>>(SIZE_MAX);
-    auto thrower = std::make_shared<std::atomic<k_tid_t>>(nullptr);
-    auto b_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto throws = std::make_shared<std::atomic<int>>(0);
+    const auto least_unused = std::make_shared<std::atomic<size_t>>(SIZE_MAX);
+    const auto thrower = std::make_shared<std::atomic<k_tid_t>>(nullptr);
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
 
     const uint32_t a_hash = rig.a->id_hash;
     AnySubscription throwing = CreateScopedSubscription(
@@ -417,7 +417,7 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
 ZTEST(sensor_events_publisher, test_a_paused_publisher_publishes_nothing_until_resumed) {
     Rig rig("paused");
 
-    auto a_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
 
     zassert_true(rig.publisher->Pause());
@@ -445,7 +445,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
         Recorder sentinel;
     };
 
-    auto deliveries = std::make_shared<Deliveries>();
+    const auto deliveries = std::make_shared<Deliveries>();
 
     std::vector<std::shared_ptr<Sensor>> sensors;
     sensors.reserve(k_count);
@@ -456,7 +456,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
 
     std::ranges::sort(deliveries->sorted_hashes);
 
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
     frame->Configure(sensors);
 
     // Takes this case's sensors only: a failed case leaves its subscription behind, and one without
@@ -514,7 +514,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
 }
 
 ZTEST(sensor_events_publisher, test_a_running_publisher_can_be_destroyed) {
-    auto a_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
 
     {
         Rig rig("destroyed");
@@ -539,8 +539,8 @@ ZTEST(sensor_events_publisher, test_a_running_publisher_can_be_destroyed) {
     // And publishing goes on with the next publisher.
     Rig rig("after_destroyed");
 
-    auto b_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 

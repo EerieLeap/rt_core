@@ -273,7 +273,7 @@ public:
         if(!canbus_)
             return;
 
-        for(int handler_id : recorder_handler_ids_)
+        for(const int handler_id : recorder_handler_ids_)
             (*canbus_)->RemoveFrameReceivedHandler(handler_id);
     }
 

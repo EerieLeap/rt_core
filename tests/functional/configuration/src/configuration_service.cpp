@@ -38,14 +38,14 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_config_successfully_save
     system_config.build_number = 22;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
         "system_config", fs_service
     );
 
-    auto save_res = system_config_service->Save(&system_config);
+    const auto save_res = system_config_service->Save(&system_config);
     zassert_true(save_res);
 }
 
@@ -57,14 +57,14 @@ ZTEST(configuration_service, test_CborSystemConfig_Load_config_successfully_save
     system_config.build_number = 46;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
         "system_config", fs_service
     );
 
-    auto save_res = system_config_service->Save(&system_config);
+    const auto save_res = system_config_service->Save(&system_config);
     zassert_true(save_res);
 
     auto loaded_config = system_config_service->Load();
@@ -81,11 +81,11 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_are_delegated_t
     system_config.build_number = 55;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
-    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+    const auto work_queue_thread = std::make_shared<WorkQueueThread>(
         "config_wq_delegated", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY
     );
     zassert_true(work_queue_thread->Initialize());
@@ -112,11 +112,11 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock
     system_config.build_number = 77;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
-    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+    const auto work_queue_thread = std::make_shared<WorkQueueThread>(
         "config_wq_reentrant", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY
     );
     zassert_true(work_queue_thread->Initialize());
@@ -178,11 +178,11 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_n
     thread_config.device_id = 42;
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
-    auto work_queue_thread = std::make_shared<WorkQueueThread>(
+    const auto work_queue_thread = std::make_shared<WorkQueueThread>(
         "config_wq_contended", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY
     );
     zassert_true(work_queue_thread->Initialize());
@@ -236,14 +236,14 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_n
 
 ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_saved) {
     // Create first sensor config
-    std::string sensor_1_name = "name 1";
-    std::string sensor_1_unit = "km/h";
-    std::string sensor_1_description = "";
-    CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
+    const std::string sensor_1_name = "name 1";
+    const std::string sensor_1_unit = "km/h";
+    const std::string sensor_1_description = "";
+    const CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
         .unit = CborHelpers::ToZcborString(sensor_1_unit),
         .description = CborHelpers::ToZcborString(sensor_1_description) };
 
-    std::string sensor_1_expression = "({var_d} + {y}) * 4";
+    const std::string sensor_1_expression = "({var_d} + {y}) * 4";
     CborSensorConfigurationConfig configuration_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration_config_1.type = 1;
     configuration_config_1.sampling_rate_ms = 210;
@@ -254,24 +254,24 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     configuration_config_1.expression = CborHelpers::ToZcborString(sensor_1_expression);
     configuration_config_1.expression_present = true;
 
-    std::string sensor_1_id = "sensor_1";
+    const std::string sensor_1_id = "sensor_1";
     CborSensorConfig sensor_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
     sensor_config_1.id = CborHelpers::ToZcborString(sensor_1_id);
     sensor_config_1.metadata = metadata_config_1;
     sensor_config_1.configuration = configuration_config_1;
 
     // Create second sensor config
-    std::string sensor_2_name = "name 2";
-    std::string sensor_2_unit = "m/s";
-    std::string sensor_2_description = "";
-    CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
+    const std::string sensor_2_name = "name 2";
+    const std::string sensor_2_unit = "m/s";
+    const std::string sensor_2_description = "";
+    const CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
         .unit = CborHelpers::ToZcborString(sensor_2_unit),
         .description = CborHelpers::ToZcborString(sensor_2_description) };
 
     CborSensorCalibrationDataMap calibration_data_map_2(std::allocator_arg, Mrm::GetDefaultPmr());
     calibration_data_map_2.float32float = { { 1.0, 2.0 }, { 1.1, 2.1 }, { 1.2, 2.2 }, { 1.3, 2.3 } };
 
-    std::string sensor_2_expression = "({x} - 8 * {var_d}) / {f}";
+    const std::string sensor_2_expression = "({x} - 8 * {var_d}) / {f}";
     CborSensorConfigurationConfig configuration_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration_config_2.type = 1;
     configuration_config_2.sampling_rate_ms = 250;
@@ -283,7 +283,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     configuration_config_2.expression = CborHelpers::ToZcborString(sensor_2_expression);
     configuration_config_2.expression_present = true;
 
-    std::string sensor_2_id = "sensor_2";
+    const std::string sensor_2_id = "sensor_2";
     CborSensorConfig sensor_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
     sensor_config_2.id = CborHelpers::ToZcborString(sensor_2_id);
     sensor_config_2.metadata = metadata_config_2;
@@ -294,27 +294,27 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     sensors_config.CborSensorConfig_m.push_back(std::move(sensor_config_2));
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto cbor_sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>(
         "sensors_config", fs_service
     );
 
-    auto save_res = cbor_sensors_config_service->Save(&sensors_config);
+    const auto save_res = cbor_sensors_config_service->Save(&sensors_config);
     zassert_true(save_res);
 }
 
 ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_saved_and_loaded) {
     // Create first sensor config
-    std::string sensor_1_name = "name 3";
-    std::string sensor_1_unit = "km/h";
-    std::string sensor_1_description = "";
-    CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
+    const std::string sensor_1_name = "name 3";
+    const std::string sensor_1_unit = "km/h";
+    const std::string sensor_1_description = "";
+    const CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
         .unit = CborHelpers::ToZcborString(sensor_1_unit),
         .description = CborHelpers::ToZcborString(sensor_1_description) };
 
-    std::string sensor_1_expression = "({var_d} + {y}) * 4";
+    const std::string sensor_1_expression = "({var_d} + {y}) * 4";
     CborSensorConfigurationConfig configuration_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration_config_1.type = 1;
     configuration_config_1.sampling_rate_ms = 210;
@@ -327,24 +327,24 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     configuration_config_1.debounce_ms = 30;
     configuration_config_1.input_mode = 1;
 
-    std::string sensor_1_id = "sensor_3";
+    const std::string sensor_1_id = "sensor_3";
     CborSensorConfig sensor_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
     sensor_config_1.id = CborHelpers::ToZcborString(sensor_1_id);
     sensor_config_1.metadata = metadata_config_1;
     sensor_config_1.configuration = configuration_config_1;
 
     // Create second sensor config
-    std::string sensor_2_name = "name 4";
-    std::string sensor_2_unit = "m/s";
-    std::string sensor_2_description = "Some description 4";
-    CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
+    const std::string sensor_2_name = "name 4";
+    const std::string sensor_2_unit = "m/s";
+    const std::string sensor_2_description = "Some description 4";
+    const CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
         .unit = CborHelpers::ToZcborString(sensor_2_unit),
         .description = CborHelpers::ToZcborString(sensor_2_description) };
 
     CborSensorCalibrationDataMap calibration_data_map_2(std::allocator_arg, Mrm::GetDefaultPmr());
     calibration_data_map_2.float32float = { { 1.0, 2.0 }, { 1.1, 2.1 }, { 1.2, 2.2 }, { 1.3, 2.3 } };
 
-    std::string sensor_2_expression = "({x} - 8 * {var_d}) / {f}";
+    const std::string sensor_2_expression = "({x} - 8 * {var_d}) / {f}";
     CborSensorConfigurationConfig configuration_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration_config_2.type = 1;
     configuration_config_2.sampling_rate_ms = 250;
@@ -356,7 +356,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     configuration_config_2.expression = CborHelpers::ToZcborString(sensor_2_expression);
     configuration_config_2.expression_present = true;
 
-    std::string sensor_2_id = "sensor_4";
+    const std::string sensor_2_id = "sensor_4";
     CborSensorConfig sensor_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
     sensor_config_2.id = CborHelpers::ToZcborString(sensor_2_id);
     sensor_config_2.is_enabled = false;
@@ -370,7 +370,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
 
     // Initialize services
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>(
@@ -378,7 +378,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     );
 
     // Save config
-    auto save_res = sensors_config_service->Save(&sensors_config);
+    const auto save_res = sensors_config_service->Save(&sensors_config);
     zassert_true(save_res);
 
     // Load config and verify
@@ -484,8 +484,8 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
 }
 
 ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_saved_and_loaded) {
-    std::string message_name = "EL_FRAME_0";
-    std::string script_path = "";
+    const std::string message_name = "EL_FRAME_0";
+    const std::string script_path = "";
     CborCanMessageConfig message_config(std::allocator_arg, Mrm::GetDefaultPmr());
     message_config.frame_id = 0x123;
     message_config.is_enabled = false;
@@ -507,7 +507,7 @@ ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_save
     };
 
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
     auto canbus_config_service = std::make_unique<CborConfigurationService<CborCanbusConfig>>(

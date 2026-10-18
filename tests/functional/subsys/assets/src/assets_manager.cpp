@@ -116,7 +116,9 @@ struct BlockedReferrer {
 };
 
 void AskIfReferenced(void* holder, void*, void*) {
-    std::unique_ptr<std::shared_ptr<BlockedReferrer>> state(static_cast<std::shared_ptr<BlockedReferrer>*>(holder));
+    const std::unique_ptr<std::shared_ptr<BlockedReferrer>> state(
+        static_cast<std::shared_ptr<BlockedReferrer>*>(holder)
+    );
 
     (*state)->manager.IsReferenced("anything.lua");
 }
@@ -155,7 +157,7 @@ ZTEST(assets_manager, test_has_access_tests_the_bit_of_the_operation) {
 
 ZTEST(assets_manager, test_register_and_find_return_the_provider) {
     AssetsManager manager;
-    auto store = MakeUnavailableStore("ui_assets/images");
+    const auto store = MakeUnavailableStore("ui_assets/images");
 
     zassert_true(manager.Register(MakeProvider(AssetKind::IMAGES, "images", store)));
 
@@ -188,8 +190,8 @@ ZTEST(assets_manager, test_find_of_a_kind_that_is_not_registered_is_null) {
 
 ZTEST(assets_manager, test_registering_a_kind_twice_is_refused) {
     AssetsManager manager;
-    auto first_store = MakeUnavailableStore("first");
-    auto second_store = MakeUnavailableStore("second");
+    const auto first_store = MakeUnavailableStore("first");
+    const auto second_store = MakeUnavailableStore("second");
 
     zassert_true(manager.Register(MakeProvider(AssetKind::SENSOR_SCRIPTS, "sensor_scripts", first_store)));
     zassert_false(manager.Register(MakeProvider(AssetKind::SENSOR_SCRIPTS, "other_name", second_store)));
@@ -286,7 +288,7 @@ ZTEST(assets_manager, test_get_providers_is_ordered_by_kind) {
 // A widget that found its provider keeps drawing from it while a controller unregisters the kind.
 ZTEST(assets_manager, test_a_found_provider_stays_usable_after_unregister) {
     AssetsManager manager;
-    auto store = MakeUnavailableStore("ui_assets/images");
+    const auto store = MakeUnavailableStore("ui_assets/images");
 
     zassert_true(manager.Register(MakeProvider(AssetKind::IMAGES, "images", store)));
 
@@ -512,7 +514,7 @@ ZTEST(assets_manager, test_a_referrer_may_change_the_referrers_while_it_runs) {
 // A referrer that is stuck, say behind the LVGL lock, must not hold up whoever needs the registry:
 // widgets call Find() under the LVGL lock, so a registry lock held across a referrer could deadlock.
 ZTEST(assets_manager, test_referrers_run_without_the_registry_lock) {
-    auto state = std::make_shared<BlockedReferrer>();
+    const auto state = std::make_shared<BlockedReferrer>();
     BlockedReferrer* blocked = state.get();
 
     blocked->manager.AddReferrer(blocked, [blocked](std::string_view) {

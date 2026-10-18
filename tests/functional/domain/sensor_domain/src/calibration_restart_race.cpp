@@ -68,19 +68,19 @@ void Restart(void* context, void*, void*) {
 } // namespace
 
 ZTEST(calibration_restart_race, test_calibration_and_restarts_leave_processing_running) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
     DriveConstant(*adc, 0, 1000);
     DriveConstant(*adc, 1, 2000);
 
-    auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
+    const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
     zassert_true(adc_configuration_manager->Update(
         *MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } }))
     ));
 
-    auto rig = MakeProcessingRig(
+    const auto rig = MakeProcessingRig(
         fs_service, adc_manager, adc_configuration_manager,
         {
             MakeAnalogSensor("fast", 0, 10),

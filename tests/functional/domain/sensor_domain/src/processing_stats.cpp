@@ -45,7 +45,7 @@ struct processing_stats_PmLayout {
 } // namespace
 
 ZTEST(processing_stats, test_FormatChannels_names_channels_by_their_global_index) {
-    processing_stats_PmLayout layout;
+    const processing_stats_PmLayout layout;
     std::array<char, 128> line{};
 
     const size_t next = RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);
@@ -83,7 +83,7 @@ ZTEST(processing_stats, test_FormatChannels_rounds_to_the_millivolt) {
 }
 
 ZTEST(processing_stats, test_FormatChannels_wraps_on_whole_channels) {
-    processing_stats_PmLayout layout;
+    const processing_stats_PmLayout layout;
 
     // " ch0 0.898 V" is 12 characters: two do not fit with the terminator, one does.
     std::array<char, 24> line{};
@@ -104,7 +104,7 @@ ZTEST(processing_stats, test_FormatChannels_wraps_on_whole_channels) {
 }
 
 ZTEST(processing_stats, test_FormatChannels_cuts_a_channel_the_line_cannot_hold) {
-    processing_stats_PmLayout layout;
+    const processing_stats_PmLayout layout;
     std::array<char, 8> line{};
 
     const size_t next = RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);

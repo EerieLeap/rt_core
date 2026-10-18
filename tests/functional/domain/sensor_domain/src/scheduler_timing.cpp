@@ -116,7 +116,7 @@ SchedulerRig MakeSchedulerRig(
     rig.generation->adc_configuration = std::move(adc_configuration);
 
     rig.recorder = std::make_shared<RecordingProcessor>();
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(rig.recorder);
     rig.pipeline = std::make_shared<ReadingPipeline>(rig.frame, processors, rig.time_service);
 
@@ -163,9 +163,9 @@ bool ThrowsInvalidArgument(TFunction function) {
 ZTEST_SUITE(rate_group_scheduler, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(rate_group_scheduler, test_SetGroups_rejects_a_period_below_1_ms_and_keeps_the_groups) {
-    auto time_service = MakeTimeService();
-    auto frame = std::make_shared<SensorReadingsFrame>();
-    auto pipeline = std::make_shared<ReadingPipeline>(
+    const auto time_service = MakeTimeService();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto pipeline = std::make_shared<ReadingPipeline>(
         frame, std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>(), time_service
     );
 
@@ -211,9 +211,9 @@ ZTEST(rate_group_scheduler, test_SetGroups_rejects_a_period_below_1_ms_and_keeps
 // Deadlines are whole system ticks: a period that is not one is rounded up, and the stats report
 // what the group runs at. The conversion is 64-bit, so a period of days does not wrap.
 ZTEST(rate_group_scheduler, test_SetGroups_reports_the_period_the_group_runs_at) {
-    auto time_service = MakeTimeService();
-    auto frame = std::make_shared<SensorReadingsFrame>();
-    auto pipeline = std::make_shared<ReadingPipeline>(
+    const auto time_service = MakeTimeService();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto pipeline = std::make_shared<ReadingPipeline>(
         frame, std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>(), time_service
     );
 
@@ -251,7 +251,7 @@ ZTEST(rate_group_scheduler, test_SetGroups_reports_the_period_the_group_runs_at)
 }
 
 ZTEST(rate_group_scheduler, test_Start_without_groups_schedules_nothing) {
-    auto rig = MakeSchedulerRig({});
+    const auto rig = MakeSchedulerRig({});
 
     zassert_true(rig.scheduler_service->Start());
     zassert_equal(rig.scheduler_service->GetRateGroupCount(), 0);
@@ -272,7 +272,7 @@ ZTEST(scheduler_timing, test_delivered_period_equals_the_configured_period) {
     constexpr int kPeriodMs = 20;
     constexpr size_t kTicks = 100;
 
-    auto rig = MakeSchedulerRig({ MakeVirtualSensor("timed", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("timed", "1", kPeriodMs) });
     rig.recorder->costly_sensor_id_hash = StringHelpers::GetHash("timed");
     rig.recorder->cost_us = 5000;
 
@@ -318,7 +318,7 @@ ZTEST(scheduler_timing, test_delivered_period_equals_the_configured_period) {
 ZTEST(scheduler_timing, test_overruns_are_counted_and_the_phase_is_kept) {
     constexpr int kPeriodMs = 20;
 
-    auto rig = MakeSchedulerRig({ MakeVirtualSensor("overrun", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("overrun", "1", kPeriodMs) });
     rig.recorder->costly_sensor_id_hash = StringHelpers::GetHash("overrun");
     rig.recorder->cost_us = 30000;
 
@@ -356,7 +356,7 @@ ZTEST(scheduler_timing, test_overruns_are_counted_and_the_phase_is_kept) {
 // The 40 ms sensor comes first in the configuration, so its group is built first; the scheduler
 // still runs the 20 ms group first whenever both are due.
 ZTEST(scheduler_timing, test_faster_groups_run_first_at_coincident_deadlines) {
-    auto rig = MakeSchedulerRig(
+    const auto rig = MakeSchedulerRig(
         {
             MakeVirtualSensor("slow", "1", 40),
             MakeVirtualSensor("fast", "2", 20),
@@ -407,13 +407,13 @@ ZTEST(scheduler_timing, test_faster_groups_run_first_at_coincident_deadlines) {
 ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
     constexpr uint16_t kSamples = 8;
 
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
-    auto adc_configuration = MakeAdcConfiguration(
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
+    const auto adc_configuration = MakeAdcConfiguration(
         adc_manager->GetChannelCount(), kSamples, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
     );
 
-    auto rig = MakeSchedulerRig(
+    const auto rig = MakeSchedulerRig(
         {
             MakeAnalogSensor("first", 0, 20),
             MakeAnalogSensor("second", 0, 20),
@@ -453,7 +453,7 @@ ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
 ZTEST(scheduler_timing, test_pause_and_resume_realign_the_deadlines) {
     constexpr int kPeriodMs = 20;
 
-    auto rig = MakeSchedulerRig({ MakeVirtualSensor("paused", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("paused", "1", kPeriodMs) });
     const k_ticks_t period_ticks = k_ms_to_ticks_ceil32(kPeriodMs);
 
     const int64_t start_ticks = k_uptime_ticks();
@@ -505,7 +505,7 @@ namespace {
 void HaltDuringTickThenRestart(bool is_stop) {
     constexpr int kPeriodMs = 20;
 
-    auto rig = MakeSchedulerRig({ MakeVirtualSensor("halted", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("halted", "1", kPeriodMs) });
     rig.recorder->costly_sensor_id_hash = StringHelpers::GetHash("halted");
     rig.recorder->cost_us = 15000;
     const k_ticks_t period_ticks = k_ms_to_ticks_ceil32(kPeriodMs);

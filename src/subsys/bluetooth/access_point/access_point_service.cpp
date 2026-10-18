@@ -180,13 +180,13 @@ ssize_t AccessPointService::InfoReadCallback(
 }
 
 void AccessPointService::SmpSentCallback(bt_conn* /*conn*/, void* /*user_data*/) {
-    AccessPointService* service = instance_.load();
+    const AccessPointService* service = instance_.load();
     if(service != nullptr && service->callbacks_.on_smp_sent)
         service->callbacks_.on_smp_sent();
 }
 
 void AccessPointService::LiveSentCallback(bt_conn* /*conn*/, void* /*user_data*/) {
-    AccessPointService* service = instance_.load();
+    const AccessPointService* service = instance_.load();
     if(service != nullptr && service->callbacks_.on_live_sent)
         service->callbacks_.on_live_sent();
 }

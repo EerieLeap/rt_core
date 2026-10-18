@@ -25,7 +25,9 @@ FileHistoryBlock::~FileHistoryBlock() {
 }
 
 void FileHistoryBlock::SetTool(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version) {
-    auto metadata_comment_block = std::dynamic_pointer_cast<MetadataBlock>(links_.GetLink(LinkType::MetadataComment));
+    const auto metadata_comment_block = std::dynamic_pointer_cast<MetadataBlock>(
+        links_.GetLink(LinkType::MetadataComment)
+    );
     metadata_comment_block->SetText(
         GetId(),
         "<TX>created</TX>"
@@ -46,7 +48,7 @@ void FileHistoryBlock::SetTimeNs(uint64_t time_ns) {
 
 void FileHistoryBlock::LinkBlock(std::shared_ptr<FileHistoryBlock> next_block) {
     auto* last = this;
-    while(auto next = last->links_.GetLink(LinkType::FileHistoryNext))
+    while(const auto next = last->links_.GetLink(LinkType::FileHistoryNext))
         last = static_cast<FileHistoryBlock*>(next.get());
 
     last->links_.SetLink(LinkType::FileHistoryNext, std::move(next_block));

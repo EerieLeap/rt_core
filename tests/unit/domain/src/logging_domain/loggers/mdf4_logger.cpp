@@ -366,27 +366,28 @@ ZTEST(mdf4_logger, test_InvalidReadingsSetTheirInvalidationBits) {
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
     const uint64_t header_size = logger.GetBytesWritten();
 
-    auto reading = [&sensors](size_t sensor, std::optional<float> value, std::optional<float> raw_value, int time_ms) {
-        auto result = MakeValueReading(*sensors[sensor], value, START_TIME + milliseconds(time_ms));
-        result.raw_value = raw_value;
+    const auto reading =
+        [&sensors](size_t sensor, std::optional<float> value, std::optional<float> raw_value, int time_ms) {
+            auto result = MakeValueReading(*sensors[sensor], value, START_TIME + milliseconds(time_ms));
+            result.raw_value = raw_value;
 
-        return result;
-    };
+            return result;
+        };
 
-    auto valid = reading(0, 9.6F, 2.0F, 100);
+    const auto valid = reading(0, 9.6F, 2.0F, 100);
     // The expression failed after the input was measured: the value is a leftover, the raw value real.
     auto error = reading(0, 9.6F, 2.5F, 200);
     error.SetError(ReadingError::EXPRESSION_FAILED);
-    auto without_value = reading(0, std::nullopt, 3.0F, 300);
-    auto without_raw = reading(0, 13.6F, std::nullopt, 400);
+    const auto without_value = reading(0, std::nullopt, 3.0F, 300);
+    const auto without_raw = reading(0, 13.6F, std::nullopt, 400);
     auto failed_read = reading(0, std::nullopt, std::nullopt, 500);
     failed_read.SetError(ReadingError::READER_FAILED);
-    auto valid_again = reading(0, 15.6F, 3.5F, 600);
+    const auto valid_again = reading(0, 15.6F, 3.5F, 600);
 
-    auto coolant_valid = reading(1, 80.0F, std::nullopt, 150);
+    const auto coolant_valid = reading(1, 80.0F, std::nullopt, 150);
     auto coolant_error = reading(1, 80.0F, std::nullopt, 250);
     coolant_error.SetError(ReadingError::READER_FAILED);
-    auto coolant_valid_again = reading(1, 81.0F, std::nullopt, 350);
+    const auto coolant_valid_again = reading(1, 81.0F, std::nullopt, 350);
 
     const std::array<const SensorReading*, 9> readings{ &valid, &coolant_valid, &error, &coolant_error, &without_value,
         &coolant_valid_again, &without_raw, &failed_read, &valid_again };
@@ -461,7 +462,7 @@ ZTEST(mdf4_logger, test_ErrorReadingIsASampleForLogOnlyNewData) {
     const auto first = MakeValueReading(*sensors[0], 1.0F, START_TIME + milliseconds(100));
     const auto recovered = MakeValueReading(*sensors[0], 2.0F, START_TIME + milliseconds(400));
 
-    for(bool log_only_new_data : { true, false }) {
+    for(const bool log_only_new_data : { true, false }) {
         Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, log_only_new_data), sensors, MakeMetadata());
 
         auto stream = MakeStream();
@@ -946,7 +947,7 @@ ZTEST(mdf4_logger, test_LogFileNaming) {
 
 ZTEST(mdf4_logger, test_AllocationCounterCounts) {
     const size_t before = GetAllocationCount();
-    auto block = std::make_unique<uint8_t[]>(32);
+    const auto block = std::make_unique<uint8_t[]>(32);
 
     zassert_equal(
         GetAllocationCount() - before, 1,

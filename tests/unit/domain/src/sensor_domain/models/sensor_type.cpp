@@ -22,7 +22,7 @@ ZTEST(sensor_type, test_persisted_type_ids_are_unchanged) {
 }
 
 ZTEST(sensor_type, test_defined_types_are_valid) {
-    for(auto type : all_types)
+    for(const auto type : all_types)
         zassert_true(IsSensorTypeValid(type));
 }
 

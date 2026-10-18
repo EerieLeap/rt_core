@@ -72,13 +72,13 @@ std::shared_ptr<Sensor> MakeIndicatorSensor(std::string_view id, int channel) {
 } // namespace
 
 ZTEST(start_failure, test_a_source_that_throws_leaves_nothing_running) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
-    auto gpio = std::make_shared<FakeGpio>();
+    const auto gpio = std::make_shared<FakeGpio>();
     // The first reader attaches, the second throws.
     gpio->refused_registration = 1;
 
-    auto rig = MakeProcessingRig(
+    const auto rig = MakeProcessingRig(
         fs_service, nullptr, nullptr,
         {
             MakeIndicatorSensor("first", 0),

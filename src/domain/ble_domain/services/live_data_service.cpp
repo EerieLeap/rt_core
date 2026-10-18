@@ -80,7 +80,7 @@ bool LiveDataService::IsSubscribed() const {
 }
 
 void LiveDataService::SampleWorkHandler(k_work* work) {
-    auto* sample_work = CONTAINER_OF(k_work_delayable_from_work(work), SampleWork, work);
+    const auto* sample_work = CONTAINER_OF(k_work_delayable_from_work(work), SampleWork, work);
     sample_work->service->Sample();
 }
 

@@ -80,7 +80,7 @@ ZTEST(writer_logging_control, test_AReceivedStartIsTheWritersOnly) {
 }
 
 ZTEST(writer_logging_control, test_WithoutANetworkOnlyTheWriterIsServed) {
-    auto local = std::make_shared<FakeLoggingControl>();
+    const auto local = std::make_shared<FakeLoggingControl>();
     WriterLoggingControl control(local, nullptr, 0);
 
     control.RequestStart(kAllUnits);

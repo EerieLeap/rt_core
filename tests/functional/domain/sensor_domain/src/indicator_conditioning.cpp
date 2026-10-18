@@ -197,7 +197,7 @@ HandPipeline MakeHandPipeline(const std::vector<std::shared_ptr<Sensor>>& sensor
     hand.generation = SensorPipelineBuilder(nullptr, hand.frame)
                           .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(hand.frame));
     hand.pipeline = std::make_shared<ReadingPipeline>(hand.frame, processors, MakeTimeService());
 
@@ -283,15 +283,15 @@ bool WaitFor(Predicate predicate) {
 } // namespace
 
 ZTEST(indicator_conditioning, test_only_an_indicator_with_conditioning_gets_a_conditioner) {
-    auto analog = MakeAnalogSensor("cond_analog", 0, 100);
+    const auto analog = MakeAnalogSensor("cond_analog", 0, 100);
     // The validator refuses this; the builder still gives an analog sensor nothing.
-    auto debounced_analog = MakeAnalogSensor("cond_debounced_analog", 1, 100);
+    const auto debounced_analog = MakeAnalogSensor("cond_debounced_analog", 1, 100);
     debounced_analog->configuration.debounce_ms = 30;
 
-    auto plain = MakeIndicator("cond_plain", 0);
-    auto debounced = MakeIndicator("cond_debounced", 1, 30);
-    auto toggle = MakeDerivedIndicator("cond_toggle", "cond_plain", 0, IndicatorInputMode::Toggle);
-    auto disabled = MakeIndicator("cond_disabled", 2, 30, IndicatorInputMode::Toggle);
+    const auto plain = MakeIndicator("cond_plain", 0);
+    const auto debounced = MakeIndicator("cond_debounced", 1, 30);
+    const auto toggle = MakeDerivedIndicator("cond_toggle", "cond_plain", 0, IndicatorInputMode::Toggle);
+    const auto disabled = MakeIndicator("cond_disabled", 2, 30, IndicatorInputMode::Toggle);
     disabled->is_enabled = false;
 
     const auto generation = Build({ analog, debounced_analog, plain, debounced, toggle, disabled });
@@ -438,7 +438,7 @@ ZTEST(indicator_conditioning, test_without_a_work_queue_a_held_change_settles_on
 // The switches come from the last generation that ran: a configuration that fails to start, here
 // with another debounce that would start the switch off, takes nothing from them.
 ZTEST(indicator_conditioning, test_a_failed_start_keeps_the_switches_of_the_last_generation_that_ran) {
-    auto gpio = std::make_shared<HandGpio>();
+    const auto gpio = std::make_shared<HandGpio>();
     const std::vector<std::shared_ptr<Sensor>> sensors{
         MakeIndicator("failed_start", 0, 0, IndicatorInputMode::Toggle)
     };
@@ -581,14 +581,14 @@ public:
         if(!reading.value.has_value())
             return;
 
-        ScopedMutex guard(lock_);
+        const ScopedMutex guard(lock_);
         entries_.push_back({ runtime.sensor->id_hash, { k_uptime_get(), reading.value.value() } });
     }
 
     [[nodiscard]] std::vector<Record> Of(std::string_view sensor_id) const {
         const uint32_t sensor_id_hash = StringHelpers::GetHash(sensor_id);
 
-        ScopedMutex guard(lock_);
+        const ScopedMutex guard(lock_);
 
         std::vector<Record> records;
         for(const auto& entry : entries_) {
@@ -709,7 +709,7 @@ void AssertTransitions(
 
 ZTEST(indicator_conditioning, test_without_conditioning_an_edge_is_committed_at_once) {
     SetInput(kChAtOnce, false);
-    auto rig = MakeRig({ MakeIndicator("at_once", kChAtOnce), MakeProbe("at_once_probe", "at_once") });
+    const auto rig = MakeRig({ MakeIndicator("at_once", kChAtOnce), MakeProbe("at_once_probe", "at_once") });
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -731,7 +731,7 @@ ZTEST(indicator_conditioning, test_without_conditioning_an_edge_is_committed_at_
 
 ZTEST(indicator_conditioning, test_with_debounce_0_a_toggle_flips_at_once) {
     SetInput(kChToggleAtOnce, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("toggle_at_once", kChToggleAtOnce, 0, IndicatorInputMode::Toggle),
             MakeProbe("toggle_at_once_probe", "toggle_at_once"),
@@ -767,7 +767,9 @@ ZTEST(indicator_conditioning, test_with_debounce_0_a_toggle_flips_at_once) {
 
 ZTEST(indicator_conditioning, test_an_edge_shorter_than_the_window_is_not_committed) {
     SetInput(kChShortEdge, false);
-    auto rig = MakeRig({ MakeIndicator("short_edge", kChShortEdge, 100), MakeProbe("short_edge_probe", "short_edge") });
+    const auto rig = MakeRig(
+        { MakeIndicator("short_edge", kChShortEdge, 100), MakeProbe("short_edge_probe", "short_edge") }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -788,7 +790,9 @@ ZTEST(indicator_conditioning, test_an_edge_shorter_than_the_window_is_not_commit
 
 ZTEST(indicator_conditioning, test_an_edge_that_holds_is_committed_once_at_the_end_of_the_window) {
     SetInput(kChHeldEdge, false);
-    auto rig = MakeRig({ MakeIndicator("held_edge", kChHeldEdge, 100), MakeProbe("held_edge_probe", "held_edge") });
+    const auto rig = MakeRig(
+        { MakeIndicator("held_edge", kChHeldEdge, 100), MakeProbe("held_edge_probe", "held_edge") }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -827,7 +831,7 @@ ZTEST(indicator_conditioning, test_an_edge_that_holds_is_committed_once_at_the_e
 // it do not restart it, and the change commits at its end.
 ZTEST(indicator_conditioning, test_a_polled_change_is_committed_once_at_the_end_of_its_window) {
     SetInput(kChPolled, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("polled", kChPolled, 100, IndicatorInputMode::Level, 10),
             MakeProbe("polled_probe", "polled"),
@@ -872,7 +876,7 @@ ZTEST(indicator_conditioning, test_a_polled_change_is_committed_once_at_the_end_
 // contact has been quiet for the window, from its last edge.
 ZTEST(indicator_conditioning, test_bounce_around_an_edge_commits_one_change) {
     SetInput(kChBounce, false);
-    auto rig = MakeRig({ MakeIndicator("bounce", kChBounce, 50), MakeProbe("bounce_probe", "bounce") });
+    const auto rig = MakeRig({ MakeIndicator("bounce", kChBounce, 50), MakeProbe("bounce_probe", "bounce") });
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -913,7 +917,7 @@ ZTEST(indicator_conditioning, test_bounce_around_an_edge_commits_one_change) {
 
 ZTEST(indicator_conditioning, test_the_first_value_of_a_generation_is_committed_at_once) {
     SetInput(kChFirstValue, true);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         { MakeIndicator("first_value", kChFirstValue, 100), MakeProbe("first_value_probe", "first_value") }
     );
 
@@ -930,7 +934,7 @@ ZTEST(indicator_conditioning, test_the_first_value_of_a_generation_is_committed_
 
 ZTEST(indicator_conditioning, test_toggle_flips_on_each_settled_press_and_holds) {
     SetInput(kChToggle, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("toggle", kChToggle, 30, IndicatorInputMode::Toggle),
             MakeProbe("toggle_probe", "toggle"),
@@ -993,7 +997,7 @@ ZTEST(indicator_conditioning, test_toggle_flips_on_each_settled_press_and_holds)
 
 ZTEST(indicator_conditioning, test_a_button_held_at_start_does_not_flip_the_switch) {
     SetInput(kChHeldAtStart, true);
-    auto rig = MakeRig({ MakeIndicator("held_at_start", kChHeldAtStart, 30, IndicatorInputMode::Toggle) });
+    const auto rig = MakeRig({ MakeIndicator("held_at_start", kChHeldAtStart, 30, IndicatorInputMode::Toggle) });
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1017,10 +1021,10 @@ ZTEST(indicator_conditioning, test_a_button_held_at_start_does_not_flip_the_swit
 // Polled every tick: an error says nothing about the input, so the window that runs keeps its end.
 ZTEST(indicator_conditioning, test_an_error_during_a_window_neither_cancels_nor_restarts_it) {
     SetInput(kChError, false);
-    auto fault_injector = std::make_shared<FaultInjector>();
+    const auto fault_injector = std::make_shared<FaultInjector>();
     fault_injector->sensor_id_hash = StringHelpers::GetHash("faulty");
 
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("faulty", kChError, 100, IndicatorInputMode::Level, 10),
             MakeProbe("faulty_probe", "faulty"),
@@ -1070,7 +1074,7 @@ ZTEST(indicator_conditioning, test_an_error_during_a_window_neither_cancels_nor_
 // A dependent is evaluated on commits only, so what the conditioner holds never reaches it.
 ZTEST(indicator_conditioning, test_a_dependent_sees_only_settled_values) {
     SetInput(kChFollowed, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("followed", kChFollowed, 100),
             MakeDerivedIndicator("follower", "followed"),
@@ -1115,7 +1119,7 @@ ZTEST(indicator_conditioning, test_a_dependent_sees_only_settled_values) {
 // sensors that read it.
 ZTEST(indicator_conditioning, test_a_derived_indicator_settles_on_its_own_window) {
     SetInput(kChContact, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("contact", kChContact),
             MakeDerivedIndicator("moving", "contact", 100),
@@ -1148,7 +1152,7 @@ ZTEST(indicator_conditioning, test_a_derived_indicator_settles_on_its_own_window
 // alive past Stop(), so a settle that was not cancelled would still commit into the frame.
 ZTEST(indicator_conditioning, test_Stop_drops_a_held_change) {
     SetInput(kChStop, false);
-    auto rig = MakeRig({ MakeIndicator("stopped", kChStop, 100), MakeProbe("stopped_probe", "stopped") });
+    const auto rig = MakeRig({ MakeIndicator("stopped", kChStop, 100), MakeProbe("stopped_probe", "stopped") });
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1179,7 +1183,7 @@ ZTEST(indicator_conditioning, test_Stop_drops_a_held_change) {
 // confirms or cancels the change as any reading does.
 ZTEST(indicator_conditioning, test_a_pause_stops_the_window_of_a_held_change) {
     SetInput(kChPause, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("paused", kChPause, 100, IndicatorInputMode::Toggle),
             MakeProbe("paused_probe", "paused"),
@@ -1228,7 +1232,7 @@ ZTEST(indicator_conditioning, test_a_pause_stops_the_window_of_a_held_change) {
 ZTEST(indicator_conditioning, test_a_switch_is_committed_before_its_input_has_a_reading) {
     SetInput(kChSwitchAtStart, false);
     SetInput(kChLevelAtStart, false);
-    auto rig = MakeRig(
+    const auto rig = MakeRig(
         {
             MakeIndicator("switch_at_start", kChSwitchAtStart, 30, IndicatorInputMode::Toggle, 1000),
             MakeProbe("switch_at_start_probe", "switch_at_start"),
@@ -1404,7 +1408,7 @@ ZTEST(indicator_conditioning, test_a_new_service_starts_every_switch_off) {
         MakeIndicator("reboot", kChReboot, 0, IndicatorInputMode::Toggle)
     };
 
-    auto before = MakeRig(sensors);
+    const auto before = MakeRig(sensors);
     zassert_true(before.processing.processing_service->Start());
 
     const Clock clock;
@@ -1417,7 +1421,7 @@ ZTEST(indicator_conditioning, test_a_new_service_starts_every_switch_off) {
     zassert_true(before.processing.processing_service->Stop());
 
     // The same stored configuration in a new service, as after a reboot.
-    auto after = MakeRig(sensors, nullptr, before.fs_service);
+    const auto after = MakeRig(sensors, nullptr, before.fs_service);
     zassert_true(after.processing.processing_service->Start());
     clock.SleepUntil(80);
     zassert_equal(after.Value("reboot"), 0.0F, "A switch does not survive a reboot");
@@ -1554,7 +1558,7 @@ ZTEST_SUITE(indicator_conditioning_can, NULL, NULL, NULL, StopCanLoopbackDevice,
 // the conditioner's work item. A pause detaches the routes and stops the window; Resume() runs
 // what was left of it, since no frame will confirm the change.
 ZTEST(indicator_conditioning_can, test_a_can_signal_that_stops_changing_settles_at_the_end_of_its_window) {
-    auto rig = MakeCanRig({ MakeCanIndicator("can_signal", 100), MakeProbe("can_signal_probe", "can_signal") });
+    const auto rig = MakeCanRig({ MakeCanIndicator("can_signal", 100), MakeProbe("can_signal_probe", "can_signal") });
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());

@@ -25,23 +25,23 @@ ZTEST_SUITE(system_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_successfully_saved) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
     auto cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
         "system_config", fs_service
     );
-    auto system_configuration_manager = std::make_shared<SystemConfigurationManager>(
+    const auto system_configuration_manager = std::make_shared<SystemConfigurationManager>(
         std::move(cbor_system_configuration_service)
     );
 
-    SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
+    const SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
 
-    bool result = system_configuration_manager->Update(system_configuration);
+    const bool result = system_configuration_manager->Update(system_configuration);
     zassert_true(result);
 
-    auto saved_system_configuration = system_configuration_manager->Get();
+    const auto saved_system_configuration = system_configuration_manager->Get();
 
     zassert_equal(saved_system_configuration->hw_version, system_configuration.hw_version);
     zassert_equal(saved_system_configuration->sw_version, system_configuration.sw_version);
@@ -49,7 +49,7 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_and_Load) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -63,7 +63,7 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
     SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     system_configuration.device_id = 14;
 
-    bool result = system_configuration_manager->Update(system_configuration);
+    const bool result = system_configuration_manager->Update(system_configuration);
     zassert_true(result);
 
     cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
@@ -74,7 +74,7 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
         std::move(cbor_system_configuration_service)
     );
 
-    auto saved_system_configuration = system_configuration_manager->Get();
+    const auto saved_system_configuration = system_configuration_manager->Get();
 
     zassert_equal(saved_system_configuration->device_id, system_configuration.device_id);
     zassert_equal(saved_system_configuration->hw_version, SystemConfiguration::hw_version);
@@ -130,7 +130,7 @@ std::vector<uint8_t> OtherArrayEncoding(std::span<const uint8_t> cbor) {
 } // namespace
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborConfiguration_keeps_the_senders_encoding) {
-    auto fs_service = FormattedFs();
+    const auto fs_service = FormattedFs();
     auto manager = CreateManager(fs_service);
 
     const auto exported = manager->GetCborConfiguration();
@@ -149,8 +149,8 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborCon
 }
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborConfiguration_rejects_trailing_bytes) {
-    auto fs_service = FormattedFs();
-    auto manager = CreateManager(fs_service);
+    const auto fs_service = FormattedFs();
+    const auto manager = CreateManager(fs_service);
 
     const auto before = manager->GetCborConfigurationInfo();
     auto padded = manager->GetCborConfiguration();
@@ -164,9 +164,9 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborCon
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborConfiguration_reports_a_failed_store) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<UnmountableFsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<UnmountableFsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
-    auto manager = CreateManager(fs_service);
+    const auto manager = CreateManager(fs_service);
     const auto exported = manager->GetCborConfiguration();
 
     fs_service->Unmount();
@@ -179,8 +179,8 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_ApplyCborCon
 }
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Update_reports_the_crc_of_its_own_encoding) {
-    auto fs_service = FormattedFs();
-    auto manager = CreateManager(fs_service);
+    const auto fs_service = FormattedFs();
+    const auto manager = CreateManager(fs_service);
     zassert_true(manager->ApplyCborConfiguration(OtherArrayEncoding(manager->GetCborConfiguration())));
 
     SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());

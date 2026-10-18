@@ -60,14 +60,14 @@ pmr_unique_ptr<AdcConfiguration> AdcConfigurationManager::Deserialize(const Cbor
 }
 
 bool AdcConfigurationManager::CreateDefaultConfiguration() {
-    auto adc_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetExtPmr());
+    const auto adc_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetExtPmr());
 
     std::vector<std::shared_ptr<AdcChannelConfiguration>> channel_configurations;
     channel_configurations.reserve(adc_manager_->GetChannelCount());
     for(int i = 0; i < adc_manager_->GetChannelCount(); ++i)
         channel_configurations.push_back(std::make_shared<AdcChannelConfiguration>(adc_calibrator));
 
-    auto configuration = std::make_shared<AdcConfiguration>();
+    const auto configuration = std::make_shared<AdcConfiguration>();
     configuration->samples = AdcDefaultConfiguration::SAMPLES;
     configuration->channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(
         std::move(channel_configurations)

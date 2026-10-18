@@ -34,7 +34,7 @@ struct SmpCanUserData {
 
 static_assert(sizeof(SmpCanUserData) <= CONFIG_MCUMGR_TRANSPORT_NETBUF_USER_DATA_SIZE);
 
-SmpCanUserData& UserData(net_buf& packet) {
+SmpCanUserData& UserData(const net_buf& packet) {
     return *static_cast<SmpCanUserData*>(net_buf_user_data(&packet));
 }
 
@@ -176,7 +176,7 @@ void SmpCanTransport::UnbindLocked() {
 }
 
 void SmpCanTransport::SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink) {
-    k_spinlock_key_t key = k_spin_lock(&sink_lock_);
+    const k_spinlock_key_t key = k_spin_lock(&sink_lock_);
     response_sink_.swap(response_sink);
     k_spin_unlock(&sink_lock_, key);
 }
@@ -219,7 +219,7 @@ bool SmpCanTransport::Enqueue(uint8_t target, SmpPacket packet) {
 
 WorkQueueTaskResult SmpCanTransport::ProcessTx() {
     const uint8_t address = address_.load();
-    auto* canbus = address != 0 && canbus_ != nullptr ? canbus_->Get() : nullptr;
+    const auto* canbus = address != 0 && canbus_ != nullptr ? canbus_->Get() : nullptr;
 
     // Canbus falls back to classic CAN on a controller without FD, so its type is authoritative.
     const CanbusConfig config = canbus != nullptr ? canbus->GetConfig() : CanbusConfig(nullptr, CanbusType::NONE, 0);
@@ -390,8 +390,8 @@ void SmpCanTransport::Deliver(uint8_t source, SmpPacket packet) {
     }
 
     if(header->IsResponse()) {
-        k_spinlock_key_t key = k_spin_lock(&sink_lock_);
-        auto response_sink = response_sink_;
+        const k_spinlock_key_t key = k_spin_lock(&sink_lock_);
+        const auto response_sink = response_sink_;
         k_spin_unlock(&sink_lock_, key);
 
         if(response_sink != nullptr) {

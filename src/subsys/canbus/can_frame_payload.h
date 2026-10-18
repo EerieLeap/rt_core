@@ -51,7 +51,7 @@ public:
     }
 
     void Resize(size_type size) {
-        auto clamped = static_cast<uint8_t>(std::min(size, CAN_FRAME_MAX_DATA_LENGTH));
+        const auto clamped = static_cast<uint8_t>(std::min(size, CAN_FRAME_MAX_DATA_LENGTH));
         if(clamped < size_)
             std::fill(data_.begin() + clamped, data_.begin() + size_, 0);
 

@@ -30,7 +30,7 @@ uint64_t SerializableBlockBase::WriteBlockToStream(std::streambuf& stream) {
     WriteBlockData(stream, block_data.get(), size);
 
     uint64_t bytes_written = size;
-    for(auto& child : GetChildren()) {
+    for(const auto& child : GetChildren()) {
         if(child && !child->IsSerialized())
             bytes_written += child->WriteToStream(stream);
     }
@@ -80,7 +80,7 @@ void SerializableBlockBase::ResetBlock() {
     address_ = 0;
     is_serialized_ = false;
 
-    for(auto& child : GetChildren()) {
+    for(const auto& child : GetChildren()) {
         if(child)
             child->Reset();
     }
@@ -99,7 +99,7 @@ uint64_t SerializableBlockBase::ResolveBlockAddress(uint64_t address) {
     address_ = address;
     uint64_t current_address = address_ + GetBlockSize();
 
-    for(auto& child : GetChildren()) {
+    for(const auto& child : GetChildren()) {
         if(child && child->GetAddress() == 0)
             current_address = child->ResolveAddress(current_address);
     }

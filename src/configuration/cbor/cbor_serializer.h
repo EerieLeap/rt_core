@@ -23,7 +23,7 @@ template<typename T>
 class CborSerializer {
 public:
     CborSerializer() {
-        auto funcs = CborTraitRegistry::Get<T>();
+        const auto funcs = CborTraitRegistry::Get<T>();
         encodeFn_ = funcs.encode;
         decodeFn_ = funcs.decode;
         getSerializingSizeFn_ = funcs.get_size;

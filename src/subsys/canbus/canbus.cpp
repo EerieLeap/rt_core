@@ -180,7 +180,7 @@ bool Canbus::Configure(const CanbusConfig& config) {
     if(config_.type == CanbusType::CANFD && config_.data_bitrate == 0)
         config_.data_bitrate = config_.bitrate;
 
-    auto rollback = [&]() {
+    const auto rollback = [&]() {
         config_ = previous_config;
         RegisterStateChangeCallback();
         return false;
@@ -210,7 +210,7 @@ bool Canbus::Configure(const CanbusConfig& config) {
             return rollback();
         }
 
-        int ret = can_start(config_.canbus_dev);
+        const int ret = can_start(config_.canbus_dev);
         if(ret != 0) {
             LOG_ERR("Failed to start device [%d].", ret);
             return rollback();
@@ -229,7 +229,7 @@ bool Canbus::SetTiming(uint32_t bitrate) const {
     if(bitrate == 0)
         return false;
 
-    int ret = can_set_bitrate(config_.canbus_dev, bitrate);
+    const int ret = can_set_bitrate(config_.canbus_dev, bitrate);
     if(ret != 0) {
         LOG_ERR("Failed to set bitrate %u [%d].", bitrate, ret);
         return false;
@@ -245,7 +245,7 @@ bool Canbus::SetDataTiming(uint32_t bitrate) const {
     if(config_.type != CanbusType::CANFD)
         return false;
 
-    int ret = can_set_bitrate_data(config_.canbus_dev, bitrate);
+    const int ret = can_set_bitrate_data(config_.canbus_dev, bitrate);
     if(ret != 0) {
         LOG_ERR("Failed to set CANFD bitrate %u [%d].", bitrate, ret);
         return false;
@@ -303,7 +303,7 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
     // The DLC table rounds FD lengths up, so the padding bytes stay zeroed.
     std::copy(frame_data.begin(), frame_data.end(), std::begin(can_frame.data));
 
-    int res = can_send(canbus_dev, &can_frame, timeout, SendFrameCallback, nullptr);
+    const int res = can_send(canbus_dev, &can_frame, timeout, SendFrameCallback, nullptr);
     if(res != 0) {
         LOG_DBG("Failed to send frame [%d].", res);
         return res;
@@ -437,7 +437,7 @@ int Canbus::RegisterFrameReceivedHandler(const CanFilter& requested_filter, CanF
 
 Canbus::FilterEntry* Canbus::FindEntry(const CanFilter& filter) {
     if(filter.IsExact()) {
-        auto it = exact_entries_.find(CanId{ filter.id, filter.is_extended }.Key());
+        const auto it = exact_entries_.find(CanId{ filter.id, filter.is_extended }.Key());
         return it != exact_entries_.end() ? &it->second : nullptr;
     }
 
@@ -464,7 +464,7 @@ Canbus::FilterEntry* Canbus::FindEntryByHandler(int handler_id) {
 }
 
 Canbus::FilterEntry* Canbus::FindMatchingEntry(const CanId& can_id) {
-    auto it = exact_entries_.find(can_id.Key());
+    const auto it = exact_entries_.find(can_id.Key());
     if(it != exact_entries_.end())
         return &it->second;
 
@@ -524,7 +524,7 @@ bool Canbus::InstallFilter(FilterEntry& entry) {
         .mask = entry.filter.mask,
         .flags = static_cast<uint8_t>(entry.filter.is_extended ? CAN_FILTER_IDE : 0) };
 
-    int filter_id = can_add_rx_filter(config_.canbus_dev, CanFrameReceivedCallback, this, &filter);
+    const int filter_id = can_add_rx_filter(config_.canbus_dev, CanFrameReceivedCallback, this, &filter);
     if(filter_id < 0) {
         LOG_ERR("Unable to add rx filter [%d].", filter_id);
         return false;
@@ -703,7 +703,7 @@ void Canbus::DispatchFrame(const CanFrame& frame) {
         if(current == nullptr)
             return;
 
-        auto handler_it = current->handlers.find(handler_ids[i]);
+        const auto handler_it = current->handlers.find(handler_ids[i]);
         if(handler_it == current->handlers.end())
             continue;
 
@@ -719,11 +719,11 @@ void Canbus::AutoDetectFrameCallback(const device* dev, can_frame* frame, void* 
 }
 
 bool Canbus::AutoDetectBitrate() {
-    std::span<const uint32_t> supported_bitrates = config_.type == CanbusType::CANFD
+    const std::span<const uint32_t> supported_bitrates = config_.type == CanbusType::CANFD
         ? std::span<const uint32_t>(canfd_supported_bitrates_)
         : std::span<const uint32_t>(classical_can_supported_bitrates_);
 
-    for(uint32_t bitrate : supported_bitrates) {
+    for(const uint32_t bitrate : supported_bitrates) {
         if(atomic_get(&auto_detect_running_) == 0 || !thread_->IsRunning()) {
             LOG_WRN("Bitrate detection stopped by user");
             return false;
@@ -767,7 +767,7 @@ bool Canbus::TestBitrate(uint32_t bitrate) {
         return false;
 
     if(config_.type == CanbusType::CANFD) {
-        uint32_t data_bitrate = config_.data_bitrate == 0 ? bitrate : config_.data_bitrate;
+        const uint32_t data_bitrate = config_.data_bitrate == 0 ? bitrate : config_.data_bitrate;
         if(!SetDataTiming(data_bitrate))
             return false;
     }
@@ -778,13 +778,15 @@ bool Canbus::TestBitrate(uint32_t bitrate) {
         return false;
     }
 
-    can_filter filter = { .id = 0,
+    const can_filter filter = { .id = 0,
         .mask = 0, // Accept all IDs
         .flags = 0 };
 
     atomic_clear(&auto_detect_frame_count_);
 
-    int filter_id = can_add_rx_filter(config_.canbus_dev, AutoDetectFrameCallback, &auto_detect_frame_count_, &filter);
+    const int filter_id = can_add_rx_filter(
+        config_.canbus_dev, AutoDetectFrameCallback, &auto_detect_frame_count_, &filter
+    );
 
     if(filter_id < 0) {
         LOG_WRN("Failed to add test filter [%d]", filter_id);
@@ -867,9 +869,9 @@ void Canbus::PrintCanLimits() const {
     auto bitrates = classical_can_supported_bitrates_;
     std::sort(bitrates.begin(), bitrates.end());
 
-    for(auto bitrate : bitrates) {
+    for(const auto bitrate : bitrates) {
         struct can_timing timing_data = { 0 };
-        int ret = can_calc_timing(config_.canbus_dev, &timing_data, bitrate, SamplePointForBitrate(bitrate));
+        const int ret = can_calc_timing(config_.canbus_dev, &timing_data, bitrate, SamplePointForBitrate(bitrate));
 
         PrintCanLimitsDetails(bitrate, ret);
     }
@@ -886,9 +888,9 @@ void Canbus::PrintCanFdLimits() const {
     auto bitrates = canfd_supported_bitrates_;
     std::sort(bitrates.begin(), bitrates.end());
 
-    for(auto bitrate : bitrates) {
+    for(const auto bitrate : bitrates) {
         struct can_timing timing_data = { 0 };
-        int ret = can_calc_timing_data(config_.canbus_dev, &timing_data, bitrate, SamplePointForBitrate(bitrate));
+        const int ret = can_calc_timing_data(config_.canbus_dev, &timing_data, bitrate, SamplePointForBitrate(bitrate));
 
         PrintCanLimitsDetails(bitrate, ret);
     }
@@ -901,7 +903,7 @@ bool Canbus::DoStop() {
         thread_->Join();
 
     if(atomic_get(&is_initialized_) != 0) {
-        int ret = can_stop(config_.canbus_dev);
+        const int ret = can_stop(config_.canbus_dev);
         if(ret != 0 && ret != -EALREADY) {
             LOG_ERR("Failed to stop CAN device [%d].", ret);
             return false;

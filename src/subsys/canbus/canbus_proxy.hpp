@@ -86,7 +86,7 @@ public:
     int RegisterUpdatedHandler(CanbusProxyUpdatedHandler handler) {
         ScopedMutex guard(lock_);
 
-        int handler_id = next_handler_id_++;
+        const int handler_id = next_handler_id_++;
         updated_handlers_.try_emplace(handler_id, std::move(handler));
 
         return handler_id;

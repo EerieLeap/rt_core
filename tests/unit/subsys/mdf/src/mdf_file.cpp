@@ -158,24 +158,26 @@ void WriteGoldenFile(std::streambuf& stream) {
     const std::array<MdfProperty, 2> properties{ { { "device_name", "golden <bench> & co" }, { "product_id", "42" } } };
     mdf_file.SetHeaderComment("rt_core golden file", properties);
 
-    auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
+    const auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
         mdf4::SourceInformationBlock::SourceType::IoDevice, mdf4::SourceInformationBlock::BusType::None
     );
     source_information->SetName(mdf_file.GetOrCreateTextBlock("Eerie Leap Sensor"));
 
-    auto pressure_group = mdf_file.CreateChannelGroup(1, "oil_pressure");
+    const auto pressure_group = mdf_file.CreateChannelGroup(1, "oil_pressure");
     pressure_group->AddSourceInformation(source_information);
-    auto pressure_channel = mdf_file.CreateDataChannel(pressure_group, MdfDataType::Float32, "oil_pressure", "bar");
+    const auto pressure_channel = mdf_file.CreateDataChannel(
+        pressure_group, MdfDataType::Float32, "oil_pressure", "bar"
+    );
     pressure_channel->SetConversion(mdf_file.CreateAlgebraicConversion("X * 0.1"));
     mdf_file.SetChannelComment(pressure_channel, "Oil pressure: main gallery");
 
-    auto coolant_group = mdf_file.CreateChannelGroup(2, "coolant");
+    const auto coolant_group = mdf_file.CreateChannelGroup(2, "coolant");
     coolant_group->AddSourceInformation(source_information);
     mdf_file.CreateDataChannel(coolant_group, MdfDataType::Float32, "coolant_temperature", "C");
     mdf_file.CreateDataChannel(coolant_group, MdfDataType::Int32, "coolant_counts", "");
 
-    auto vlsd_group = mdf_file.CreateVLSDChannelGroup(3);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_group, 4, "can0");
+    const auto vlsd_group = mdf_file.CreateVLSDChannelGroup(3);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_group, 4, "can0");
 
     mdf_file.WriteHeaderToStream(stream);
 
@@ -266,7 +268,7 @@ ZTEST(mdf_file, test_DeepChainsSerializeAndDestroyIteratively) {
 
         std::vector<std::shared_ptr<mdf4::ChannelGroupBlock>> groups;
         for(size_t i = 0; i < group_count; i++) {
-            auto group = mdf_file.CreateChannelGroup(i + 1, "group_" + std::to_string(i));
+            const auto group = mdf_file.CreateChannelGroup(i + 1, "group_" + std::to_string(i));
             mdf_file.CreateDataChannel(group, MdfDataType::Float32, "value", "bar");
             groups.push_back(group);
         }
@@ -348,26 +350,26 @@ ZTEST(mdf_file, test_WriteAndFinalize) {
     Mdf4File mdf_file({ .record_id_size_bytes = RECORD_ID_SIZE });
     mdf_file.UpdateCurrentTime(rtc_time_provider.GetTime());
 
-    auto channel_group_1 = mdf_file.CreateChannelGroup(1, "pressure");
-    auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
+    const auto channel_group_1 = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
         mdf4::SourceInformationBlock::SourceType::IoDevice, mdf4::SourceInformationBlock::BusType::None
     );
     source_information->SetName(mdf_file.GetOrCreateTextBlock("Eerie Leap Sensor"));
     channel_group_1->AddSourceInformation(source_information);
 
-    auto channel_1 = mdf_file.CreateDataChannel(channel_group_1, MdfDataType::Uint64, "value", "bar");
+    const auto channel_1 = mdf_file.CreateDataChannel(channel_group_1, MdfDataType::Uint64, "value", "bar");
     channel_1->SetConversion(mdf_file.CreateAlgebraicConversion("x * 0.1"));
 
-    auto channel_group_2 = mdf_file.CreateChannelGroup(2, "temperature");
+    const auto channel_group_2 = mdf_file.CreateChannelGroup(2, "temperature");
     channel_group_2->AddSourceInformation(source_information);
     mdf_file.CreateDataChannel(channel_group_2, MdfDataType::Float32, "value", "C");
 
-    auto vlsd_channel_group_3 = mdf_file.CreateVLSDChannelGroup(3);
-    auto channel_group_3 = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group_3, 4, "Raw CAN Frame");
+    const auto vlsd_channel_group_3 = mdf_file.CreateVLSDChannelGroup(3);
+    const auto channel_group_3 = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group_3, 4, "Raw CAN Frame");
 
     MemoryStreamBuf file;
 
-    auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
+    const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
     zassert_true(header_bytes_written > ID_BLOCK_SIZE);
 
     constexpr uint64_t value_record_count = 10;
@@ -433,11 +435,11 @@ ZTEST(mdf_file, test_WriteAndFinalize) {
 ZTEST(mdf_file, test_CanFdFrameEncoding) {
     Mdf4File mdf_file;
 
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-    auto channel_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+    const auto channel_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
     MemoryStreamBuf file;
-    auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
+    const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
 
     CanFrame can_frame{ .id = 0x7FF,
         .is_extended = false,
@@ -484,14 +486,14 @@ ZTEST(mdf_file, test_CanFdFrameEncoding) {
 // in the file: readers would fail the whole CAN group on it.
 ZTEST(mdf_file, test_VlsdPayloadIsWrittenBeforeItsFrame) {
     Mdf4File mdf_file;
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
     auto file = MakeStream();
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
 
     const std::array<size_t, 3> payload_sizes{ 3, 64, 5 };
-    for(size_t payload_size : payload_sizes)
+    for(const size_t payload_size : payload_sizes)
         mdf_file.WriteCanbusDataRecordToStream(can_group, file, MakeCanFrame(payload_size), 0.0, 1);
 
     const auto file_bytes = file.str();
@@ -521,7 +523,7 @@ ZTEST(mdf_file, test_VlsdPayloadIsWrittenBeforeItsFrame) {
 ZTEST(mdf_file, test_UnfinalizedFileIsMarkedAsSuch) {
     Mdf4File mdf_file;
 
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
     mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
     MemoryStreamBuf file;
@@ -568,7 +570,7 @@ ZTEST(mdf_file, test_RejectsRecordIdThatDoesNotFit) {
 ZTEST(mdf_file, test_RejectsMismatchedValueTypes) {
     Mdf4File mdf_file;
 
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
     mdf_file.CreateDataChannel(channel_group, MdfDataType::Uint64, "value", "bar");
 
     MemoryStreamBuf file;
@@ -605,7 +607,7 @@ ZTEST(mdf_file, test_RejectsMismatchedValueTypes) {
 ZTEST(mdf_file, test_RejectsZeroRecordIdSize) {
     bool threw = false;
     try {
-        Mdf4File mdf_file({ .record_id_size_bytes = 0 });
+        const Mdf4File mdf_file({ .record_id_size_bytes = 0 });
     } catch(const std::invalid_argument&) {
         threw = true;
     }
@@ -620,7 +622,7 @@ ZTEST(mdf_file, test_RejectsZeroRecordIdSize) {
         );
     }
 
-    for(uint8_t size : { 1, 2, 4, 8 })
+    for(const uint8_t size : { 1, 2, 4, 8 })
         zassert_equal(Mdf4File({ .record_id_size_bytes = size }).GetDataGroup()->GetRecordIdSizeBytes(), size);
 }
 
@@ -792,7 +794,7 @@ ZTEST(mdf_file, test_CreateDataChannelCountsTheInvalidationByte) {
     Mdf4File mdf_file({ .record_id_size_bytes = 8 });
 
     // id 8 + time 8 + 6 * 8 = 64 bytes: the largest record, as long as it has no invalidation byte.
-    auto without_bits = mdf_file.CreateChannelGroup(1, "without_bits");
+    const auto without_bits = mdf_file.CreateChannelGroup(1, "without_bits");
     for(int i = 0; i < 5; i++)
         mdf_file.CreateDataChannel(without_bits, MdfDataType::Float64, "value_" + std::to_string(i), "");
 
@@ -823,14 +825,14 @@ ZTEST(mdf_file, test_CreateDataChannelCountsTheInvalidationByte) {
         }),
         "8 + 8 + 6 * 8 data bytes and the invalidation byte make 65 bytes"
     );
-    auto last_bit = mdf_file.CreateDataChannel(with_bits, MdfDataType::Float32, "last", "", true);
+    const auto last_bit = mdf_file.CreateDataChannel(with_bits, MdfDataType::Float32, "last", "", true);
     zassert_equal(last_bit->GetInvalidationBitPosition(), 1, "a group's bits are handed out in channel order");
 
     // The master channel takes one of the eight fields, so seven channels with a bit is the most a
     // group of this file can have; the record writer tests cover the eight bits of the byte.
     auto seven_bits = mdf_file.CreateChannelGroup(3, "seven_bits");
     for(uint32_t i = 0; i < 7; i++) {
-        auto channel = mdf_file.CreateDataChannel(
+        const auto channel = mdf_file.CreateDataChannel(
             seven_bits, MdfDataType::Float32, "bit_" + std::to_string(i), "", true
         );
         zassert_equal(channel->GetInvalidationBitPosition(), i, "channel %u has bit %u", i, i);
@@ -855,12 +857,12 @@ ZTEST(mdf_file, test_CreateDataChannelCountsTheInvalidationByte) {
 // bit position, and the byte after the data bytes of every record, which the DT length covers.
 ZTEST(mdf_file, test_InvalidationBitsLayoutAndRecords) {
     Mdf4File mdf_file;
-    auto group = mdf_file.CreateChannelGroup(1, "oil_pressure");
-    auto value = mdf_file.CreateDataChannel(group, MdfDataType::Float32, "oil_pressure", "bar", true);
-    auto raw = mdf_file.CreateDataChannel(group, MdfDataType::Float32, "oil_pressure.raw", "", true);
-    auto counts = mdf_file.CreateDataChannel(group, MdfDataType::Int32, "counts", "");
-    auto vlsd_group = mdf_file.CreateVLSDChannelGroup(2);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_group, 3, "can0");
+    const auto group = mdf_file.CreateChannelGroup(1, "oil_pressure");
+    const auto value = mdf_file.CreateDataChannel(group, MdfDataType::Float32, "oil_pressure", "bar", true);
+    const auto raw = mdf_file.CreateDataChannel(group, MdfDataType::Float32, "oil_pressure.raw", "", true);
+    const auto counts = mdf_file.CreateDataChannel(group, MdfDataType::Int32, "counts", "");
+    const auto vlsd_group = mdf_file.CreateVLSDChannelGroup(2);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_group, 3, "can0");
 
     zassert_equal(group->GetDataSizeBytes(), TIME_SIZE + 3 * 4, "the invalidation byte is not a data byte");
 
@@ -1015,9 +1017,9 @@ ZTEST(mdf_file, test_RecordWritersAreBuiltWithTheHeader) {
 ZTEST(mdf_file, test_TextBlocksAreSharedBetweenChannels) {
     Mdf4File mdf_file;
 
-    auto first = mdf_file.GetOrCreateTextBlock("bar");
-    auto second = mdf_file.GetOrCreateTextBlock("bar");
-    auto other = mdf_file.GetOrCreateTextBlock("psi");
+    const auto first = mdf_file.GetOrCreateTextBlock("bar");
+    const auto second = mdf_file.GetOrCreateTextBlock("bar");
+    const auto other = mdf_file.GetOrCreateTextBlock("psi");
 
     zassert_equal(first, second, "identical texts must share one TX block");
     zassert_not_equal(first, other);
@@ -1032,8 +1034,8 @@ ZTEST(mdf_file, test_CanDlcFollowsTheIso11898Table) {
 
     for(const auto& test_case : cases) {
         Mdf4File mdf_file;
-        auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-        auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+        const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+        const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
         auto file = MakeStream();
         const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
@@ -1057,11 +1059,11 @@ ZTEST(mdf_file, test_CanDlcFollowsTheIso11898Table) {
 
 ZTEST(mdf_file, test_RejectsAnOversizedCanPayload) {
     Mdf4File mdf_file;
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
     auto file = MakeStream();
-    auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
+    const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
 
     // CanFramePayload caps itself at the CAN FD limit, so a record can never
     // reach the writer with a length that has no DLC.
@@ -1081,8 +1083,8 @@ ZTEST(mdf_file, test_RejectsAnOversizedCanPayload) {
 
 ZTEST(mdf_file, test_ExtendedAndStandardIdsAreMaskedToTheirWidth) {
     Mdf4File mdf_file;
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
     auto file = MakeStream();
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
@@ -1121,10 +1123,10 @@ ZTEST(mdf_file, test_HeaderCanBeRewrittenForANewFile) {
     auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
     mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(2);
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(2);
     auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 3, "Raw CAN Frame");
 
-    auto write_file = [&](MemoryStreamBuf& stream, int record_count) {
+    const auto write_file = [&](MemoryStreamBuf& stream, int record_count) {
         mdf_file.WriteHeaderToStream(stream);
 
         for(int i = 0; i < record_count; i++) {
@@ -1165,7 +1167,7 @@ ZTEST(mdf_file, test_FinalizeRequiresAWrittenHeader) {
 
 ZTEST(mdf_file, test_FinalizeNeedsASeekableStream) {
     Mdf4File mdf_file;
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
 
     NonSeekableStreamBuf stream;
     mdf_file.WriteHeaderToStream(stream);
@@ -1186,7 +1188,7 @@ ZTEST(mdf_file, test_FinalizeNeedsASeekableStream) {
 // there before the lengths and counts it vouches for.
 ZTEST(mdf_file, test_FinalizeSyncsBeforeAndAfterTheIdentifier) {
     Mdf4File mdf_file;
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
     mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
     SyncProbeStreamBuf stream;
@@ -1241,7 +1243,7 @@ ZTEST(mdf_file, test_FinalizeSyncsBeforeAndAfterTheIdentifier) {
 
 ZTEST(mdf_file, test_FinalizeThrowsWhenTheSyncFails) {
     Mdf4File mdf_file;
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
     mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
     SyncProbeStreamBuf stream;
@@ -1267,7 +1269,7 @@ ZTEST(mdf_file, test_FinalizeThrowsWhenTheSyncFails) {
 ZTEST(mdf_file, test_DataGroupIsSharedByEveryChannelGroup) {
     Mdf4File mdf_file({ .record_id_size_bytes = RECORD_ID_SIZE });
 
-    auto data_group = mdf_file.GetDataGroup();
+    const auto data_group = mdf_file.GetDataGroup();
     zassert_not_null(data_group.get());
     zassert_equal(data_group->GetRecordIdSizeBytes(), RECORD_ID_SIZE);
     zassert_equal(mdf_file.GetDataGroup(), data_group, "a file has exactly one data group");
@@ -1291,10 +1293,10 @@ ZTEST(mdf_file, test_FileExtensionIsMf4) {
 
 ZTEST(mdf_file, test_Float64MasterChannelLayout) {
     Mdf4File mdf_file;
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
-    auto value_channel = mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto value_channel = mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
-    auto master = channel_group->GetChannels().at(0);
+    const auto master = channel_group->GetChannels().at(0);
     zassert_equal(master->GetType(), mdf4::ChannelBlock::Type::Master);
     zassert_equal(master->GetDataType(), mdf4::ChannelBlock::DataType::FloatLe);
     zassert_equal(master->GetBitCount(), 64, "the default master time channel is a Float64");
@@ -1329,8 +1331,8 @@ ZTEST(mdf_file, test_Float32TimeOptionKeepsTheOldWidth) {
     auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
     mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(2);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 3, "Raw CAN Frame");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(2);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 3, "Raw CAN Frame");
 
     zassert_equal(channel_group->GetChannels().at(0)->GetBitCount(), 32, "a Float32 master channel stays 4 bytes wide");
     zassert_equal(channel_group->GetDataSizeBytes(), 4 + 4);
@@ -1366,10 +1368,10 @@ ZTEST(mdf_file, test_Float32TimeOptionKeepsTheOldWidth) {
 }
 
 ZTEST(mdf_file, test_VlsdOffsetWidthFollowsTheOption) {
-    for(uint8_t width : { 4, 8 }) {
+    for(const uint8_t width : { 4, 8 }) {
         Mdf4File mdf_file({ .vlsd_offset_size_bytes = width });
-        auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-        auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+        const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+        const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
         const auto members = CanFrameMembers(can_group);
         zassert_equal(members.size(), 10, "width %u: every CAN_DataFrame member is linked", width);
@@ -1417,8 +1419,8 @@ ZTEST(mdf_file, test_VlsdOffsetWidthFollowsTheOption) {
 
 ZTEST(mdf_file, test_CanDataFrameMemberOffsetsAndBitFields) {
     Mdf4File mdf_file;
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(1);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 2, "Raw CAN Frame");
 
     auto file = MakeStream();
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
@@ -1589,8 +1591,8 @@ ZTEST(mdf_file, test_FileHistoryToolFields) {
 
 ZTEST(mdf_file, test_ChannelAndGroupCommentsAreLinked) {
     Mdf4File mdf_file;
-    auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
-    auto channel = mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
+    const auto channel_group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel = mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "value", "bar");
 
     mdf_file.SetChannelGroupComment(channel_group, "Oil pressure <sensor>");
     mdf_file.SetChannelComment(channel, "bar, 0..10 & more");
@@ -1687,27 +1689,29 @@ ZTEST(mdf_file, test_DumpFileForAsammdf) {
         { "sensors_configuration_hash", "3735928559" } } };
     mdf_file.SetHeaderComment("rt_core mdf unit dump", properties);
 
-    auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
+    const auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
         mdf4::SourceInformationBlock::SourceType::IoDevice, mdf4::SourceInformationBlock::BusType::None
     );
     source_information->SetName(mdf_file.GetOrCreateTextBlock("Eerie Leap Sensor"));
 
-    auto pressure_group = mdf_file.CreateChannelGroup(1, "oil_pressure");
+    const auto pressure_group = mdf_file.CreateChannelGroup(1, "oil_pressure");
     pressure_group->AddSourceInformation(source_information);
     mdf_file.SetChannelGroupComment(pressure_group, "Oil pressure, \"main gallery\"");
-    auto pressure_channel = mdf_file.CreateDataChannel(pressure_group, MdfDataType::Uint64, "oil_pressure", "bar");
+    const auto pressure_channel = mdf_file.CreateDataChannel(
+        pressure_group, MdfDataType::Uint64, "oil_pressure", "bar"
+    );
     pressure_channel->SetConversion(mdf_file.CreateAlgebraicConversion("X * 0.1"));
     mdf_file.SetChannelComment(pressure_channel, "raw counts <0..1000> & scaled by 0.1");
 
-    auto temperature_group = mdf_file.CreateChannelGroup(2, "coolant_temperature");
+    const auto temperature_group = mdf_file.CreateChannelGroup(2, "coolant_temperature");
     temperature_group->AddSourceInformation(source_information);
-    auto temperature_channel = mdf_file.CreateDataChannel(
+    const auto temperature_channel = mdf_file.CreateDataChannel(
         temperature_group, MdfDataType::Float32, "coolant_temperature", "C"
     );
     mdf_file.SetChannelComment(temperature_channel, "Coolant temperature at the outlet");
 
-    auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(3);
-    auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 4, "can0");
+    const auto vlsd_channel_group = mdf_file.CreateVLSDChannelGroup(3);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_channel_group, 4, "can0");
 
     const std::string path = std::string(dump_dir) + "/mdf_unit_dump.mf4";
     std::ofstream file_stream(path, std::ios::binary | std::ios::trunc);

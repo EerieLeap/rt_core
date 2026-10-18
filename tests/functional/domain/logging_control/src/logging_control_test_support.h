@@ -134,7 +134,7 @@ inline void* SetUpChannels() {
 // The configuration work queue of the binary: RemoteLoggingControl sends from it, and the manager
 // stores from it. 16 KiB, because exceptions unwind on it (qemu_riscv64 needs the room).
 inline std::shared_ptr<WorkQueueThread> TestConfigQueue() {
-    static std::shared_ptr<WorkQueueThread> queue = [] {
+    static const std::shared_ptr<WorkQueueThread> queue = [] {
         auto created = std::make_shared<WorkQueueThread>("logging_control_config_queue", 16384, 5);
         zassert_true(created->Initialize(), "The configuration queue did not start.");
 
@@ -156,7 +156,7 @@ inline std::string CurrentThreadName() {
 
 // Returns once everything queued before the call has run.
 [[nodiscard]] inline bool FlushQueue(WorkQueueThread& queue) {
-    auto done = std::make_shared<k_sem>();
+    const auto done = std::make_shared<k_sem>();
     k_sem_init(done.get(), 0, 1);
 
     queue.Run([done] {
@@ -188,7 +188,7 @@ public:
     [[nodiscard]] bool Close(WorkQueueThread& queue) {
         Open();
 
-        auto context = std::make_shared<Context>();
+        const auto context = std::make_shared<Context>();
         queue.Run([context] {
             k_sem_give(&context->entered);
             k_sem_take(&context->open, K_SECONDS(5));

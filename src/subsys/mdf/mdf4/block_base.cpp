@@ -48,7 +48,7 @@ std::unique_ptr<uint8_t[]> BlockBase::SerializeBase() const {
     offset += sizeof(link_count);
 
     if(link_count > 0) {
-        auto links = block_links->Serialize();
+        const auto links = block_links->Serialize();
         std::copy(links.get(), links.get() + block_links->GetLinksSizeBytes(), buffer.get() + offset);
         offset += block_links->GetLinksSizeBytes();
     }

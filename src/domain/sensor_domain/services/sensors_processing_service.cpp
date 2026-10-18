@@ -192,8 +192,8 @@ void SensorsProcessingService::CommitSwitchStates() {
 
 // Exceptions must not unwind into the work queue's C dispatch.
 void SensorsProcessingService::SwitchStateWorkHandler(k_work* work) {
-    auto* switch_state_work = CONTAINER_OF(work, SwitchStateWork, work);
-    auto* service = switch_state_work->service;
+    const auto* switch_state_work = CONTAINER_OF(work, SwitchStateWork, work);
+    const auto* service = switch_state_work->service;
 
     try {
         service->pipeline_->CommitSwitchStates(*service->generation_);

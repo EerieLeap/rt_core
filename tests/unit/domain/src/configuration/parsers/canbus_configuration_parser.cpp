@@ -25,7 +25,7 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     channel_configuration_0.bus_channel = 0;
     channel_configuration_0.bitrate = 500000;
 
-    auto message_configuration_0_0 = std::make_shared<CanMessageConfiguration>(
+    const auto message_configuration_0_0 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
     );
     message_configuration_0_0->frame_id = 0x123;
@@ -57,7 +57,7 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
 
     channel_configuration_0.message_configurations.emplace_back(std::move(message_configuration_0_0));
 
-    auto message_configuration_0_1 = std::make_shared<CanMessageConfiguration>(
+    const auto message_configuration_0_1 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
     );
     message_configuration_0_1->frame_id = 0x456;
@@ -72,7 +72,7 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     channel_configuration_1.bus_channel = 1;
     channel_configuration_1.bitrate = 250000;
 
-    auto message_configuration_1_0 = std::make_shared<CanMessageConfiguration>(
+    const auto message_configuration_1_0 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
     );
     message_configuration_1_0->frame_id = 0x123;
@@ -81,7 +81,7 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_1_0->send_interval_ms = 100;
     channel_configuration_1.message_configurations.emplace_back(std::move(message_configuration_1_0));
 
-    auto message_configuration_1_1 = std::make_shared<CanMessageConfiguration>(
+    const auto message_configuration_1_1 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
     );
     message_configuration_1_1->frame_id = 0x456;
@@ -90,7 +90,7 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_1_1->send_interval_ms = 200;
     channel_configuration_1.message_configurations.emplace_back(std::move(message_configuration_1_1));
 
-    auto message_configuration_1_2 = std::make_shared<CanMessageConfiguration>(
+    const auto message_configuration_1_2 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
     );
     message_configuration_1_2->frame_id = 0x789;
@@ -194,7 +194,7 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize) {
 
     auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
 
-    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+    const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
     auto deserialized_canbus_configuration = canbus_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_canbus_configuration
     );
@@ -208,7 +208,7 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_without_com_cha
     auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
     canbus_configuration.com_configuration = {};
 
-    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+    const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
     auto deserialized_canbus_configuration = canbus_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_canbus_configuration
     );
@@ -220,7 +220,7 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_without_com_cha
 ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_com_channel_out_of_range) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    const auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
     auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     // Channel 0 is configured, which 256 must not wrap to.
@@ -237,7 +237,7 @@ ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_com_channel_ou
 ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_channel_out_of_range) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    const auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
     auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     // 258 would wrap to channel 2, the one it replaces.
@@ -314,9 +314,9 @@ std::vector<uint8_t> EncodeSingleMessageConfiguration(bool has_is_enabled, bool 
 ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_keeps_enabled_and_disabled_messages) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    const auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
 
-    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+    const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     const auto* channel_config_0 = FindCborChannel(*serialized_canbus_configuration, 0);
     zassert_not_null(channel_config_0);
@@ -344,7 +344,7 @@ ZTEST(canbus_configuration_parser, test_CborEncodeDecode_keeps_enabled_and_disab
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
     auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
-    auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
+    const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     std::vector<uint8_t> payload(2048);
     size_t encoded_size = 0;

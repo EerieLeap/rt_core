@@ -38,7 +38,7 @@ LoggingConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const
     configuration->max_log_size_mb = config.max_log_size_mb;
 
     for(const auto& sensor_logging_config : config.CborSensorLoggingConfig_m) {
-        SensorLoggingConfiguration sensor_logging_configuration{ .is_enabled = sensor_logging_config.is_enabled,
+        const SensorLoggingConfiguration sensor_logging_configuration{ .is_enabled = sensor_logging_config.is_enabled,
             .log_raw_value = sensor_logging_config.log_raw_value,
             .log_only_new_data = sensor_logging_config.log_only_new_data };
 

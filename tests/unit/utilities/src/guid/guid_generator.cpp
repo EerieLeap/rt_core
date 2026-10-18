@@ -12,7 +12,7 @@ ZTEST_SUITE(guid_generator, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(guid_generator, test_first_guid_has_counter_one) {
     GuidGenerator generator;
-    Guid guid = generator.Generate();
+    const Guid guid = generator.Generate();
 
     zassert_equal(guid.counter, 1);
     zassert_not_equal(guid.AsUint64(), 0);
@@ -27,16 +27,16 @@ ZTEST(guid_generator, test_counter_increments_sequentially) {
 
 ZTEST(guid_generator, test_guids_are_unique) {
     GuidGenerator generator;
-    Guid guid0 = generator.Generate();
+    const Guid guid0 = generator.Generate();
 
-    uint16_t device_hash = guid0.device_hash;
+    const uint16_t device_hash = guid0.device_hash;
     std::set<uint16_t> counters;
     counters.insert(guid0.counter);
     std::set<uint64_t> guid_nums;
     guid_nums.insert(guid0.AsUint64());
 
     for(int i = 1; i < 100; ++i) {
-        Guid guid = generator.Generate();
+        const Guid guid = generator.Generate();
 
         zassert_false(counters.count(guid.counter));
         counters.insert(guid.counter);
@@ -78,9 +78,9 @@ ZTEST(guid_generator, test_counter_wraps_at_16_bits) {
 ZTEST(guid_generator, test_timestamp_comes_from_uptime) {
     GuidGenerator generator;
 
-    uint32_t before = k_uptime_get_32();
-    Guid guid = generator.Generate();
-    uint32_t after = k_uptime_get_32();
+    const uint32_t before = k_uptime_get_32();
+    const Guid guid = generator.Generate();
+    const uint32_t after = k_uptime_get_32();
 
     zassert_true(guid.timestamp >= before);
     zassert_true(guid.timestamp <= after);
@@ -91,7 +91,7 @@ ZTEST(guid_generator, test_timestamps_are_non_decreasing) {
 
     uint32_t previous = generator.Generate().timestamp;
     for(int i = 0; i < 100; ++i) {
-        uint32_t current = generator.Generate().timestamp;
+        const uint32_t current = generator.Generate().timestamp;
 
         zassert_true(current >= previous, "timestamp went backwards at iteration %d", i);
         previous = current;
@@ -115,10 +115,10 @@ ZTEST(guid_generator, test_AsUint64_matches_object_representation) {
 }
 
 ZTEST(guid_generator, test_AsUint64_changes_with_every_field) {
-    Guid base{ .device_hash = 1, .counter = 2, .timestamp = 3 };
-    Guid other_device{ .device_hash = 9, .counter = 2, .timestamp = 3 };
-    Guid other_counter{ .device_hash = 1, .counter = 9, .timestamp = 3 };
-    Guid other_timestamp{ .device_hash = 1, .counter = 2, .timestamp = 9 };
+    const Guid base{ .device_hash = 1, .counter = 2, .timestamp = 3 };
+    const Guid other_device{ .device_hash = 9, .counter = 2, .timestamp = 3 };
+    const Guid other_counter{ .device_hash = 1, .counter = 9, .timestamp = 3 };
+    const Guid other_timestamp{ .device_hash = 1, .counter = 2, .timestamp = 9 };
 
     zassert_not_equal(base.AsUint64(), other_device.AsUint64());
     zassert_not_equal(base.AsUint64(), other_counter.AsUint64());

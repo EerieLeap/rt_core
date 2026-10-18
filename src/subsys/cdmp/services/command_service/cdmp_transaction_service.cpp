@@ -66,7 +66,7 @@ void CdmpTransactionService::Stop() {
 }
 
 uint8_t CdmpTransactionService::GetNextTransactionId() {
-    uint8_t transaction_id = next_transaction_id_;
+    const uint8_t transaction_id = next_transaction_id_;
 
     // Skip transaction ID 0 and find next available
     do {
@@ -88,7 +88,7 @@ uint8_t CdmpTransactionService::StartTransaction(
 
     ScopedMutex guard(transactions_lock_);
 
-    uint8_t transaction_id = GetNextTransactionId();
+    const uint8_t transaction_id = GetNextTransactionId();
 
     PendingTransaction transaction{ .transaction_id = transaction_id,
         .start_time = static_cast<uint64_t>(k_uptime_get()),
@@ -119,7 +119,7 @@ void CdmpTransactionService::CompleteTransaction(const CdmpCommandResponseMessag
     {
         ScopedMutex guard(transactions_lock_);
 
-        auto it = pending_transactions_.find(response.transaction_id);
+        const auto it = pending_transactions_.find(response.transaction_id);
         if(it == pending_transactions_.end() || !IsResponseTo(it->second, response))
             return;
 
@@ -140,7 +140,7 @@ void CdmpTransactionService::CleanupExpiredTransactions() {
         {
             ScopedMutex guard(transactions_lock_);
 
-            auto it = std::ranges::find_if(pending_transactions_, [current_time](const auto& entry) {
+            const auto it = std::ranges::find_if(pending_transactions_, [current_time](const auto& entry) {
                 return current_time - entry.second.start_time >= entry.second.timeout;
             });
             if(it == pending_transactions_.end())

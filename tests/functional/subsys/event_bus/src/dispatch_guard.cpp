@@ -48,7 +48,7 @@ struct DetachRace {
 };
 
 void DispatchSlowly(void* race_holder, void*, void*) {
-    std::unique_ptr<std::shared_ptr<DetachRace>> holder(static_cast<std::shared_ptr<DetachRace>*>(race_holder));
+    const std::unique_ptr<std::shared_ptr<DetachRace>> holder(static_cast<std::shared_ptr<DetachRace>*>(race_holder));
     auto& race = **holder;
 
     race.guard.Dispatch([&race] {
@@ -121,7 +121,7 @@ ZTEST(dispatch_guard, test_Detach_can_be_repeated) {
 // The helper holds the guard's lock from before it signals until its body returns, so Detach()
 // can only return after the body, whatever the scheduler does in between.
 ZTEST(dispatch_guard, test_Detach_waits_for_an_in_flight_dispatch) {
-    auto race = std::make_shared<DetachRace>();
+    const auto race = std::make_shared<DetachRace>();
 
     k_thread_create(
         &dispatch_helper, dispatch_helper_stack, K_THREAD_STACK_SIZEOF(dispatch_helper_stack), DispatchSlowly,
@@ -151,9 +151,9 @@ ZTEST(dispatch_guard, test_a_guarded_handler_removed_during_dispatch_does_nothin
     auto& channels = RegisterBindingTestChannels();
 
     auto race = std::make_shared<RemovalRace>();
-    auto guard_b = std::make_shared<DispatchGuard>(&race->owner_b);
+    const auto guard_b = std::make_shared<DispatchGuard>(&race->owner_b);
 
-    auto subscription_a = SubscribeEventBinding(ValueBinding(), [race, guard_b](const EventData&) {
+    const auto subscription_a = SubscribeEventBinding(ValueBinding(), [race, guard_b](const EventData&) {
         ++race->a_calls;
 
         // B's owner tears down the way a widget does: detach first, then drop the subscription.

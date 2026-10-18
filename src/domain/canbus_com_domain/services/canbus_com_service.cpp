@@ -72,7 +72,7 @@ bool CanbusComService::DoInitialize() {
 }
 
 bool CanbusComService::DoStart() {
-    auto com_canbus = canbus_service_->GetComCanbus();
+    const auto com_canbus = canbus_service_->GetComCanbus();
     if(!com_canbus)
         return false;
 

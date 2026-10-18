@@ -11,35 +11,35 @@ using eerie_leap::utilities::string::StringHelpers;
 ZTEST_SUITE(string_helpers, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(string_helpers, test_ToPaddedCharArray_pads_with_explicit_char) {
-    auto padded = StringHelpers::ToPaddedCharArray("abc", 8, '.');
+    const auto padded = StringHelpers::ToPaddedCharArray("abc", 8, '.');
 
     zassert_not_null(padded.get());
     zassert_mem_equal(padded.get(), "abc.....", 8);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_pads_with_space_by_default) {
-    auto padded = StringHelpers::ToPaddedCharArray("abc", 6);
+    const auto padded = StringHelpers::ToPaddedCharArray("abc", 6);
 
     zassert_mem_equal(padded.get(), "abc   ", 6);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_exact_fit_has_no_padding) {
-    auto padded = StringHelpers::ToPaddedCharArray("abcdef", 6, '.');
+    const auto padded = StringHelpers::ToPaddedCharArray("abcdef", 6, '.');
 
     zassert_mem_equal(padded.get(), "abcdef", 6);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_empty_input_is_all_padding) {
-    auto padded = StringHelpers::ToPaddedCharArray("", 4, 'x');
+    const auto padded = StringHelpers::ToPaddedCharArray("", 4, 'x');
 
     zassert_mem_equal(padded.get(), "xxxx", 4);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_returns_independent_buffers) {
-    std::string source = "abc";
+    const std::string source = "abc";
 
-    auto first = StringHelpers::ToPaddedCharArray(source, 8, '.');
-    auto second = StringHelpers::ToPaddedCharArray(source, 8, '.');
+    const auto first = StringHelpers::ToPaddedCharArray(source, 8, '.');
+    const auto second = StringHelpers::ToPaddedCharArray(source, 8, '.');
 
     zassert_true(first.get() != second.get());
 
@@ -81,7 +81,7 @@ ZTEST(string_helpers, test_UInt16ToStaticString) {
 }
 
 ZTEST(string_helpers, test_UInt16ToStaticString_size_and_capacity) {
-    auto value = StringHelpers::UInt16ToStaticString(UINT16_MAX);
+    const auto value = StringHelpers::UInt16ToStaticString(UINT16_MAX);
 
     zassert_equal(value.Size(), 5);
     zassert_equal(decltype(value)::Capacity(), 5);
@@ -95,7 +95,7 @@ ZTEST(string_helpers, test_UInt32ToStaticString) {
 }
 
 ZTEST(string_helpers, test_UInt32ToStaticString_size_and_capacity) {
-    auto value = StringHelpers::UInt32ToStaticString(UINT32_MAX);
+    const auto value = StringHelpers::UInt32ToStaticString(UINT32_MAX);
 
     zassert_equal(value.Size(), 10);
     zassert_equal(decltype(value)::Capacity(), 10);

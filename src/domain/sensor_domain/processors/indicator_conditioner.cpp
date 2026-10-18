@@ -131,7 +131,7 @@ void IndicatorConditioner::ResumeSettle() {
 }
 
 void IndicatorConditioner::SettleWorkHandler(k_work* work) {
-    auto* settle_work = CONTAINER_OF(k_work_delayable_from_work(work), SettleWork, work);
+    const auto* settle_work = CONTAINER_OF(k_work_delayable_from_work(work), SettleWork, work);
     settle_work->conditioner->Settle();
 }
 

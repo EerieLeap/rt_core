@@ -15,10 +15,10 @@ using namespace processing_test_support;
 ZTEST_SUITE(no_adc, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(no_adc, test_Start_runs_without_an_adc_and_skips_analog_sensors) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
     // A configuration written for a unit with an ADC, so the analog sensor passes validation.
-    auto rig = MakeProcessingRig(
+    const auto rig = MakeProcessingRig(
         fs_service, nullptr, nullptr,
         {
             MakeAnalogSensor("analog", 0, 20),

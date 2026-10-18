@@ -18,7 +18,7 @@ std::vector<uint8_t> ScriptProcessor::Process(
     std::span<const uint8_t> can_frame_data
 ) {
 
-    auto lua_script = message_configuration.lua_script;
+    const auto lua_script = message_configuration.lua_script;
     if(lua_script == nullptr)
         return {};
 

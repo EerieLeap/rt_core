@@ -61,8 +61,8 @@ private:
     friend void Connected(bt_conn* conn, uint8_t err);
     friend void Disconnected(bt_conn* conn, uint8_t reason);
     friend void Recycled();
-    friend void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout);
-    friend void DataLengthUpdated(bt_conn* conn, bt_conn_le_data_len_info* info);
+    friend void ParamertersUpdated(const bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout);
+    friend void DataLengthUpdated(const bt_conn* conn, const bt_conn_le_data_len_info* info);
     friend void SecurityChanged(bt_conn* conn, bt_security_t level, enum bt_security_err err);
 
     friend void PairingFailed(struct bt_conn* conn, enum bt_security_err reason);

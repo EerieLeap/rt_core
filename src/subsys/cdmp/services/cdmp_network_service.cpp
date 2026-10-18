@@ -157,7 +157,7 @@ void CdmpNetworkService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, Cdmp
 }
 
 void CdmpNetworkService::ProcessFrame(std::span<const uint8_t> frame_data) {
-    CdmpManagementMessageType message_type = static_cast<CdmpManagementMessageType>(frame_data[0]);
+    const CdmpManagementMessageType message_type = static_cast<CdmpManagementMessageType>(frame_data[0]);
 
     switch(message_type) {
         case CdmpManagementMessageType::DISCOVERY_REQUEST:
@@ -230,7 +230,7 @@ void CdmpNetworkService::ProcessDiscoveryRequestFrame(std::span<const uint8_t> f
     LOG_INF("Processing discovery request frame");
 
     try {
-        auto message = CdmpDiscoveryRequestMessage::FromCanFrame(frame_data);
+        const auto message = CdmpDiscoveryRequestMessage::FromCanFrame(frame_data);
 
         if(message.uid == 0 || message.uid == device_->GetUniqueIdentifier()) {
             LOG_ERR("Device UID conflict detected during discovery - received UID: %08X", message.uid);
@@ -251,7 +251,7 @@ void CdmpNetworkService::ProcessDiscoveryResponseFrame(std::span<const uint8_t> 
     LOG_INF("Processing discovery response frame");
 
     try {
-        auto message = CdmpDiscoveryResponseMessage::FromCanFrame(frame_data);
+        const auto message = CdmpDiscoveryResponseMessage::FromCanFrame(frame_data);
         discovery_response_received_ = true;
 
         if(message.uid == device_->GetUniqueIdentifier()) {
@@ -492,7 +492,7 @@ void CdmpNetworkService::RecordIdClaim(const CdmpIdClaimRequestMessage& claim) {
     {
         ScopedMutex guard(devices_lock_);
 
-        auto it = network_devices_.find(device_id);
+        const auto it = network_devices_.find(device_id);
         if(it != network_devices_.end()) {
             // Another UID on a known ID is a conflicting claim, which the owner rejects.
             if(it->second->GetUniqueIdentifier() != claim.uid)
@@ -561,7 +561,7 @@ void CdmpNetworkService::ExpirePendingIdClaims() {
 }
 
 std::optional<uint8_t> CdmpNetworkService::FindDeviceIdByUid(uint32_t uid) const {
-    auto it = std::ranges::find_if(network_devices_, [uid](const auto& entry) {
+    const auto it = std::ranges::find_if(network_devices_, [uid](const auto& entry) {
         return entry.second->GetUniqueIdentifier() == uid;
     });
 
@@ -680,7 +680,7 @@ void CdmpNetworkService::RemoveDevice(uint8_t device_id) {
     {
         ScopedMutex guard(devices_lock_);
 
-        auto it = network_devices_.find(device_id);
+        const auto it = network_devices_.find(device_id);
         if(it == network_devices_.end())
             return;
 
@@ -812,7 +812,7 @@ void CdmpNetworkService::ProcessPeriodicTasks() {
 bool CdmpNetworkService::IsDeviceOnline(uint8_t device_id) const {
     ScopedMutex guard(devices_lock_);
 
-    auto it = network_devices_.find(device_id);
+    const auto it = network_devices_.find(device_id);
     return it != network_devices_.end() && it->second->GetStatus() == CdmpDeviceStatus::ONLINE;
 }
 
@@ -829,7 +829,7 @@ void CdmpNetworkService::RemoveOfflineDevices() {
     }
 
     // Outside the lock, so that the LEFT handlers may query the table.
-    for(auto device_id : offline_devices)
+    for(const auto device_id : offline_devices)
         RemoveDevice(device_id);
 }
 

@@ -76,13 +76,13 @@ SensorReading MakeReading(const SensorRuntime& runtime, float value) {
 } // namespace
 
 ZTEST(lua_scripts, test_scripts_in_one_state_do_not_share_globals) {
-    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+    const auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
 
     // Both scripts define "scale" and "create_sensor_value"; each must see its own.
-    auto runtime_a = MakeScriptedRuntime(
+    const auto runtime_a = MakeScriptedRuntime(
         host, "sensor_a", "scale = 2\nfunction create_sensor_value(id) return scale * 10 end\n"
     );
-    auto runtime_b = MakeScriptedRuntime(
+    const auto runtime_b = MakeScriptedRuntime(
         host, "sensor_b", "scale = 5\nfunction create_sensor_value(id) return scale * 10 end\n"
     );
 
@@ -90,7 +90,7 @@ ZTEST(lua_scripts, test_scripts_in_one_state_do_not_share_globals) {
     zassert_true(runtime_b.script.HasCreateValue());
     zassert_false(runtime_a.script.HasPostProcess(), "Not defined by this script");
 
-    auto time_service = MakeTimeService();
+    const auto time_service = MakeTimeService();
     SensorReaderUserValueType reader_a(time_service, runtime_a);
     SensorReaderUserValueType reader_b(time_service, runtime_b);
     const TickContext tick{ time_service->GetCurrentTime() };
@@ -100,7 +100,7 @@ ZTEST(lua_scripts, test_scripts_in_one_state_do_not_share_globals) {
     zassert_equal(reader_a.Read(tick).value.value(), 20.0F, "Running b did not change a's globals");
 
     // The standard libraries and the host functions stay visible through the environment.
-    auto runtime_c = MakeScriptedRuntime(
+    const auto runtime_c = MakeScriptedRuntime(
         host, "sensor_c", "function create_sensor_value(id) return math.floor(string.len(id) * 1.5) end\n"
     );
     SensorReaderUserValueType reader_c(time_service, runtime_c);
@@ -108,20 +108,20 @@ ZTEST(lua_scripts, test_scripts_in_one_state_do_not_share_globals) {
 }
 
 ZTEST(lua_scripts, test_a_script_that_fails_to_load_has_no_environment) {
-    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+    const auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
 
-    auto broken = MakeScriptedRuntime(host, "broken", "function (\n");
+    const auto broken = MakeScriptedRuntime(host, "broken", "function (\n");
     zassert_false(broken.script.IsLoaded());
     zassert_false(broken.script.HasCreateValue());
 
-    auto runtime_error = MakeScriptedRuntime(host, "runtime_error", "error('boom')\n");
+    const auto runtime_error = MakeScriptedRuntime(host, "runtime_error", "error('boom')\n");
     zassert_false(runtime_error.script.IsLoaded());
 
     // The state keeps serving the scripts that did load.
-    auto fine = MakeScriptedRuntime(host, "fine", "function create_sensor_value(id) return 1 end\n");
+    const auto fine = MakeScriptedRuntime(host, "fine", "function create_sensor_value(id) return 1 end\n");
     zassert_true(fine.script.HasCreateValue());
 
-    auto time_service = MakeTimeService();
+    const auto time_service = MakeTimeService();
     SensorReaderUserValueType reader(time_service, broken);
     zassert_equal(
         reader.Read({ time_service->GetCurrentTime() }).status, ReadingStatus::UNINITIALIZED, "No function, no value"
@@ -129,15 +129,15 @@ ZTEST(lua_scripts, test_a_script_that_fails_to_load_has_no_environment) {
 }
 
 ZTEST(lua_scripts, test_post_process_receives_the_sample_and_returns_the_new_value) {
-    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+    const auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
 
-    auto doubling = MakeScriptedRuntime(
+    const auto doubling = MakeScriptedRuntime(
         host, "doubling", "function post_process_sensor_value(id, value) return value * 2 end\n"
     );
-    auto keeping = MakeScriptedRuntime(
+    const auto keeping = MakeScriptedRuntime(
         host, "keeping", "seen = nil\nfunction post_process_sensor_value(id, value) seen = value return nil end\n"
     );
-    auto failing = MakeScriptedRuntime(
+    const auto failing = MakeScriptedRuntime(
         host, "failing", "function post_process_sensor_value(id, value) error('no') end\n"
     );
 
@@ -165,18 +165,18 @@ ZTEST(lua_scripts, test_post_process_receives_the_sample_and_returns_the_new_val
 }
 
 ZTEST(lua_scripts, test_scripts_read_and_write_other_sensors_through_the_frame) {
-    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+    const auto frame = std::make_shared<SensorReadingsFrame>();
 
-    auto source = MakeUserSensor("source");
-    auto target = MakeUserSensor("target");
+    const auto source = MakeUserSensor("source");
+    const auto target = MakeUserSensor("target");
     std::vector<std::shared_ptr<Sensor>> sensors{ source, target };
     frame->Configure(sensors);
 
     GlobalFunctionsRegistry::RegisterGetSensorValue(*host, *frame);
     GlobalFunctionsRegistry::RegisterUpdateSensorValue(*host, *frame);
 
-    auto runtime = MakeScriptedRuntime(
+    const auto runtime = MakeScriptedRuntime(
         host, "writer",
         "function post_process_sensor_value(id, value)\n"
         "  local other = get_sensor_value('source')\n"
@@ -212,10 +212,10 @@ ZTEST(lua_scripts, test_scripts_read_and_write_other_sensors_through_the_frame) 
 }
 
 ZTEST(lua_scripts, test_a_script_past_the_memory_limit_fails_its_call_only) {
-    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+    const auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
     host->SetMemoryLimit(64 * 1024);
 
-    auto greedy = MakeScriptedRuntime(
+    const auto greedy = MakeScriptedRuntime(
         host, "greedy",
         "function create_sensor_value(id)\n"
         "  local t = {}\n"
@@ -223,11 +223,11 @@ ZTEST(lua_scripts, test_a_script_past_the_memory_limit_fails_its_call_only) {
         "  return #t\n"
         "end\n"
     );
-    auto modest = MakeScriptedRuntime(host, "modest", "function create_sensor_value(id) return 3 end\n");
+    const auto modest = MakeScriptedRuntime(host, "modest", "function create_sensor_value(id) return 3 end\n");
 
     zassert_true(greedy.script.HasCreateValue());
 
-    auto time_service = MakeTimeService();
+    const auto time_service = MakeTimeService();
     SensorReaderUserValueType greedy_reader(time_service, greedy);
     SensorReaderUserValueType modest_reader(time_service, modest);
     const TickContext tick{ time_service->GetCurrentTime() };
@@ -249,10 +249,10 @@ ZTEST(lua_scripts, test_a_script_past_the_memory_limit_fails_its_call_only) {
 }
 
 ZTEST(lua_scripts, test_the_base_library_is_available) {
-    auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
+    const auto host = std::make_shared<LuaScript>(LuaScript::CreateExt());
 
     // pairs, pcall, error, tonumber and tostring come from the base library, which the host opens.
-    auto runtime = MakeScriptedRuntime(
+    const auto runtime = MakeScriptedRuntime(
         host, "base",
         "function create_sensor_value(id)\n"
         "  local sum = 0\n"
@@ -264,7 +264,7 @@ ZTEST(lua_scripts, test_the_base_library_is_available) {
 
     zassert_true(runtime.script.HasCreateValue());
 
-    auto time_service = MakeTimeService();
+    const auto time_service = MakeTimeService();
     SensorReaderUserValueType reader(time_service, runtime);
     const TickContext tick{ time_service->GetCurrentTime() };
 

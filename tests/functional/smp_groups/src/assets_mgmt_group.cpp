@@ -1291,7 +1291,7 @@ ZTEST_F(smp_assets_group, test_a_request_with_a_missing_or_malformed_key_is_inva
     const uint8_t list_command = std::to_underlying(Command::LIST);
     const uint8_t delete_command = std::to_underlying(Command::DELETE);
 
-    auto client_read = [&](uint8_t command, const Bytes& body) {
+    const auto client_read = [&](uint8_t command, const Bytes& body) {
         return harness.client.Read(SmpGroupId::ASSETS, command, body);
     };
 
@@ -2504,7 +2504,7 @@ ZTEST_F(smp_assets_group, test_a_request_to_write_without_its_keys_is_invalid) {
     const std::span<const uint8_t> chunk(data);
     const uint8_t write_command = std::to_underlying(Command::WRITE);
 
-    auto client_write = [&harness, write_command](const Bytes& body) {
+    const auto client_write = [&harness, write_command](const Bytes& body) {
         return harness.client.Write(SmpGroupId::ASSETS, write_command, body);
     };
 

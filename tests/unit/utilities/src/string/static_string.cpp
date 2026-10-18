@@ -8,7 +8,7 @@ using eerie_leap::utilities::string::StaticString;
 ZTEST_SUITE(static_string, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(static_string, test_default_construction) {
-    StaticString<16> text;
+    const StaticString<16> text;
 
     zassert_true(text.Empty());
     zassert_equal(text.Size(), 0);
@@ -24,7 +24,7 @@ ZTEST(static_string, test_Capacity_is_compile_time) {
 }
 
 ZTEST(static_string, test_construction_from_string_view) {
-    StaticString<16> text("sensor_1");
+    const StaticString<16> text("sensor_1");
 
     zassert_false(text.Empty());
     zassert_equal(text.Size(), 8);
@@ -33,7 +33,7 @@ ZTEST(static_string, test_construction_from_string_view) {
 }
 
 ZTEST(static_string, test_construction_at_exact_capacity) {
-    StaticString<8> text("sensor_1");
+    const StaticString<8> text("sensor_1");
 
     zassert_equal(text.Size(), 8);
     zassert_str_equal(text.CStr(), "sensor_1");
@@ -154,7 +154,7 @@ ZTEST(static_string, test_operator_plus_equal_silently_drops_overflow) {
 }
 
 ZTEST(static_string, test_operator_index) {
-    StaticString<16> text("abc");
+    const StaticString<16> text("abc");
 
     zassert_equal(text[0], 'a');
     zassert_equal(text[1], 'b');
@@ -162,7 +162,7 @@ ZTEST(static_string, test_operator_index) {
 }
 
 ZTEST(static_string, test_operator_equal_with_string_view) {
-    StaticString<16> text("sensor_1");
+    const StaticString<16> text("sensor_1");
 
     zassert_true(text == "sensor_1");
     zassert_false(text == "sensor_2");
@@ -171,9 +171,9 @@ ZTEST(static_string, test_operator_equal_with_string_view) {
 }
 
 ZTEST(static_string, test_operator_equal_across_capacities) {
-    StaticString<8> small("abc");
-    StaticString<32> large("abc");
-    StaticString<32> other("abcd");
+    const StaticString<8> small("abc");
+    const StaticString<32> large("abc");
+    const StaticString<32> other("abcd");
 
     zassert_true(small == large);
     zassert_true(large == small);

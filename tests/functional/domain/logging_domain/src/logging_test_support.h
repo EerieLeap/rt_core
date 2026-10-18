@@ -127,7 +127,7 @@ inline std::shared_ptr<FsService> GetFormattedFsService() {
 
 // The log files, and the configurations a test stored, which the next rig would otherwise load.
 inline void RemoveDataDirectory() {
-    auto fs_service = GetFormattedFsService();
+    const auto fs_service = GetFormattedFsService();
 
     if(fs_service->Exists(LogFileNaming::LOGS_DIR))
         fs_service->DeleteRecursive(LogFileNaming::LOGS_DIR);
@@ -295,7 +295,7 @@ inline void RemoveFiller(FsService& fs_service, std::string_view path) {
 
 // An analog sensor with a convertible expression and a raw CAN sensor on bus 0.
 inline std::vector<std::shared_ptr<Sensor>> MakeLoggedSensors() {
-    auto oil_pressure = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "oil_pressure");
+    const auto oil_pressure = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "oil_pressure");
     oil_pressure->metadata.name = "Oil pressure";
     oil_pressure->metadata.unit = "bar";
     oil_pressure->metadata.description = "Main gallery, <after> the filter & cooler";
@@ -303,7 +303,7 @@ inline std::vector<std::shared_ptr<Sensor>> MakeLoggedSensors() {
     oil_pressure->configuration.channel = 0;
     oil_pressure->configuration.expression = "x * 0.1";
 
-    auto can_raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "can_raw");
+    const auto can_raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "can_raw");
     can_raw->metadata.name = "Raw frames";
     can_raw->configuration.type = SensorType::CANBUS_RAW;
     can_raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 0, 0x100);
@@ -510,7 +510,7 @@ TryStoreLoggingConfiguration(LoggingConfigurationManager& manager, uint32_t inte
 
 // Stores a logging configuration with @p interval_ms and @p max_log_size_mb and no sensor entries;
 // the rig's factory enables its sensors itself. Never while the queue is gated: the save runs there.
-inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
+inline void StoreLoggingConfiguration(const LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
     zassert_true(
         TryStoreLoggingConfiguration(*rig.logging_configuration_manager, interval_ms, max_log_size_mb),
         "the logging configuration was not stored"
@@ -518,8 +518,11 @@ inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, u
 }
 
 // Stores a logging configuration that logs @p sensors, for the supervisor's own factory.
-inline void
-EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> sensors, uint32_t interval_ms = 100) {
+inline void EnableSensorLogging(
+    const LogWriterRig& rig,
+    std::span<const std::shared_ptr<Sensor>> sensors,
+    uint32_t interval_ms = 100
+) {
     LoggingConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = interval_ms;
     configuration.max_log_size_mb = 0;
@@ -531,7 +534,7 @@ EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> 
 }
 
 inline void PublishValue(
-    LogWriterRig& rig,
+    const LogWriterRig& rig,
     const Sensor& sensor,
     uint8_t sequence,
     const std::chrono::system_clock::time_point& time
@@ -546,7 +549,7 @@ inline void PublishValue(
 }
 
 inline void PublishFrame(
-    LogWriterRig& rig,
+    const LogWriterRig& rig,
     const Sensor& sensor,
     uint8_t sequence,
     const std::chrono::system_clock::time_point& time
@@ -608,7 +611,7 @@ inline LogWriterSupervisor& AttachSupervisor(
     }
     rig.sensors_configuration_manager = sensors_configuration_manager;
 
-    auto supervisor = std::make_shared<LogWriterSupervisor>(
+    const auto supervisor = std::make_shared<LogWriterSupervisor>(
         rig.config_work_queue, rig.log_writer_service, rig.logging_configuration_manager,
         std::move(sensors_configuration_manager), kTestToolId, std::move(device_id_provider)
     );
@@ -648,7 +651,7 @@ public:
     [[nodiscard]] bool Close(WorkQueueThread& work_queue) {
         Open();
 
-        auto context = std::make_shared<Context>();
+        const auto context = std::make_shared<Context>();
         work_queue.Run([context] {
             k_sem_give(&context->entered);
             k_sem_take(&context->open, K_SECONDS(5));
@@ -675,8 +678,8 @@ inline ConfigQueueGate& Gate() {
 }
 
 // Returns once everything queued on the rig's configuration work queue before the call has run.
-[[nodiscard]] inline bool FlushConfigQueue(LogWriterRig& rig) {
-    auto done = std::make_shared<k_sem>();
+[[nodiscard]] inline bool FlushConfigQueue(const LogWriterRig& rig) {
+    const auto done = std::make_shared<k_sem>();
     k_sem_init(done.get(), 0, 1);
 
     rig.config_work_queue->Run([done] {
@@ -686,7 +689,7 @@ inline ConfigQueueGate& Gate() {
     return k_sem_take(done.get(), K_SECONDS(5)) == 0;
 }
 
-inline k_tid_t ConfigQueueThread(LogWriterRig& rig) {
+inline k_tid_t ConfigQueueThread(const LogWriterRig& rig) {
     return k_work_queue_thread_get(rig.config_work_queue->GetWorkQueue());
 }
 
@@ -873,7 +876,7 @@ inline void ResetAfterTest(void* = nullptr) {
     StatusRecorder::ReleaseLeftover();
     ReleaseSupervisor();
 
-    if(auto service = std::exchange(LastRigService(), nullptr); service != nullptr)
+    if(const auto service = std::exchange(LastRigService(), nullptr); service != nullptr)
         service->Stop();
 
     // The bus delivers what this test published before the next test subscribes.

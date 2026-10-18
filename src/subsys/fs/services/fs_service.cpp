@@ -88,14 +88,16 @@ bool FsService::WriteFile(std::string_view relative_path, const void* data_p, si
     struct fs_file_t file;
     fs_file_t_init(&file);
 
-    int rc = fs_open(&file, full_path.String().CStr(), FS_O_WRITE | FS_O_CREATE | (append ? FS_O_APPEND : FS_O_TRUNC));
+    const int rc = fs_open(
+        &file, full_path.String().CStr(), FS_O_WRITE | FS_O_CREATE | (append ? FS_O_APPEND : FS_O_TRUNC)
+    );
     if(rc < 0) {
         LOG_ERR("fs_open failed: %d.", rc);
         return false;
     }
 
-    ssize_t written = fs_write(&file, data_p, data_size);
-    int close_rc = fs_close(&file);
+    const ssize_t written = fs_write(&file, data_p, data_size);
+    const int close_rc = fs_close(&file);
 
     if(written < 0) {
         LOG_ERR("fs_write failed: %d.", static_cast<int>(written));
@@ -132,13 +134,13 @@ bool FsService::ReadFile(std::string_view relative_path, void* data_p, size_t da
     struct fs_file_t file;
     fs_file_t_init(&file);
 
-    int rc = fs_open(&file, full_path.String().CStr(), FS_O_READ);
+    const int rc = fs_open(&file, full_path.String().CStr(), FS_O_READ);
     if(rc < 0) {
         LOG_ERR("fs_open failed: %d.", rc);
         return false;
     }
 
-    ssize_t read = fs_read(&file, data_p, data_size);
+    const ssize_t read = fs_read(&file, data_p, data_size);
     fs_close(&file);
 
     if(read < 0) {
@@ -168,7 +170,7 @@ int FsService::OpenFile(std::string_view relative_path, fs_mode_t flags, fs_file
 
     fs_file_t_init(file_p);
 
-    int rc = fs_open(file_p, full_path.String().CStr(), flags);
+    const int rc = fs_open(file_p, full_path.String().CStr(), flags);
     if(rc < 0)
         LOG_ERR("fs_open failed: %d.", rc);
 
@@ -199,7 +201,7 @@ bool FsService::CreateDirectory(std::string_view relative_path) {
 
         current_path /= segment;
 
-        int rc = fs_mkdir(current_path.String().CStr());
+        const int rc = fs_mkdir(current_path.String().CStr());
         if(rc < 0 && rc != -EEXIST) {
             LOG_ERR("Failed to create dir '%s': %d.", current_path.String().CStr(), rc);
             return false;
@@ -222,7 +224,7 @@ bool FsService::Exists(std::string_view relative_path) const {
         return false;
 
     struct fs_dirent entry;
-    int rc = fs_stat(full_path.String().CStr(), &entry);
+    const int rc = fs_stat(full_path.String().CStr(), &entry);
 
     return rc == 0;
 }
@@ -239,7 +241,7 @@ bool FsService::DeleteFile(std::string_view relative_path) {
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    int rc = fs_unlink(full_path.String().CStr());
+    const int rc = fs_unlink(full_path.String().CStr());
     if(rc < 0) {
         LOG_ERR("fs_unlink failed: %d.", rc);
         return false;
@@ -285,7 +287,7 @@ bool FsService::DeleteDirectoryContents(FilesystemPath<PATH_BUFFER_SIZE>* full_p
         if(entry.name[0] == '\0')
             break;
 
-        size_t base_path_size = full_path->String().Size();
+        const size_t base_path_size = full_path->String().Size();
         if(base_path_size + 1 + std::strlen(entry.name) > PATH_BUFFER_SIZE) {
             LOG_ERR("Path does not fit the %d byte path buffer.", static_cast<int>(PATH_BUFFER_SIZE));
             fs_closedir(&dir);
@@ -565,7 +567,7 @@ std::optional<size_t> FsService::GetFileSize(std::string_view relative_path) con
         return std::nullopt;
 
     struct fs_dirent entry;
-    int rc = fs_stat(full_path.String().CStr(), &entry);
+    const int rc = fs_stat(full_path.String().CStr(), &entry);
 
     if(rc < 0) {
         LOG_ERR("fs_stat failed: %d.", rc);
@@ -633,7 +635,7 @@ bool FsService::Format() {
         return false;
     }
 
-    int rc = fs_mkfs(mountpoint_->type, (uintptr_t)mountpoint_->storage_dev, NULL, 0);
+    const int rc = fs_mkfs(mountpoint_->type, (uintptr_t)mountpoint_->storage_dev, NULL, 0);
     if(rc < 0) {
         LOG_ERR("Format failed: %d.", rc);
         Mount();
@@ -654,7 +656,7 @@ bool FsService::Mount() {
     if(mountpoint_ == nullptr)
         return false;
 
-    int rc = fs_mount(mountpoint_);
+    const int rc = fs_mount(mountpoint_);
     if(rc < 0) {
         LOG_ERR("Failed to mount FS: %d.", rc);
         return false;
@@ -671,7 +673,7 @@ void FsService::Unmount() {
     if(!IsMounted())
         return;
 
-    int rc = fs_unmount(mountpoint_);
+    const int rc = fs_unmount(mountpoint_);
     if(rc < 0)
         LOG_ERR("Failed to unmount FS: %d.", rc);
     else

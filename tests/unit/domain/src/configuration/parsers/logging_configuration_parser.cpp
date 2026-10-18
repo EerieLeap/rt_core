@@ -27,7 +27,7 @@ LoggingConfiguration logging_configuration_parser_GetTestConfiguration() {
 }
 
 void logging_configuration_parser_CompareLoggingConfigurations(
-    LoggingConfiguration& logging_configuration,
+    const LoggingConfiguration& logging_configuration,
     LoggingConfiguration& deserialized_logging_configuration
 ) {
 
@@ -62,7 +62,7 @@ ZTEST(logging_configuration_parser, test_CborSerializeDeserialize) {
 
     auto logging_configuration = logging_configuration_parser_GetTestConfiguration();
 
-    auto serialized_logging_configuration = logging_configuration_cbor_parser.Serialize(logging_configuration);
+    const auto serialized_logging_configuration = logging_configuration_cbor_parser.Serialize(logging_configuration);
     auto deserialized_logging_configuration = logging_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_logging_configuration.get()
     );

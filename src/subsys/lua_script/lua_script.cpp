@@ -213,11 +213,11 @@ void* LuaScript::ExtMemoryAllocator(void* ud, void* ptr, size_t osize, size_t ns
 }
 
 int LuaScript::sleep_ms_func(lua_State* state) {
-    int n = lua_gettop(state);
+    const int n = lua_gettop(state);
     if(n != 1)
         return luaL_error(state, "expected 1 arguments, got %d", n);
 
-    int ms = luaL_checkinteger(state, 1);
+    const int ms = luaL_checkinteger(state, 1);
 
     k_msleep(ms);
 
@@ -225,7 +225,7 @@ int LuaScript::sleep_ms_func(lua_State* state) {
 }
 
 int LuaScript::print_func(lua_State* state) {
-    int n = lua_gettop(state);
+    const int n = lua_gettop(state);
     if(n != 1)
         return luaL_error(state, "expected 1 arguments, got %d", n);
 

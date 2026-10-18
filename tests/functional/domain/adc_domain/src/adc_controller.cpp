@@ -96,8 +96,8 @@ void ExpectDefaultConfiguration(const AdcController& controller) {
 ZTEST_SUITE(adc_controller, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(adc_controller, test_Initialize_registers_a_default_configuration_sized_to_the_device_tree) {
-    auto fixture = MakeFixture();
-    auto configuration_service = std::make_shared<ConfigurationService>();
+    const auto fixture = MakeFixture();
+    const auto configuration_service = std::make_shared<ConfigurationService>();
 
     AdcController controller(fixture.fs_service, fixture.work_queue, configuration_service, nullptr);
     zassert_is_null(controller.GetManager().get());
@@ -130,7 +130,7 @@ ZTEST(adc_controller, test_Initialize_registers_a_default_configuration_sized_to
 }
 
 ZTEST(adc_controller, test_Initialize_without_a_configuration_service) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     AdcController controller(fixture.fs_service, fixture.work_queue, nullptr, nullptr);
 
@@ -149,10 +149,10 @@ ZTEST(adc_controller, test_Initialize_without_a_configuration_service) {
 
 // The paused service may be registered before or after Initialize(); a job pauses it either way.
 ZTEST(adc_controller, test_Initialize_creates_the_calibration_service) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     for(const bool is_registered_first : { true, false }) {
-        auto paused_service = std::make_shared<RecordingService>();
+        const auto paused_service = std::make_shared<RecordingService>();
 
         AdcController controller(fixture.fs_service, fixture.work_queue, nullptr, MakeTimeService());
         zassert_is_null(controller.GetCalibrationService().get());
@@ -237,11 +237,11 @@ ZTEST(adc_controller, test_the_calibration_group_lives_with_the_controller) {
     // build that keeps it fails here, so the case cannot go missing as a skip.
     static_assert(!kDtHasFailingAdc, "the smp scenario must build without the ADC that fails to initialize");
 
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
     SmpTestClient client;
 
     for(int round = 0; round < 2; round++) {
-        auto paused_service = std::make_shared<RecordingService>();
+        const auto paused_service = std::make_shared<RecordingService>();
 
         {
             AdcController controller(fixture.fs_service, fixture.work_queue, nullptr, MakeTimeService());
