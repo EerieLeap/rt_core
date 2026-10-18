@@ -21,19 +21,20 @@ class Cfb {
 private:
     const device* display_dev_;
 
-    static constexpr int thread_stack_size_ = 2048;
-    static constexpr int thread_priority_ = 6;
+    static constexpr int THREAD_STACK_SIZE = 2048;
+    static constexpr int THREAD_PRIORITY = 6;
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
     std::optional<threading::WorkQueueTask<CfbTask>> work_queue_task_;
 
-    uint16_t x_res_;
-    uint16_t y_res_;
-    uint8_t font_height_;
-    uint8_t font_width_;
+    uint16_t x_res_ = 0;
+    uint16_t y_res_ = 0;
+    uint8_t font_height_ = 0;
+    uint8_t font_width_ = 0;
     bool initialized_ = false;
 
     void PrintScreenInfo();
     void InitializeThread();
+    threading::WorkQueueTask<CfbTask>& GetTask();
     static WorkQueueTaskResult ProcessWorkTask(CfbTask* task);
 
 public:

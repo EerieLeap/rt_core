@@ -25,6 +25,11 @@ public:
     );
     virtual ~ThreadBase();
 
+    ThreadBase(const ThreadBase&) = delete;
+    ThreadBase& operator=(const ThreadBase&) = delete;
+    ThreadBase(ThreadBase&&) = delete;
+    ThreadBase& operator=(ThreadBase&&) = delete;
+
     bool InitializeStack();
     [[nodiscard]] const k_thread_stack_t* GetStack() const;
 };

@@ -72,6 +72,10 @@ public:
      */
     CdmpService(uint16_t features, uint32_t uid);
     ~CdmpService() override;
+    CdmpService(const CdmpService&) = delete;
+    CdmpService& operator=(const CdmpService&) = delete;
+    CdmpService(CdmpService&&) = delete;
+    CdmpService& operator=(CdmpService&&) = delete;
 
     /**
      * @brief Binds the services to a bus; only while stopped.

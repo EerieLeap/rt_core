@@ -13,39 +13,39 @@ namespace eerie_leap::subsys::device_tree {
 
 LOG_MODULE_DECLARE(dt_logger);
 
-fs_mount_t* DtFs::int_fs_mp_ = nullptr;
-fs_mount_t* DtFs::sd_fs_mp_ = nullptr;
+fs_mount_t* DtFs::int_fs_mp = nullptr;
+fs_mount_t* DtFs::sd_fs_mp = nullptr;
 #ifdef CONFIG_SDMMC_SUBSYS
-sdhc_host_props DtFs::sd_host_props_;
+sdhc_host_props DtFs::sd_host_props;
 #endif
-uint32_t DtFs::sd_relative_addr_ = 0;
-const char* DtFs::sd_disk_name_ = nullptr;
+uint32_t DtFs::sd_relative_addr = 0;
+const char* DtFs::sd_disk_name = nullptr;
 
 void DtFs::InitInternalFs() {
 #if DT_HAS_ALIAS(intfs0)
-    int_fs_mp_ = &FS_FSTAB_ENTRY(INT_FS_NODE);
+    int_fs_mp = &FS_FSTAB_ENTRY(INT_FS_NODE);
     LOG_INF("Internal File System initialized.");
 #endif
 }
 
 void DtFs::InitSdFs() {
 #if DT_HAS_CHOSEN(zephyr_sdhc) && DT_HAS_ALIAS(sdfs0) && CONFIG_SDMMC_SUBSYS
-    fs_mount_t* sd_fs_mp = &FS_FSTAB_ENTRY(SD_FS_NODE);
-    sd_fs_mp->storage_dev = (void*)SD_DEV;
+    fs_mount_t* mount_point = &FS_FSTAB_ENTRY(SD_FS_NODE);
+    mount_point->storage_dev = (void*)SD_DEV;
 
-    int ret = sdhc_get_host_props(SD_DEV, &sd_host_props_);
+    int ret = sdhc_get_host_props(SD_DEV, &sd_host_props);
     if(ret) {
         LOG_ERR("SDHC get host props failed with error %d", ret);
         return;
     }
 
-    sd_fs_mp_ = sd_fs_mp;
+    sd_fs_mp = mount_point;
 
     LOG_INF("SD File System initialized.");
 
     const char* disk_names[] = { DT_FOREACH_CHILD_SEP(SDHC_NODE, SDHC_DISK_NAME, (,))};
     if(sizeof(disk_names) > 0)
-        sd_disk_name_ = disk_names[0];
+        sd_disk_name = disk_names[0];
 #endif
 }
 
@@ -72,10 +72,10 @@ int DtFs::SdmmcRequestRca(const device* dev) {
         }
 
         /* Card RCA is in upper 16 bits of response */
-        sd_relative_addr_ = ((cmd.response[0U] & 0xFFFF0000) >> 16U);
-    } while(sd_relative_addr_ == 0U);
+        sd_relative_addr = ((cmd.response[0U] & 0xFFFF0000) >> 16U);
+    } while(sd_relative_addr == 0U);
 
-    LOG_DBG("SDHC Card relative addr: %d", sd_relative_addr_);
+    LOG_DBG("SDHC Card relative addr: %d", sd_relative_addr);
     return 0;
 }
 
@@ -85,14 +85,14 @@ bool DtFs::SdmmcReadStatus(const device* dev) {
 
     cmd.opcode = SD_SEND_STATUS;
     cmd.arg = 0;
-    if(!sd_host_props_.is_spi) {
-        if(sd_relative_addr_ == 0U) {
+    if(!sd_host_props.is_spi) {
+        if(sd_relative_addr == 0U) {
             ret = SdmmcRequestRca(dev);
             if(ret)
                 return false;
         }
 
-        cmd.arg = (sd_relative_addr_ << 16U);
+        cmd.arg = (sd_relative_addr << 16U);
     }
     cmd.response_type = (SD_RSP_TYPE_R1 | SD_SPI_RSP_TYPE_R2);
     cmd.retries = CONFIG_SD_CMD_RETRIES;
@@ -110,7 +110,7 @@ bool DtFs::SdmmcReadStatus(const device* dev) {
 bool DtFs::IsSdCardPresent() {
 #if DT_HAS_CHOSEN(zephyr_sdhc) && DT_HAS_ALIAS(sdfs0) && CONFIG_SDMMC_SUBSYS
     // NOTE: SPI SDHC driver does not support card detection.
-    if(sd_host_props_.is_spi)
+    if(sd_host_props.is_spi)
         return SdmmcReadStatus(SD_DEV);
 
     return sd_is_card_present(SD_DEV);

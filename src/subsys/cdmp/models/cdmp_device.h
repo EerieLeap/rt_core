@@ -22,7 +22,7 @@ private:
     // Application feature mask (EerieLeap: ProductFeature). The CDMP layer only carries it.
     // Set by the application on any thread, read by the heartbeat and discovery services.
     std::atomic<uint16_t> features_ = 0;
-    uint64_t last_heartbeat_;
+    uint64_t last_heartbeat_ = 0;
     uint8_t uptime_counter_ = 0;
     bool is_lowest_id_on_network_ = false;
     uint32_t staggered_message_delay_ = 0;

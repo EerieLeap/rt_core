@@ -37,7 +37,7 @@ protected:
     std::vector<gpio_dt_spec> gpio_specs_;
     std::vector<std::unique_ptr<ChannelCallback>> channel_callbacks_;
 
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
     int next_handler_id_ = 1;
 
     bool IsChannelValid(int channel) const;

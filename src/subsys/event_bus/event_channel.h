@@ -42,7 +42,7 @@ private:
 
     SubscriberMap<TEventType, TPayloadType> subscribers_;
     // Mutable for Accepts(), which runs the filters under it.
-    mutable k_mutex subscribers_mutex_;
+    mutable k_mutex subscribers_mutex_{};
     size_t next_id_ = 1;
     // Bumped under subscribers_mutex_ once a subscription is added or removed, with release order,
     // so a reader that loads it with acquire after seeing the change's effects sees the new value.
@@ -54,7 +54,7 @@ private:
     std::pmr::vector<EventMessage> event_queue_;
     size_t queue_head_ = 0;
     size_t queue_count_ = 0;
-    k_mutex queue_mutex_;
+    k_mutex queue_mutex_{};
     size_t dropped_events_ = 0;
     uint32_t last_dropped_source_id_ = 0;
 

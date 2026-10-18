@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <utility>
 
 #include <zephyr/logging/log.h>
@@ -36,10 +37,8 @@ CdmpDeviceStatus CdmpStatusMachine::GetCurrentStatus() const {
 
 int CdmpStatusMachine::RegisterStatusChangeHandler(StatusChangeCallback callback) {
     int max_id = 0;
-    for(const auto& [id, _] : status_change_callbacks_) {
-        if(id > max_id)
-            max_id = id;
-    }
+    for(const auto& [id, _] : status_change_callbacks_)
+        max_id = std::max(max_id, id);
     const int new_id = max_id + 1;
 
     status_change_callbacks_[new_id] = std::move(callback);
@@ -67,7 +66,7 @@ void CdmpStatusMachine::NotifyStatusChange(CdmpDeviceStatus old_status, CdmpDevi
         callback(old_status, new_status);
 }
 
-bool CdmpStatusMachine::IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatus to) const {
+bool CdmpStatusMachine::IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatus to) {
     switch(from) {
         case CdmpDeviceStatus::OFFLINE:
             return to == CdmpDeviceStatus::INIT || to == CdmpDeviceStatus::ERROR;

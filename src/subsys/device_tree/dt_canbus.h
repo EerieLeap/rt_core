@@ -17,7 +17,7 @@ namespace eerie_leap::subsys::device_tree {
 
 class DtCanbus {
 private:
-    static std::unordered_map<uint8_t, const device*> canbus_devs_;
+    static std::unordered_map<uint8_t, const device*> canbus_devs;
 
     DtCanbus() = default;
 

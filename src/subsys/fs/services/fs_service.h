@@ -28,7 +28,7 @@ protected:
     // Not owned: fs_mount() links this very entry into the global mount list, so it has to be
     // the devicetree fstab entry and not a copy of it.
     fs_mount_t* mountpoint_;
-    mutable k_mutex mutex_;
+    mutable k_mutex mutex_{};
 
     bool TryBuildPath(std::string_view relative_path, FilesystemPath<PATH_BUFFER_SIZE>& full_path) const;
 
@@ -43,6 +43,7 @@ public:
     FsService& operator=(const FsService&) = delete;
     FsService(FsService&&) = delete;
     FsService& operator=(FsService&&) = delete;
+    ~FsService() override = default;
 
     using IFsService::DeleteRecursive;
     using IFsService::ListFiles;

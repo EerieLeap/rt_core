@@ -86,12 +86,12 @@ private:
         std::unordered_map<int, CanFrameHandler> handlers;
     };
 
-    alignas(4) char frame_msgq_buffer_[FRAME_MSGQ_SIZE * sizeof(can_frame)];
-    k_msgq frame_msgq_;
+    alignas(4) char frame_msgq_buffer_[FRAME_MSGQ_SIZE * sizeof(can_frame)] = {};
+    k_msgq frame_msgq_{};
 
     // Guards config_, the filter entries and bitrate_detected_fn_.
     // Never taken from the RX callback, which only feeds the message queue.
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
 
     CanbusConfig config_;
     std::unordered_map<uint32_t, FilterEntry> exact_entries_; // <CanId::Key(), entry>
@@ -118,13 +118,13 @@ private:
     // NOTE: Thread is used as a Bottom Half for IRQ processing
     // and should have highest priority, or have MetaIRQ priority level,
     // for that set CONFIG_NUM_METAIRQ_PRIORITIES to be > 0
-    static constexpr int thread_priority_ = K_HIGHEST_THREAD_PRIO;
-    static constexpr bool thread_is_cooperative_ = true;
-    static constexpr int thread_stack_size_ = 2048;
+    static constexpr int THREAD_PRIORITY = K_HIGHEST_THREAD_PRIO;
+    static constexpr bool THREAD_IS_COOPERATIVE = true;
+    static constexpr int THREAD_STACK_SIZE = 2048;
     std::unique_ptr<Thread> thread_;
 
     // Ordered by most common first
-    static constexpr std::array<uint32_t, 9> classical_can_supported_bitrates_ = {
+    static constexpr std::array<uint32_t, 9> CLASSICAL_CAN_SUPPORTED_BITRATES = {
         500000,
         1000000,
         250000,
@@ -137,7 +137,7 @@ private:
     };
 
     // Ordered by most common first
-    static constexpr std::array<uint32_t, 13> canfd_supported_bitrates_ = { 500000, 1000000, 250000, 125000, 100000,
+    static constexpr std::array<uint32_t, 13> CANFD_SUPPORTED_BITRATES = { 500000, 1000000, 250000, 125000, 100000,
         83333, 50000, 20000, 10000, 2000000, 4000000, 5000000, 8000000 };
 
     void ThreadEntry() override;
@@ -163,7 +163,7 @@ private:
     void EraseEntry(const CanFilter& filter);
     bool HasOverlap(const CanFilter& filter) const;
     bool InstallFilter(FilterEntry& entry);
-    void UninstallFilter(FilterEntry& entry);
+    void UninstallFilter(FilterEntry& entry) const;
     void InstallDeferredFilters();
     void RemoveAllFilters();
     void ClearEntries();

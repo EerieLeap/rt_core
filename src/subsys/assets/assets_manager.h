@@ -30,6 +30,9 @@ public:
     AssetsManager();
     AssetsManager(const AssetsManager&) = delete;
     AssetsManager& operator=(const AssetsManager&) = delete;
+    AssetsManager(AssetsManager&&) = delete;
+    AssetsManager& operator=(AssetsManager&&) = delete;
+    ~AssetsManager() = default;
 
     /** @return false, registering nothing, when the kind is registered already or the provider
      *          has no store. */
@@ -58,7 +61,7 @@ private:
         std::shared_ptr<const Referrer> referrer;
     };
 
-    mutable k_mutex mutex_;
+    mutable k_mutex mutex_{};
     // By kind. Providers and referrers are shared, so that a caller keeps using the one it found
     // while another thread unregisters it, and so that the lock covers only the lookup.
     std::array<std::shared_ptr<const AssetProvider>, ASSET_KIND_COUNT> providers_;

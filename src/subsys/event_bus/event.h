@@ -190,7 +190,7 @@ using EventPayload = InlinePayload<PayloadTypeEnum>;
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
 struct Event {
     uint32_t source_id = 0;
-    EventTypeEnum type;
+    EventTypeEnum type{};
     EventPayload<PayloadTypeEnum> payload;
 };
 

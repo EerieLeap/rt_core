@@ -44,13 +44,13 @@ int64_t UptimeUs() {
 
 } // namespace
 
-std::atomic<SmpCanTransport*> SmpCanTransport::instance_ = nullptr;
+std::atomic<SmpCanTransport*> SmpCanTransport::instance = nullptr;
 
 SmpCanTransport::SmpCanTransport(std::shared_ptr<WorkQueueThread> work_queue_thread) :
     work_queue_thread_(std::move(work_queue_thread)) {
 
     SmpCanTransport* expected = nullptr;
-    if(!instance_.compare_exchange_strong(expected, this))
+    if(!instance.compare_exchange_strong(expected, this))
         throw std::logic_error("Only one SmpCanTransport may exist");
 
     k_mutex_init(&bind_lock_);
@@ -61,11 +61,11 @@ SmpCanTransport::~SmpCanTransport() {
     Unbind();
 
     if(tx_task_.has_value()) {
-        k_work_sync sync;
+        k_work_sync sync{};
         k_work_cancel_sync(&smp_transport_.work, &sync);
     }
 
-    instance_.store(nullptr);
+    instance.store(nullptr);
 
     if(tx_task_.has_value())
         tx_task_->Cancel();
@@ -169,8 +169,10 @@ void SmpCanTransport::UnbindLocked() {
     smp_rx_clear(&smp_transport_);
 
     // Waits for a TX run that still saw the old address, then lets the TX task drop the queue itself.
-    tx_task_->Cancel();
-    tx_task_->Schedule();
+    if(tx_task_.has_value()) {
+        tx_task_->Cancel();
+        tx_task_->Schedule();
+    }
 
     LOG_INF("SMP over CAN unbound");
 }
@@ -188,7 +190,7 @@ bool SmpCanTransport::Forward(uint8_t target, SmpPacket packet) {
 int SmpCanTransport::Output(net_buf* packet) {
     SmpPacket owned(packet);
 
-    SmpCanTransport* transport = instance_.load();
+    SmpCanTransport* transport = instance.load();
     if(transport == nullptr)
         return -ENODEV;
 
@@ -203,6 +205,7 @@ bool SmpCanTransport::Enqueue(uint8_t target, SmpPacket packet) {
     if(packet == nullptr
         || packet->len == 0
         || address == 0
+        || !tx_task_.has_value()
         || !SmpCanIdLayout::IsValidAddress(target)
         || target == address) {
 
@@ -242,7 +245,9 @@ WorkQueueTaskResult SmpCanTransport::ProcessTx() {
 
     while(true) {
         if(tx_packet_ == nullptr) {
+            // NOLINTBEGIN(misc-const-correctness): the variable is declared inside the k_fifo_get macro
             tx_packet_ = SmpPacket(static_cast<net_buf*>(k_fifo_get(&tx_queue_, K_NO_WAIT)));
+            // NOLINTEND(misc-const-correctness)
             if(tx_packet_ == nullptr)
                 return {};
 
@@ -283,10 +288,12 @@ void SmpCanTransport::DropTx() {
         tx_dropped_++;
     }
 
+    // NOLINTBEGIN(misc-const-correctness): the variable is declared inside the k_fifo_get macro
     while(auto* packet = static_cast<net_buf*>(k_fifo_get(&tx_queue_, K_NO_WAIT))) {
         smp_packet_free(packet);
         tx_dropped_++;
     }
+    // NOLINTEND(misc-const-correctness)
 }
 
 void SmpCanTransport::OnFrame(const CanFrame& frame) {
@@ -382,6 +389,11 @@ void SmpCanTransport::ReleaseExpiredRxSlots(int64_t now_ms) {
 
 void SmpCanTransport::Deliver(uint8_t source, SmpPacket packet) {
     const auto header = SmpHeader::Parse({ packet->data, packet->len });
+
+    if(!header.has_value()) {
+        rx_dropped_++;
+        return;
+    }
 
     if(header->IsRequest()) {
         UserData(*packet).peer = source;

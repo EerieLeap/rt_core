@@ -2,7 +2,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <ctime>
 #include <string>
+#include <utility>
 
 #include <zephyr/kernel.h>
 #include <zephyr/timing/timing.h>
@@ -17,10 +19,11 @@ public:
         const auto millis = duration_cast<std::chrono::milliseconds>(duration - secs).count();
 
         std::time_t time_sec = std::chrono::system_clock::to_time_t(tp);
-        std::tm* timeinfo = localtime(&time_sec);
+        std::tm timeinfo{};
+        localtime_r(&time_sec, &timeinfo);
 
         char buffer[32];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
 
         const std::string formatted_time = std::string(buffer);
         return formatted_time + "." + std::to_string(millis);
@@ -66,13 +69,14 @@ public:
      */
     template<typename Func>
     static float MeasureExecutionTimeUs(Func&& func) {
-        timing_t start_time, end_time;
+        timing_t start_time = 0;
+        timing_t end_time = 0;
 
         timing_init();
         timing_start();
         start_time = timing_counter_get();
 
-        func();
+        std::forward<Func>(func)();
 
         end_time = timing_counter_get();
         const uint64_t total_cycles = timing_cycles_get(&start_time, &end_time);

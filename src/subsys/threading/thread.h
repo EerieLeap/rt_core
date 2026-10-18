@@ -12,7 +12,7 @@ namespace eerie_leap::subsys::threading {
 class Thread : public ThreadBase {
 private:
     IThread* instance_;
-    k_thread thread_;
+    k_thread thread_{};
     bool is_initialized_{ false };
     bool is_created_{ false };
     atomic_t is_running_{ ATOMIC_INIT(0) };

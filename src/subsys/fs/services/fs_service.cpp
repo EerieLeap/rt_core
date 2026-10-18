@@ -86,7 +86,7 @@ bool FsService::WriteFile(std::string_view relative_path, const void* data_p, si
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    struct fs_file_t file;
+    struct fs_file_t file{};
     fs_file_t_init(&file);
 
     const int rc = fs_open(
@@ -132,7 +132,7 @@ bool FsService::ReadFile(std::string_view relative_path, void* data_p, size_t da
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    struct fs_file_t file;
+    struct fs_file_t file{};
     fs_file_t_init(&file);
 
     const int rc = fs_open(&file, full_path.String().CStr(), FS_O_READ);
@@ -224,7 +224,7 @@ bool FsService::Exists(std::string_view relative_path) const {
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    struct fs_dirent entry;
+    struct fs_dirent entry{};
     const int rc = fs_stat(full_path.String().CStr(), &entry);
 
     return rc == 0;
@@ -266,9 +266,10 @@ bool FsService::DeleteRecursive(std::string_view relative_path) {
     return DeleteDirectoryContents(&full_path);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): the depth is bounded by the path buffer, a name is at least two bytes
 bool FsService::DeleteDirectoryContents(FilesystemPath<PATH_BUFFER_SIZE>* full_path) {
-    struct fs_dir_t dir;
-    struct fs_dirent entry;
+    struct fs_dir_t dir{};
+    struct fs_dirent entry{};
     fs_dir_t_init(&dir);
 
     int rc = fs_opendir(&dir, full_path->String().CStr());
@@ -423,7 +424,7 @@ int FsService::Rename(std::string_view from, std::string_view to) {
 
     // FAT unlinks the target before it looks for the source as well: a missing source would cost
     // the file it was meant to replace.
-    struct fs_dirent entry;
+    struct fs_dirent entry{};
     int rc = fs_stat(from_path.String().CStr(), &entry);
     if(rc < 0) {
         LOG_ERR("fs_stat failed on path: %s (%d).", from_path.String().CStr(), rc);
@@ -451,8 +452,8 @@ std::vector<std::string> FsService::ListFiles(std::string_view relative_path) co
     if(!TryBuildPath(relative_path, full_path))
         return files;
 
-    struct fs_dir_t dir;
-    struct fs_dirent entry;
+    struct fs_dir_t dir{};
+    struct fs_dirent entry{};
     fs_dir_t_init(&dir);
 
     int rc = fs_opendir(&dir, full_path.String().CStr());
@@ -502,8 +503,8 @@ int FsService::ListDirectory(
     if(!TryBuildPath(relative_path, full_path))
         return -EINVAL;
 
-    struct fs_dir_t dir;
-    struct fs_dirent entry;
+    struct fs_dir_t dir{};
+    struct fs_dirent entry{};
     fs_dir_t_init(&dir);
 
     int rc = fs_opendir(&dir, full_path.String().CStr());
@@ -520,10 +521,17 @@ int FsService::ListDirectory(
     struct DirectoryCloser {
         fs_dir_t* dir;
 
+        explicit DirectoryCloser(fs_dir_t* directory) :
+            dir(directory) {}
+        DirectoryCloser(const DirectoryCloser&) = delete;
+        DirectoryCloser& operator=(const DirectoryCloser&) = delete;
+        DirectoryCloser(DirectoryCloser&&) = delete;
+        DirectoryCloser& operator=(DirectoryCloser&&) = delete;
         ~DirectoryCloser() {
             fs_closedir(dir);
         }
-    } closer{ &dir };
+    };
+    const DirectoryCloser closer{ &dir };
 
     while(true) {
         rc = fs_readdir(&dir, &entry);
@@ -567,7 +575,7 @@ std::optional<size_t> FsService::GetFileSize(std::string_view relative_path) con
     if(!TryBuildPath(relative_path, full_path))
         return std::nullopt;
 
-    struct fs_dirent entry;
+    struct fs_dirent entry{};
     const int rc = fs_stat(full_path.String().CStr(), &entry);
 
     if(rc < 0) {
@@ -592,7 +600,7 @@ uint64_t FsService::GetTotalSpace() const {
         return 0;
     }
 
-    struct fs_statvfs stat;
+    struct fs_statvfs stat{};
     if(fs_statvfs(mountpoint_->mnt_point, &stat) < 0) {
         LOG_ERR("fs_statvfs failed when querying total space.");
         return 0;
@@ -611,7 +619,7 @@ uint64_t FsService::GetUsedSpace() const {
         return 0;
     }
 
-    struct fs_statvfs stat;
+    struct fs_statvfs stat{};
     if(fs_statvfs(mountpoint_->mnt_point, &stat) < 0) {
         LOG_ERR("fs_statvfs failed when querying used space.");
         return 0;
@@ -636,7 +644,8 @@ bool FsService::Format() {
         return false;
     }
 
-    const int rc = fs_mkfs(mountpoint_->type, (uintptr_t)mountpoint_->storage_dev, NULL, 0);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): fs_mkfs takes the storage device as an integer
+    const int rc = fs_mkfs(mountpoint_->type, reinterpret_cast<uintptr_t>(mountpoint_->storage_dev), nullptr, 0);
     if(rc < 0) {
         LOG_ERR("Format failed: %d.", rc);
         Mount();

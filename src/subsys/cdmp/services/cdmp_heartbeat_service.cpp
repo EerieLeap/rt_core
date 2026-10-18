@@ -50,8 +50,11 @@ bool CdmpHeartbeatService::DoStop() {
 }
 
 void CdmpHeartbeatService::StartHeartbeatTask() {
-    if(heartbeat_enabled_ && !is_heartbeat_task_running_ && device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
-        heartbeat_task_.value().Schedule();
+    if(heartbeat_enabled_
+        && !is_heartbeat_task_running_
+        && heartbeat_task_.has_value()
+        && device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
+        heartbeat_task_->Schedule();
         is_heartbeat_task_running_ = true;
 
         LOG_INF("CDMP Heartbeat Service started, interval: %d ms", CdmpConstants::HEARTBEAT_INTERVAL_MS);
@@ -87,7 +90,7 @@ void CdmpHeartbeatService::UnregisterCanHandlers() {
     canbus_handler_id_ = -1;
 }
 
-void CdmpHeartbeatService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
+void CdmpHeartbeatService::OnDeviceStatusChanged(CdmpDeviceStatus /*old_status*/, CdmpDeviceStatus new_status) {
     switch(new_status) {
         case CdmpDeviceStatus::ONLINE:
             LOG_INF("Device %d starting to send heartbeats", device_->GetDeviceId());

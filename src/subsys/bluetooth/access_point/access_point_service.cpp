@@ -29,9 +29,9 @@ constexpr size_t LIVE_VALUE_INDEX = 5;
 
 } // namespace
 
-std::atomic<AccessPointService*> AccessPointService::instance_ = nullptr;
+std::atomic<AccessPointService*> AccessPointService::instance = nullptr;
 
-const bt_gatt_attr AccessPointService::attributes_[] = {
+const bt_gatt_attr AccessPointService::ATTRIBUTES[] = {
     BT_GATT_PRIMARY_SERVICE(BT_UUID_ACCESS_POINT_SERVICE),
 
     // Requests change settings, so writing needs an encrypted link.
@@ -67,14 +67,14 @@ const bt_gatt_attr AccessPointService::attributes_[] = {
     ),
 };
 
-const STRUCT_SECTION_ITERABLE(bt_gatt_service_static, AccessPointService::gatt_service_) = BT_GATT_SERVICE(attributes_);
+const STRUCT_SECTION_ITERABLE(bt_gatt_service_static, AccessPointService::gatt_service_) = BT_GATT_SERVICE(ATTRIBUTES);
 
 AccessPointService::AccessPointService() :
-    smp_notifier_(std::make_shared<Notifier>(&attributes_[SMP_VALUE_INDEX], SmpSentCallback)),
-    live_notifier_(std::make_shared<Notifier>(&attributes_[LIVE_VALUE_INDEX], LiveSentCallback)) {
+    smp_notifier_(std::make_shared<Notifier>(&ATTRIBUTES[SMP_VALUE_INDEX], SmpSentCallback)),
+    live_notifier_(std::make_shared<Notifier>(&ATTRIBUTES[LIVE_VALUE_INDEX], LiveSentCallback)) {
 
     AccessPointService* expected = nullptr;
-    if(!instance_.compare_exchange_strong(expected, this))
+    if(!instance.compare_exchange_strong(expected, this))
         throw std::logic_error("Only one AccessPointService may exist");
 
     k_work_init(&fast_work_, FastWorkHandler);
@@ -87,9 +87,9 @@ AccessPointService::~AccessPointService() {
     if(disconnected_handler_id_ >= 0)
         Ble::UnregisterDisconnectedHandler(disconnected_handler_id_);
 
-    instance_.store(nullptr);
+    instance.store(nullptr);
 
-    k_work_sync sync;
+    k_work_sync sync{};
     k_work_cancel_sync(&fast_work_, &sync);
     k_work_cancel_delayable_sync(&idle_work_, &sync);
 }
@@ -155,7 +155,7 @@ ssize_t AccessPointService::SmpWriteCallback(
     if(offset != 0)
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 
-    AccessPointService* service = instance_.load();
+    AccessPointService* service = instance.load();
     if(service != nullptr && service->callbacks_.on_smp_write) {
         service->callbacks_.on_smp_write({ static_cast<const uint8_t*>(buf), len });
         service->OnSmpActivity();
@@ -172,7 +172,7 @@ ssize_t AccessPointService::InfoReadCallback(
     uint16_t offset
 ) {
 
-    AccessPointService* service = instance_.load();
+    AccessPointService* service = instance.load();
     if(service == nullptr)
         return bt_gatt_attr_read(conn, attr, buf, len, offset, nullptr, 0);
 
@@ -180,13 +180,13 @@ ssize_t AccessPointService::InfoReadCallback(
 }
 
 void AccessPointService::SmpSentCallback(bt_conn* /*conn*/, void* /*user_data*/) {
-    const AccessPointService* service = instance_.load();
+    const AccessPointService* service = instance.load();
     if(service != nullptr && service->callbacks_.on_smp_sent)
         service->callbacks_.on_smp_sent();
 }
 
 void AccessPointService::LiveSentCallback(bt_conn* /*conn*/, void* /*user_data*/) {
-    const AccessPointService* service = instance_.load();
+    const AccessPointService* service = instance.load();
     if(service != nullptr && service->callbacks_.on_live_sent)
         service->callbacks_.on_live_sent();
 }
@@ -203,7 +203,7 @@ void AccessPointService::FastWorkHandler(k_work* /*work*/) {
 }
 
 void AccessPointService::IdleWorkHandler(k_work* /*work*/) {
-    AccessPointService* service = instance_.load();
+    AccessPointService* service = instance.load();
     if(service != nullptr)
         service->is_fast_ = false;
 
@@ -219,7 +219,7 @@ void AccessPointService::RequestConnectionParameters(bool is_fast) {
     if(err != 0 && err != -EALREADY)
         LOG_WRN("Connection parameter update failed (err %d)", err);
 
-#if defined(CONFIG_BT_USER_PHY_UPDATE)
+#ifdef CONFIG_BT_USER_PHY_UPDATE
     if(is_fast) {
         const bt_conn_le_phy_param phy = BT_CONN_LE_PHY_PARAM_INIT(BT_GAP_LE_PHY_2M, BT_GAP_LE_PHY_2M);
         err = bt_conn_le_phy_update(conn, &phy);

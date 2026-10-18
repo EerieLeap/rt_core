@@ -73,6 +73,7 @@ bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
 }
 
 std::string_view ToView(const zcbor_string& text) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out the text as raw bytes
     return { reinterpret_cast<const char*>(text.value), text.len };
 }
 
@@ -195,6 +196,10 @@ int AssetsMgmtGroup::HandleDelete(smp_streamer* ctxt) {
 }
 
 int AssetsMgmtGroup::RunJob(Command command, smp_streamer* ctxt) {
+    // Initialize() creates the task; without it no job could ever run and the wait below would not end.
+    if(!job_task_.has_value())
+        return Fail(ctxt, Error::UNKNOWN);
+
     Job job{ .command = command, .ctxt = ctxt };
 
     job_ = &job;
@@ -449,6 +454,7 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     }
 
     const bool is_last = offset + chunk == size;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the chunk is raw file bytes, zcbor takes char*
     const char* chunk_data = chunk > 0 ? reinterpret_cast<const char*>(transfer_buffer_.data()) : "";
 
     bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, offset);
@@ -728,6 +734,7 @@ int AssetsMgmtGroup::FinishUpload(
         last_commit_.token = token;
     } catch(const std::bad_alloc&) {
         // A last chunk sent again then gets BAD_TOKEN, and the client finds the file with a LIST.
+        LOG_WRN("Out of memory recording the commit, a repeated last chunk will be answered with BAD_TOKEN.");
     }
 
     ResetUpload();
@@ -970,6 +977,7 @@ void AssetsMgmtGroup::CloseReadSession() {
             checkpoint_.is_valid = true;
         } catch(const std::bad_alloc&) {
             // Without a checkpoint a resume reads the file again, which only costs time.
+            LOG_WRN("Out of memory recording the read checkpoint, a resume will read the file again.");
         }
     }
 
@@ -1129,7 +1137,7 @@ void AssetsMgmtGroup::OnActivity() {
 
     // Armed for the session that expires first, so a session does not outlive its time by the other's.
     const int64_t delay_ms = GetIdleDelayMs(k_uptime_get());
-    if(delay_ms != INT64_MAX)
+    if(delay_ms != INT64_MAX && idle_task_.has_value())
         idle_task_->Reschedule(K_MSEC(delay_ms));
 }
 

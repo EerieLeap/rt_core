@@ -17,10 +17,13 @@ size_t SmpCanFramer::Encode(std::span<uint8_t, SmpCanFrameFormat::MAX_FRAME_SIZE
     frame[0] = static_cast<uint8_t>(
         (offset_ == 0 ? SmpCanFrameFormat::START_FLAG : 0) | (sequence_ & SmpCanFrameFormat::SEQUENCE_MASK)
     );
-    std::copy_n(packet_.begin() + offset_, data_size, frame.begin() + 1);
+    std::copy_n(packet_.begin() + static_cast<std::ptrdiff_t>(offset_), data_size, frame.begin() + 1);
 
     const size_t frame_size = format_.GetPaddedSize(data_size + 1);
-    std::fill(frame.begin() + 1 + data_size, frame.begin() + frame_size, 0);
+    std::fill(
+        frame.begin() + 1 + static_cast<std::ptrdiff_t>(data_size),
+        frame.begin() + static_cast<std::ptrdiff_t>(frame_size), 0
+    );
 
     return frame_size;
 }

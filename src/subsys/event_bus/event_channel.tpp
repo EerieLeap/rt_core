@@ -8,7 +8,8 @@
 #include "utilities/memory/memory_resource_manager.h"
 #include "subsys/threading/scoped_mutex.h"
 
-#include "event_channel.h"
+// Not self-contained on purpose: event_channel.h includes this file at its end, so the class
+// definition is already visible here. Including the header back would be a cycle.
 
 namespace eerie_leap::subsys::event_bus {
 
@@ -209,7 +210,7 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
     }
 
     if(dropped != 0) {
-        LOG_MODULE_DECLARE(event_bus_logger);
+        LOG_MODULE_DECLARE(event_bus_logger); // NOLINT(misc-const-correctness): the variable is declared inside the Zephyr macro
         LOG_WRN("Channel '%s' dropped %u queued events, subscribers cannot keep up. Last dropped publisher: 0x%08x",
             name_.c_str(), static_cast<unsigned>(dropped), dropped_source_id);
     }
@@ -251,11 +252,11 @@ void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event)
         try {
             subscription->handler(event);
         } catch (const std::exception& e) {
-            LOG_MODULE_DECLARE(event_bus_logger);
+            LOG_MODULE_DECLARE(event_bus_logger); // NOLINT(misc-const-correctness): the variable is declared inside the Zephyr macro
             LOG_ERR("Channel '%s' subscriber threw for event type %u. %s",
                 name_.c_str(), static_cast<unsigned>(event.type), e.what());
         } catch (...) {
-            LOG_MODULE_DECLARE(event_bus_logger);
+            LOG_MODULE_DECLARE(event_bus_logger); // NOLINT(misc-const-correctness): the variable is declared inside the Zephyr macro
             LOG_ERR("Channel '%s' subscriber threw a non-standard exception for event type %u",
                 name_.c_str(), static_cast<unsigned>(event.type));
         }

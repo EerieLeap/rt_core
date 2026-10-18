@@ -16,9 +16,9 @@ namespace eerie_leap::subsys::event_bus {
 class EventChannelRegistry {
 private:
     // Sized from the last id, so every id IsValidEventChannelId() accepts has a slot.
-    static constexpr size_t k_channel_count = std::to_underlying(k_last_event_channel_id) + 1;
+    static constexpr size_t K_CHANNEL_COUNT = std::to_underlying(k_last_event_channel_id) + 1;
 
-    std::array<IEventChannel*, k_channel_count> channels_{};
+    std::array<IEventChannel*, K_CHANNEL_COUNT> channels_{};
 
     EventChannelRegistry() = default;
 
@@ -27,6 +27,7 @@ public:
 
     EventChannelRegistry(const EventChannelRegistry&) = delete;
     EventChannelRegistry& operator=(const EventChannelRegistry&) = delete;
+    ~EventChannelRegistry() = default;
 
     // 0, also for the channel already held under @p id; -EINVAL for None or an id that names no
     // channel (IsValidEventChannelId), -EEXIST for a second channel under a taken id.

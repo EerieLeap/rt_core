@@ -16,7 +16,7 @@ struct WorkQueueLoadMetrics {
 
     void OnWorkComplete(uint32_t execution_time_ms) {
         atomic_dec(&pending_items);
-        atomic_add(&total_load_ms, execution_time_ms);
+        atomic_add(&total_load_ms, static_cast<atomic_val_t>(execution_time_ms));
     }
 };
 

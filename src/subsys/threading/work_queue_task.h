@@ -21,7 +21,7 @@ private:
 public:
     // NOTE: Has to be public, in order to be able to retrieve
     // an object containing that field
-    k_work_delayable work;
+    k_work_delayable work{};
 
     WorkQueueTaskBase(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler) :
         work_q_(work_q),
@@ -78,6 +78,8 @@ public:
     WorkQueueTask(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler, const Handler& user_handler) :
         WorkQueueTaskBase(work_q, sync, handler),
         user_handler_(user_handler) {}
+
+    ~WorkQueueTask() override = default;
 
     WorkQueueTask(const WorkQueueTask&) = delete;
     WorkQueueTask(WorkQueueTask&&) = default;

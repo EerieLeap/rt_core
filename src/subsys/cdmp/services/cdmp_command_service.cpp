@@ -92,16 +92,11 @@ void CdmpCommandService::UnregisterCanHandlers() {
     }
 }
 
-void CdmpCommandService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
-    switch(new_status) {
-        case CdmpDeviceStatus::ONLINE:
-            transaction_service_->Start();
-            break;
-
-        default:
-            transaction_service_->Stop();
-            break;
-    }
+void CdmpCommandService::OnDeviceStatusChanged(CdmpDeviceStatus /*old_status*/, CdmpDeviceStatus new_status) {
+    if(new_status == CdmpDeviceStatus::ONLINE)
+        transaction_service_->Start();
+    else
+        transaction_service_->Stop();
 }
 
 void CdmpCommandService::ProcessRequestFrame(std::span<const uint8_t> frame_data) {
@@ -209,7 +204,7 @@ void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const Cdm
         CanId can_id = can_id_manager_->GetCommandResponseCanId();
 
         if(target_device_id != device_->GetDeviceId())
-            k_msleep(device_->GetStaggeredMessageDelay());
+            k_msleep(static_cast<int32_t>(device_->GetStaggeredMessageDelay()));
 
         (*canbus_)->SendFrame(can_id, frame);
 
@@ -337,7 +332,7 @@ uint8_t CdmpCommandService::SendCommand(
     return SendCommand(target_device_id, std::to_underlying(command_code), data, std::move(callback));
 }
 
-bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
+bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) {
     auto service_command_code = static_cast<CdmpServiceCommandCode>(command_code);
 
     return service_command_code == CdmpServiceCommandCode::STATUS_REQUEST
@@ -345,7 +340,7 @@ bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
         || service_command_code == CdmpServiceCommandCode::STATE_SYNC_REQUEST;
 }
 
-bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) const {
+bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) {
     return command_code >= CdmpConstants::USER_COMMAND_CODE_MIN && command_code <= CdmpConstants::USER_COMMAND_CODE_MAX;
 }
 

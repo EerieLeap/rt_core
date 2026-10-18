@@ -24,7 +24,7 @@ class ServiceBase : public TService {
 
 private:
     atomic_t service_state_ = ATOMIC_INIT(static_cast<atomic_val_t>(ServiceState::STOPPED));
-    k_mutex transition_mutex_;
+    k_mutex transition_mutex_{};
 
     void SetState(ServiceState state) noexcept {
         atomic_set(&service_state_, static_cast<atomic_val_t>(state));

@@ -4,6 +4,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <stdexcept>
 #include <utility>
 
 #include "cfb.h"
@@ -12,6 +16,25 @@
 LOG_MODULE_REGISTER(cfb_logger);
 
 namespace eerie_leap::subsys::cfb {
+
+namespace {
+
+// Coordinate holds int, the CFB driver int16_t / uint16_t; clamp instead of wrapping.
+int16_t ToCfbCoordinate(int value) {
+    return static_cast<int16_t>(
+        std::clamp<int>(value, std::numeric_limits<int16_t>::min(), std::numeric_limits<int16_t>::max())
+    );
+}
+
+uint16_t ToCfbExtent(int value) {
+    return static_cast<uint16_t>(std::clamp<int>(value, 0, std::numeric_limits<uint16_t>::max()));
+}
+
+cfb_position ToCfbPosition(const Coordinate& coordinate) {
+    return cfb_position{ ToCfbCoordinate(coordinate.x), ToCfbCoordinate(coordinate.y) };
+}
+
+} // namespace
 
 Cfb::Cfb(const device* display_dev) :
     display_dev_(display_dev),
@@ -36,7 +59,7 @@ bool Cfb::Initialize() {
         return false;
     }
 
-    if(cfb_framebuffer_init(display_dev_)) {
+    if(cfb_framebuffer_init(display_dev_) != 0) {
         LOG_ERR("Framebuffer initialization failed!");
         return false;
     }
@@ -64,20 +87,20 @@ bool Cfb::Initialize() {
 }
 
 void Cfb::InitializeThread() {
-    work_queue_thread_ = std::make_unique<WorkQueueThread>("display_service", thread_stack_size_, thread_priority_);
+    work_queue_thread_ = std::make_unique<WorkQueueThread>("display_service", THREAD_STACK_SIZE, THREAD_PRIORITY);
     work_queue_thread_->Initialize();
 
     auto task = std::make_unique<CfbTask>();
     task->display_dev = display_dev_;
 
     work_queue_task_ = work_queue_thread_->CreateTask(ProcessWorkTask, std::move(task));
-    work_queue_task_.value().Schedule();
+    GetTask().Schedule();
 
     LOG_INF("Display service initialized.");
 }
 
 WorkQueueTaskResult Cfb::ProcessWorkTask(CfbTask* task) {
-    const bool is_animation_running = atomic_get(&task->is_animation_running_)
+    const bool is_animation_running = atomic_get(&task->is_animation_running_) != 0
         && task->frame_rate > 0
         && task->animation_handler;
 
@@ -86,12 +109,22 @@ WorkQueueTaskResult Cfb::ProcessWorkTask(CfbTask* task) {
 
     cfb_framebuffer_finalize(task->display_dev);
 
-    return { .reschedule = is_animation_running, .delay = K_MSEC(1000 / task->frame_rate) };
+    // frame_rate is 0 until SetAnimationHandler(); the delay only matters while an animation runs.
+    const uint32_t frame_period_ms = task->frame_rate > 0 ? 1000 / task->frame_rate : 0;
+
+    return { .reschedule = is_animation_running, .delay = K_MSEC(frame_period_ms) };
+}
+
+threading::WorkQueueTask<CfbTask>& Cfb::GetTask() {
+    if(!work_queue_task_.has_value())
+        throw std::logic_error("Cfb is not initialized.");
+
+    return *work_queue_task_;
 }
 
 bool Cfb::Flush() {
-    work_queue_task_.value().Schedule();
-    work_queue_task_.value().Flush();
+    GetTask().Schedule();
+    GetTask().Flush();
 
     return true;
 }
@@ -119,7 +152,7 @@ int Cfb::GetFontWidth() const {
 }
 
 bool Cfb::PrintString(const char* str, const Coordinate& coordinate) {
-    if(cfb_print(display_dev_, str, coordinate.x, coordinate.y) != 0) {
+    if(cfb_print(display_dev_, str, ToCfbCoordinate(coordinate.x), ToCfbCoordinate(coordinate.y)) != 0) {
         LOG_ERR("Failed to print a string");
         return false;
     }
@@ -128,7 +161,7 @@ bool Cfb::PrintString(const char* str, const Coordinate& coordinate) {
 }
 
 bool Cfb::PrintStringLine(const char* str, const Coordinate& coordinate) {
-    if(cfb_draw_text(display_dev_, str, coordinate.x, coordinate.y) != 0) {
+    if(cfb_draw_text(display_dev_, str, ToCfbCoordinate(coordinate.x), ToCfbCoordinate(coordinate.y)) != 0) {
         LOG_ERR("Failed to print a string");
         return false;
     }
@@ -137,7 +170,7 @@ bool Cfb::PrintStringLine(const char* str, const Coordinate& coordinate) {
 }
 
 bool Cfb::DrawPoint(const Coordinate& coordinate) {
-    const cfb_position cbf_coordinate = { coordinate.x, coordinate.y };
+    const cfb_position cbf_coordinate = ToCfbPosition(coordinate);
 
     if(cfb_draw_point(display_dev_, &cbf_coordinate) != 0) {
         LOG_ERR("Failed to draw a point");
@@ -148,8 +181,8 @@ bool Cfb::DrawPoint(const Coordinate& coordinate) {
 }
 
 bool Cfb::DrawLine(const Coordinate& start, const Coordinate& end) {
-    const cfb_position cbf_start = { start.x, start.y };
-    const cfb_position cbf_end = { end.x, end.y };
+    const cfb_position cbf_start = ToCfbPosition(start);
+    const cfb_position cbf_end = ToCfbPosition(end);
 
     if(cfb_draw_line(display_dev_, &cbf_start, &cbf_end) != 0) {
         LOG_ERR("Failed to draw a line");
@@ -160,8 +193,8 @@ bool Cfb::DrawLine(const Coordinate& start, const Coordinate& end) {
 }
 
 bool Cfb::DrawRectangle(const Coordinate& start, const Coordinate& end) {
-    const cfb_position cbf_start = { start.x, start.y };
-    const cfb_position cbf_end = { end.x, end.y };
+    const cfb_position cbf_start = ToCfbPosition(start);
+    const cfb_position cbf_end = ToCfbPosition(end);
 
     if(cfb_draw_rect(display_dev_, &cbf_start, &cbf_end) != 0) {
         LOG_ERR("Failed to draw a rectangle");
@@ -172,7 +205,7 @@ bool Cfb::DrawRectangle(const Coordinate& start, const Coordinate& end) {
 }
 
 bool Cfb::DrawCircle(const Coordinate& center, uint16_t radius) {
-    const cfb_position cbf_center = { center.x, center.y };
+    const cfb_position cbf_center = ToCfbPosition(center);
 
     if(cfb_draw_circle(display_dev_, &cbf_center, radius) != 0) {
         LOG_ERR("Failed to draw a circle");
@@ -183,11 +216,12 @@ bool Cfb::DrawCircle(const Coordinate& center, uint16_t radius) {
 }
 
 bool Cfb::InvertArea(const Coordinate& start, const Coordinate& end) {
-    const uint16_t height = std::abs(end.y - start.y);
-    const uint16_t width = std::abs(end.x - start.x);
+    const uint16_t height = ToCfbExtent(std::abs(end.y - start.y));
+    const uint16_t width = ToCfbExtent(std::abs(end.x - start.x));
 
     if(cfb_invert_area(
-           display_dev_, start.x >= end.x ? end.x : start.x, start.y >= end.y ? end.y : start.y, width, height
+           display_dev_, ToCfbCoordinate(std::min(start.x, end.x)), ToCfbCoordinate(std::min(start.y, end.y)), width,
+           height
        ) != 0) {
 
         LOG_ERR("Failed to invert an area");
@@ -207,18 +241,18 @@ bool Cfb::Clear(bool clear_display) {
 }
 
 void Cfb::SetAnimationHandler(std::function<void()> handler, uint32_t frame_rate) {
-    work_queue_task_.value().GetUserdata()->animation_handler = std::move(handler);
-    work_queue_task_.value().GetUserdata()->frame_rate = frame_rate;
+    GetTask().GetUserdata()->animation_handler = std::move(handler);
+    GetTask().GetUserdata()->frame_rate = frame_rate;
 }
 
 void Cfb::StartAnimation() {
-    atomic_set(&work_queue_task_.value().GetUserdata()->is_animation_running_, 1);
-    work_queue_task_.value().Schedule();
+    atomic_set(&GetTask().GetUserdata()->is_animation_running_, 1);
+    GetTask().Schedule();
 }
 
 void Cfb::StopAnimation() {
-    work_queue_task_.value().Cancel();
-    atomic_set(&work_queue_task_.value().GetUserdata()->is_animation_running_, 0);
+    GetTask().Cancel();
+    atomic_set(&GetTask().GetUserdata()->is_animation_running_, 0);
 }
 
 void Cfb::PrintScreenInfo() {
@@ -228,11 +262,11 @@ void Cfb::PrintScreenInfo() {
 
     LOG_INF("x_res %d, y_res %d, ppt %d, rows %d, cols %d", x_res_, y_res_, ppt, rows, cols);
 
-    uint8_t font_width;
-    uint8_t font_height;
+    uint8_t font_width = 0;
+    uint8_t font_height = 0;
 
     for(int idx = 0; idx < 42; idx++) {
-        if(cfb_get_font_size(display_dev_, idx, &font_width, &font_height))
+        if(cfb_get_font_size(display_dev_, idx, &font_width, &font_height) != 0)
             break;
 
         LOG_INF("font %d: width %d, height %d", idx, font_width, font_height);

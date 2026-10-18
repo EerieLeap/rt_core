@@ -23,7 +23,7 @@ public:
     using CanbusProxyUpdatedHandler = std::function<void(Canbus*)>;
 
 private:
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
     std::unique_ptr<Canbus> canbus_;
 
     int next_handler_id_ = 1;
@@ -44,6 +44,7 @@ public:
     CanbusProxy& operator=(const CanbusProxy&) = delete;
     CanbusProxy(CanbusProxy&&) = delete;
     CanbusProxy& operator=(CanbusProxy&&) = delete;
+    ~CanbusProxy() = default;
 
     Canbus* operator->() const {
         ScopedMutex guard(lock_);
@@ -87,7 +88,7 @@ public:
         ScopedMutex guard(lock_);
 
         const int handler_id = next_handler_id_++;
-        updated_handlers_.try_emplace(handler_id, std::move(handler));
+        updated_handlers_.try_emplace(handler_id, handler);
 
         return handler_id;
     }

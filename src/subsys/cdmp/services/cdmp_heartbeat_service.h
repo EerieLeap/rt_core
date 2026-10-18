@@ -53,6 +53,10 @@ public:
     );
 
     ~CdmpHeartbeatService() override;
+    CdmpHeartbeatService(const CdmpHeartbeatService&) = delete;
+    CdmpHeartbeatService& operator=(const CdmpHeartbeatService&) = delete;
+    CdmpHeartbeatService(CdmpHeartbeatService&&) = delete;
+    CdmpHeartbeatService& operator=(CdmpHeartbeatService&&) = delete;
 
     // Heartbeat management
     void SetHeartbeatEnabled(bool enabled);

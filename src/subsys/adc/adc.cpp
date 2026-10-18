@@ -359,7 +359,8 @@ void Adc::ResolveResults(const AdcSampleRequest& request, size_t count, uint16_t
             continue;
 
         const int channel = request.channels[i];
-        request.results[i].volts = static_cast<float>(accumulators_[channel]) * (scale_[channel] / samples);
+        request.results[i].volts = static_cast<float>(accumulators_[channel])
+            * (scale_[channel] / static_cast<float>(samples));
     }
 }
 

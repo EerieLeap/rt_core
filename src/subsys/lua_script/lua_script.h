@@ -42,22 +42,22 @@ public:
 private:
     // Heap-allocated so the state's user data and the mutex keep their addresses across moves.
     struct Context {
-        k_mutex mutex;
+        k_mutex mutex{};
         MemoryBudget budget;
     };
 
     lua_State* state_;
     std::unique_ptr<Context> context_;
 
-    static int sleep_ms_func(lua_State* state);
-    static int print_func(lua_State* state);
+    static int SleepMsFunc(lua_State* state);
+    static int PrintFunc(lua_State* state);
 
-    static const luaL_Reg lua_std_libs_[];
-    static const luaL_Reg static_global_functions_[];
+    static const luaL_Reg LUA_STD_LIBS[];
+    static const luaL_Reg STATIC_GLOBAL_FUNCTIONS[];
 
     LuaScript(lua_State* state, std::unique_ptr<Context> context);
 
-    void OpenLuaStdLibs(lua_State* L);
+    static void OpenLuaStdLibs(lua_State* l);
     static void* ExtMemoryAllocator(void* ud, void* ptr, size_t osize, size_t nsize);
 
 public:

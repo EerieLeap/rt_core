@@ -17,10 +17,10 @@ using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
 
 // (Base + 3)
 struct CdmpCommandResponseMessage {
-    uint8_t source_device_id;
-    uint8_t command_code;
-    uint8_t transaction_id;
-    CdmpResultCode result_code;
+    uint8_t source_device_id = 0;
+    uint8_t command_code = 0;
+    uint8_t transaction_id = 0;
+    CdmpResultCode result_code{};
     std::vector<uint8_t> data;
 
     static CdmpCommandResponseMessage FromCanFrame(std::span<const uint8_t> frame_data) {

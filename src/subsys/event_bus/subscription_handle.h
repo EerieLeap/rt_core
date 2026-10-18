@@ -20,6 +20,8 @@ public:
 
     SubscriptionHandle(const SubscriptionHandle&) = delete;
     SubscriptionHandle& operator=(const SubscriptionHandle&) = delete;
+    SubscriptionHandle& operator=(SubscriptionHandle&&) = delete;
+    ~SubscriptionHandle() = default;
 
     SubscriptionHandle(SubscriptionHandle&& other) noexcept :
         id_(other.id_),

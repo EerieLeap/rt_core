@@ -87,8 +87,10 @@ bool CdmpNetworkService::DoStop() {
 }
 
 void CdmpNetworkService::StartValidationTask() {
-    if(!is_validation_task_running_ && device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
-        validation_task_.value().Schedule();
+    if(!is_validation_task_running_
+        && validation_task_.has_value()
+        && device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
+        validation_task_->Schedule();
         is_validation_task_running_ = true;
     }
 }
@@ -122,7 +124,7 @@ void CdmpNetworkService::UnregisterCanHandlers() {
     canbus_handler_id_ = -1;
 }
 
-void CdmpNetworkService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
+void CdmpNetworkService::OnDeviceStatusChanged(CdmpDeviceStatus /*old_status*/, CdmpDeviceStatus new_status) {
     switch(new_status) {
         case CdmpDeviceStatus::INIT:
             RunInSession([this] {
@@ -187,7 +189,8 @@ void CdmpNetworkService::StartInitialization() {
     discovery_response_received_ = false;
     lower_uid_discovering_ = false;
 
-    discovery_task_.value().Reschedule();
+    if(discovery_task_.has_value())
+        discovery_task_->Reschedule();
 }
 
 WorkQueueTaskResult CdmpNetworkService::ProcessDiscoveryAttempt(CdmpNetworkService* instance) {
@@ -290,7 +293,7 @@ void CdmpNetworkService::SendDiscoveryResponse() {
     message.uid = device_->GetUniqueIdentifier();
     message.features = device_->GetFeatures();
 
-    k_msleep(device_->GetStaggeredMessageDelay());
+    k_msleep(static_cast<int32_t>(device_->GetStaggeredMessageDelay()));
 
     auto frame_data = message.ToCanFrame();
     CanId frame_id = can_id_manager_->GetDiscoveryResponseCanId();
@@ -323,7 +326,8 @@ void CdmpNetworkService::StartIdClaim() {
     id_claim_attempt_ = 0;
     id_claim_result_.reset();
 
-    id_claim_task_.value().Reschedule();
+    if(id_claim_task_.has_value())
+        id_claim_task_->Reschedule();
 }
 
 WorkQueueTaskResult CdmpNetworkService::ProcessIdClaimAttempt(CdmpNetworkService* instance) {
@@ -760,6 +764,7 @@ std::vector<uint8_t> CdmpNetworkService::GetAllDeviceIds() const {
     ScopedMutex guard(devices_lock_);
 
     std::vector<uint8_t> all_devices;
+    all_devices.reserve(network_devices_.size());
     for(const auto& [device_id, device] : network_devices_)
         all_devices.push_back(device_id);
 

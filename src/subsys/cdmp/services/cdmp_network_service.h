@@ -82,13 +82,13 @@ private:
     atomic_t session_ = ATOMIC_INIT(0);
 
     // Written on the CDMP work queue, read from any thread.
-    mutable k_mutex devices_lock_;
+    mutable k_mutex devices_lock_{};
     std::unordered_map<uint8_t, std::unique_ptr<CdmpDevice>> network_devices_;
     // Claims waiting for their first heartbeat, under devices_lock_.
     std::array<PendingIdClaim, CdmpConstants::PENDING_ID_CLAIMS_MAX> pending_id_claims_{};
 
     // Handlers run without devices_lock_, so they may query the table.
-    mutable k_mutex handlers_lock_;
+    mutable k_mutex handlers_lock_{};
     int next_handler_id_ = 0;
     std::map<int, DeviceEventHandler> device_event_handlers_;
     std::map<int, HeartbeatHandler> heartbeat_handlers_;
@@ -180,6 +180,10 @@ public:
     );
 
     ~CdmpNetworkService() override;
+    CdmpNetworkService(const CdmpNetworkService&) = delete;
+    CdmpNetworkService& operator=(const CdmpNetworkService&) = delete;
+    CdmpNetworkService(CdmpNetworkService&&) = delete;
+    CdmpNetworkService& operator=(CdmpNetworkService&&) = delete;
 
     void ProcessFrame(std::span<const uint8_t> frame_data);
 

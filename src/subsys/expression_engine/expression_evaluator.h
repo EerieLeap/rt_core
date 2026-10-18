@@ -24,10 +24,10 @@ using ee::CompileError;
 // bound once with BindVariable(). Neither direction throws.
 class ExpressionEvaluator {
 private:
-    static constexpr std::string_view k_input_name = "x";
+    static constexpr std::string_view K_INPUT_NAME = "x";
 
     // The configuration work queue has a small stack; Compile() needs ~1 kB per nesting level.
-    static constexpr ee::Limits k_limits{ .max_nesting = 8 };
+    static constexpr ee::Limits K_LIMITS{ .max_nesting = 8 };
 
     std::pmr::string expression_;
     ee::Program program_;
@@ -41,6 +41,7 @@ public:
     ExpressionEvaluator& operator=(ExpressionEvaluator&&) noexcept = default;
     ExpressionEvaluator(const ExpressionEvaluator&) = delete;
     ExpressionEvaluator& operator=(const ExpressionEvaluator&) = delete;
+    ~ExpressionEvaluator() = default;
 
     // Stores the text and the program on @p resource.
     static std::expected<ExpressionEvaluator, CompileError>
@@ -61,7 +62,7 @@ public:
     // The sensor IDs the expression reads, in program order; x is excluded.
     auto GetVariableNames() const noexcept {
         return program_.VariableNames() | std::views::filter([](std::string_view name) {
-            return name != k_input_name;
+            return name != K_INPUT_NAME;
         });
     }
 

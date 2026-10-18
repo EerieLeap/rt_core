@@ -18,54 +18,54 @@ namespace eerie_leap::subsys::bluetooth {
 // Advertising data
 // =================
 
-AdBuffer Ble::ad_;
-AdBuffer Ble::sd_;
+AdBuffer Ble::ad;
+AdBuffer Ble::sd;
 
-void Ble::UpdateAdvertisingData(AdBuffer&& ad) {
-    ad_ = std::move(ad);
+void Ble::UpdateAdvertisingData(AdBuffer&& new_ad) {
+    ad = std::move(new_ad);
 }
 
-void Ble::UpdateScanResponseData(AdBuffer&& sd) {
-    sd_ = std::move(sd);
+void Ble::UpdateScanResponseData(AdBuffer&& new_sd) {
+    sd = std::move(new_sd);
 }
 
-const bt_le_adv_param* Ble::advertising_params_ =
+const bt_le_adv_param* Ble::advertising_params =
     BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, nullptr);
 
-bt_conn* Ble::active_conn_{ nullptr };
-k_mutex Ble::conn_mutex_;
-k_work_delayable Ble::adv_restart_work_;
+bt_conn* Ble::active_conn{ nullptr };
+k_mutex Ble::conn_mutex;
+k_work_delayable Ble::adv_restart_work;
 
-k_work_delayable Ble::connected_cb_work_;
-k_work_delayable Ble::security_update_work_;
-k_work_delayable Ble::data_length_update_work_;
-k_work_delayable Ble::pairing_started_work_;
-k_work_delayable Ble::pairing_finished_work_;
+k_work_delayable Ble::connected_cb_work;
+k_work_delayable Ble::security_update_work;
+k_work_delayable Ble::data_length_update_work;
+k_work_delayable Ble::pairing_started_work;
+k_work_delayable Ble::pairing_finished_work;
 
-std::unordered_map<int, Ble::ConnectedHandler> Ble::connected_handlers_;
-std::unordered_map<int, Ble::DisconnectedHandler> Ble::disconnected_handlers_;
-std::unordered_map<int, Ble::PairingStartedHandler> Ble::pairing_started_handlers_;
-std::unordered_map<int, Ble::PairingFinishedHandler> Ble::pairing_finished_handlers_;
+std::unordered_map<int, Ble::ConnectedHandler> Ble::connected_handlers;
+std::unordered_map<int, Ble::DisconnectedHandler> Ble::disconnected_handlers;
+std::unordered_map<int, Ble::PairingStartedHandler> Ble::pairing_started_handlers;
+std::unordered_map<int, Ble::PairingFinishedHandler> Ble::pairing_finished_handlers;
 
 bool Ble::Initialize() {
-    k_mutex_init(&conn_mutex_);
+    k_mutex_init(&conn_mutex);
 
-    k_work_init_delayable(&adv_restart_work_, RestartAdvertisingWorkHandler);
-    k_work_init_delayable(&connected_cb_work_, ConnectedCbWorkHandler);
-    k_work_init_delayable(&security_update_work_, SecurityUpdateWorkHandler);
-    k_work_init_delayable(&data_length_update_work_, DataLengthUpdateWorkHandler);
-    k_work_init_delayable(&pairing_started_work_, PairingStartedWorkHandler);
-    k_work_init_delayable(&pairing_finished_work_, PairingFinishedWorkHandler);
+    k_work_init_delayable(&adv_restart_work, RestartAdvertisingWorkHandler);
+    k_work_init_delayable(&connected_cb_work, ConnectedCbWorkHandler);
+    k_work_init_delayable(&security_update_work, SecurityUpdateWorkHandler);
+    k_work_init_delayable(&data_length_update_work, DataLengthUpdateWorkHandler);
+    k_work_init_delayable(&pairing_started_work, PairingStartedWorkHandler);
+    k_work_init_delayable(&pairing_finished_work, PairingFinishedWorkHandler);
 
     int err = bt_enable(nullptr);
-    if(err) {
+    if(err != 0) {
         LOG_ERR("Bluetooth init failed (err %d)", err);
         return false;
     }
 
     if(IS_ENABLED(CONFIG_BT_SETTINGS)) {
         err = settings_load();
-        if(err)
+        if(err != 0)
             LOG_ERR("Failed to load Bluetooth settings (err %d)", err);
     }
 
@@ -82,21 +82,20 @@ bool Ble::Start() {
 // ===========
 
 int Ble::StartAdvertising() {
-    return k_work_reschedule(&adv_restart_work_, K_NO_WAIT);
+    return k_work_reschedule(&adv_restart_work, K_NO_WAIT);
 }
 
-void Ble::RestartAdvertisingWorkHandler(struct k_work* work) {
+void Ble::RestartAdvertisingWorkHandler(struct k_work* /*work*/) {
     bt_le_adv_stop();
 
     const int err = bt_le_adv_start(
-        advertising_params_, ad_.empty() ? nullptr : ad_.data(), ad_.size(), sd_.empty() ? nullptr : sd_.data(),
-        sd_.size()
+        advertising_params, ad.empty() ? nullptr : ad.data(), ad.size(), sd.empty() ? nullptr : sd.data(), sd.size()
     );
     if(err == -EALREADY) {
         LOG_DBG("BLE advertising already active");
         return;
     }
-    if(err) {
+    if(err != 0) {
         LOG_ERR("Failed to start advertising (err %d)", err);
         return;
     }
@@ -108,9 +107,9 @@ void Ble::RestartAdvertisingWorkHandler(struct k_work* work) {
 // =================
 
 bt_conn* Ble::AcquireActiveConn() {
-    k_mutex_lock(&conn_mutex_, K_FOREVER);
-    bt_conn* conn = active_conn_ != nullptr ? bt_conn_ref(active_conn_) : nullptr;
-    k_mutex_unlock(&conn_mutex_);
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+    bt_conn* conn = active_conn != nullptr ? bt_conn_ref(active_conn) : nullptr;
+    k_mutex_unlock(&conn_mutex);
 
     return conn;
 }
@@ -125,7 +124,7 @@ void Ble::UpdateDataLength(bt_conn* conn) {
     };
 
     const int err = bt_conn_le_data_len_update(conn, &my_data_len);
-    if(err) {
+    if(err != 0) {
         LOG_ERR("data_len_update failed (err %d)", err);
     }
 }
@@ -134,7 +133,7 @@ void Ble::UpdateDataLength(bt_conn* conn) {
 // ====================
 
 void Connected(bt_conn* conn, uint8_t err) {
-    if(err) {
+    if(err != 0) {
         LOG_ERR("Connection failed (err %u)", err);
         return;
     }
@@ -143,21 +142,21 @@ void Connected(bt_conn* conn, uint8_t err) {
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
     LOG_INF("Connected: %s", addr);
 
-    k_mutex_lock(&Ble::conn_mutex_, K_FOREVER);
-    if(Ble::active_conn_)
-        bt_conn_unref(Ble::active_conn_);
-    Ble::active_conn_ = bt_conn_ref(conn);
-    k_mutex_unlock(&Ble::conn_mutex_);
+    k_mutex_lock(&Ble::conn_mutex, K_FOREVER);
+    if(Ble::active_conn)
+        bt_conn_unref(Ble::active_conn);
+    Ble::active_conn = bt_conn_ref(conn);
+    k_mutex_unlock(&Ble::conn_mutex);
 
-    k_work_reschedule(&Ble::connected_cb_work_, K_NO_WAIT);
-    k_work_reschedule(&Ble::pairing_started_work_, K_NO_WAIT);
-    k_work_reschedule(&Ble::security_update_work_, K_NO_WAIT);
+    k_work_reschedule(&Ble::connected_cb_work, K_NO_WAIT);
+    k_work_reschedule(&Ble::pairing_started_work, K_NO_WAIT);
+    k_work_reschedule(&Ble::security_update_work, K_NO_WAIT);
 }
 
 void Disconnected(bt_conn* conn, uint8_t reason) {
     LOG_INF("Disconnected (reason %u)", reason);
 
-    for(auto& [_, handler] : Ble::disconnected_handlers_) {
+    for(auto& [_, handler] : Ble::disconnected_handlers) {
         try {
             handler(conn);
         } catch(const std::exception& e) {
@@ -167,18 +166,18 @@ void Disconnected(bt_conn* conn, uint8_t reason) {
         }
     }
 
-    k_mutex_lock(&Ble::conn_mutex_, K_FOREVER);
-    if(Ble::active_conn_)
-        bt_conn_unref(Ble::active_conn_);
-    Ble::active_conn_ = nullptr;
-    k_mutex_unlock(&Ble::conn_mutex_);
+    k_mutex_lock(&Ble::conn_mutex, K_FOREVER);
+    if(Ble::active_conn)
+        bt_conn_unref(Ble::active_conn);
+    Ble::active_conn = nullptr;
+    k_mutex_unlock(&Ble::conn_mutex);
 }
 
 void Recycled() {
     Ble::StartAdvertising();
 }
 
-void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
+void ParamertersUpdated(bt_conn* /*conn*/, uint16_t interval, uint16_t latency, uint16_t timeout) {
     const double connection_interval_ms = interval * 1.25;
     const uint16_t supervision_timeout_ms = timeout * 10;
 
@@ -190,7 +189,8 @@ void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint
 
 // NOTE: Any logging from this callback will cause a crash,
 // thus it's disabled.
-void DataLengthUpdated(bt_conn* conn, bt_conn_le_data_len_info* info) {
+// NOLINTNEXTLINE(misc-const-correctness): the parameter types are fixed by the bt_conn_cb callback
+void DataLengthUpdated(bt_conn* /*conn*/, bt_conn_le_data_len_info* info) {
     const uint16_t tx_len = info->tx_max_len;
     const uint16_t tx_time = info->tx_max_time;
     const uint16_t rx_len = info->rx_max_len;
@@ -203,17 +203,17 @@ void SecurityChanged(struct bt_conn* conn, bt_security_t level, enum bt_security
     char addr[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-    if(!err) {
+    if(err == BT_SECURITY_ERR_SUCCESS) {
         LOG_INF("Security changed: %s level %u", addr, level);
 
         if(level >= BT_SECURITY_L2)
-            k_work_reschedule(&Ble::data_length_update_work_, K_NO_WAIT);
+            k_work_reschedule(&Ble::data_length_update_work, K_NO_WAIT);
     } else {
         LOG_INF("Security failed: %s level %u err %d", addr, level, err);
         bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
     }
 
-    k_work_reschedule(&Ble::pairing_finished_work_, K_NO_WAIT);
+    k_work_reschedule(&Ble::pairing_finished_work, K_NO_WAIT);
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
@@ -225,14 +225,14 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
     .security_changed = &SecurityChanged,
 };
 
-void Ble::ConnectedCbWorkHandler(struct k_work* work) {
+void Ble::ConnectedCbWorkHandler(struct k_work* /*work*/) {
     bt_conn* conn = AcquireActiveConn();
     if(conn == nullptr) {
         LOG_WRN("Connected handlers skipped: no active connection");
         return;
     }
 
-    for(auto& [_, handler] : Ble::connected_handlers_) {
+    for(auto& [_, handler] : Ble::connected_handlers) {
         try {
             handler(conn);
         } catch(const std::exception& e) {
@@ -245,7 +245,7 @@ void Ble::ConnectedCbWorkHandler(struct k_work* work) {
     bt_conn_unref(conn);
 }
 
-void Ble::SecurityUpdateWorkHandler(struct k_work* work) {
+void Ble::SecurityUpdateWorkHandler(struct k_work* /*work*/) {
     bt_conn* conn = AcquireActiveConn();
     if(conn == nullptr) {
         LOG_WRN("Security upgrade skipped: no active connection");
@@ -253,7 +253,7 @@ void Ble::SecurityUpdateWorkHandler(struct k_work* work) {
     }
 
     const int sec_err = bt_conn_set_security(conn, BT_SECURITY_L2);
-    if(sec_err)
+    if(sec_err != 0)
         LOG_ERR("Failed to set security (err %d)", sec_err);
     else
         LOG_INF("Security upgrade initiated");
@@ -261,7 +261,7 @@ void Ble::SecurityUpdateWorkHandler(struct k_work* work) {
     bt_conn_unref(conn);
 }
 
-void Ble::DataLengthUpdateWorkHandler(struct k_work* work) {
+void Ble::DataLengthUpdateWorkHandler(struct k_work* /*work*/) {
     bt_conn* conn = AcquireActiveConn();
     if(conn == nullptr) {
         LOG_WRN("Data length update skipped: no active connection");
@@ -274,8 +274,8 @@ void Ble::DataLengthUpdateWorkHandler(struct k_work* work) {
     bt_conn_unref(conn);
 }
 
-void Ble::PairingStartedWorkHandler(struct k_work* work) {
-    for(auto& [_, handler] : Ble::pairing_started_handlers_) {
+void Ble::PairingStartedWorkHandler(struct k_work* /*work*/) {
+    for(auto& [_, handler] : Ble::pairing_started_handlers) {
         try {
             handler();
         } catch(const std::exception& e) {
@@ -286,8 +286,8 @@ void Ble::PairingStartedWorkHandler(struct k_work* work) {
     }
 }
 
-void Ble::PairingFinishedWorkHandler(struct k_work* work) {
-    for(auto& [_, handler] : Ble::pairing_finished_handlers_) {
+void Ble::PairingFinishedWorkHandler(struct k_work* /*work*/) {
+    for(auto& [_, handler] : Ble::pairing_finished_handlers) {
         try {
             handler();
         } catch(const std::exception& e) {
@@ -300,36 +300,36 @@ void Ble::PairingFinishedWorkHandler(struct k_work* work) {
 
 int Ble::RegisterConnectedHandler(ConnectedHandler handler) {
     static int id = 0;
-    connected_handlers_[id] = std::move(handler);
+    connected_handlers[id] = std::move(handler);
     return id++;
 }
 int Ble::RegisterDisconnectedHandler(DisconnectedHandler handler) {
     static int id = 0;
-    disconnected_handlers_[id] = std::move(handler);
+    disconnected_handlers[id] = std::move(handler);
     return id++;
 }
 int Ble::RegisterPairingStartedHandler(PairingStartedHandler handler) {
     static int id = 0;
-    pairing_started_handlers_[id] = std::move(handler);
+    pairing_started_handlers[id] = std::move(handler);
     return id++;
 }
 int Ble::RegisterPairingFinishedHandler(PairingFinishedHandler handler) {
     static int id = 0;
-    pairing_finished_handlers_[id] = std::move(handler);
+    pairing_finished_handlers[id] = std::move(handler);
     return id++;
 }
 
 void Ble::UnregisterConnectedHandler(int id) {
-    connected_handlers_.erase(id);
+    connected_handlers.erase(id);
 }
 void Ble::UnregisterDisconnectedHandler(int id) {
-    disconnected_handlers_.erase(id);
+    disconnected_handlers.erase(id);
 }
 void Ble::UnregisterPairingStartedHandler(int id) {
-    pairing_started_handlers_.erase(id);
+    pairing_started_handlers.erase(id);
 }
 void Ble::UnregisterPairingFinishedHandler(int id) {
-    pairing_finished_handlers_.erase(id);
+    pairing_finished_handlers.erase(id);
 }
 
 } // namespace eerie_leap::subsys::bluetooth

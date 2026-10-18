@@ -68,17 +68,24 @@ CdmpStateService::CdmpStateService(
 }
 
 CdmpStateService::~CdmpStateService() {
-    Stop();
+    // A destructor is noexcept: an exception from Stop() or a mutex would end in std::terminate.
+    try {
+        Stop();
 
-    command_service_->UnregisterServiceCommandHandler(CdmpServiceCommandCode::STATE_SYNC_REQUEST);
-    network_service_->UnregisterHeartbeatHandler(heartbeat_handler_id_);
-    network_service_->UnregisterDeviceEventHandler(device_event_handler_id_);
+        command_service_->UnregisterServiceCommandHandler(CdmpServiceCommandCode::STATE_SYNC_REQUEST);
+        network_service_->UnregisterHeartbeatHandler(heartbeat_handler_id_);
+        network_service_->UnregisterDeviceEventHandler(device_event_handler_id_);
 
-    // Leaving ONLINE after the stop still reports the dropped copies. The others are cancelled too,
-    // so that no timer outlives the service whatever state the stop found.
-    for(auto* task : { &receive_task_, &transmit_task_, &replay_task_, &notify_task_ }) {
-        if(task->has_value())
-            task->value().Cancel();
+        // Leaving ONLINE after the stop still reports the dropped copies. The others are cancelled too,
+        // so that no timer outlives the service whatever state the stop found.
+        for(auto* task : { &receive_task_, &transmit_task_, &replay_task_, &notify_task_ }) {
+            if(task->has_value())
+                task->value().Cancel();
+        }
+    } catch(const std::exception& e) {
+        LOG_ERR("CDMP State Service teardown failed: %s", e.what());
+    } catch(...) {
+        LOG_ERR("CDMP State Service teardown failed.");
     }
 }
 
@@ -201,7 +208,8 @@ void CdmpStateService::QueueFrame(std::span<const uint8_t> frame_data, bool is_r
         return;
     }
 
-    receive_task_.value().Schedule();
+    if(receive_task_.has_value())
+        receive_task_->Schedule();
 }
 
 WorkQueueTaskResult CdmpStateService::ProcessReceivedFrames(CdmpStateService* instance) {
@@ -786,8 +794,8 @@ void CdmpStateService::ScheduleRetransmission(int64_t now) {
     }
 
     // Under records_lock_, like every other reschedule, so the latest one is always right.
-    if(next_retransmit_ms != std::numeric_limits<int64_t>::max())
-        transmit_task_.value().Reschedule(K_MSEC(std::max<int64_t>(next_retransmit_ms - now, 0)));
+    if(next_retransmit_ms != std::numeric_limits<int64_t>::max() && transmit_task_.has_value())
+        transmit_task_->Reschedule(K_MSEC(std::max<int64_t>(next_retransmit_ms - now, 0)));
 }
 
 template<typename TPredicate>

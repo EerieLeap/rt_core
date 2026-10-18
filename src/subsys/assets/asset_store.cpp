@@ -629,18 +629,15 @@ bool AssetStore::IsValidName(std::string_view name, std::span<const std::string_
     if(name.empty() || name.size() > CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH || name.front() == '.')
         return false;
 
-    for(const char c : name) {
-        if(!IsNameCharacter(c))
-            return false;
-    }
+    if(!std::ranges::all_of(name, [](char c) {
+           return IsNameCharacter(c);
+       }))
+        return false;
 
-    for(const std::string_view extension : extensions) {
+    return std::ranges::any_of(extensions, [name](std::string_view extension) {
         // At least one character stays in front of the extension.
-        if(name.size() > extension.size() && EndsWithIgnoreCase(name, extension))
-            return true;
-    }
-
-    return false;
+        return name.size() > extension.size() && EndsWithIgnoreCase(name, extension);
+    });
 }
 
 } // namespace eerie_leap::subsys::assets

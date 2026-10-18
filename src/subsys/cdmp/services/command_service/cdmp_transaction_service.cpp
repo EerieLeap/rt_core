@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <exception>
 
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/timeutil.h>
@@ -28,14 +29,21 @@ void CdmpTransactionService::Initialize() {
 }
 
 CdmpTransactionService::~CdmpTransactionService() {
-    Stop();
+    // A destructor is noexcept: a throwing callback or mutex in Stop() would end in std::terminate.
+    try {
+        Stop();
+    } catch(const std::exception& e) {
+        LOG_ERR("CDMP Transaction Service teardown failed: %s", e.what());
+    } catch(...) {
+        LOG_ERR("CDMP Transaction Service teardown failed.");
+    }
 }
 
 void CdmpTransactionService::Start() {
     ScopedMutex guard(transactions_lock_);
 
-    if(!is_timeout_task_running_) {
-        timeout_task_.value().Schedule();
+    if(!is_timeout_task_running_ && timeout_task_.has_value()) {
+        timeout_task_->Schedule();
         is_timeout_task_running_ = true;
 
         LOG_INF("CDMP Transaction Service started");
@@ -183,10 +191,10 @@ WorkQueueTaskResult CdmpTransactionService::ProcessTransactionTimeouts(CdmpTrans
         // while Stop() cancels it.
         ScopedMutex guard(instance->transactions_lock_);
 
-        if(!instance->is_timeout_task_running_)
+        if(!instance->is_timeout_task_running_ || !instance->timeout_task_.has_value())
             return {};
 
-        instance->timeout_task_.value().Reschedule(K_MSEC(CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS / 2));
+        instance->timeout_task_->Reschedule(K_MSEC(CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS / 2));
     }
 
     instance->CleanupExpiredTransactions();

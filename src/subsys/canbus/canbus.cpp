@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -56,29 +57,35 @@ Canbus::Canbus(const CanbusConfig& config) :
     k_msgq_init(&frame_msgq_, frame_msgq_buffer_, sizeof(can_frame), FRAME_MSGQ_SIZE);
 
     thread_ = std::make_unique<Thread>(
-        "can_" + std::string(config_.canbus_dev->name), this, thread_stack_size_, thread_priority_,
-        thread_is_cooperative_
+        "can_" + std::string(config_.canbus_dev->name), this, THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_IS_COOPERATIVE
     );
 }
 
 Canbus::~Canbus() {
-    if(GetState() != ServiceState::STOPPED) {
-        Stop();
+    // A destructor is noexcept: an exception from Stop() or the mutex would end in std::terminate.
+    try {
+        if(GetState() != ServiceState::STOPPED) {
+            Stop();
+            UnregisterStateChangeCallback();
+            return;
+        }
+
+        // Filters outlive a failed Configure(); the driver would otherwise keep calling back into a destroyed object.
+        StopActivityMonitoring();
+
+        if(thread_ && thread_->IsRunning())
+            thread_->Join();
+
+        // Same for the state change callback node: the driver's list must not point into this object.
         UnregisterStateChangeCallback();
-        return;
+
+        ScopedMutex guard(lock_);
+        RemoveAllFilters();
+    } catch(const std::exception& e) {
+        LOG_ERR("CANBus teardown failed: %s", e.what());
+    } catch(...) {
+        LOG_ERR("CANBus teardown failed.");
     }
-
-    // Filters outlive a failed Configure(); the driver would otherwise keep calling back into a destroyed object.
-    StopActivityMonitoring();
-
-    if(thread_ && thread_->IsRunning())
-        thread_->Join();
-
-    // Same for the state change callback node: the driver's list must not point into this object.
-    UnregisterStateChangeCallback();
-
-    ScopedMutex guard(lock_);
-    RemoveAllFilters();
 }
 
 bool Canbus::DoInitialize() {
@@ -503,17 +510,14 @@ void Canbus::EraseEntry(const CanFilter& filter) {
 }
 
 bool Canbus::HasOverlap(const CanFilter& filter) const {
-    for(const auto& [_, entry] : exact_entries_) {
-        if(entry.filter.Overlaps(filter))
-            return true;
-    }
+    if(std::ranges::any_of(exact_entries_, [&filter](const auto& item) {
+           return item.second.filter.Overlaps(filter);
+       }))
+        return true;
 
-    for(const auto& entry : mask_entries_) {
-        if(entry.has_value() && entry->filter.Overlaps(filter))
-            return true;
-    }
-
-    return false;
+    return std::ranges::any_of(mask_entries_, [&filter](const auto& entry) {
+        return entry.has_value() && entry->filter.Overlaps(filter);
+    });
 }
 
 bool Canbus::InstallFilter(FilterEntry& entry) {
@@ -535,7 +539,7 @@ bool Canbus::InstallFilter(FilterEntry& entry) {
     return true;
 }
 
-void Canbus::UninstallFilter(FilterEntry& entry) {
+void Canbus::UninstallFilter(FilterEntry& entry) const {
     if(entry.filter_id < 0)
         return;
 
@@ -650,7 +654,7 @@ void Canbus::BitrateAutodetectTask() {
 }
 
 void Canbus::ProcessFramesTask() {
-    can_frame raw_frame;
+    can_frame raw_frame{};
     if(k_msgq_get(&frame_msgq_, &raw_frame, K_MSEC(MSGQ_GET_TIMEOUT_MS)) != 0)
         return;
 
@@ -720,8 +724,8 @@ void Canbus::AutoDetectFrameCallback(const device* dev, can_frame* frame, void* 
 
 bool Canbus::AutoDetectBitrate() {
     const std::span<const uint32_t> supported_bitrates = config_.type == CanbusType::CANFD
-        ? std::span<const uint32_t>(canfd_supported_bitrates_)
-        : std::span<const uint32_t>(classical_can_supported_bitrates_);
+        ? std::span<const uint32_t>(CANFD_SUPPORTED_BITRATES)
+        : std::span<const uint32_t>(CLASSICAL_CAN_SUPPORTED_BITRATES);
 
     for(const uint32_t bitrate : supported_bitrates) {
         if(atomic_get(&auto_detect_running_) == 0 || !thread_->IsRunning()) {
@@ -752,9 +756,9 @@ bool Canbus::IsBitrateSupported(CanbusType type, uint32_t bitrate) {
         return true;
 
     if(type == CanbusType::CANFD)
-        return std::ranges::find(canfd_supported_bitrates_, bitrate) != canfd_supported_bitrates_.end();
+        return std::ranges::find(CANFD_SUPPORTED_BITRATES, bitrate) != CANFD_SUPPORTED_BITRATES.end();
 
-    return std::ranges::find(classical_can_supported_bitrates_, bitrate) != classical_can_supported_bitrates_.end();
+    return std::ranges::find(CLASSICAL_CAN_SUPPORTED_BITRATES, bitrate) != CLASSICAL_CAN_SUPPORTED_BITRATES.end();
 }
 
 bool Canbus::TestBitrate(uint32_t bitrate) {
@@ -866,7 +870,7 @@ void Canbus::PrintCanLimits() const {
         can_get_bitrate_max(config_.canbus_dev)
     );
 
-    auto bitrates = classical_can_supported_bitrates_;
+    auto bitrates = CLASSICAL_CAN_SUPPORTED_BITRATES;
     std::ranges::sort(bitrates);
 
     for(const auto bitrate : bitrates) {
@@ -885,7 +889,7 @@ void Canbus::PrintCanFdLimits() const {
         can_get_bitrate_max(config_.canbus_dev)
     );
 
-    auto bitrates = canfd_supported_bitrates_;
+    auto bitrates = CANFD_SUPPORTED_BITRATES;
     std::ranges::sort(bitrates);
 
     for(const auto bitrate : bitrates) {

@@ -119,8 +119,8 @@ private:
     int heartbeat_handler_id_ = -1;
 
     // Filled by the CAN RX thread, drained by receive_task_.
-    alignas(4) char rx_queue_buffer_[RX_QUEUE_SIZE * sizeof(ReceivedFrame)];
-    k_msgq rx_queue_;
+    alignas(4) char rx_queue_buffer_[RX_QUEUE_SIZE * sizeof(ReceivedFrame)] = {};
+    k_msgq rx_queue_{};
     atomic_t rx_dropped_ = ATOMIC_INIT(0);
 
     // Created by DoInitialize() and scheduled under records_lock_.
@@ -134,7 +134,7 @@ private:
     static WorkQueueTaskResult ProcessStateHandlers(CdmpStateService* instance);
 
     // The records, never held across a call into the network or command service.
-    mutable k_mutex records_lock_;
+    mutable k_mutex records_lock_{};
     // Cleared before DoStop() cancels the tasks, so that nothing schedules them again.
     bool is_started_ = false;
     uint8_t version_counter_ = 0;
@@ -147,7 +147,7 @@ private:
     std::bitset<256> changed_types_;
 
     // Handlers run under it but without records_lock_, so they may read the records.
-    mutable k_mutex handlers_lock_;
+    mutable k_mutex handlers_lock_{};
     int next_handler_id_ = 0;
     std::map<int, StateHandlerEntry> state_handlers_;
 
@@ -217,6 +217,10 @@ public:
     );
 
     ~CdmpStateService() override;
+    CdmpStateService(const CdmpStateService&) = delete;
+    CdmpStateService& operator=(const CdmpStateService&) = delete;
+    CdmpStateService(CdmpStateService&&) = delete;
+    CdmpStateService& operator=(CdmpStateService&&) = delete;
 
     /**
      * @brief Shares @p data as this unit's record of @p state_type, from any thread.

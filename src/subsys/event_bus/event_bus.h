@@ -32,25 +32,25 @@ using threading::WorkQueueThread;
 // payload enums are unrelated can share one thread.
 class EventBus : public IEventBus {
 private:
-    static constexpr int k_default_priority = 10;
+    static constexpr int K_DEFAULT_PRIORITY = 10;
 
     std::string bus_name_;
 
     EventChannelSlots channels_{};
     std::atomic<size_t> channel_count_{ 0 };
-    k_mutex channels_mutex_;
+    k_mutex channels_mutex_{};
 
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
     std::optional<threading::WorkQueueTask<EventBusTask>> work_queue_task_;
 
-    k_sem processing_semaphore_;
+    k_sem processing_semaphore_{};
 
     void Initialize();
 
     static threading::WorkQueueTaskResult ProcessEventWork(EventBusTask* task);
 
 protected:
-    EventBus(std::string bus_name, int k_stack_size, int priority = k_default_priority);
+    EventBus(std::string bus_name, int k_stack_size, int priority = K_DEFAULT_PRIORITY);
 
 public:
     ~EventBus() override;
@@ -95,6 +95,7 @@ inline void EventBus::Initialize() {
 }
 
 inline int EventBus::RegisterChannel(IEventChannel& channel) {
+    // NOLINTNEXTLINE(misc-const-correctness): the variable is declared inside the Zephyr macro
     LOG_MODULE_DECLARE(event_bus_logger);
 
     ScopedMutex guard(channels_mutex_);
@@ -146,10 +147,18 @@ inline threading::WorkQueueTaskResult EventBus::ProcessEventWork(EventBusTask* t
     // the bus for the rest of the run.
     struct SemaphoreRelease {
         k_sem* sem;
+
+        explicit SemaphoreRelease(k_sem* semaphore) :
+            sem(semaphore) {}
+        SemaphoreRelease(const SemaphoreRelease&) = delete;
+        SemaphoreRelease& operator=(const SemaphoreRelease&) = delete;
+        SemaphoreRelease(SemaphoreRelease&&) = delete;
+        SemaphoreRelease& operator=(SemaphoreRelease&&) = delete;
         ~SemaphoreRelease() {
             k_sem_give(sem);
         }
-    } release{ task->processing_semaphore };
+    };
+    const SemaphoreRelease release{ task->processing_semaphore };
 
     const size_t count = task->channel_count->load(std::memory_order_acquire);
 
