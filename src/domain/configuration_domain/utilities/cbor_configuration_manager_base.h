@@ -79,6 +79,7 @@ private:
 
     // Serializes, parses back and saves, then adopts what was parsed.
     bool Store(const TConfiguration& configuration) {
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
         LOG_MODULE_DECLARE(
             configuration_manager_logger
         ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
@@ -106,6 +107,7 @@ private:
     // After a successful store. Logs what the handler throws: the configuration is stored by then, and
     // the store must not turn into a failure a client retries.
     void NotifyStored() {
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
         LOG_MODULE_DECLARE(
             configuration_manager_logger
         ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
@@ -148,6 +150,7 @@ protected:
     // over it would destroy the user's configuration. A default is created in memory instead and
     // GetCborConfigurationInfo() reports the stored one as not applied.
     bool LoadOrCreateDefault() {
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
         LOG_MODULE_DECLARE(
             configuration_manager_logger
         ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
@@ -209,6 +212,7 @@ protected:
 
     // Keeps the given instance, so it is validated only once; callers must not modify it afterwards.
     bool Adopt(std::shared_ptr<TConfiguration> configuration) {
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
         LOG_MODULE_DECLARE(
             configuration_manager_logger
         ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
@@ -278,6 +282,7 @@ public:
     using ICborConfigurationManager::ApplyCborConfiguration;
 
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
         LOG_MODULE_DECLARE(
             configuration_manager_logger
         ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
