@@ -18,8 +18,8 @@ struct LoggingControlConfiguration {
     // Default: none.
     std::pmr::vector<LoggingTrigger> triggers;
 
-    LoggingControlConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : triggers(alloc) {}
+    LoggingControlConfiguration(std::allocator_arg_t, allocator_type alloc) :
+        triggers(alloc) {}
 
     LoggingControlConfiguration(const LoggingControlConfiguration&) = delete;
     LoggingControlConfiguration& operator=(const LoggingControlConfiguration&) noexcept = default;
@@ -27,8 +27,8 @@ struct LoggingControlConfiguration {
     LoggingControlConfiguration(LoggingControlConfiguration&&) noexcept = default;
     ~LoggingControlConfiguration() = default;
 
-    LoggingControlConfiguration(LoggingControlConfiguration&& other, allocator_type alloc)
-        : triggers(std::move(other.triggers), alloc) {}
+    LoggingControlConfiguration(LoggingControlConfiguration&& other, allocator_type alloc) :
+        triggers(std::move(other.triggers), alloc) {}
 };
 
 } // namespace eerie_leap::domain::logging_domain::control::models

@@ -4,8 +4,8 @@
 #include <memory_resource>
 #include <vector>
 
-#include "interpolation_method.h"
 #include "calibration_data.h"
+#include "interpolation_method.h"
 
 namespace eerie_leap::utilities::voltage_interpolator {
 

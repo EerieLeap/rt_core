@@ -11,18 +11,19 @@ LOG_MODULE_REGISTER(can_frame_router_logger);
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
-using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::domain::canbus_domain::models::CanSignalConfiguration;
+using eerie_leap::subsys::canbus::CanId;
 
 CanFrameRouter::CanFrameRouter(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CanbusService> canbus_service,
-    ProcessSensorCallback process_sensor_callback)
-        : time_service_(std::move(time_service)),
-        work_queue_thread_(std::move(work_queue_thread)),
-        canbus_service_(std::move(canbus_service)),
-        process_sensor_callback_(std::move(process_sensor_callback)) {
+    ProcessSensorCallback process_sensor_callback
+) :
+    time_service_(std::move(time_service)),
+    work_queue_thread_(std::move(work_queue_thread)),
+    canbus_service_(std::move(canbus_service)),
+    process_sensor_callback_(std::move(process_sensor_callback)) {
 
     pending_work_.router = this;
     k_work_init(&pending_work_.work, WorkHandler);
@@ -35,21 +36,26 @@ CanFrameRouter::~CanFrameRouter() {
 size_t CanFrameRouter::Attach(const SensorGeneration& generation) {
     Detach();
 
-    table_.Build(generation, [this](uint8_t bus_channel, uint32_t frame_id, uint32_t signal_name_hash)
-        -> std::shared_ptr<const CanSignalConfiguration> {
+    table_.Build(
+        generation,
+        [this](
+            uint8_t bus_channel, uint32_t frame_id, uint32_t signal_name_hash
+        ) -> std::shared_ptr<const CanSignalConfiguration> {
+            // A disabled message decodes nothing, like one that was removed.
+            auto message_configuration = canbus_service_->GetMessageConfiguration(bus_channel, frame_id);
+            if(message_configuration == nullptr || !message_configuration->is_enabled)
+                return nullptr;
 
-        // A disabled message decodes nothing, like one that was removed.
-        auto message_configuration = canbus_service_->GetMessageConfiguration(bus_channel, frame_id);
-        if(message_configuration == nullptr || !message_configuration->is_enabled)
-            return nullptr;
+            const auto* signal_configuration = message_configuration->TryGetSignal(signal_name_hash);
+            if(signal_configuration == nullptr)
+                return nullptr;
 
-        const auto* signal_configuration = message_configuration->TryGetSignal(signal_name_hash);
-        if(signal_configuration == nullptr)
-            return nullptr;
-
-        // Aliases the owning message configuration, so that stays alive too.
-        return std::shared_ptr<const CanSignalConfiguration>(std::move(message_configuration), signal_configuration);
-    });
+            // Aliases the owning message configuration, so that stays alive too.
+            return std::shared_ptr<const CanSignalConfiguration>(
+                std::move(message_configuration), signal_configuration
+            );
+        }
+    );
 
     const auto routes = table_.GetRoutes();
     states_.resize(routes.size());
@@ -62,25 +68,36 @@ size_t CanFrameRouter::Attach(const SensorGeneration& generation) {
         state.canbus = canbus_service_->GetCanbus(route.bus_channel);
         const auto* channel_configuration = canbus_service_->GetChannelConfiguration(route.bus_channel);
         if(state.canbus == nullptr || !state.canbus->IsValid() || channel_configuration == nullptr) {
-            LOG_ERR("CAN bus %u is not available; %zu sensors on frame 0x%08X stay silent.",
-                route.bus_channel, route.bindings.size(), route.frame_id);
+            LOG_ERR(
+                "CAN bus %u is not available; %zu sensors on frame 0x%08X stay silent.", route.bus_channel,
+                route.bindings.size(), route.frame_id
+            );
             continue;
         }
 
         // Handler removal is serialised against dispatch, so `this` outlives every call.
-        const int handler_id = (*state.canbus)->RegisterFrameReceivedHandler(
-            CanId{route.frame_id, channel_configuration->is_extended_id},
-            [this, i](const CanFrame& frame) { OnFrameReceived(i, frame); });
+        const int handler_id = (*state.canbus)
+                                   ->RegisterFrameReceivedHandler(
+                                       CanId{ route.frame_id, channel_configuration->is_extended_id },
+                                       [this, i](const CanFrame& frame) {
+                                           OnFrameReceived(i, frame);
+                                       }
+                                   );
 
         if(handler_id <= 0) {
-            LOG_ERR("Failed to register the CAN handler for bus %u frame 0x%08X: %d.", route.bus_channel, route.frame_id, handler_id);
+            LOG_ERR(
+                "Failed to register the CAN handler for bus %u frame 0x%08X: %d.", route.bus_channel, route.frame_id,
+                handler_id
+            );
             continue;
         }
 
         state.handler_id = handler_id;
         attached++;
 
-        LOG_INF("CAN route bus %u frame 0x%08X feeds %zu sensors.", route.bus_channel, route.frame_id, route.bindings.size());
+        LOG_INF(
+            "CAN route bus %u frame 0x%08X feeds %zu sensors.", route.bus_channel, route.frame_id, route.bindings.size()
+        );
     }
 
     return attached;

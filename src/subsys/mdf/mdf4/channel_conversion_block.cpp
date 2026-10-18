@@ -6,8 +6,8 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-ChannelConversionBlock::ChannelConversionBlock(ConversionType conversion_type)
-    : BlockBase("CC") {
+ChannelConversionBlock::ChannelConversionBlock(ConversionType conversion_type) :
+    BlockBase("CC") {
 
     conversion_type_ = conversion_type;
     precision_ = 0;
@@ -16,7 +16,8 @@ ChannelConversionBlock::ChannelConversionBlock(ConversionType conversion_type)
     max_physical_value_ = 0.0;
 }
 
-std::shared_ptr<ChannelConversionBlock> ChannelConversionBlock::CreateAlgebraicConversion(std::shared_ptr<TextBlock> formula) {
+std::shared_ptr<ChannelConversionBlock>
+ChannelConversionBlock::CreateAlgebraicConversion(std::shared_ptr<TextBlock> formula) {
     if(!formula)
         throw std::invalid_argument("Algebraic conversion requires a formula text block");
 

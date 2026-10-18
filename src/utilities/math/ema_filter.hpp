@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <concepts>
+#include <cstdint>
 
 namespace eerie_leap::utilities::math {
 
@@ -13,7 +13,9 @@ private:
     T error_ = 0;
 
 public:
-    EmaFilter(T value) : filter_(value), error_(0) {}
+    EmaFilter(T value) :
+        filter_(value),
+        error_(0) {}
 
     T Filter(T val, uint8_t k2) {
         T sum = (val - filter_) + error_;

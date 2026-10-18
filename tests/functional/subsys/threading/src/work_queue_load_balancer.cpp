@@ -30,7 +30,7 @@ public:
     WorkQueueLoadBalancer balancer;
 
     explicit BalancedQueues(int count) {
-        static const char* names[] = {"wq_lb_0", "wq_lb_1", "wq_lb_2", "wq_lb_3"};
+        static const char* names[] = { "wq_lb_0", "wq_lb_1", "wq_lb_2", "wq_lb_3" };
 
         for(int i = 0; i < count; ++i) {
             queue_threads_.push_back(MakeQueueThread(names[i]));

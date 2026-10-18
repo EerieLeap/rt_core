@@ -14,7 +14,7 @@
 #include "domain/adc_domain/services/calibration_service.h"
 
 #ifdef CONFIG_EERIE_LEAP_SMP
-#include "domain/adc_domain/smp/calibration_mgmt_group.h"
+    #include "domain/adc_domain/smp/calibration_mgmt_group.h"
 #endif
 
 namespace eerie_leap::controllers {
@@ -64,7 +64,8 @@ public:
         std::shared_ptr<IFsService> fs_service,
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
         std::shared_ptr<ConfigurationService> configuration_service,
-        std::shared_ptr<ITimeService> time_service);
+        std::shared_ptr<ITimeService> time_service
+    );
     ~AdcController();
 
     int Initialize();
@@ -78,10 +79,16 @@ public:
      */
     void RegisterPausedService(std::shared_ptr<IService> service);
 
-    std::shared_ptr<IAdcManager> GetManager() const { return adc_manager_; }
-    std::shared_ptr<AdcConfigurationManager> GetConfigurationManager() const { return adc_configuration_manager_; }
+    std::shared_ptr<IAdcManager> GetManager() const {
+        return adc_manager_;
+    }
+    std::shared_ptr<AdcConfigurationManager> GetConfigurationManager() const {
+        return adc_configuration_manager_;
+    }
     /** @return nullptr on a unit without ADC channels or without a time service. */
-    std::shared_ptr<CalibrationService> GetCalibrationService() const { return calibration_service_; }
+    std::shared_ptr<CalibrationService> GetCalibrationService() const {
+        return calibration_service_;
+    }
 };
 
 } // namespace eerie_leap::controllers

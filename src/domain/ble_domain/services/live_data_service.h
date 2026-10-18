@@ -11,15 +11,15 @@
 
 #include <zephyr/kernel.h>
 
-#include "subsys/bluetooth/i_ble_notifier.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/ble_domain/utilities/live_data_encoder.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/bluetooth/i_ble_notifier.h"
 
 namespace eerie_leap::domain::ble_domain::services {
 
-using eerie_leap::subsys::bluetooth::IBleNotifier;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::ble_domain::utilities::LiveDataEncoder;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::bluetooth::IBleNotifier;
 
 /**
  * @brief Samples the latest values of the subscribed sensors and notifies them on `live`.
@@ -76,7 +76,9 @@ public:
     [[nodiscard]] size_t GetCapacity() const;
 
     /** @brief The sampling period used for a requested @p period_ms. */
-    static constexpr uint32_t ClampPeriod(uint32_t period_ms) { return std::max(period_ms, MIN_PERIOD_MS); }
+    static constexpr uint32_t ClampPeriod(uint32_t period_ms) {
+        return std::max(period_ms, MIN_PERIOD_MS);
+    }
 
     /**
      * @brief Replaces the subscription and samples right away.
@@ -90,7 +92,9 @@ public:
 
     [[nodiscard]] bool IsSubscribed() const;
     /** @brief Samples not notified: one still in flight, no free buffer, or no subscribed central. */
-    [[nodiscard]] uint32_t GetDroppedCount() const { return dropped_; }
+    [[nodiscard]] uint32_t GetDroppedCount() const {
+        return dropped_;
+    }
 };
 
 } // namespace eerie_leap::domain::ble_domain::services

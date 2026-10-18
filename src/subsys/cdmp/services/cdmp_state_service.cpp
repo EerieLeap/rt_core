@@ -23,7 +23,7 @@ namespace {
 
 // Each record adds type, version, length and data, in ascending type order (§4.3).
 uint8_t AddToDigest(uint8_t digest, uint8_t state_type, uint8_t version, const CdmpStateData& data) {
-    const std::array<uint8_t, 3> header = {state_type, version, static_cast<uint8_t>(data.GetSize())};
+    const std::array<uint8_t, 3> header = { state_type, version, static_cast<uint8_t>(data.GetSize()) };
     digest = crc8_ccitt(digest, header.data(), header.size());
 
     return crc8_ccitt(digest, data.GetData().data(), data.GetSize());
@@ -41,23 +41,30 @@ CdmpStateService::CdmpStateService(
     std::shared_ptr<CdmpDevice> device,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<CdmpNetworkService> network_service,
-    std::shared_ptr<CdmpCommandService> command_service)
-        : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
-        work_queue_thread_(std::move(work_queue_thread)),
-        network_service_(std::move(network_service)),
-        command_service_(std::move(command_service)) {
+    std::shared_ptr<CdmpCommandService> command_service
+) :
+    CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
+    work_queue_thread_(std::move(work_queue_thread)),
+    network_service_(std::move(network_service)),
+    command_service_(std::move(command_service)) {
 
     k_mutex_init(&records_lock_);
     k_mutex_init(&handlers_lock_);
     k_msgq_init(&rx_queue_, rx_queue_buffer_, sizeof(ReceivedFrame), RX_QUEUE_SIZE);
 
     device_event_handler_id_ = network_service_->RegisterDeviceEventHandler(
-        [this](CdmpDeviceEvent event, const CdmpDeviceInfo& device) { OnDeviceEvent(event, device); });
-    heartbeat_handler_id_ = network_service_->RegisterHeartbeatHandler(
-        [this](const CdmpHeartbeatMessage& heartbeat) { OnHeartbeat(heartbeat); });
+        [this](CdmpDeviceEvent event, const CdmpDeviceInfo& device) {
+            OnDeviceEvent(event, device);
+        }
+    );
+    heartbeat_handler_id_ = network_service_->RegisterHeartbeatHandler([this](const CdmpHeartbeatMessage& heartbeat) {
+        OnHeartbeat(heartbeat);
+    });
     command_service_->RegisterServiceCommandHandler(
-        CdmpServiceCommandCode::STATE_SYNC_REQUEST,
-        [this](const CdmpCommandRequestMessage& request) { return ProcessSyncRequest(request); });
+        CdmpServiceCommandCode::STATE_SYNC_REQUEST, [this](const CdmpCommandRequestMessage& request) {
+            return ProcessSyncRequest(request);
+        }
+    );
 }
 
 CdmpStateService::~CdmpStateService() {
@@ -69,7 +76,7 @@ CdmpStateService::~CdmpStateService() {
 
     // Leaving ONLINE after the stop still reports the dropped copies. The others are cancelled too,
     // so that no timer outlives the service whatever state the stop found.
-    for(auto* task : {&receive_task_, &transmit_task_, &replay_task_, &notify_task_}) {
+    for(auto* task : { &receive_task_, &transmit_task_, &replay_task_, &notify_task_ }) {
         if(task->has_value())
             task->value().Cancel();
     }
@@ -147,12 +154,16 @@ void CdmpStateService::RegisterCanHandlers() {
     }
 
     state_change_handler_id_ = RegisterReceiveHandler(
-        can_id_manager_->GetStateChangeRequestCanId(),
-        [this](const CanFrame& frame) { QueueFrame(frame.data, false); });
+        can_id_manager_->GetStateChangeRequestCanId(), [this](const CanFrame& frame) {
+            QueueFrame(frame.data, false);
+        }
+    );
 
     state_change_response_handler_id_ = RegisterReceiveHandler(
-        can_id_manager_->GetStateChangeResponseCanId(),
-        [this](const CanFrame& frame) { QueueFrame(frame.data, true); });
+        can_id_manager_->GetStateChangeResponseCanId(), [this](const CanFrame& frame) {
+            QueueFrame(frame.data, true);
+        }
+    );
 
     if(state_change_handler_id_ < 0 || state_change_response_handler_id_ < 0) {
         UnregisterCanHandlers();
@@ -174,7 +185,7 @@ void CdmpStateService::UnregisterCanHandlers() {
 }
 
 void CdmpStateService::QueueFrame(std::span<const uint8_t> frame_data, bool is_response) {
-    ReceivedFrame frame{.is_response = is_response};
+    ReceivedFrame frame{ .is_response = is_response };
 
     // Only a CAN FD frame can be longer, and no state frame is.
     if(frame_data.size() > frame.data.size()) {
@@ -283,7 +294,8 @@ void CdmpStateService::OnHeartbeat(const CdmpHeartbeatMessage& heartbeat) {
         } else if(has_stale && fresh_digest == heartbeat.state_digest) {
             // The replay brought back every record the source still has; it withdrew the others.
             RemoveRemoteRecords([source](const RemoteRecord& record) {
-                return record.source == source && record.is_stale; });
+                return record.source == source && record.is_stale;
+            });
         } else {
             for(auto& record : records)
                 record.is_stale = true;
@@ -358,10 +370,7 @@ std::optional<CdmpCommandResult> CdmpStateService::ProcessSyncRequest(const Cdmp
     if(!count.has_value())
         return std::nullopt;
 
-    return CdmpCommandResult{
-        .result_code = CdmpResultCode::SUCCESS,
-        .data = {static_cast<uint8_t>(count.value())}
-    };
+    return CdmpCommandResult{ .result_code = CdmpResultCode::SUCCESS, .data = { static_cast<uint8_t>(count.value()) } };
 }
 
 WorkQueueTaskResult CdmpStateService::ProcessTransmissions(CdmpStateService* instance) {
@@ -418,12 +427,10 @@ void CdmpStateService::Transmit() {
             }
 
             // The record's current value, which a newer change replaces.
-            messages[message_count++] = {
-                .source_device_id = device_->GetDeviceId(),
+            messages[message_count++] = { .source_device_id = device_->GetDeviceId(),
                 .version = record.version,
                 .state_type = record.state_type,
-                .data = record.data
-            };
+                .data = record.data };
         }
 
         FreeAcknowledgedWithdrawals();
@@ -458,12 +465,10 @@ std::optional<size_t> CdmpStateService::ReplayRecords() {
             if(record.is_withdrawn)
                 continue;
 
-            messages[message_count++] = {
-                .source_device_id = device_->GetDeviceId(),
+            messages[message_count++] = { .source_device_id = device_->GetDeviceId(),
                 .version = record.version,
                 .state_type = record.state_type,
-                .data = record.data
-            };
+                .data = record.data };
         }
     }
 
@@ -490,12 +495,10 @@ void CdmpStateService::SendResponse(const CdmpStateChangeMessage& notification) 
         return;
 
     // Duplicates too, so that a sender whose acknowledgement was lost stops resending.
-    const CdmpStateChangeResponseMessage response{
-        .responding_device_id = device_->GetDeviceId(),
+    const CdmpStateChangeResponseMessage response{ .responding_device_id = device_->GetDeviceId(),
         .source_device_id = notification.source_device_id,
         .version = notification.version,
-        .result_code = CdmpResultCode::SUCCESS
-    };
+        .result_code = CdmpResultCode::SUCCESS };
 
     (*canbus_)->SendFrame(can_id_manager_->GetStateChangeResponseCanId(), response.ToCanFrame());
 }
@@ -580,7 +583,9 @@ int CdmpStateService::RegisterStateHandler(uint8_t state_type, StateHandler hand
         ScopedMutex guard(handlers_lock_);
 
         handler_id = next_handler_id_++;
-        state_handlers_.emplace(handler_id, StateHandlerEntry{.state_type = state_type, .handler = std::move(handler)});
+        state_handlers_.emplace(
+            handler_id, StateHandlerEntry{ .state_type = state_type, .handler = std::move(handler) }
+        );
     }
 
     // Before DoInitialize() the work queue may not run yet, which then schedules the first call.
@@ -606,7 +611,7 @@ size_t CdmpStateService::GetRemoteStates(uint8_t state_type, std::span<CdmpRemot
             break;
 
         if(record.state_type == state_type)
-            states[count++] = {.device_id = record.source, .data = record.data, .is_stale = record.is_stale};
+            states[count++] = { .device_id = record.source, .data = record.data, .is_stale = record.is_stale };
     }
 
     return count;
@@ -615,7 +620,7 @@ size_t CdmpStateService::GetRemoteStates(uint8_t state_type, std::span<CdmpRemot
 std::span<CdmpStateService::RemoteRecord> CdmpStateService::SourceRecords(uint8_t source) {
     auto range = std::ranges::equal_range(RemoteRecords(), source, {}, &RemoteRecord::source);
 
-    return {range.begin(), range.end()};
+    return { range.begin(), range.end() };
 }
 
 CdmpStateService::LocalRecord* CdmpStateService::FindLocalRecord(uint8_t state_type) {
@@ -645,7 +650,7 @@ CdmpStateService::LocalRecord* CdmpStateService::AddLocalRecord(uint8_t state_ty
     std::move_backward(position, first + local_count_, first + local_count_ + 1);
     local_count_++;
 
-    *position = {.state_type = state_type};
+    *position = { .state_type = state_type };
 
     return &*position;
 }
@@ -694,10 +699,10 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
     const uint8_t source = message.source_device_id;
     auto records = RemoteRecords();
     auto it = std::ranges::lower_bound(
-        records,
-        std::pair(source, message.state_type),
-        {},
-        [](const RemoteRecord& record) { return std::pair(record.source, record.state_type); });
+        records, std::pair(source, message.state_type), {}, [](const RemoteRecord& record) {
+            return std::pair(record.source, record.state_type);
+        }
+    );
     const bool is_found = it != records.end() && it->source == source && it->state_type == message.state_type;
 
     // A duplicate, or a resend overtaken by a newer change.
@@ -707,7 +712,8 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
     if(message.data.IsEmpty()) {
         if(is_found) {
             RemoveRemoteRecords([source, state_type = message.state_type](const RemoteRecord& record) {
-                return record.source == source && record.state_type == state_type; });
+                return record.source == source && record.state_type == state_type;
+            });
         }
 
         return;
@@ -738,10 +744,7 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
     remote_count_++;
 
     *position = {
-        .source = source,
-        .state_type = message.state_type,
-        .version = message.version,
-        .data = message.data
+        .source = source, .state_type = message.state_type, .version = message.version, .data = message.data
     };
 
     changed_types_.set(message.state_type);
@@ -768,7 +771,8 @@ void CdmpStateService::RemoveFromAcknowledgementSets(uint8_t peer_id, std::optio
 void CdmpStateService::FreeAcknowledgedWithdrawals() {
     auto records = LocalRecords();
     auto freed = std::ranges::remove_if(records, [](const LocalRecord& record) {
-        return record.is_withdrawn && !record.is_announce_pending && record.unacknowledged_count == 0; });
+        return record.is_withdrawn && !record.is_announce_pending && record.unacknowledged_count == 0;
+    });
 
     local_count_ -= freed.size();
 }
@@ -809,7 +813,9 @@ void CdmpStateService::RemoveRemoteRecords(TPredicate predicate) {
 }
 
 void CdmpStateService::DropSource(uint8_t source) {
-    RemoveRemoteRecords([source](const RemoteRecord& record) { return record.source == source; });
+    RemoveRemoteRecords([source](const RemoteRecord& record) {
+        return record.source == source;
+    });
     RemoveFromAcknowledgementSets(source);
 
     SourceState* source_state = FindSourceState(source);
@@ -818,7 +824,9 @@ void CdmpStateService::DropSource(uint8_t source) {
 }
 
 void CdmpStateService::ForgetNetwork() {
-    RemoveRemoteRecords([](const RemoteRecord&) { return true; });
+    RemoveRemoteRecords([](const RemoteRecord&) {
+        return true;
+    });
     sources_.fill({});
 
     is_announce_all_pending_ = false;
@@ -840,12 +848,12 @@ CdmpStateService::SourceState* CdmpStateService::FindSourceState(uint8_t source,
         return source_state.device_id == CdmpDevice::DEVICE_ID_UNASSIGNED
             || (!source_state.is_overflowed
                 && (!source_state.has_requested_sync
-                    || now - source_state.sync_requested_at_ms
-                        >= CdmpConstants::STATE_SYNC_REQUEST_MIN_INTERVAL_MS)); });
+                    || now - source_state.sync_requested_at_ms >= CdmpConstants::STATE_SYNC_REQUEST_MIN_INTERVAL_MS));
+    });
     if(it == sources_.end())
         return nullptr;
 
-    *it = {.device_id = source};
+    *it = { .device_id = source };
 
     return &*it;
 }
@@ -856,8 +864,10 @@ void CdmpStateService::MarkOverflowed(uint8_t source) {
         return;
 
     source_state->is_overflowed = true;
-    LOG_WRN("No room for more state records of device %d: keeping %zu records in all, without its digest check",
-        source, remote_count_);
+    LOG_WRN(
+        "No room for more state records of device %d: keeping %zu records in all, without its digest check", source,
+        remote_count_
+    );
 }
 
 bool CdmpStateService::StartSyncRequest(uint8_t source) {

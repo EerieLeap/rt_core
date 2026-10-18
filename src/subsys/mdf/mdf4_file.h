@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -9,16 +10,15 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <chrono>
 
 #include "subsys/canbus/can_frame.h"
+#include "subsys/mdf/mdf4/can_record_writer.h"
 #include "subsys/mdf/mdf4/channel_conversion_block.h"
 #include "subsys/mdf/mdf4/channel_group_block.h"
 #include "subsys/mdf/mdf4/data_group_block.h"
-#include "subsys/mdf/mdf4/id_block.h"
 #include "subsys/mdf/mdf4/header_block.h"
+#include "subsys/mdf/mdf4/id_block.h"
 #include "subsys/mdf/mdf4/record_writer.h"
-#include "subsys/mdf/mdf4/can_record_writer.h"
 
 #include "mdf_data_type.h"
 #include "mdf_property.h"
@@ -30,8 +30,8 @@ using eerie_leap::subsys::canbus::CanFrame;
 
 struct Mdf4FileOptions {
     uint8_t record_id_size_bytes = 1;
-    MdfDataType time_type = MdfDataType::Float64;   // master channel of every group: seconds since the header start time
-    uint8_t vlsd_offset_size_bytes = 8;             // width of the in-record VLSD offset (CAN_DataFrame.DataBytes)
+    MdfDataType time_type = MdfDataType::Float64; // master channel of every group: seconds since the header start time
+    uint8_t vlsd_offset_size_bytes = 8;           // width of the in-record VLSD offset (CAN_DataFrame.DataBytes)
 };
 
 /**
@@ -72,11 +72,16 @@ private:
     bool is_header_written_;
     bool is_finalized_;
 
-    std::shared_ptr<mdf4::ChannelBlock> CreateChannelBlock(MdfDataType data_type, const std::string& name, const std::string& unit = "");
+    std::shared_ptr<mdf4::ChannelBlock>
+    CreateChannelBlock(MdfDataType data_type, const std::string& name, const std::string& unit = "");
     std::shared_ptr<mdf4::ChannelGroupBlock> CreateChannelGroupBlock(uint64_t record_id);
     std::shared_ptr<mdf4::ChannelGroupBlock> CreateTimeChannelGroup(uint64_t record_id, const std::string& name);
     void BuildRecordWriters();
-    std::shared_ptr<mdf4::MetadataBlock> CreateCommentBlock(const std::string& block_id, std::string_view text, std::span<const MdfProperty> properties = {});
+    std::shared_ptr<mdf4::MetadataBlock> CreateCommentBlock(
+        const std::string& block_id,
+        std::string_view text,
+        std::span<const MdfProperty> properties = {}
+    );
     void EnsureRecordsWritable() const;
     void EnsureStructureEditable() const;
 
@@ -104,7 +109,8 @@ public:
     std::shared_ptr<mdf4::ChannelGroupBlock> CreateCanDataFrameChannelGroup(
         const std::shared_ptr<mdf4::ChannelGroupBlock>& vlsd_channel_group,
         uint64_t record_id,
-        const std::string& name);
+        const std::string& name
+    );
     /**
      * Rejects a channel that would take the group's record past RecordWriter's limits. With
      * @p with_invalidation_bit the channel gets the next bit of the group's one invalidation byte,
@@ -115,7 +121,8 @@ public:
         MdfDataType data_type,
         const std::string& name,
         const std::string& unit,
-        bool with_invalidation_bit = false);
+        bool with_invalidation_bit = false
+    );
     std::shared_ptr<mdf4::ChannelConversionBlock> CreateAlgebraicConversion(const std::string& formula);
     std::shared_ptr<mdf4::TextBlock> GetOrCreateTextBlock(const std::string& name);
 
@@ -136,13 +143,15 @@ public:
         const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
         std::streambuf& stream,
         std::span<const MdfValue> values,
-        uint32_t invalid_mask = 0);
+        uint32_t invalid_mask = 0
+    );
     uint64_t WriteCanbusDataRecordToStream(
         const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
         std::streambuf& stream,
         const CanFrame& can_frame,
         double time,
-        uint8_t bus_channel);
+        uint8_t bus_channel
+    );
     /**
      * Patches the DT length and the cycle counts, syncs the stream, then patches the file
      * identifier and syncs again, so the identifier never reaches the medium ahead of the lengths

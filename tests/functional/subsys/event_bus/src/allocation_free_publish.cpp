@@ -38,30 +38,54 @@ void* CountedAllocate(size_t size) {
 
 } // namespace
 
-void* operator new(size_t size) { return CountedAllocate(size); }
-void* operator new[](size_t size) { return CountedAllocate(size); }
-void* operator new(size_t size, const std::nothrow_t&) noexcept { g_allocations++; return std::malloc(size == 0 ? 1 : size); }
-void* operator new[](size_t size, const std::nothrow_t&) noexcept { g_allocations++; return std::malloc(size == 0 ? 1 : size); }
-void operator delete(void* pointer) noexcept { std::free(pointer); }
-void operator delete[](void* pointer) noexcept { std::free(pointer); }
-void operator delete(void* pointer, size_t) noexcept { std::free(pointer); }
-void operator delete[](void* pointer, size_t) noexcept { std::free(pointer); }
+void* operator new(size_t size) {
+    return CountedAllocate(size);
+}
+void* operator new[](size_t size) {
+    return CountedAllocate(size);
+}
+void* operator new(size_t size, const std::nothrow_t&) noexcept {
+    g_allocations++;
+    return std::malloc(size == 0 ? 1 : size);
+}
+void* operator new[](size_t size, const std::nothrow_t&) noexcept {
+    g_allocations++;
+    return std::malloc(size == 0 ? 1 : size);
+}
+void operator delete(void* pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete(void* pointer, size_t) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer, size_t) noexcept {
+    std::free(pointer);
+}
 
 namespace {
 
-enum class ProbeEventType : uint32_t { DataUpdated = 0 };
-enum class ProbePayloadType : uint32_t { SensorId = 0, Value = 1 };
+enum class ProbeEventType : uint32_t {
+    DataUpdated = 0
+};
+enum class ProbePayloadType : uint32_t {
+    SensorId = 0,
+    Value = 1
+};
 
 using ProbeEvent = Event<ProbeEventType, ProbePayloadType>;
 
 class ProbeChannel : public EventChannel<ProbeEventType, ProbePayloadType> {
 public:
-    explicit ProbeChannel(size_t capacity) : EventChannel("probe", capacity) {}
+    explicit ProbeChannel(size_t capacity) :
+        EventChannel("probe", capacity) {}
 };
 
 class ManualBus : public IEventBus {
 public:
-    void Wake() override { }
+    void Wake() override {}
 };
 
 } // namespace
@@ -77,30 +101,40 @@ ZTEST(allocation_free_publish, test_publish_queue_and_dispatch_do_not_allocate) 
     float last_value = 0.0F;
     size_t delivered = 0;
 
-    AnySubscription subscription = CreateScopedSubscription(channel, ProbeEventType::DataUpdated,
-        [&](const ProbeEvent& event) {
+    AnySubscription subscription = CreateScopedSubscription(
+        channel, ProbeEventType::DataUpdated, [&](const ProbeEvent& event) {
             if(auto it = event.payload.find(ProbePayloadType::SensorId); it != event.payload.end())
                 last_id = std::get<uint32_t>(it->second);
             if(auto it = event.payload.find(ProbePayloadType::Value); it != event.payload.end())
                 last_value = std::get<float>(it->second);
 
             delivered++;
-        });
+        }
+    );
 
     // Warm up: nothing should allocate even on the first pass, but the comparison is what counts.
-    channel.PublishAsync({ .source_id = 1, .type = ProbeEventType::DataUpdated,
-        .payload = { { ProbePayloadType::SensorId, uint32_t { 7 } }, { ProbePayloadType::Value, 1.0F } } });
+    channel.PublishAsync(
+        { .source_id = 1,
+            .type = ProbeEventType::DataUpdated,
+            .payload = { { ProbePayloadType::SensorId, uint32_t{ 7 } }, { ProbePayloadType::Value, 1.0F } } }
+    );
     zassert_true(channel.DrainOne());
 
     const size_t before = g_allocations;
 
     for(uint32_t i = 0; i < 100; i++) {
-        channel.PublishAsync({ .source_id = 1, .type = ProbeEventType::DataUpdated,
-            .payload = { { ProbePayloadType::SensorId, uint32_t { 100 + i } }, { ProbePayloadType::Value, static_cast<float>(i) } } });
+        channel.PublishAsync(
+            { .source_id = 1,
+                .type = ProbeEventType::DataUpdated,
+                .payload = { { ProbePayloadType::SensorId, uint32_t{ 100 + i } },
+                    { ProbePayloadType::Value, static_cast<float>(i) } } }
+        );
         zassert_true(channel.DrainOne());
     }
 
-    zassert_equal(g_allocations - before, 0U, "%zu allocations across 100 publish/drain cycles", g_allocations - before);
+    zassert_equal(
+        g_allocations - before, 0U, "%zu allocations across 100 publish/drain cycles", g_allocations - before
+    );
     zassert_equal(delivered, 101U);
     zassert_equal(last_id, 199U);
     zassert_equal(last_value, 99.0F);
@@ -113,17 +147,22 @@ ZTEST(allocation_free_publish, test_a_full_ring_sheds_the_oldest_without_allocat
 
     std::vector<uint32_t> seen;
     seen.reserve(16);
-    AnySubscription subscription = CreateScopedSubscription(channel, ProbeEventType::DataUpdated,
-        [&](const ProbeEvent& event) { seen.push_back(std::get<uint32_t>(event.payload.at(ProbePayloadType::SensorId))); });
+    AnySubscription subscription = CreateScopedSubscription(
+        channel, ProbeEventType::DataUpdated, [&](const ProbeEvent& event) {
+            seen.push_back(std::get<uint32_t>(event.payload.at(ProbePayloadType::SensorId)));
+        }
+    );
 
     const size_t before = g_allocations;
 
     for(uint32_t i = 0; i < 6; i++) {
-        channel.PublishAsync({ .source_id = i, .type = ProbeEventType::DataUpdated,
-            .payload = { { ProbePayloadType::SensorId, i } } });
+        channel.PublishAsync(
+            { .source_id = i, .type = ProbeEventType::DataUpdated, .payload = { { ProbePayloadType::SensorId, i } } }
+        );
     }
 
-    while(channel.DrainOne()) { }
+    while(channel.DrainOne()) {
+    }
 
     zassert_equal(g_allocations - before, 0U);
     zassert_equal(seen.size(), 4U, "Four slots: two oldest were shed");
@@ -144,7 +183,7 @@ ZTEST(allocation_free_publish, test_inline_payload_keeps_map_semantics) {
     zassert_false(inserted, "emplace keeps an existing entry");
     zassert_true(std::holds_alternative<float>(it->second));
 
-    zassert_true(payload.emplace(ProbePayloadType::SensorId, uint32_t { 3 }).second);
+    zassert_true(payload.emplace(ProbePayloadType::SensorId, uint32_t{ 3 }).second);
     zassert_equal(payload.size(), 2U);
     zassert_true(payload.find(ProbePayloadType::SensorId) != payload.end());
     zassert_equal(payload.erase(ProbePayloadType::Value), 1U);

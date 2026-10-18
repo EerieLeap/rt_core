@@ -48,14 +48,14 @@ private:
     const k_ticks_t debounce_ticks_;
     const IndicatorInputMode input_mode_;
 
-    bool has_input_ = false;       // A first value arrived in this generation.
-    bool input_ = false;           // The conditioned input.
-    bool is_switch_on_ = false;    // Toggle only; seeded by the builder.
+    bool has_input_ = false;    // A first value arrived in this generation.
+    bool input_ = false;        // The conditioned input.
+    bool is_switch_on_ = false; // Toggle only; seeded by the builder.
 
-    bool has_pending_ = false;     // The raw input differs from input_ and its window runs.
-    int64_t deadline_ = 0;         // Uptime ticks at which it settles.
-    int64_t remaining_ticks_ = 0;  // What was left of the window when processing paused.
-    SensorReading held_{};         // The latest reading carrying the pending value.
+    bool has_pending_ = false;    // The raw input differs from input_ and its window runs.
+    int64_t deadline_ = 0;        // Uptime ticks at which it settles.
+    int64_t remaining_ticks_ = 0; // What was left of the window when processing paused.
+    SensorReading held_{};        // The latest reading carrying the pending value.
     ReadingPipeline* pipeline_ = nullptr;
     const runtime::SensorRuntime* runtime_ = nullptr;
 
@@ -104,8 +104,12 @@ public:
      */
     void ResumeSettle();
 
-    [[nodiscard]] bool IsSwitch() const { return input_mode_ == IndicatorInputMode::Toggle; }
-    [[nodiscard]] bool IsSwitchOn() const { return is_switch_on_; }
+    [[nodiscard]] bool IsSwitch() const {
+        return input_mode_ == IndicatorInputMode::Toggle;
+    }
+    [[nodiscard]] bool IsSwitchOn() const {
+        return is_switch_on_;
+    }
 };
 
 } // namespace eerie_leap::domain::sensor_domain::processors

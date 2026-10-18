@@ -28,13 +28,13 @@ class AdcSampleSet {
 private:
     struct AdcEntry {
         IAdc* adc = nullptr;
-        std::vector<uint8_t> channels;          // Reserved local channels, ascending, unique.
-        std::vector<int> global_channels;       // Parallel to channels.
-        std::vector<AdcSample> results;         // One slot per local channel of the ADC.
-        uint16_t samples = 0;                   // The largest count any reservation asked for.
+        std::vector<uint8_t> channels;    // Reserved local channels, ascending, unique.
+        std::vector<int> global_channels; // Parallel to channels.
+        std::vector<AdcSample> results;   // One slot per local channel of the ADC.
+        uint16_t samples = 0;             // The largest count any reservation asked for.
 
-        std::vector<AdcSample> packed_results;  // One per reserved channel; built by Seal().
-        AdcSampleRequest request;               // Over channels and packed_results; built by Seal().
+        std::vector<AdcSample> packed_results; // One per reserved channel; built by Seal().
+        AdcSampleRequest request;              // Over channels and packed_results; built by Seal().
     };
 
     std::vector<AdcEntry> adcs_;
@@ -44,9 +44,9 @@ public:
     // One ADC of the set as reporting sees it: what each Acquire() asks of it and what it returned.
     struct AdcView {
         const IAdc* adc;
-        std::span<const uint8_t> channels;      // Reserved local channels, ascending.
-        std::span<const int> global_channels;   // Parallel to channels: the global index of each.
-        std::span<const AdcSample> results;     // Indexed by local channel; written by Acquire().
+        std::span<const uint8_t> channels;    // Reserved local channels, ascending.
+        std::span<const int> global_channels; // Parallel to channels: the global index of each.
+        std::span<const AdcSample> results;   // Indexed by local channel; written by Acquire().
         uint16_t samples;
     };
 
@@ -72,7 +72,9 @@ public:
     void Acquire() noexcept;
 
     /** @return The number of ADCs sampled per Acquire(). */
-    [[nodiscard]] size_t GetAdcCount() const { return adcs_.size(); }
+    [[nodiscard]] size_t GetAdcCount() const {
+        return adcs_.size();
+    }
 
     // index < GetAdcCount(), in the order the ADCs were first reserved. Results are only stable
     // on the thread that calls Acquire().

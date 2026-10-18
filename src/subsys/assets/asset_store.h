@@ -197,7 +197,9 @@ public:
     std::optional<size_t> GetSize(std::string_view relative_path) const;
 
     [[nodiscard]] bool IsAvailable() const;
-    [[nodiscard]] const std::string& GetDirectory() const { return directory_; }
+    [[nodiscard]] const std::string& GetDirectory() const {
+        return directory_;
+    }
     /** @brief @p relative_path relative to the volume: directory + "/" + path, or the path alone
      *         for an empty directory. */
     [[nodiscard]] std::string GetPath(std::string_view relative_path) const;
@@ -218,8 +220,14 @@ public:
      *         volume is unavailable; another negative errno of IFsService::ListDirectory().
      * @throws std::bad_alloc when an entry cannot be stored.
      */
-    int List(size_t first, size_t max_entries, std::span<const std::string_view> extensions,
-        std::vector<AssetEntry>& entries, size_t& scanned, size_t& count) const;
+    int List(
+        size_t first,
+        size_t max_entries,
+        std::span<const std::string_view> extensions,
+        std::vector<AssetEntry>& entries,
+        size_t& scanned,
+        size_t& count
+    ) const;
 
     /**
      * @brief Opens @p name (relative to the directory) for reading; a reader that is still open is

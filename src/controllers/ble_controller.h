@@ -29,7 +29,8 @@ public:
     BleController(
         std::shared_ptr<SensorsProcessingService> sensors_processing_service,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-        std::shared_ptr<ISmpForwarder> smp_forwarder);
+        std::shared_ptr<ISmpForwarder> smp_forwarder
+    );
 
     int Initialize();
     int Start();

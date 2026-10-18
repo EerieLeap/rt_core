@@ -11,14 +11,14 @@
 
 #include "domain/configuration_domain/services/configuration_service.h"
 
-#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
-#include "domain/canbus_domain/services/canbus_service.h"
 #include "domain/canbus_com_domain/services/canbus_com_service.h"
 #include "domain/canbus_com_domain/smp/network_mgmt_group.h"
+#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
+#include "domain/canbus_domain/services/canbus_service.h"
 
 namespace eerie_leap::subsys::assets {
 class AssetsManager;
-}
+} // namespace eerie_leap::subsys::assets
 
 namespace eerie_leap::controllers {
 
@@ -30,10 +30,10 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 
-using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
-using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 using eerie_leap::domain::canbus_com_domain::smp::NetworkMgmtGroup;
+using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
+using eerie_leap::domain::canbus_domain::services::CanbusService;
 
 class CanbusController {
 public:
@@ -74,7 +74,8 @@ public:
         std::shared_ptr<IFsService> sd_fs_service = nullptr,
         // With CONFIG_EERIE_LEAP_ASSETS: the registry the CAN scripts are registered with, once
         // Initialize() succeeded, when there is an SD service too; ignored otherwise.
-        std::shared_ptr<AssetsManager> assets_manager = nullptr);
+        std::shared_ptr<AssetsManager> assets_manager = nullptr
+    );
     ~CanbusController();
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
@@ -82,9 +83,15 @@ public:
 
     void RegisterDependentService(std::shared_ptr<IService> service);
 
-    std::shared_ptr<CanbusConfigurationManager> GetConfigurationManager() const { return canbus_configuration_manager_; }
-    std::shared_ptr<CanbusService> GetService() const { return canbus_service_; }
-    std::shared_ptr<CanbusComService> GetComService() const { return canbus_com_service_; }
+    std::shared_ptr<CanbusConfigurationManager> GetConfigurationManager() const {
+        return canbus_configuration_manager_;
+    }
+    std::shared_ptr<CanbusService> GetService() const {
+        return canbus_service_;
+    }
+    std::shared_ptr<CanbusComService> GetComService() const {
+        return canbus_com_service_;
+    }
 };
 
 } // namespace eerie_leap::controllers

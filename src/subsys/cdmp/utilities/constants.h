@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 
 namespace eerie_leap::subsys::cdmp::utilities {
 
@@ -37,12 +37,10 @@ struct CdmpConstants {
 };
 
 struct CdmpTimeouts {
-    static constexpr std::array<int, 3> RETRY_BACKOFFS_MS = {
-        100, 200, 500};
+    static constexpr std::array<int, 3> RETRY_BACKOFFS_MS = { 100, 200, 500 };
 
     // Waits before each resend of an unacknowledged state change (§7.2).
-    static constexpr std::array<int, 3> STATE_RETRANSMIT_BACKOFFS_MS = {
-        50, 100, 200};
+    static constexpr std::array<int, 3> STATE_RETRANSMIT_BACKOFFS_MS = { 50, 100, 200 };
 };
 
 } // namespace eerie_leap::subsys::cdmp::utilities

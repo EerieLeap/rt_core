@@ -21,9 +21,15 @@ class ProbeThreadBase : public ThreadBase {
 public:
     using ThreadBase::ThreadBase;
 
-    [[nodiscard]] int Priority() const { return k_priority_; }
-    [[nodiscard]] int StackSize() const { return k_stack_size_; }
-    [[nodiscard]] const std::string& Name() const { return name_; }
+    [[nodiscard]] int Priority() const {
+        return k_priority_;
+    }
+    [[nodiscard]] int StackSize() const {
+        return k_stack_size_;
+    }
+    [[nodiscard]] const std::string& Name() const {
+        return name_;
+    }
 };
 
 class TrackingMemoryResource : public std::pmr::memory_resource {

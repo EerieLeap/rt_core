@@ -34,24 +34,31 @@ struct CanbusSource {
     std::pmr::string signal_name;
     uint32_t signal_name_hash = 0;
 
-    CanbusSource(std::allocator_arg_t, allocator_type alloc, uint8_t bus_channel, uint32_t frame_id, std::string_view signal_name)
-        : bus_channel(bus_channel), frame_id(frame_id), signal_name(signal_name, alloc) {
+    CanbusSource(
+        std::allocator_arg_t,
+        allocator_type alloc,
+        uint8_t bus_channel,
+        uint32_t frame_id,
+        std::string_view signal_name
+    ) :
+        bus_channel(bus_channel),
+        frame_id(frame_id),
+        signal_name(signal_name, alloc) {
 
         if(!signal_name.empty())
             signal_name_hash = StringHelpers::GetHash(signal_name);
     }
 
-    CanbusSource(std::allocator_arg_t alloc_arg, allocator_type alloc, uint8_t bus_channel, uint32_t frame_id)
-        : CanbusSource(alloc_arg, alloc, bus_channel, frame_id, "") {}
-
+    CanbusSource(std::allocator_arg_t alloc_arg, allocator_type alloc, uint8_t bus_channel, uint32_t frame_id) :
+        CanbusSource(alloc_arg, alloc, bus_channel, frame_id, "") {}
 
     CanbusSource(const CanbusSource&) = delete;
     CanbusSource& operator=(const CanbusSource&) = delete;
 
     CanbusSource(CanbusSource&&) noexcept = default;
 
-    CanbusSource(CanbusSource&& other, allocator_type alloc) noexcept
-        : bus_channel(other.bus_channel),
+    CanbusSource(CanbusSource&& other, allocator_type alloc) noexcept :
+        bus_channel(other.bus_channel),
         frame_id(other.frame_id),
         signal_name(other.signal_name, alloc),
         signal_name_hash(other.signal_name_hash) {}
@@ -95,7 +102,7 @@ struct CanbusSource {
         if(!frame_id.has_value())
             return std::unexpected("Connection string frame ID must be a number from 0 to 0x1FFFFFFF.");
 
-        Parts parts{.bus_channel = static_cast<uint8_t>(*bus_channel), .frame_id = *frame_id};
+        Parts parts{ .bus_channel = static_cast<uint8_t>(*bus_channel), .frame_id = *frame_id };
 
         if(frame_end != std::string_view::npos) {
             parts.signal_name = rest.substr(frame_end + 1);
@@ -112,7 +119,7 @@ struct CanbusSource {
         if(!parts.has_value())
             throw std::invalid_argument(parts.error());
 
-        return {std::allocator_arg, alloc, parts->bus_channel, parts->frame_id, parts->signal_name};
+        return { std::allocator_arg, alloc, parts->bus_channel, parts->frame_id, parts->signal_name };
     }
 
 private:
@@ -137,6 +144,6 @@ private:
     }
 };
 
-}
+} // namespace eerie_leap::domain::sensor_domain::models::sources
 
 // namespace eerie_leap::domain::sensor_domain::models::sources

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <string>
 #include <memory_resource>
+#include <string>
 
 #include <zephyr/kernel.h>
 
@@ -21,7 +21,8 @@ public:
         int stack_size,
         int priority,
         bool is_cooperative = false,
-        std::pmr::memory_resource* mr = nullptr);
+        std::pmr::memory_resource* mr = nullptr
+    );
     virtual ~ThreadBase();
 
     bool InitializeStack();

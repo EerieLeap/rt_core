@@ -68,8 +68,9 @@ public:
     void Register(INetworkStateTransport& transport, CanbusComStateType state_type) {
         transport_ = &transport;
         state_type_ = state_type;
-        handler_id_ = transport.RegisterStateHandler(
-            state_type, [this](CanbusComStateType type) { OnStateChanged(type); });
+        handler_id_ = transport.RegisterStateHandler(state_type, [this](CanbusComStateType type) {
+            OnStateChanged(type);
+        });
         zassert_true(handler_id_ >= 0, "RegisterStateHandler failed: %d", handler_id_);
     }
 

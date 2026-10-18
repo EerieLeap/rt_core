@@ -15,12 +15,13 @@ LOG_MODULE_REGISTER(canbus_scheduler_logger);
 CanbusSchedulerService::CanbusSchedulerService(
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager,
     std::shared_ptr<CanbusService> canbus_service,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
-        : work_queue_thread_(nullptr),
-        canbus_configuration_manager_(std::move(canbus_configuration_manager)),
-        canbus_service_(std::move(canbus_service)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)),
-        can_frame_processors_(std::make_shared<std::vector<std::shared_ptr<ICanFrameProcessor>>>()) {
+    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame
+) :
+    work_queue_thread_(nullptr),
+    canbus_configuration_manager_(std::move(canbus_configuration_manager)),
+    canbus_service_(std::move(canbus_service)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)),
+    can_frame_processors_(std::make_shared<std::vector<std::shared_ptr<ICanFrameProcessor>>>()) {
 
     can_frame_builder_ = std::make_shared<CanFrameBuilder>(sensor_readings_frame_);
     can_frame_processors_->push_back(std::make_shared<ScriptProcessor>(sensor_readings_frame_, "process_can_frame"));
@@ -28,9 +29,8 @@ CanbusSchedulerService::CanbusSchedulerService(
 
 bool CanbusSchedulerService::DoInitialize() {
     work_queue_thread_ = std::make_unique<WorkQueueThread>(
-        "canbus_scheduler_service",
-        thread_stack_size_,
-        thread_priority_);
+        "canbus_scheduler_service", thread_stack_size_, thread_priority_
+    );
 
     return work_queue_thread_->Initialize();
 }
@@ -40,10 +40,7 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
         if(!task->canbus->IsValid()) {
             LOG_ERR("Canbus is not valid");
 
-            return {
-                .reschedule = false,
-                .delay = K_NO_WAIT
-            };
+            return { .reschedule = false, .delay = K_NO_WAIT };
         }
 
         auto can_frame_data = task->can_frame_builder->Build(*task->message_configuration);
@@ -59,20 +56,20 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
             (*task->canbus)->SendFrame(task->frame_id, can_frame_data);
 
         LOG_HEXDUMP_DBG(
-            can_frame_data.data(),
-            static_cast<uint32_t>(can_frame_data.size()),
-            ("Can frame " + std::to_string(task->message_configuration->frame_id)).c_str());
-    } catch (const std::exception& e) {
+            can_frame_data.data(), static_cast<uint32_t>(can_frame_data.size()),
+            ("Can frame " + std::to_string(task->message_configuration->frame_id)).c_str()
+        );
+    } catch(const std::exception& e) {
         LOG_DBG("Error processing Frame ID: %d, Error: %s", task->message_configuration->frame_id, e.what());
     }
 
-    return {
-        .reschedule = true,
-        .delay = task->send_interval_ms
-    };
+    return { .reschedule = true, .delay = task->send_interval_ms };
 }
 
-std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(uint8_t bus_channel, std::shared_ptr<CanMessageConfiguration> message_configuration) {
+std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(
+    uint8_t bus_channel,
+    std::shared_ptr<CanMessageConfiguration> message_configuration
+) {
     auto canbus = canbus_service_->GetCanbus(bus_channel);
     const auto* channel_configuration = canbus_service_->GetChannelConfiguration(bus_channel);
     if(canbus == nullptr || channel_configuration == nullptr) {
@@ -88,7 +85,7 @@ std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(uint8_t bus_chann
     auto task = std::make_unique<CanbusTask>();
     task->send_interval_ms = K_MSEC(message_configuration->send_interval_ms.value());
     task->bus_channel = bus_channel;
-    task->frame_id = CanId{message_configuration->frame_id, channel_configuration->is_extended_id};
+    task->frame_id = CanId{ message_configuration->frame_id, channel_configuration->is_extended_id };
     task->message_configuration = std::move(message_configuration);
     task->canbus = canbus;
     task->can_frame_builder = can_frame_builder_;
@@ -122,8 +119,7 @@ bool CanbusSchedulerService::DoStart() {
             if(task == nullptr)
                 continue;
 
-            work_queue_tasks_.push_back(
-                work_queue_thread_->CreateTask(ProcessCanbusWorkTask, std::move(task)));
+            work_queue_tasks_.push_back(work_queue_thread_->CreateTask(ProcessCanbusWorkTask, std::move(task)));
             LOG_INF("Created task for Frame ID: %d", message_configuration->frame_id);
         }
     }

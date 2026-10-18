@@ -6,21 +6,21 @@
 
 #include <zephyr/kernel.h>
 
-#include "subsys/threading/work_queue_thread.h"
-#include "subsys/time/i_time_service.h"
-#include "domain/sensor_domain/models/reading_status.h"
 #include "domain/sensor_domain/models/reading_source.h"
+#include "domain/sensor_domain/models/reading_status.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "i_reading_processor.h"
+#include "subsys/threading/work_queue_thread.h"
+#include "subsys/time/i_time_service.h"
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
+using eerie_leap::domain::sensor_domain::models::ReadingSource;
+using eerie_leap::domain::sensor_domain::models::ReadingStatus;
+using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::sensor_domain::models::ReadingStatus;
-using eerie_leap::domain::sensor_domain::models::ReadingSource;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
-using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
 
 // Takes a reading from its source to the frame: the stages, the indicator conditioning, one
 // commit, and the sensors that are derived from it. Every source (CAN route, GPIO edge, rate
@@ -41,9 +41,7 @@ private:
         for(const auto* dependent : runtime.dependents) {
             SensorReading derived(dependent->sensor.get());
             derived.source = ReadingSource::PROCESSING;
-            derived.timestamp = reading.timestamp.has_value()
-                ? reading.timestamp
-                : time_service_->GetCurrentTime();
+            derived.timestamp = reading.timestamp.has_value() ? reading.timestamp : time_service_->GetCurrentTime();
 
             Run(*processors_, *dependent, derived);
 
@@ -61,16 +59,17 @@ public:
         std::shared_ptr<ITimeService> time_service,
         // Where a held indicator change settles. Without one a held change settles only when a
         // later reading confirms it after its window, which is enough for a pipeline driven by hand.
-        std::shared_ptr<WorkQueueThread> work_queue_thread = nullptr)
-            : sensor_readings_frame_(std::move(sensor_readings_frame)),
-            processors_(std::move(processors)),
-            time_service_(std::move(time_service)),
-            work_queue_thread_(std::move(work_queue_thread)) {}
+        std::shared_ptr<WorkQueueThread> work_queue_thread = nullptr
+    ) :
+        sensor_readings_frame_(std::move(sensor_readings_frame)),
+        processors_(std::move(processors)),
+        time_service_(std::move(time_service)),
+        work_queue_thread_(std::move(work_queue_thread)) {}
 
     // Runs the stages on a reading the caller owns, stopping at the first failure, and marks a
     // reading that went through as PROCESSED. Does not touch the frame.
-    static void Run(
-        const std::vector<std::shared_ptr<IReadingProcessor>>& processors,
+    static void
+    Run(const std::vector<std::shared_ptr<IReadingProcessor>>& processors,
         const SensorRuntime& runtime,
         SensorReading& reading) {
 

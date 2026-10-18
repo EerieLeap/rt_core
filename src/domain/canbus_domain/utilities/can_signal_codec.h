@@ -19,7 +19,7 @@ private:
     static uint64_t SignalMask(uint32_t size_bits);
 
     // Walks the frame bit positions the signal occupies, from its least to most significant bit.
-    template <typename TBitHandler>
+    template<typename TBitHandler>
     static void ForEachSignalBit(const CanSignalConfiguration& signal, TBitHandler&& handler);
 
 public:

@@ -5,13 +5,13 @@
 #include <cstdint>
 #include <memory>
 
-#include "subsys/smp/smp_group.h"
 #include "domain/ble_domain/services/live_data_service.h"
+#include "subsys/smp/smp_group.h"
 
 namespace eerie_leap::domain::ble_domain::smp {
 
-using eerie_leap::subsys::smp::SmpGroup;
 using eerie_leap::domain::ble_domain::services::LiveDataService;
+using eerie_leap::subsys::smp::SmpGroup;
 
 /** @brief SMP `live` group: subscribes the connected central to sensor values on the `live` characteristic. */
 class LiveMgmtGroup : public SmpGroup<LiveMgmtGroup> {

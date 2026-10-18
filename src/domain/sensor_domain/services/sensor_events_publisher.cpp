@@ -9,14 +9,14 @@
 
 namespace eerie_leap::domain::sensor_domain::services {
 
-using eerie_leap::utilities::reflection::GetCallerName;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventType;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
+using eerie_leap::utilities::reflection::GetCallerName;
 
 LOG_MODULE_REGISTER(sensor_events_publisher_logger);
 
-SensorEventsPublisher::SensorEventsPublisher(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
-    : sensor_readings_frame_(std::move(sensor_readings_frame)) { }
+SensorEventsPublisher::SensorEventsPublisher(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame) :
+    sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
 // The task refers to this publisher, so it is stopped before anything goes.
 SensorEventsPublisher::~SensorEventsPublisher() {
@@ -33,9 +33,9 @@ bool SensorEventsPublisher::DoInitialize() {
     }
 
     auto work_queue_thread = std::make_unique<WorkQueueThread>(
-        "sensor_events_publisher",
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE,
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY);
+        "sensor_events_publisher", CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY
+    );
     if(!work_queue_thread->Initialize()) {
         LOG_ERR("Failed to initialize the sensor events publisher work queue.");
         return false;
@@ -108,10 +108,7 @@ WorkQueueTaskResult SensorEventsPublisher::ProcessWorkTask(SensorEventsPublisher
             LOG_ERR("Failed to publish sensor events: a non-standard exception.");
     }
 
-    return {
-        .reschedule = true,
-        .delay = K_MSEC(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS)
-    };
+    return { .reschedule = true, .delay = K_MSEC(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS) };
 }
 
 void SensorEventsPublisher::PublishProcessedReadings() {
@@ -138,14 +135,10 @@ void SensorEventsPublisher::PublishProcessedReadings() {
             if(!reading.value.has_value())
                 continue;
 
-            const SensorEventsChannel::EventMessage event {
-                .source_id = caller.hash,
+            const SensorEventsChannel::EventMessage event{ .source_id = caller.hash,
                 .type = SensorEventType::DataUpdated,
-                .payload = {
-                    { SensorPayloadType::SensorId, reading.sensor_id_hash },
-                    { SensorPayloadType::Value, *reading.value }
-                }
-            };
+                .payload = { { SensorPayloadType::SensorId, reading.sensor_id_hash },
+                    { SensorPayloadType::Value, *reading.value } } };
 
             if(IsAccepted(channel, event, reading.sensor_id_hash, subscription_generation))
                 channel.PublishAsync(event);
@@ -157,7 +150,8 @@ bool SensorEventsPublisher::IsAccepted(
     const SensorEventsChannel& channel,
     const SensorEventsChannel::EventMessage& event,
     uint32_t sensor_id_hash,
-    uint32_t subscription_generation) {
+    uint32_t subscription_generation
+) {
 
     if(const auto is_accepted = acceptance_cache_.Find(sensor_id_hash); is_accepted.has_value())
         return *is_accepted;
@@ -178,14 +172,20 @@ bool SensorEventsPublisher::IsAccepted(
     return is_accepted;
 }
 
-void SensorEventsPublisher::LogFilterError(uint32_t sensor_id_hash, uint32_t subscription_generation, const char* error) {
+void SensorEventsPublisher::LogFilterError(
+    uint32_t sensor_id_hash,
+    uint32_t subscription_generation,
+    const char* error
+) {
     if(filter_error_generation_ == subscription_generation)
         return;
 
     filter_error_generation_ = subscription_generation;
 
-    LOG_ERR("A sensor_events filter threw for sensor 0x%08x, which is not published until the subscriptions change. %s",
-        sensor_id_hash, error);
+    LOG_ERR(
+        "A sensor_events filter threw for sensor 0x%08x, which is not published until the subscriptions change. %s",
+        sensor_id_hash, error
+    );
 }
 
 } // namespace eerie_leap::domain::sensor_domain::services

@@ -6,8 +6,12 @@ namespace eerie_leap::subsys::time {
 
 LOG_MODULE_REGISTER(time_service_logger);
 
-TimeService::TimeService(std::shared_ptr<ITimeProvider> rtc_provider, std::shared_ptr<ITimeProvider> boot_elapsed_time_provider)
-    : rtc_provider_(std::move(rtc_provider)), boot_elapsed_time_provider_(std::move(boot_elapsed_time_provider)) { }
+TimeService::TimeService(
+    std::shared_ptr<ITimeProvider> rtc_provider,
+    std::shared_ptr<ITimeProvider> boot_elapsed_time_provider
+) :
+    rtc_provider_(std::move(rtc_provider)),
+    boot_elapsed_time_provider_(std::move(boot_elapsed_time_provider)) {}
 
 void TimeService::Initialize() {
     LOG_INF("Time Service initialized");

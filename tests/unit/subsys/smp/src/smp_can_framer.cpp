@@ -20,7 +20,7 @@ ZTEST(smp_can_framer, test_first_frame_is_marked_start) {
 }
 
 ZTEST(smp_can_framer, test_only_the_last_frame_is_short) {
-    auto packet = MakePacket(20); // 28 bytes: 7 + 7 + 7 + 7
+    auto packet = MakePacket(20);     // 28 bytes: 7 + 7 + 7 + 7
     auto odd_packet = MakePacket(22); // 30 bytes: 7 + 7 + 7 + 7 + 2
 
     for(const auto& frame : MakeFrames(packet))
@@ -92,8 +92,15 @@ ZTEST(smp_can_framer, test_short_can_fd_frame_is_padded_to_a_valid_length) {
     zassert_equal(frames.size(), 2);
     zassert_equal(frames[1].size(), 16);
     zassert_true(std::equal(packet.begin() + 63, packet.end(), frames[1].begin() + 1));
-    zassert_true(std::all_of(frames[1].begin() + 14, frames[1].end(), [](uint8_t byte) { return byte == 0; }),
-        "Padding is zeroed");
+    zassert_true(
+        std::all_of(
+            frames[1].begin() + 14, frames[1].end(),
+            [](uint8_t byte) {
+                return byte == 0;
+            }
+        ),
+        "Padding is zeroed"
+    );
 }
 
 ZTEST(smp_can_framer, test_can_fd_frames_up_to_8_bytes_are_not_padded) {

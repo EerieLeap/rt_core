@@ -20,12 +20,12 @@
 
 namespace eerie_leap::domain::logging_domain::control {
 
-using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
-using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
-using eerie_leap::subsys::cdmp::services::CdmpDeviceEvent;
 using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 using eerie_leap::domain::canbus_com_domain::states::RemoteStateRecord;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
+using eerie_leap::subsys::cdmp::services::CdmpDeviceEvent;
 
 // Tells RemoteLoggingControl that a logging unit restarted, or joined while another unit reports, and
 // shares an idle status again, from CDMP's device events, heartbeats and the units' LOGGING_STATUS
@@ -93,7 +93,8 @@ public:
     // unit itself, in the spell without any copy as well.
     explicit CanbusComLoggingRestartMonitor(
         std::shared_ptr<CanbusComService> canbus_com_service,
-        bool has_status_rule = true);
+        bool has_status_rule = true
+    );
 
     // Unregisters its handlers, waiting for one in progress. Not on the CDMP work queue.
     ~CanbusComLoggingRestartMonitor() override;

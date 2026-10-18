@@ -10,7 +10,6 @@
 
 #include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_system_config/cbor_system_config.h"
 #include "configuration/cbor/cbor_system_config/cbor_system_config_cbor_encode.h"
 #include "configuration/services/cbor_configuration_service.h"
@@ -18,6 +17,7 @@
 #include "subsys/fs/services/fs_service.h"
 #include "subsys/threading/scoped_mutex.h"
 #include "subsys/threading/work_queue_thread.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/configuration_domain/utilities/cbor_configuration_manager_base.h"
@@ -64,7 +64,7 @@ private:
     }
 
     bool CreateDefaultConfiguration() override {
-        return Update(TestConfiguration { .device_id = 1, .build_number = 0 });
+        return Update(TestConfiguration{ .device_id = 1, .build_number = 0 });
     }
 
     void ValidateApply(const TestConfiguration& configuration) override {
@@ -73,14 +73,14 @@ private:
     }
 
 public:
-    explicit TestManager(std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service)
-        : CborConfigurationManagerBase("Test", std::move(cbor_configuration_service)) {
+    explicit TestManager(std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service) :
+        CborConfigurationManagerBase("Test", std::move(cbor_configuration_service)) {
 
         LoadOrCreateDefault();
     }
 
     bool AdoptForTest(uint64_t device_id) {
-        return Adopt(std::make_shared<TestConfiguration>(TestConfiguration { .device_id = device_id }));
+        return Adopt(std::make_shared<TestConfiguration>(TestConfiguration{ .device_id = device_id }));
     }
 };
 
@@ -94,7 +94,9 @@ struct Recorder {
     k_mutex lock;
     std::vector<Entry> entries;
 
-    Recorder() { k_mutex_init(&lock); }
+    Recorder() {
+        k_mutex_init(&lock);
+    }
 
     std::vector<Entry> Get() {
         ScopedMutex guard(lock);
@@ -105,13 +107,13 @@ struct Recorder {
     ConfigurationService::ConfigurationStoredHandler Handler() {
         return [this](Type type) {
             ScopedMutex guard(lock);
-            entries.push_back({type, k_current_get()});
+            entries.push_back({ type, k_current_get() });
         };
     }
 };
 
 std::vector<uint8_t> Encode(uint64_t device_id, uint32_t build_number = 0) {
-    CborSystemConfig config {.device_id = device_id, .build_number = build_number};
+    CborSystemConfig config{ .device_id = device_id, .build_number = build_number };
     std::vector<uint8_t> bytes(64);
     size_t size = 0;
     zassert_equal(cbor_encode_CborSystemConfig(bytes.data(), bytes.size(), &config, &size), 0);
@@ -140,7 +142,8 @@ struct Fixture {
 
     std::shared_ptr<TestManager> MakeManager() {
         return std::make_shared<TestManager>(std::make_unique<CborConfigurationService<CborSystemConfig>>(
-            "stored_handler_" + std::to_string(next_name++), fs_service));
+            "stored_handler_" + std::to_string(next_name++), fs_service
+        ));
     }
 
     // A manager registered under @p type, with the recorder as the service's handler.
@@ -179,7 +182,7 @@ ZTEST_SUITE(configuration_stored_handler, NULL, NULL, Before, After, NULL);
 ZTEST(configuration_stored_handler, test_AnUpdateReportsItsTypeOnTheStoringThread) {
     auto manager = F().Register(Type::Canbus);
 
-    zassert_true(manager->Update(TestConfiguration { .device_id = 7, .build_number = 1 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 7, .build_number = 1 }));
 
     const auto entries = F().recorder->Get();
     zassert_equal(entries.size(), 1U);
@@ -193,9 +196,11 @@ ZTEST(configuration_stored_handler, test_TheStoreIsDoneWhenTheHandlerRuns) {
     F().service->RegisterCborConfigurationManager(Type::System, manager);
 
     uint64_t seen = 0;
-    F().service->RegisterConfigurationStoredHandler([&seen, &manager](Type) { seen = manager->Get()->device_id; });
+    F().service->RegisterConfigurationStoredHandler([&seen, &manager](Type) {
+        seen = manager->Get()->device_id;
+    });
 
-    zassert_true(manager->Update(TestConfiguration { .device_id = 21 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 21 }));
     zassert_equal(seen, 21U, "A handler reads the configuration it was told about");
 }
 
@@ -235,7 +240,7 @@ ZTEST(configuration_stored_handler, test_AnAdoptReportsItsType) {
 ZTEST(configuration_stored_handler, test_UpdateOwnSettingStoresAndReportsNothing) {
     auto manager = F().Register(Type::Display);
 
-    zassert_true(manager->UpdateOwnSetting(TestConfiguration { .device_id = 12 }));
+    zassert_true(manager->UpdateOwnSetting(TestConfiguration{ .device_id = 12 }));
 
     zassert_equal(manager->Get()->device_id, 12U, "The setting is stored");
     zassert_equal(F().recorder->Get().size(), 0U, "and no update is reported");
@@ -247,12 +252,14 @@ ZTEST(configuration_stored_handler, test_UpdateOwnSettingStoresAndReportsNothing
 ZTEST(configuration_stored_handler, test_ARejectedApplyReportsNothing) {
     auto manager = F().Register();
 
-    const std::vector<uint8_t> malformed = {0xFF, 0x01, 0x02};
+    const std::vector<uint8_t> malformed = { 0xFF, 0x01, 0x02 };
     zassert_false(F().service->ApplyCborConfiguration(Type::System, malformed), "Malformed CBOR");
 
     char reason[64] = {};
-    zassert_false(F().service->ApplyCborConfiguration(Type::System, Encode(REJECTED_DEVICE_ID), reason),
-        "A configuration the manager's validator refuses");
+    zassert_false(
+        F().service->ApplyCborConfiguration(Type::System, Encode(REJECTED_DEVICE_ID), reason),
+        "A configuration the manager's validator refuses"
+    );
 
     zassert_equal(F().recorder->Get().size(), 0U, "A rejected write is not an update");
     zassert_equal(manager->Get()->device_id, 1U, "and the configuration is as it was");
@@ -264,7 +271,9 @@ ZTEST(configuration_stored_handler, test_LoadingAndTheDefaultReportNothing) {
     zassert_not_null(manager->Get(true).get(), "The stored default loads");
     zassert_not_null(manager->Get().get());
 
-    zassert_equal(F().recorder->Get().size(), 0U, "A load, and the default made while the manager was built, are no updates");
+    zassert_equal(
+        F().recorder->Get().size(), 0U, "A load, and the default made while the manager was built, are no updates"
+    );
 }
 
 ZTEST(configuration_stored_handler, test_TheSameBytesStoredAgainReportAgain) {
@@ -283,7 +292,7 @@ ZTEST(configuration_stored_handler, test_AManagerRegisteredAfterTheHandlerReport
     auto manager = F().MakeManager();
     F().service->RegisterCborConfigurationManager(Type::LoggingControl, manager);
 
-    zassert_true(manager->Update(TestConfiguration { .device_id = 3 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 3 }));
 
     const auto entries = F().recorder->Get();
     zassert_equal(entries.size(), 1U);
@@ -295,10 +304,10 @@ ZTEST(configuration_stored_handler, test_ARefusedSecondManagerOfATypeIsNotWired)
     auto second = F().MakeManager();
     F().service->RegisterCborConfigurationManager(Type::System, second);
 
-    zassert_true(second->Update(TestConfiguration { .device_id = 2 }));
+    zassert_true(second->Update(TestConfiguration{ .device_id = 2 }));
     zassert_equal(F().recorder->Get().size(), 0U, "The service keeps the first manager, so the second reports nothing");
 
-    zassert_true(first->Update(TestConfiguration { .device_id = 4 }));
+    zassert_true(first->Update(TestConfiguration{ .device_id = 4 }));
     zassert_equal(F().recorder->Get().size(), 1U);
 }
 
@@ -307,22 +316,26 @@ ZTEST(configuration_stored_handler, test_AClearedHandlerIsNotCalledAndASecondRep
     auto second = std::make_shared<Recorder>();
 
     F().service->RegisterConfigurationStoredHandler(second->Handler());
-    zassert_true(manager->Update(TestConfiguration { .device_id = 6 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 6 }));
     zassert_equal(F().recorder->Get().size(), 0U, "A second handler replaces the first");
     zassert_equal(second->Get().size(), 1U);
 
     F().service->RegisterConfigurationStoredHandler(nullptr);
-    zassert_true(manager->Update(TestConfiguration { .device_id = 8 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 8 }));
     zassert_equal(second->Get().size(), 1U, "and a cleared one is not called");
 }
 
 ZTEST(configuration_stored_handler, test_AHandlerThatThrowsDoesNotFailTheStore) {
     auto manager = F().MakeManager();
     F().service->RegisterCborConfigurationManager(Type::System, manager);
-    F().service->RegisterConfigurationStoredHandler([](Type) { throw std::runtime_error("The handler failed."); });
+    F().service->RegisterConfigurationStoredHandler([](Type) {
+        throw std::runtime_error("The handler failed.");
+    });
 
-    zassert_true(manager->Update(TestConfiguration { .device_id = 13 }),
-        "The configuration is stored by then: the store must not turn into a failure a client retries");
+    zassert_true(
+        manager->Update(TestConfiguration{ .device_id = 13 }),
+        "The configuration is stored by then: the store must not turn into a failure a client retries"
+    );
     zassert_equal(manager->Get()->device_id, 13U);
 
     zassert_true(F().service->ApplyCborConfiguration(Type::System, Encode(14)));
@@ -334,7 +347,7 @@ ZTEST(configuration_stored_handler, test_AManagerThatIsNotRegisteredReportsNothi
     F().service->RegisterConfigurationStoredHandler(F().recorder->Handler());
 
     auto manager = F().MakeManager();
-    zassert_true(manager->Update(TestConfiguration { .device_id = 15 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 15 }));
 
     zassert_equal(F().recorder->Get().size(), 0U);
 }
@@ -345,6 +358,6 @@ ZTEST(configuration_stored_handler, test_AManagerThatOutlivesItsServiceStillStor
     F().service->RegisterConfigurationStoredHandler(nullptr);
     F().service.reset();
 
-    zassert_true(manager->Update(TestConfiguration { .device_id = 16 }));
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 16 }));
     zassert_equal(manager->Get()->device_id, 16U);
 }

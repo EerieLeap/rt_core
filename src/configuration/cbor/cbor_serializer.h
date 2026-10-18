@@ -4,22 +4,22 @@
 #include <cstdint>
 #include <span>
 
+#include <eerie_memory.hpp>
+#include <zcbor_common.h>
+#include <zcbor_decode.h>
+#include <zcbor_encode.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_instance.h>
-#include <zcbor_common.h>
-#include <zcbor_encode.h>
-#include <zcbor_decode.h>
-#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_trait.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 namespace eerie_leap::configuration::cbor {
 
 using eerie_leap::utilities::memory::Mrm;
 
-template <typename T>
+template<typename T>
 class CborSerializer {
 public:
     CborSerializer() {
@@ -29,7 +29,7 @@ public:
         getSerializingSizeFn_ = funcs.get_size;
     }
 
-    std::pmr::vector<uint8_t> Serialize(const T& obj, size_t *payload_len_out = nullptr) {
+    std::pmr::vector<uint8_t> Serialize(const T& obj, size_t* payload_len_out = nullptr) {
         LOG_MODULE_DECLARE(cbor_serializer_logger);
 
         std::pmr::vector<uint8_t> buffer(getSerializingSizeFn_(obj), Mrm::GetExtPmr());
@@ -42,7 +42,7 @@ public:
 
         buffer.resize(obj_size);
 
-        if (payload_len_out != nullptr)
+        if(payload_len_out != nullptr)
             *payload_len_out = obj_size;
 
         return buffer;

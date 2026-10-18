@@ -12,15 +12,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "subsys/event_bus/event_channel.h"
 #include "domain/sensor_domain/models/sensor_limits.h"
+#include "subsys/event_bus/event_channel.h"
 
 #include "sensor_events_test_support.h"
 
 using namespace sensor_events_test_support;
 
-using eerie_leap::subsys::event_bus::CreateScopedSubscription;
 using eerie_leap::domain::sensor_domain::models::SensorLimits;
+using eerie_leap::subsys::event_bus::CreateScopedSubscription;
 
 namespace {
 
@@ -49,13 +49,13 @@ struct Rig {
     std::shared_ptr<SensorReadingsFrame> frame = std::make_shared<SensorReadingsFrame>();
     std::unique_ptr<SensorEventsPublisher> publisher;
 
-    explicit Rig(std::string_view name)
-        : a(MakeSensor(std::string(name) + "_a")),
+    explicit Rig(std::string_view name) :
+        a(MakeSensor(std::string(name) + "_a")),
         b(MakeSensor(std::string(name) + "_b")),
         c(MakeSensor(std::string(name) + "_c")),
         d(MakeSensor(std::string(name) + "_d")),
         sentinel(MakeSensor(std::string(name) + "_sentinel")),
-        sensors { a, b, c, d, sentinel } {
+        sensors{ a, b, c, d, sentinel } {
 
         frame->Configure(sensors);
 
@@ -101,8 +101,8 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
     Rig rig("nobody");
 
     struct FilterCalls {
-        std::atomic<int> a { 0 };
-        std::atomic<int> sentinel { 0 };
+        std::atomic<int> a{ 0 };
+        std::atomic<int> sentinel{ 0 };
     };
 
     auto calls = std::make_shared<FilterCalls>();
@@ -113,8 +113,7 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
     const uint32_t a_hash = rig.a->id_hash;
     const uint32_t sentinel_hash = rig.sentinel->id_hash;
     AnySubscription subscription = CreateScopedSubscription(
-        SensorEventsChannel::GetInstance(),
-        SensorEventType::DataUpdated,
+        SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated,
         [calls, a_hash, sentinel_hash](const SensorEventsChannel::EventMessage& event) {
             const auto id = std::get<uint32_t>(event.payload.at(SensorPayloadType::SensorId));
 
@@ -127,7 +126,8 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
         },
         [sentinel_recorder](const SensorEventsChannel::EventMessage& event) {
             sentinel_recorder->Record(std::get<float>(event.payload.at(SensorPayloadType::Value)));
-        });
+        }
+    );
     zassert_not_null(subscription.get());
 
     for(int round = 0; round < 3; round++)
@@ -159,7 +159,9 @@ ZTEST(sensor_events_publisher, test_a_selector_filtered_subscriber_receives_only
     zassert_not_null(sentinel_binding.get());
 
     // c is bound by nobody.
-    zassert_true(rig.Round({ { rig.a.get(), 1.0F }, { rig.b.get(), 2.0F }, { rig.c.get(), 3.0F } }, *sentinel_recorder));
+    zassert_true(
+        rig.Round({ { rig.a.get(), 1.0F }, { rig.b.get(), 2.0F }, { rig.c.get(), 3.0F } }, *sentinel_recorder)
+    );
 
     zassert_equal(a_recorder->Count(), 1);
     zassert_equal(a_recorder->At(0), 1.0F);
@@ -198,8 +200,7 @@ ZTEST(sensor_events_publisher, test_a_sensor_whose_last_binding_goes_is_asked_ag
     const uint32_t a_hash = rig.a->id_hash;
     const uint32_t sentinel_hash = rig.sentinel->id_hash;
     AnySubscription counting = CreateScopedSubscription(
-        SensorEventsChannel::GetInstance(),
-        SensorEventType::DataUpdated,
+        SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated,
         [a_calls, a_hash, sentinel_hash](const SensorEventsChannel::EventMessage& event) {
             const auto id = std::get<uint32_t>(event.payload.at(SensorPayloadType::SensorId));
 
@@ -210,7 +211,8 @@ ZTEST(sensor_events_publisher, test_a_sensor_whose_last_binding_goes_is_asked_ag
         },
         [sentinel_recorder](const SensorEventsChannel::EventMessage& event) {
             sentinel_recorder->Record(std::get<float>(event.payload.at(SensorPayloadType::Value)));
-        });
+        }
+    );
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     zassert_not_null(counting.get());
     zassert_not_null(a_binding.get());
@@ -264,7 +266,8 @@ ZTEST(sensor_events_publisher, test_Replay_publishes_the_latest_value_of_every_a
     // Within one tick a sensor goes out once, with its latest value; d is never committed.
     zassert_true(rig.Round(
         { { rig.a.get(), 1.0F }, { rig.a.get(), 2.0F }, { rig.b.get(), 5.0F }, { rig.c.get(), 7.0F } },
-        *sentinel_recorder));
+        *sentinel_recorder
+    ));
     zassert_equal(a_recorder->Count(), 1);
     zassert_equal(a_recorder->At(0), 2.0F);
 
@@ -284,7 +287,7 @@ ZTEST(sensor_events_publisher, test_Replay_publishes_the_latest_value_of_every_a
     zassert_equal(d_recorder->Count(), 0, "a sensor without a processed reading has nothing to replay");
 
     // The replay ran once.
-    zassert_true(rig.Round({ }, *sentinel_recorder));
+    zassert_true(rig.Round({}, *sentinel_recorder));
     zassert_equal(a_recorder->Count(), 1);
     zassert_equal(b_recorder->Count(), 1);
 }
@@ -310,7 +313,7 @@ ZTEST(sensor_events_publisher, test_Replay_reaches_a_sensor_bound_after_it_was_c
     zassert_equal(a_recorder->Count(), 1);
     zassert_equal(a_recorder->At(0), 3.0F);
 
-    zassert_true(rig.Round({ }, *sentinel_recorder));
+    zassert_true(rig.Round({}, *sentinel_recorder));
     zassert_equal(a_recorder->Count(), 1, "the replayed value went out once");
 }
 
@@ -337,10 +340,14 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
 #ifdef RT_CORE_TEST_RAISED_PUBLISHER_STACK
     // The raised_publisher_stack scenario exists to run this case: a build that does not raise the
     // stack, or does not fill the stacks for the measurement below, fails here instead of skipping.
-    static_assert(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= kThrowingFilterStackSize,
-        "the raised_publisher_stack scenario must raise the publisher stack");
-    static_assert(IS_ENABLED(CONFIG_INIT_STACKS) && IS_ENABLED(CONFIG_THREAD_STACK_INFO),
-        "the raised_publisher_stack scenario measures the stack the unwind leaves unused");
+    static_assert(
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= kThrowingFilterStackSize,
+        "the raised_publisher_stack scenario must raise the publisher stack"
+    );
+    static_assert(
+        IS_ENABLED(CONFIG_INIT_STACKS) && IS_ENABLED(CONFIG_THREAD_STACK_INFO),
+        "the raised_publisher_stack scenario measures the stack the unwind leaves unused"
+    );
 #else
     if(!IS_ENABLED(CONFIG_ARCH_POSIX)
         && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < kThrowingFilterStackSize)
@@ -357,8 +364,7 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
 
     const uint32_t a_hash = rig.a->id_hash;
     AnySubscription throwing = CreateScopedSubscription(
-        SensorEventsChannel::GetInstance(),
-        SensorEventType::DataUpdated,
+        SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated,
         [throws, least_unused, thrower, a_hash](const SensorEventsChannel::EventMessage& event) {
             if(std::get<uint32_t>(event.payload.at(SensorPayloadType::SensorId)) != a_hash) {
 #if defined(CONFIG_INIT_STACKS) && defined(CONFIG_THREAD_STACK_INFO)
@@ -379,7 +385,8 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
             thrower->store(k_current_get());
             throw std::runtime_error("filter failed");
         },
-        [](const SensorEventsChannel::EventMessage&) { });
+        [](const SensorEventsChannel::EventMessage&) {}
+    );
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
@@ -399,10 +406,11 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
     // filled with a pattern (native_sim, which does not enforce them either) there is nothing to
     // measure.
     zassert_not_equal(least_unused->load(), SIZE_MAX, "the publisher's stack was not measured");
-    TC_PRINT("publisher stack: %zu of %d bytes unused after the unwind\n",
-        least_unused->load(), CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE);
-    zassert_true(least_unused->load() >= kPublisherStackMargin,
-        "the publisher stack is nearly used up by the unwind");
+    TC_PRINT(
+        "publisher stack: %zu of %d bytes unused after the unwind\n", least_unused->load(),
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE
+    );
+    zassert_true(least_unused->load() >= kPublisherStackMargin, "the publisher stack is nearly used up by the unwind");
 #endif
 }
 
@@ -432,8 +440,8 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     static constexpr size_t k_sentinel = k_count - 1;
 
     struct Deliveries {
-        std::array<uint32_t, k_count> sorted_hashes { };
-        std::array<std::atomic<int>, k_count> counts { };   // By sensor.
+        std::array<uint32_t, k_count> sorted_hashes{};
+        std::array<std::atomic<int>, k_count> counts{}; // By sensor.
         Recorder sentinel;
     };
 
@@ -454,8 +462,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     // Takes this case's sensors only: a failed case leaves its subscription behind, and one without
     // a filter would answer Accepts() ahead of the counting filters of the cases after it.
     AnySubscription subscription = CreateScopedSubscription(
-        SensorEventsChannel::GetInstance(),
-        SensorEventType::DataUpdated,
+        SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated,
         [deliveries](const SensorEventsChannel::EventMessage& event) {
             const auto id = std::get<uint32_t>(event.payload.at(SensorPayloadType::SensorId));
 
@@ -471,7 +478,8 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
 
             if(index == k_sentinel)
                 deliveries->sentinel.Record(static_cast<float>(index));
-        });
+        }
+    );
     zassert_not_null(subscription.get());
 
     auto publisher = std::make_unique<SensorEventsPublisher>(frame);
@@ -495,8 +503,10 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
         // native_sim's clock moves only while every thread waits, so a second tick would show as
         // a whole period; QEMU's clock also runs while a tick works.
         if(IS_ENABLED(CONFIG_ARCH_POSIX)) {
-            zassert_true(elapsed_ms < CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS,
-                "%lld ms from Resume() to the sentinel, round %d", static_cast<long long>(elapsed_ms), round);
+            zassert_true(
+                elapsed_ms < CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS,
+                "%lld ms from Resume() to the sentinel, round %d", static_cast<long long>(elapsed_ms), round
+            );
         }
     }
 

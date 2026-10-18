@@ -6,8 +6,8 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 
-#include "adc_default_configuration.h"
 #include "adc_configuration_manager.h"
+#include "adc_default_configuration.h"
 
 namespace eerie_leap::domain::adc_domain::configuration {
 
@@ -18,10 +18,11 @@ using namespace eerie_leap::domain::adc_domain::models;
 
 AdcConfigurationManager::AdcConfigurationManager(
     std::unique_ptr<CborConfigurationService<CborAdcConfig>> cbor_configuration_service,
-    std::shared_ptr<IAdcManager> adc_manager)
-        : CborConfigurationManagerBase("ADC", std::move(cbor_configuration_service)),
-        adc_manager_(std::move(adc_manager)),
-        cbor_parser_(static_cast<size_t>(adc_manager_->GetChannelCount())) {
+    std::shared_ptr<IAdcManager> adc_manager
+) :
+    CborConfigurationManagerBase("ADC", std::move(cbor_configuration_service)),
+    adc_manager_(std::move(adc_manager)),
+    cbor_parser_(static_cast<size_t>(adc_manager_->GetChannelCount())) {
 
     LoadOrCreateDefault();
 }
@@ -68,8 +69,9 @@ bool AdcConfigurationManager::CreateDefaultConfiguration() {
 
     auto configuration = std::make_shared<AdcConfiguration>();
     configuration->samples = AdcDefaultConfiguration::SAMPLES;
-    configuration->channel_configurations =
-        std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(std::move(channel_configurations));
+    configuration->channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(
+        std::move(channel_configurations)
+    );
 
     return Update(*configuration);
 }

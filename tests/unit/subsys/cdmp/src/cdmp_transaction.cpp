@@ -7,10 +7,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "subsys/threading/work_queue_thread.h"
+#include "cdmp_test_features.h"
 #include "subsys/cdmp/models/messages/cdmp_command_response_message.h"
 #include "subsys/cdmp/services/command_service/cdmp_transaction_service.h"
-#include "cdmp_test_features.h"
+#include "subsys/threading/work_queue_thread.h"
 
 using eerie_leap::tests::DISPLAY_FEATURES;
 
@@ -31,7 +31,8 @@ struct TransactionFixture {
     std::shared_ptr<WorkQueueThread> work_queue = std::make_shared<WorkQueueThread>(
         "cdmp_test_wq",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
-        CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY);
+        CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY
+    );
     std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(0x11111111, DISPLAY_FEATURES);
     std::unique_ptr<CdmpTransactionService> transactions;
 
@@ -51,20 +52,23 @@ struct TransactionFixture {
     }
 
     uint8_t Start(uint8_t target_device_id, uint8_t command_code, int timeout_ms = 1000) {
-        return transactions->StartTransaction(target_device_id, command_code, timeout_ms,
+        return transactions->StartTransaction(
+            target_device_id, command_code, timeout_ms,
             [this](uint8_t, CdmpResultCode result_code, std::span<const uint8_t>) {
                 results.push_back(result_code);
                 k_sem_give(&completed);
-            });
+            }
+        );
     }
 
     void Respond(uint8_t source, uint8_t command_code, uint8_t transaction_id) {
-        transactions->CompleteTransaction({
-            .source_device_id = source,
-            .command_code = command_code,
-            .transaction_id = transaction_id,
-            .result_code = CdmpResultCode::SUCCESS,
-            .data = {}});
+        transactions->CompleteTransaction(
+            { .source_device_id = source,
+                .command_code = command_code,
+                .transaction_id = transaction_id,
+                .result_code = CdmpResultCode::SUCCESS,
+                .data = {} }
+        );
     }
 };
 
@@ -106,8 +110,10 @@ ZTEST(cdmp_transaction, test_unanswered_transaction_times_out) {
 
     const uint8_t transaction_id = fixture.Start(TARGET_ID, LOGGING_COMMAND, 50);
 
-    zassert_equal(k_sem_take(&fixture.completed, K_MSEC(2 * CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS)), 0,
-        "The timeout task expires it");
+    zassert_equal(
+        k_sem_take(&fixture.completed, K_MSEC(2 * CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS)), 0,
+        "The timeout task expires it"
+    );
     zassert_equal(fixture.results[0], CdmpResultCode::TIMEOUT);
     zassert_false(fixture.transactions->IsTransactionPending(transaction_id));
 }

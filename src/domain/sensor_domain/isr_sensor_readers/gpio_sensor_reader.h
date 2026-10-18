@@ -45,7 +45,8 @@ public:
         const SensorRuntime& runtime,
         ProcessSensorCallback process_sensor_callback,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<IGpio> gpio);
+        std::shared_ptr<IGpio> gpio
+    );
     ~GpioSensorReader() override;
 };
 

@@ -3,9 +3,9 @@
 #include <memory>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
 #include "i_gpio.h"
@@ -48,7 +48,10 @@ protected:
     void DispatchChannelChanged(ChannelCallback& channel_callback);
 
 public:
-    explicit Gpio(std::vector<gpio_dt_spec> gpio_specs) : gpio_specs_(std::move(gpio_specs)) { k_mutex_init(&lock_); }
+    explicit Gpio(std::vector<gpio_dt_spec> gpio_specs) :
+        gpio_specs_(std::move(gpio_specs)) {
+        k_mutex_init(&lock_);
+    }
 
     int Initialize() override;
     bool ReadChannel(int channel) override;
@@ -58,4 +61,4 @@ public:
     bool RemoveChannelChangedHandler(int channel, int handler_id) override;
 };
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

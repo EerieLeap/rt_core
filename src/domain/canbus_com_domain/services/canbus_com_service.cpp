@@ -1,33 +1,33 @@
-#include <utility>
 #include <exception>
+#include <utility>
 
 #include <zephyr/logging/log.h>
 
-#include "subsys/cdmp/utilities/cdmp_uid.h"
 #include "domain/system_domain/models/product_feature.h"
+#include "subsys/cdmp/utilities/cdmp_uid.h"
 
 #include "canbus_com_service.h"
 
 namespace eerie_leap::domain::canbus_com_domain::services {
 
 using namespace eerie_leap::subsys::cdmp::models;
-using eerie_leap::subsys::cdmp::services::CdmpStateService;
-using eerie_leap::subsys::cdmp::utilities::CdmpUid;
-using eerie_leap::subsys::smp::can::SmpCanIdLayout;
 using eerie_leap::domain::system_domain::models::BUILD_FEATURES;
 using eerie_leap::domain::system_domain::models::HasFeature;
 using eerie_leap::domain::system_domain::models::ProductFeature;
 using eerie_leap::domain::system_domain::models::ToMask;
+using eerie_leap::subsys::cdmp::services::CdmpStateService;
+using eerie_leap::subsys::cdmp::utilities::CdmpUid;
+using eerie_leap::subsys::smp::can::SmpCanIdLayout;
 
 LOG_MODULE_REGISTER(canbus_com_logger);
 
-CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service)
-    : canbus_service_(std::move(canbus_service)) {
+CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service) :
+    canbus_service_(std::move(canbus_service)) {
 
     // LOGGING starts cleared: it is set only while this unit has a log writer (SetLoggingAvailable()).
     cdmp_service_ = std::make_shared<CdmpService>(
-        static_cast<uint16_t>(BUILD_FEATURES & ~ToMask(ProductFeature::LOGGING)),
-        CdmpUid::Generate());
+        static_cast<uint16_t>(BUILD_FEATURES & ~ToMask(ProductFeature::LOGGING)), CdmpUid::Generate()
+    );
 
     if(cdmp_service_ == nullptr)
         throw std::runtime_error("Failed to create CDMP service");
@@ -37,13 +37,16 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
     cdmp_status_handler_id_ = cdmp_service_->RegisterStatusChangedHandler(
         [this](CdmpDeviceStatus /*old_status*/, CdmpDeviceStatus new_status) {
             OnCdmpStatusChanged(new_status);
-        });
+        }
+    );
 
-    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler(
-        [this]() { Stop(); });
+    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler([this]() {
+        Stop();
+    });
 
-    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler(
-        [this]() { Start(); });
+    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler([this]() {
+        Start();
+    });
 }
 
 CanbusComService::~CanbusComService() {
@@ -75,8 +78,7 @@ bool CanbusComService::DoStart() {
 
     const auto com_configuration = canbus_service_->GetComConfiguration();
 
-    smp_transport_->Configure(
-        com_canbus, com_configuration.smp_can_id_base, com_configuration.smp_bus_share_percent);
+    smp_transport_->Configure(com_canbus, com_configuration.smp_can_id_base, com_configuration.smp_bus_share_percent);
     cdmp_service_->Configure(com_canbus, com_configuration.cdmp_base_can_id);
 
     return cdmp_service_->Start();
@@ -137,10 +139,10 @@ int CanbusComService::RegisterStateHandler(CanbusComStateType state_type, StateH
         return -1;
 
     return cdmp_service_->GetStateService()->RegisterStateHandler(
-        std::to_underlying(state_type),
-        [handler = std::move(handler)](uint8_t type) {
+        std::to_underlying(state_type), [handler = std::move(handler)](uint8_t type) {
             handler(static_cast<CanbusComStateType>(type));
-        });
+        }
+    );
 }
 
 void CanbusComService::UnregisterStateHandler(int handler_id) {
@@ -192,8 +194,7 @@ void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {
     if(!cdmp_service_)
         return;
 
-    cdmp_service_->GetCommandService()->UnregisterCommandHandler(
-        std::to_underlying(command_code));
+    cdmp_service_->GetCommandService()->UnregisterCommandHandler(std::to_underlying(command_code));
 }
 
 void CanbusComService::SendCommand(ICanbusComCommand& command, CommandAckCallback callback, uint8_t device_id) {
@@ -202,17 +203,15 @@ void CanbusComService::SendCommand(ICanbusComCommand& command, CommandAckCallbac
 
     if(callback) {
         cdmp_service_->GetCommandService()->SendCommand(
-            device_id,
-            std::to_underlying(command.GetCommandCode()),
-            command.GetData(),
+            device_id, std::to_underlying(command.GetCommandCode()), command.GetData(),
             [callback](uint8_t _, const CdmpResultCode result_code, std::span<const uint8_t> data) {
                 callback(result_code == CdmpResultCode::SUCCESS);
-            });
+            }
+        );
     } else {
         cdmp_service_->GetCommandService()->SendCommand(
-            device_id,
-            std::to_underlying(command.GetCommandCode()),
-            command.GetData());
+            device_id, std::to_underlying(command.GetCommandCode()), command.GetData()
+        );
     }
 }
 

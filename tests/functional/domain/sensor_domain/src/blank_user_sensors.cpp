@@ -6,22 +6,22 @@
 #include <string_view>
 #include <vector>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "utilities/string/string_helpers.h"
-#include "subsys/time/rtc_provider.h"
-#include "subsys/time/boot_elapsed_time_provider.h"
-#include "subsys/time/time_service.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "domain/sensor_domain/processors/expression_processor.h"
+#include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/processors/script_processor.h"
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_user_value_type.h"
-#include "domain/sensor_domain/processors/expression_processor.h"
-#include "domain/sensor_domain/processors/script_processor.h"
-#include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
+#include "subsys/time/time_service.h"
+#include "utilities/memory/memory_resource_manager.h"
+#include "utilities/string/string_helpers.h"
 
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::time;
@@ -88,7 +88,8 @@ Fixture MakeFixture() {
     Fixture fixture;
 
     fixture.time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
 
     auto with_expression = MakeSensor("with_expression", SensorType::USER_ANALOG);
     with_expression->configuration.expression = "blank * 2";
@@ -108,8 +109,8 @@ Fixture MakeFixture() {
     };
 
     fixture.frame = std::make_shared<SensorReadingsFrame>();
-    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame)
+                             .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
     auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));

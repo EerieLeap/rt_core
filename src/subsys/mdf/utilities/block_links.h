@@ -1,24 +1,22 @@
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
-#include <vector>
-#include <utility>
-#include <concepts>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
-#include "subsys/mdf/i_block.h"
 #include "i_block_links.h"
+#include "subsys/mdf/i_block.h"
 
 namespace eerie_leap::subsys::mdf::utilities {
 
 template<typename T>
-concept IntEnum =
-    std::is_enum_v<T> &&
-    std::is_same_v<std::underlying_type_t<T>, int>;
+concept IntEnum = std::is_enum_v<T> && std::is_same_v<std::underlying_type_t<T>, int>;
 
 template<IntEnum LinkType, int N>
 class BlockLinks : public IBlockLinks {

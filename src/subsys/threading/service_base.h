@@ -31,13 +31,19 @@ private:
     }
 
 protected:
-    virtual bool DoInitialize() { return true; }
+    virtual bool DoInitialize() {
+        return true;
+    }
     virtual bool DoStart() = 0;
     virtual bool DoStop() = 0;
 
     // Only reached when IsPausable() is overridden to return true.
-    virtual bool DoPause() { return false; }
-    virtual bool DoResume() { return false; }
+    virtual bool DoPause() {
+        return false;
+    }
+    virtual bool DoResume() {
+        return false;
+    }
 
 public:
     ServiceBase() {

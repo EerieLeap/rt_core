@@ -15,8 +15,9 @@ using namespace eerie_leap::configuration::services;
 using eerie_leap::subsys::threading::ScopedMutex;
 
 LoggingControlConfigurationManager::LoggingControlConfigurationManager(
-    std::unique_ptr<CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service)
-        : CborConfigurationManagerBase("LoggingControl", std::move(cbor_configuration_service)) {
+    std::unique_ptr<CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service
+) :
+    CborConfigurationManagerBase("LoggingControl", std::move(cbor_configuration_service)) {
 
     // Before the default is created: that store notifies too.
     k_mutex_init(&handler_mutex_);
@@ -67,7 +68,10 @@ bool LoggingControlConfigurationManager::Update(const LoggingControlConfiguratio
     return true;
 }
 
-bool LoggingControlConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) {
+bool LoggingControlConfigurationManager::ApplyCborConfiguration(
+    std::span<const uint8_t> cbor_data,
+    std::span<char> reason
+) {
     if(!CborConfigurationManagerBase::ApplyCborConfiguration(cbor_data, reason))
         return false;
 
@@ -76,14 +80,14 @@ bool LoggingControlConfigurationManager::ApplyCborConfiguration(std::span<const 
     return true;
 }
 
-pmr_unique_ptr<CborLoggingControlConfig> LoggingControlConfigurationManager::Serialize(
-    const LoggingControlConfiguration& configuration) {
+pmr_unique_ptr<CborLoggingControlConfig>
+LoggingControlConfigurationManager::Serialize(const LoggingControlConfiguration& configuration) {
 
     return cbor_parser_.Serialize(configuration);
 }
 
-pmr_unique_ptr<LoggingControlConfiguration> LoggingControlConfigurationManager::Deserialize(
-    const CborLoggingControlConfig& cbor_config) {
+pmr_unique_ptr<LoggingControlConfiguration>
+LoggingControlConfigurationManager::Deserialize(const CborLoggingControlConfig& cbor_config) {
 
     return cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config);
 }

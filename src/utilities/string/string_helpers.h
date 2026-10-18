@@ -6,8 +6,8 @@
 #include <memory>
 #include <string>
 
-#include "xx_hash64.hpp"
 #include "static_string.hpp"
+#include "xx_hash64.hpp"
 
 namespace eerie_leap::utilities::string {
 

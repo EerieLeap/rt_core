@@ -1,10 +1,10 @@
 #pragma once
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 #include <stdexcept>
-#include <utility>
 #include <string_view>
+#include <utility>
 
 namespace eerie_leap::domain::canbus_domain::models {
 
@@ -16,10 +16,7 @@ enum class CanSignalByteOrder : uint8_t {
     BIG_ENDIAN_MOTOROLA
 };
 
-constexpr const std::array CanSignalByteOrderNames = {
-    "LITTLE_ENDIAN_INTEL"sv,
-    "BIG_ENDIAN_MOTOROLA"sv
-};
+constexpr const std::array CanSignalByteOrderNames = { "LITTLE_ENDIAN_INTEL"sv, "BIG_ENDIAN_MOTOROLA"sv };
 
 constexpr bool IsCanSignalByteOrderValid(CanSignalByteOrder byte_order) {
     return std::to_underlying(byte_order) < CanSignalByteOrderNames.size();

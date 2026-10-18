@@ -10,16 +10,21 @@ template<size_t N>
 class FilesystemPath {
 private:
     static constexpr char kPathSeparator_ = '/';
-    static constexpr std::string_view kRootPath_{&kPathSeparator_, 1};
+    static constexpr std::string_view kRootPath_{ &kPathSeparator_, 1 };
     StaticString<N> data_;
 
 public:
     FilesystemPath() = default;
 
-    explicit FilesystemPath(std::string_view path) : data_(path) {}
+    explicit FilesystemPath(std::string_view path) :
+        data_(path) {}
 
-    StaticString<N>& String() noexcept { return data_; }
-    const StaticString<N>& String() const noexcept { return data_; }
+    StaticString<N>& String() noexcept {
+        return data_;
+    }
+    const StaticString<N>& String() const noexcept {
+        return data_;
+    }
 
     /**
      * @brief Appends a path component with separator
@@ -89,7 +94,7 @@ public:
         if(view.back() == kPathSeparator_) {
             const std::string_view trimmed = trim_separators(view);
 
-            return trimmed.empty() ? FilesystemPath{kRootPath_} : FilesystemPath{trimmed};
+            return trimmed.empty() ? FilesystemPath{ kRootPath_ } : FilesystemPath{ trimmed };
         }
 
         const auto pos = view.rfind(kPathSeparator_);
@@ -99,7 +104,7 @@ public:
 
         const std::string_view parent = trim_separators(view.substr(0, pos));
 
-        return parent.empty() ? FilesystemPath{kRootPath_} : FilesystemPath{parent};
+        return parent.empty() ? FilesystemPath{ kRootPath_ } : FilesystemPath{ parent };
     }
 };
 

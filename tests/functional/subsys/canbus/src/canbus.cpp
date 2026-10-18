@@ -9,8 +9,8 @@
 
 using namespace canbus_test;
 
-using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::canbus::CanId;
+using eerie_leap::subsys::threading::ServiceState;
 
 ZTEST_SUITE(canbus, NULL, NULL, ResetLoopbackDevice, NULL, NULL);
 
@@ -55,8 +55,12 @@ ZTEST(canbus, test_register_handler_returns_positive_id) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    int first = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x100), [&](const CanFrame& f) { collector.Collect(f); });
-    int second = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x100), [&](const CanFrame& f) { collector.Collect(f); });
+    int first = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x100), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
+    int second = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x100), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
 
     zassert_true(first > 0, "Handler ids must be strictly positive");
     zassert_true(second > 0);
@@ -94,7 +98,8 @@ ZTEST(canbus, test_handler_limit_is_enforced) {
 
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(CanId::Standard(0x200), [](const CanFrame&) {}),
-        Canbus::ERR_TOO_MANY_HANDLERS);
+        Canbus::ERR_TOO_MANY_HANDLERS
+    );
 
     for(int id : ids)
         zassert_true(canbus->RemoveFrameReceivedHandler(id));
@@ -121,10 +126,12 @@ ZTEST(canbus, test_send_and_receive_round_trip) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x321), [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x321), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0);
 
-    std::array<uint8_t, 8> payload = {1, 2, 3, 4, 5, 6, 7, 8};
+    std::array<uint8_t, 8> payload = { 1, 2, 3, 4, 5, 6, 7, 8 };
     zassert_ok(canbus->SendFrame(CanId::Standard(0x321), payload));
 
     zassert_true(collector.Wait(), "Frame was not delivered");
@@ -144,10 +151,12 @@ ZTEST(canbus, test_extended_id_round_trip) {
 
     const CanId extended_id = CanId::Extended(0x18FF1234);
 
-    int id = canbus->RegisterFrameReceivedHandler(extended_id, [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(extended_id, [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0, "Extended ids must be accepted");
 
-    std::array<uint8_t, 4> payload = {0xDE, 0xAD, 0xBE, 0xEF};
+    std::array<uint8_t, 4> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
     zassert_ok(canbus->SendFrame(extended_id, payload));
 
     zassert_true(collector.Wait(), "Extended frame was not delivered");
@@ -164,10 +173,12 @@ ZTEST(canbus, test_extended_id_filter_does_not_alias_lower_bits) {
     FrameCollector collector;
 
     // 0x18FF1234 and 0x1CFF1234 share their low 11 bits.
-    int id = canbus->RegisterFrameReceivedHandler(CanId::Extended(0x18FF1234), [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(CanId::Extended(0x18FF1234), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0);
 
-    std::array<uint8_t, 1> payload = {0x01};
+    std::array<uint8_t, 1> payload = { 0x01 };
     zassert_ok(canbus->SendFrame(CanId::Extended(0x1CFF1234), payload));
 
     zassert_false(collector.Wait(200), "A different extended id must not match the filter");
@@ -178,8 +189,10 @@ ZTEST(canbus, test_oversized_payload_is_rejected) {
 
     std::vector<uint8_t> payload(64, 0xAA);
 
-    zassert_equal(canbus->SendFrame(CanId::Standard(0x100), payload), -EINVAL,
-        "Classical CAN must reject payloads longer than 8 bytes");
+    zassert_equal(
+        canbus->SendFrame(CanId::Standard(0x100), payload), -EINVAL,
+        "Classical CAN must reject payloads longer than 8 bytes"
+    );
 }
 
 ZTEST(canbus, test_huge_payload_is_rejected) {
@@ -187,25 +200,29 @@ ZTEST(canbus, test_huge_payload_is_rejected) {
 
     std::vector<uint8_t> payload(512, 0xAA);
 
-    zassert_equal(canbus->SendFrame(CanId::Standard(0x100), payload), -EINVAL,
-        "Payloads beyond the CAN FD limit must be rejected");
+    zassert_equal(
+        canbus->SendFrame(CanId::Standard(0x100), payload), -EINVAL, "Payloads beyond the CAN FD limit must be rejected"
+    );
 }
 
 ZTEST(canbus, test_send_before_start_is_rejected) {
     Canbus canbus(MakeConfig());
     zassert_true(canbus.Initialize());
 
-    std::array<uint8_t, 1> payload = {0x01};
+    std::array<uint8_t, 1> payload = { 0x01 };
 
-    zassert_equal(canbus.SendFrame(CanId::Standard(0x100), payload), -ENETDOWN,
-        "SendFrame() must fail while not RUNNING");
+    zassert_equal(
+        canbus.SendFrame(CanId::Standard(0x100), payload), -ENETDOWN, "SendFrame() must fail while not RUNNING"
+    );
 }
 
 ZTEST(canbus, test_canfd_payload_round_trip) {
     auto canbus = MakeRunningCanbus(CanbusType::CANFD, 500000);
     FrameCollector collector;
 
-    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x123), [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x123), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0);
 
     std::vector<uint8_t> payload(32, 0x77);
@@ -224,10 +241,14 @@ ZTEST(canbus, test_all_handlers_for_an_id_are_invoked) {
     FrameCollector first;
     FrameCollector second;
 
-    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x400), [&](const CanFrame& f) { first.Collect(f); }) > 0);
-    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x400), [&](const CanFrame& f) { second.Collect(f); }) > 0);
+    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x400), [&](const CanFrame& f) {
+        first.Collect(f);
+    }) > 0);
+    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x400), [&](const CanFrame& f) {
+        second.Collect(f);
+    }) > 0);
 
-    std::array<uint8_t, 2> payload = {0x10, 0x20};
+    std::array<uint8_t, 2> payload = { 0x10, 0x20 };
     zassert_ok(canbus->SendFrame(CanId::Standard(0x400), payload));
 
     zassert_true(first.Wait(), "First handler was not invoked");
@@ -238,11 +259,13 @@ ZTEST(canbus, test_removed_handler_stops_receiving) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x500), [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x500), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0);
     zassert_true(canbus->RemoveFrameReceivedHandler(id));
 
-    std::array<uint8_t, 1> payload = {0x01};
+    std::array<uint8_t, 1> payload = { 0x01 };
     zassert_ok(canbus->SendFrame(CanId::Standard(0x500), payload));
 
     zassert_false(collector.Wait(200), "A removed handler must not be invoked");
@@ -259,7 +282,7 @@ ZTEST(canbus, test_handler_may_unregister_itself_during_dispatch) {
     });
     zassert_true(id > 0);
 
-    std::array<uint8_t, 1> payload = {0x01};
+    std::array<uint8_t, 1> payload = { 0x01 };
     zassert_ok(canbus->SendFrame(CanId::Standard(0x600), payload));
     zassert_true(collector.Wait());
 
@@ -271,9 +294,11 @@ ZTEST(canbus, test_unfiltered_ids_are_not_delivered) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x700), [&](const CanFrame& f) { collector.Collect(f); }) > 0);
+    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x700), [&](const CanFrame& f) {
+        collector.Collect(f);
+    }) > 0);
 
-    std::array<uint8_t, 1> payload = {0x01};
+    std::array<uint8_t, 1> payload = { 0x01 };
     zassert_ok(canbus->SendFrame(CanId::Standard(0x701), payload));
 
     zassert_false(collector.Wait(200), "Only filtered ids may be delivered");
@@ -283,7 +308,9 @@ ZTEST(canbus, test_stop_clears_handlers_and_rx_state) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x108), [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x108), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0);
 
     zassert_true(canbus->Stop());
@@ -291,8 +318,8 @@ ZTEST(canbus, test_stop_clears_handlers_and_rx_state) {
     zassert_false(canbus->IsBitrateDetected());
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(CanId::Standard(0x108), [](const CanFrame&) {}),
-        Canbus::ERR_NOT_INITIALIZED,
-        "Stop() must leave the bus uninitialized");
+        Canbus::ERR_NOT_INITIALIZED, "Stop() must leave the bus uninitialized"
+    );
 }
 
 ZTEST(canbus, test_reconfigure_after_stop) {
@@ -307,9 +334,11 @@ ZTEST(canbus, test_reconfigure_after_stop) {
     zassert_equal(canbus.GetDetectedBitrate(), 250000);
 
     FrameCollector collector;
-    zassert_true(canbus.RegisterFrameReceivedHandler(CanId::Standard(0x109), [&](const CanFrame& f) { collector.Collect(f); }) > 0);
+    zassert_true(canbus.RegisterFrameReceivedHandler(CanId::Standard(0x109), [&](const CanFrame& f) {
+        collector.Collect(f);
+    }) > 0);
 
-    std::array<uint8_t, 1> payload = {0x42};
+    std::array<uint8_t, 1> payload = { 0x42 };
     zassert_ok(canbus.SendFrame(CanId::Standard(0x109), payload));
     zassert_true(collector.Wait(), "Bus must work again after a reconfigure");
 
@@ -333,8 +362,7 @@ ZTEST(canbus, test_auto_detect_defers_filters_but_returns_valid_handler_id) {
 
     int id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x10A), [](const CanFrame&) {});
     zassert_true(id > 0, "A deferred handler must still return a usable id, got %d", id);
-    zassert_true(canbus->RemoveFrameReceivedHandler(id),
-        "The id returned during auto-detect must be removable");
+    zassert_true(canbus->RemoveFrameReceivedHandler(id), "The id returned during auto-detect must be removable");
 
     zassert_true(canbus->Stop());
 }
@@ -344,9 +372,11 @@ ZTEST(canbus, test_destruction_while_running_is_safe) {
 
     {
         auto canbus = MakeRunningCanbus();
-        zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x10B), [&](const CanFrame& f) { collector.Collect(f); }) > 0);
+        zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x10B), [&](const CanFrame& f) {
+            collector.Collect(f);
+        }) > 0);
 
-        std::array<uint8_t, 1> payload = {0x01};
+        std::array<uint8_t, 1> payload = { 0x01 };
         zassert_ok(canbus->SendFrame(CanId::Standard(0x10B), payload));
         zassert_true(collector.Wait());
     }
@@ -356,10 +386,11 @@ ZTEST(canbus, test_destruction_while_running_is_safe) {
     auto replacement = MakeRunningCanbus();
     FrameCollector replacement_collector;
 
-    zassert_true(replacement->RegisterFrameReceivedHandler(
-        CanId::Standard(0x10B), [&](const CanFrame& f) { replacement_collector.Collect(f); }) > 0);
+    zassert_true(replacement->RegisterFrameReceivedHandler(CanId::Standard(0x10B), [&](const CanFrame& f) {
+        replacement_collector.Collect(f);
+    }) > 0);
 
-    std::array<uint8_t, 1> payload = {0x02};
+    std::array<uint8_t, 1> payload = { 0x02 };
     zassert_ok(replacement->SendFrame(CanId::Standard(0x10B), payload));
 
     zassert_true(replacement_collector.Wait());

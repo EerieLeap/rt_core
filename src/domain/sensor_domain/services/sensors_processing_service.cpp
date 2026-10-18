@@ -23,43 +23,41 @@ SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     std::shared_ptr<CanbusService> canbus_service,
-    std::shared_ptr<IFsService> sd_fs_service)
-        : work_queue_thread_(nullptr),
-        sensors_configuration_manager_(std::move(sensors_configuration_manager)),
-        adc_configuration_manager_(std::move(adc_configuration_manager)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)),
-        pipeline_builder_(std::move(sd_fs_service), sensor_readings_frame_),
-        reading_processors_(std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>()) {
+    std::shared_ptr<IFsService> sd_fs_service
+) :
+    work_queue_thread_(nullptr),
+    sensors_configuration_manager_(std::move(sensors_configuration_manager)),
+    adc_configuration_manager_(std::move(adc_configuration_manager)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)),
+    pipeline_builder_(std::move(sd_fs_service), sensor_readings_frame_),
+    reading_processors_(std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>()) {
 
     work_queue_thread_ = std::make_shared<WorkQueueThread>(
-        "processing_service",
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
+        "processing_service", CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
+    );
 
     reading_processors_->push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame_));
     reading_processors_->push_back(std::make_shared<ScriptProcessor>("post_process_sensor_value"));
 
-    pipeline_ = std::make_shared<ReadingPipeline>(sensor_readings_frame_, reading_processors_, time_service, work_queue_thread_);
+    pipeline_ = std::make_shared<ReadingPipeline>(
+        sensor_readings_frame_, reading_processors_, time_service, work_queue_thread_
+    );
 
     switch_state_work_.service = this;
     k_work_init(&switch_state_work_.work, SwitchStateWorkHandler);
 
     if(isr_sensor_reader_factory != nullptr || canbus_service != nullptr) {
         isr_service_ = std::make_shared<ProcessingIsrService>(
-            time_service,
-            std::move(isr_sensor_reader_factory),
-            std::move(canbus_service),
-            work_queue_thread_,
-            pipeline_);
+            time_service, std::move(isr_sensor_reader_factory), std::move(canbus_service), work_queue_thread_, pipeline_
+        );
         processing_services_.push_back(isr_service_);
     }
 
     if(sensor_reader_factory != nullptr) {
         scheduler_service_ = std::make_shared<ProcessingSchedulerService>(
-            time_service,
-            std::move(sensor_reader_factory),
-            work_queue_thread_,
-            pipeline_);
+            time_service, std::move(sensor_reader_factory), work_queue_thread_, pipeline_
+        );
         processing_services_.push_back(scheduler_service_);
     }
 };
@@ -89,9 +87,8 @@ bool SensorsProcessingService::DoStart() {
     // taken as it is now; an apply swaps the manager's pointer and restarts, never touching this one.
     try {
         generation_ = pipeline_builder_.Build(sensors, switch_states_);
-        generation_->adc_configuration = adc_configuration_manager_ != nullptr
-            ? adc_configuration_manager_->Get()
-            : nullptr;
+        generation_->adc_configuration = adc_configuration_manager_ != nullptr ? adc_configuration_manager_->Get()
+                                                                               : nullptr;
     } catch(const std::exception& e) {
         LOG_ERR("Failed to build the sensor pipeline: %s", e.what());
         generation_ = nullptr;
@@ -126,7 +123,9 @@ bool SensorsProcessingService::DoStart() {
         throw;
     }
 
-    LOG_INF("Processing Service started with generation %u, %zu sensors.", generation_->id, generation_->runtimes.size());
+    LOG_INF(
+        "Processing Service started with generation %u, %zu sensors.", generation_->id, generation_->runtimes.size()
+    );
 
     return true;
 }

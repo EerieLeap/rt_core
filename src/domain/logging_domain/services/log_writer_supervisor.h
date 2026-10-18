@@ -7,28 +7,28 @@
 #include <optional>
 #include <string>
 
+#include "domain/logging_domain/configuration/logging_configuration_manager.h"
+#include "domain/logging_domain/control/i_logging_control.h"
+#include "domain/logging_domain/event_bus/logging_events_channel.h"
+#include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "subsys/event_bus/dispatch_guard.h"
 #include "subsys/event_bus/i_scoped_subscription.h"
 #include "subsys/threading/i_service.h"
 #include "subsys/threading/work_queue_task_result.h"
 #include "subsys/threading/work_queue_thread.h"
-#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
-#include "domain/logging_domain/configuration/logging_configuration_manager.h"
-#include "domain/logging_domain/control/i_logging_control.h"
-#include "domain/logging_domain/event_bus/logging_events_channel.h"
-#include "domain/logging_domain/event_bus/logging_status_reason.h"
 
 #include "log_writer_service.h"
 
 namespace eerie_leap::domain::logging_domain::services {
 
-using eerie_leap::subsys::event_bus::AnySubscription;
-using eerie_leap::subsys::event_bus::DispatchGuard;
-using eerie_leap::subsys::threading::IService;
-using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::subsys::event_bus::AnySubscription;
+using eerie_leap::subsys::event_bus::DispatchGuard;
+using eerie_leap::subsys::threading::IService;
 
 // Runs the log writer of a unit that logs. Every start, stop, restart for a stored logging
 // configuration, failed-session stop, and the stop and start around a sensors restart runs on the
@@ -60,7 +60,8 @@ public:
         std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
         std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
         std::string tool_id,
-        DeviceIdProvider device_id_provider = nullptr);
+        DeviceIdProvider device_id_provider = nullptr
+    );
 
     // Withdraws the status subscription, the updated handler and the task, and waits for a run of
     // the task in progress. Leaves the writer as it is: its owner stops it. No request may come in

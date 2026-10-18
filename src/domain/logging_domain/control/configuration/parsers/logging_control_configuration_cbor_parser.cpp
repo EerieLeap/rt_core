@@ -11,15 +11,15 @@ namespace eerie_leap::domain::logging_domain::control::configuration::parsers {
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
-using eerie_leap::utilities::cbor::CborHelpers;
-using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
+using eerie_leap::subsys::event_bus::EventChannelId;
+using eerie_leap::utilities::cbor::CborHelpers;
 
 // The schema (logging_control_config.cddl) and the codec cap the triggers at 16; the validator enforces the model's cap.
 static_assert(LoggingControlConfiguration::kMaxTriggers == 16, "The schema and the codec cap triggers at 16.");
 
-pmr_unique_ptr<CborLoggingControlConfig> LoggingControlConfigurationCborParser::Serialize(
-    const LoggingControlConfiguration& configuration) {
+pmr_unique_ptr<CborLoggingControlConfig>
+LoggingControlConfigurationCborParser::Serialize(const LoggingControlConfiguration& configuration) {
 
     LoggingControlConfigurationValidator::Validate(configuration);
 
@@ -28,15 +28,13 @@ pmr_unique_ptr<CborLoggingControlConfig> LoggingControlConfigurationCborParser::
     for(const auto& trigger : configuration.triggers) {
         const auto& binding = trigger.binding;
 
-        CborLoggingTriggerConfig cbor_trigger {
-            .channel = static_cast<uint32_t>(binding.channel),
+        CborLoggingTriggerConfig cbor_trigger{ .channel = static_cast<uint32_t>(binding.channel),
             .event_type = binding.event_type,
             .payload_key = binding.payload_key,
             .has_selector = binding.HasSelector(),
             .selector_key = binding.selector_key,
             .selector_value = {},
-            .target_uid = trigger.target_uid
-        };
+            .target_uid = trigger.target_uid };
 
         // Without a selector the stored value is int 0, which the decoder ignores.
         if(const auto* text = std::get_if<std::pmr::string>(&binding.selector_value))
@@ -53,7 +51,9 @@ pmr_unique_ptr<CborLoggingControlConfig> LoggingControlConfigurationCborParser::
 }
 
 pmr_unique_ptr<LoggingControlConfiguration> LoggingControlConfigurationCborParser::Deserialize(
-    std::pmr::memory_resource* mr, const CborLoggingControlConfig& config) {
+    std::pmr::memory_resource* mr,
+    const CborLoggingControlConfig& config
+) {
 
     auto configuration = make_unique_pmr<LoggingControlConfiguration>(mr);
 

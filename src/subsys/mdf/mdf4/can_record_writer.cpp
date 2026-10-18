@@ -17,7 +17,7 @@ uint8_t ToCanDlc(size_t data_length) {
     if(data_length <= 8)
         return static_cast<uint8_t>(data_length);
 
-    constexpr std::array<size_t, 7> fd_lengths{12, 16, 20, 24, 32, 48, 64};
+    constexpr std::array<size_t, 7> fd_lengths{ 12, 16, 20, 24, 32, 48, 64 };
     for(size_t i = 0; i < fd_lengths.size(); i++) {
         if(data_length <= fd_lengths[i])
             return static_cast<uint8_t>(9 + i);
@@ -32,8 +32,10 @@ CanRecordWriter::CanRecordWriter(
     ChannelGroupBlock& channel_group,
     ChannelGroupBlock& vlsd_channel_group,
     MdfDataType time_type,
-    uint8_t vlsd_offset_size_bytes)
-        : channel_group_(&channel_group), vlsd_channel_group_(&vlsd_channel_group) {
+    uint8_t vlsd_offset_size_bytes
+) :
+    channel_group_(&channel_group),
+    vlsd_channel_group_(&vlsd_channel_group) {
 
     if(!(vlsd_channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel)))
         throw std::runtime_error("Invalid channel group flags");
@@ -130,11 +132,9 @@ uint64_t CanRecordWriter::Write(std::streambuf& stream, const CanFrame& frame, d
     const uint32_t frame_esi = 0U;
 
     can_frame[FLAGS_OFFSET] = static_cast<uint8_t>(
-        ((frame_dlc & 0xFU) << DLC_BIT)
-        | ((frame_dir & 0x1U) << DIR_BIT)
-        | ((frame_edl & 0x1U) << EDL_BIT)
-        | ((frame_brs & 0x1U) << BRS_BIT)
-        | ((frame_esi & 0x1U) << ESI_BIT));
+        ((frame_dlc & 0xFU) << DLC_BIT) | ((frame_dir & 0x1U) << DIR_BIT) | ((frame_edl & 0x1U) << EDL_BIT)
+        | ((frame_brs & 0x1U) << BRS_BIT) | ((frame_esi & 0x1U) << ESI_BIT)
+    );
 
     // CAN_DataFrame.DataLength (8 bits)
     can_frame[DATA_LENGTH_OFFSET] = static_cast<uint8_t>(data_length);

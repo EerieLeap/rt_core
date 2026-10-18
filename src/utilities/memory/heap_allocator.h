@@ -1,12 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <memory>
 #include <new>
 #include <utility>
 #include <vector>
-#include <algorithm>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -18,7 +18,7 @@ namespace eerie_leap::utilities::memory {
 void* ExtHeapAllocate(size_t align, size_t bytes) noexcept;
 void ExtHeapFree(void* pointer) noexcept;
 
-template <typename T>
+template<typename T>
 class HeapAllocator {
 private:
     static constexpr size_t kAlignment = alignof(T) > 32 ? alignof(T) : 32;
@@ -28,7 +28,7 @@ public:
 
     HeapAllocator() = default;
 
-    template <typename U>
+    template<typename U>
     constexpr HeapAllocator(const HeapAllocator<U>& obj) noexcept {}
 
     T* allocate(size_t n, size_t align = kAlignment) {
@@ -55,11 +55,11 @@ public:
 
         size_t copy_count = (old_n < new_n) ? old_n : new_n;
 
-        if constexpr (std::is_trivially_copyable_v<T>) {
+        if constexpr(std::is_trivially_copyable_v<T>) {
             memcpy(new_p, p, copy_count * sizeof(T));
         } else {
             for(size_t i = 0; i < copy_count; ++i) {
-                new (new_p + i) T(std::move(p[i]));
+                new(new_p + i) T(std::move(p[i]));
                 p[i].~T();
             }
 
@@ -76,13 +76,17 @@ public:
 // TODO: Remove methods bellow after EerieLeap RoundGauge project migration
 // to new memory allocator utilities is complete.
 
-template <class T, class U>
-bool operator==(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) { return true; }
+template<class T, class U>
+bool operator==(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) {
+    return true;
+}
 
-template <class T, class U>
-bool operator!=(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) { return false; }
+template<class T, class U>
+bool operator!=(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) {
+    return false;
+}
 
-template <typename T, typename... Args>
+template<typename T, typename... Args>
 std::shared_ptr<T> make_shared_ext(Args&&... args) {
     return std::allocate_shared<T>(HeapAllocator<T>(), std::forward<Args>(args)...);
 }
@@ -90,7 +94,7 @@ std::shared_ptr<T> make_shared_ext(Args&&... args) {
 struct ext_deleter {
     template<typename T>
     void operator()(T* p) const {
-        if (p) {
+        if(p) {
             p->~T();
 
             HeapAllocator<T> allocator;
@@ -102,15 +106,15 @@ struct ext_deleter {
 template<typename T>
 using ext_unique_ptr = std::unique_ptr<T, ext_deleter>;
 
-template <typename T, typename... Args>
+template<typename T, typename... Args>
 ext_unique_ptr<T> make_unique_ext(Args&&... args) {
     HeapAllocator<T> allocator;
     auto p = allocator.allocate(1);
 
     try {
-        new (p) T(std::forward<Args>(args)...);
+        new(p) T(std::forward<Args>(args)...);
         return ext_unique_ptr<T>(p, ext_deleter{});
-    } catch (...) {
+    } catch(...) {
         allocator.deallocate(p, 1);
         throw;
     }

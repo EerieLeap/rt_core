@@ -12,15 +12,15 @@
 
 #include <zephyr/kernel.h>
 
-#include "subsys/threading/scoped_mutex.h"
-#include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/logging_domain/loggers/i_logger.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
+#include "subsys/threading/scoped_mutex.h"
 
 namespace logging_test_support {
 
-using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 // Hands every call to the logger it wraps, and records when the writer thread called it: the uptime
 // of each tick that offered a reading, and the thread that finalized the file. On request it holds
@@ -47,12 +47,15 @@ public:
     std::atomic<bool> stop_found_held_reading_done = false;
     k_sem held_reading_started;
 
-    explicit ProbeLogger(std::shared_ptr<ILogger<SensorReading>> inner) : inner_(std::move(inner)) {
+    explicit ProbeLogger(std::shared_ptr<ILogger<SensorReading>> inner) :
+        inner_(std::move(inner)) {
         tick_times.reserve(kMaxTicks);
         k_sem_init(&held_reading_started, 0, 1);
     }
 
-    const char* GetFileExtension() const override { return inner_->GetFileExtension(); }
+    const char* GetFileExtension() const override {
+        return inner_->GetFileExtension();
+    }
 
     bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) override {
         return inner_->StartLogging(stream, start_time);
@@ -92,7 +95,9 @@ public:
         return is_logged;
     }
 
-    [[nodiscard]] uint64_t GetBytesWritten() const override { return inner_->GetBytesWritten(); }
+    [[nodiscard]] uint64_t GetBytesWritten() const override {
+        return inner_->GetBytesWritten();
+    }
 };
 
 // A logger factory that wraps every logger another one builds in a new ProbeLogger, so a case can
@@ -109,7 +114,8 @@ private:
     std::shared_ptr<ProbeLogger> current_;
     int count_ = 0;
 
-    explicit ProbeLoggerFactory(LoggerFactory inner) : inner_(std::move(inner)) {
+    explicit ProbeLoggerFactory(LoggerFactory inner) :
+        inner_(std::move(inner)) {
         k_mutex_init(&lock_);
     }
 
@@ -134,7 +140,9 @@ public:
     }
 
     LoggerFactory AsFactory() {
-        return [self = shared_from_this()] { return self->Create(); };
+        return [self = shared_from_this()] {
+            return self->Create();
+        };
     }
 
     // The probe of the latest start; null before the first.

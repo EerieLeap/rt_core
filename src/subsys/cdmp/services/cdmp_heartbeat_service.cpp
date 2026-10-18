@@ -14,8 +14,9 @@ CdmpHeartbeatService::CdmpHeartbeatService(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<CdmpNetworkService> network_service)
-    : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
+    std::shared_ptr<CdmpNetworkService> network_service
+) :
+    CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
     work_queue_thread_(std::move(work_queue_thread)),
     network_service_(std::move(network_service)) {}
 
@@ -24,8 +25,7 @@ CdmpHeartbeatService::~CdmpHeartbeatService() {
 }
 
 bool CdmpHeartbeatService::DoInitialize() {
-    heartbeat_task_ = work_queue_thread_->CreateTask(
-        ProcessPeriodicHeartbeat, this);
+    heartbeat_task_ = work_queue_thread_->CreateTask(ProcessPeriodicHeartbeat, this);
 
     return true;
 }
@@ -59,24 +59,27 @@ void CdmpHeartbeatService::StartHeartbeatTask() {
 }
 
 void CdmpHeartbeatService::RegisterCanHandlers() {
-    if (!canbus_ || !canbus_->IsValid()) {
+    if(!canbus_ || !canbus_->IsValid()) {
         LOG_ERR("Cannot register CAN handlers: CAN bus is not valid");
         return;
     }
 
-    canbus_handler_id_ = RegisterReceiveHandler(
-        can_id_manager_->GetHeartbeatCanId(),
-        [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() { ProcessFrame(frame.data); }); });
+    canbus_handler_id_ = RegisterReceiveHandler(can_id_manager_->GetHeartbeatCanId(), [this](const CanFrame& frame) {
+        work_queue_thread_->Run([this, frame]() {
+            ProcessFrame(frame.data);
+        });
+    });
 
     if(canbus_handler_id_ < 0) {
-        throw std::runtime_error("Failed to register CAN frame handler for frame ID: "
-            + std::to_string(can_id_manager_->GetHeartbeatCanId().id));
+        throw std::runtime_error(
+            "Failed to register CAN frame handler for frame ID: "
+            + std::to_string(can_id_manager_->GetHeartbeatCanId().id)
+        );
     }
 }
 
 void CdmpHeartbeatService::UnregisterCanHandlers() {
-    if (!canbus_ || !canbus_->IsValid())
+    if(!canbus_ || !canbus_->IsValid())
         return;
 
     if(canbus_handler_id_ >= 0)
@@ -109,7 +112,7 @@ void CdmpHeartbeatService::ProcessFrame(std::span<const uint8_t> frame_data) {
         // the state service among them.
         network_service_->UpdateDeviceFromHeartbeat(heartbeat);
         LOG_DBG("Processed heartbeat frame");
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing heartbeat frame: %s", e.what());
     }
 }
@@ -119,13 +122,11 @@ void CdmpHeartbeatService::SendHeartbeat() {
         return;
 
     try {
-        CdmpHeartbeatMessage heartbeat{
-            .device_id = device_->GetDeviceId(),
+        CdmpHeartbeatMessage heartbeat{ .device_id = device_->GetDeviceId(),
             .health_status = device_->GetHealthStatus(),
             .sequence_number = heartbeat_sequence_number_,
             .features = device_->GetFeatures(),
-            .state_digest = device_->GetStateDigest()
-        };
+            .state_digest = device_->GetStateDigest() };
 
         auto frame_data = heartbeat.ToCanFrame();
         CanId frame_id = can_id_manager_->GetHeartbeatCanId();
@@ -134,7 +135,7 @@ void CdmpHeartbeatService::SendHeartbeat() {
         heartbeat_sequence_number_++;
 
         LOG_DBG("Sent heartbeat, sequence: %d", heartbeat_sequence_number_ - 1);
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error sending heartbeat: %s", e.what());
     }
 }
@@ -146,18 +147,13 @@ void CdmpHeartbeatService::SetHeartbeatEnabled(bool enabled) {
 
 WorkQueueTaskResult CdmpHeartbeatService::ProcessPeriodicHeartbeat(CdmpHeartbeatService* instance) {
     if(!instance->heartbeat_enabled_) {
-        return {
-            .reschedule = false
-        };
+        return { .reschedule = false };
     }
 
     instance->SendHeartbeat();
 
-    return {
-        .reschedule = instance->heartbeat_enabled_,
-        .delay = K_MSEC(CdmpConstants::HEARTBEAT_INTERVAL_MS
-            + instance->device_->GetStaggeredMessageDelay())
-    };
+    return { .reschedule = instance->heartbeat_enabled_,
+        .delay = K_MSEC(CdmpConstants::HEARTBEAT_INTERVAL_MS + instance->device_->GetStaggeredMessageDelay()) };
 }
 
 void CdmpHeartbeatService::PrintHeartbeatStatus() const {

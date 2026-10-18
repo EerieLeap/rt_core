@@ -9,15 +9,15 @@
 #include <string_view>
 #include <vector>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "utilities/cbor/cbor_helpers.hpp"
-#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
-#include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
-#include "subsys/expression_engine/expression_evaluator.h"
 #include "configuration/cbor/cbor_serializer.h"
+#include "subsys/expression_engine/expression_evaluator.h"
+#include "utilities/cbor/cbor_helpers.hpp"
+#include "utilities/memory/memory_resource_manager.h"
+#include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
+#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 
 #include "domain/sensor_domain/configuration/parsers/sensors_cbor_parser.h"
 #include "domain/sensor_domain/models/sensor.h"
@@ -35,10 +35,7 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 ZTEST_SUITE(sensors_parser, NULL, NULL, NULL, NULL, NULL);
 
 std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1 {
-        {0.0, 0.0},
-        {3.3, 100.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
     auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
@@ -54,13 +51,8 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2 {
-        {0.0, 0.0},
-        {1.0, 29.0},
-        {2.0, 111.0},
-        {2.5, 162.0},
-        {3.3, 200.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
+        { 3.3, 200.0 } };
     auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
     auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
@@ -99,16 +91,16 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     sensor_4->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_4->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
 
-    std::vector<std::shared_ptr<Sensor>> sensors = {
-        std::move(sensor_1), std::move(sensor_2), std::move(sensor_3), std::move(sensor_4)
-    };
+    std::vector<std::shared_ptr<Sensor>> sensors = { std::move(sensor_1), std::move(sensor_2), std::move(sensor_3),
+        std::move(sensor_4) };
 
     return sensors;
 }
 
 void sensors_parser_CompareSensors(
     std::vector<std::shared_ptr<Sensor>>& sensors,
-    std::vector<std::shared_ptr<Sensor>>& deserialized_sensors) {
+    std::vector<std::shared_ptr<Sensor>>& deserialized_sensors
+) {
 
     zassert_equal(deserialized_sensors.size(), sensors.size());
 
@@ -130,16 +122,32 @@ void sensors_parser_CompareSensors(
 
         zassert_true(deserialized_sensor->configuration.type == sensors[i]->configuration.type);
         if(deserialized_sensor->configuration.channel.has_value() && sensors[i]->configuration.channel.has_value()) {
-            zassert_true(deserialized_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value());
+            zassert_true(
+                deserialized_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value()
+            );
         } else {
-            zassert_true(!deserialized_sensor->configuration.channel.has_value() && !sensors[i]->configuration.channel.has_value());
+            zassert_true(
+                !deserialized_sensor->configuration.channel.has_value()
+                && !sensors[i]->configuration.channel.has_value()
+            );
         }
         zassert_true(deserialized_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
-        zassert_true(deserialized_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method);
-        zassert_true(deserialized_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size());
+        zassert_true(
+            deserialized_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method
+        );
+        zassert_true(
+            deserialized_sensor->configuration.calibration_table.size()
+            == sensors[i]->configuration.calibration_table.size()
+        );
         zassert_true(deserialized_sensor->configuration.expression == sensors[i]->configuration.expression);
-        zassert_equal(deserialized_sensor->configuration.debounce_ms, sensors[i]->configuration.debounce_ms, "%s", sensors[i]->id.c_str());
-        zassert_equal(deserialized_sensor->configuration.input_mode, sensors[i]->configuration.input_mode, "%s", sensors[i]->id.c_str());
+        zassert_equal(
+            deserialized_sensor->configuration.debounce_ms, sensors[i]->configuration.debounce_ms, "%s",
+            sensors[i]->id.c_str()
+        );
+        zassert_equal(
+            deserialized_sensor->configuration.input_mode, sensors[i]->configuration.input_mode, "%s",
+            sensors[i]->id.c_str()
+        );
     }
 }
 
@@ -170,7 +178,9 @@ ZTEST(sensors_parser, test_Deserialize_orders_an_unordered_calibration_table) {
             continue;
 
         const auto& calibration_table = sensor->configuration.calibration_table;
-        zassert_true(std::ranges::is_sorted(calibration_table, {}, &CalibrationData::voltage), "%s", sensor->id.c_str());
+        zassert_true(
+            std::ranges::is_sorted(calibration_table, {}, &CalibrationData::voltage), "%s", sensor->id.c_str()
+        );
     }
 }
 
@@ -253,8 +263,11 @@ ZTEST(sensors_parser, test_Deserialize_reads_the_connection_string_strictly) {
 
     const auto error = DeserializeRejection(parser, *serialized_sensors);
     zassert_true(
-        error == "Invalid Sensor configuration. Sensor ID: engine_rpm. Connection string frame ID must be a number from 0 to 0x1FFFFFFF.",
-        "%s", error.c_str());
+        error
+            == "Invalid Sensor configuration. Sensor ID: engine_rpm. Connection string frame ID must be a number from "
+               "0 to 0x1FFFFFFF.",
+        "%s", error.c_str()
+    );
 }
 
 ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_sensor_id) {
@@ -267,7 +280,9 @@ ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_sensor_id) {
     sensor_configs[3].id = sensor_configs[0].id;
 
     const auto error = DeserializeRejection(parser, *serialized_sensors);
-    zassert_true(error == "Invalid Sensor configuration. Sensor ID: sensor_1. Duplicate sensor ID.", "%s", error.c_str());
+    zassert_true(
+        error == "Invalid Sensor configuration. Sensor ID: sensor_1. Duplicate sensor ID.", "%s", error.c_str()
+    );
 }
 
 ZTEST(sensors_parser, test_Deserialize_names_the_sensor_whose_expression_is_wrong) {
@@ -282,14 +297,17 @@ ZTEST(sensors_parser, test_Deserialize_names_the_sensor_whose_expression_is_wron
     auto error = DeserializeRejection(parser, *serialized_sensors);
     zassert_true(
         error == "Invalid Sensor configuration. Sensor ID: sensor_3. Expression references unknown sensor sensor_9.",
-        "%s", error.c_str());
+        "%s", error.c_str()
+    );
 
     const std::string unfinished = "x +";
     sensor_configs[2].configuration.expression = sensor_configs[0].configuration.expression;
     sensor_configs[1].configuration.expression = CborHelpers::ToZcborString(unfinished);
 
     error = DeserializeRejection(parser, *serialized_sensors);
-    zassert_true(error.starts_with("Invalid Sensor configuration. Sensor ID: sensor_2. Invalid expression"), "%s", error.c_str());
+    zassert_true(
+        error.starts_with("Invalid Sensor configuration. Sensor ID: sensor_2. Invalid expression"), "%s", error.c_str()
+    );
 }
 
 namespace {
@@ -375,7 +393,8 @@ ZTEST(sensors_parser, test_Deserialize_refuses_an_expression_that_reads_a_disabl
     const auto error = DeserializeRejection(parser, *serialized_sensors);
     zassert_true(
         error == "Invalid Sensor configuration. Sensor ID: sensor_1. Expression references disabled sensor sensor_2.",
-        "%s", error.c_str());
+        "%s", error.c_str()
+    );
 }
 
 namespace {
@@ -477,7 +496,9 @@ ZTEST(sensors_parser, test_conditioning_cannot_be_left_out) {
     auto sensors = sensors_parser_GetConditionedSensors();
 
     // A debounce that encodes to bytes found nowhere else.
-    const auto button = std::ranges::find_if(sensors, [](const auto& sensor) { return sensor->id == "button"; });
+    const auto button = std::ranges::find_if(sensors, [](const auto& sensor) {
+        return sensor->id == "button";
+    });
     (*button)->configuration.debounce_ms = 0x1234;
 
     auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
@@ -506,6 +527,6 @@ ZTEST(sensors_parser, test_Deserialize_refuses_an_unknown_input_mode) {
 
     const auto error = DeserializeRejection(parser, *serialized_sensors);
     zassert_true(
-        error == "Invalid Sensor configuration. Sensor ID: button. Invalid indicator input mode.",
-        "%s", error.c_str());
+        error == "Invalid Sensor configuration. Sensor ID: button. Invalid indicator input mode.", "%s", error.c_str()
+    );
 }

@@ -14,18 +14,18 @@ struct CanbusConfiguration {
     std::pmr::unordered_map<uint8_t, CanChannelConfiguration> channel_configurations;
     CanbusComConfiguration com_configuration;
 
-    CanbusConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : channel_configurations(alloc) {}
+    CanbusConfiguration(std::allocator_arg_t, allocator_type alloc) :
+        channel_configurations(alloc) {}
 
     CanbusConfiguration(const CanbusConfiguration&) = delete;
-	CanbusConfiguration& operator=(const CanbusConfiguration&) noexcept = default;
-	CanbusConfiguration& operator=(CanbusConfiguration&&) noexcept = default;
-	CanbusConfiguration(CanbusConfiguration&&) noexcept = default;
-	~CanbusConfiguration() = default;
+    CanbusConfiguration& operator=(const CanbusConfiguration&) noexcept = default;
+    CanbusConfiguration& operator=(CanbusConfiguration&&) noexcept = default;
+    CanbusConfiguration(CanbusConfiguration&&) noexcept = default;
+    ~CanbusConfiguration() = default;
 
-    CanbusConfiguration(CanbusConfiguration&& other, allocator_type alloc)
-        : channel_configurations(std::move(other.channel_configurations), alloc),
-          com_configuration(other.com_configuration) {}
+    CanbusConfiguration(CanbusConfiguration&& other, allocator_type alloc) :
+        channel_configurations(std::move(other.channel_configurations), alloc),
+        com_configuration(other.com_configuration) {}
 };
 
 } // namespace eerie_leap::domain::canbus_domain::models

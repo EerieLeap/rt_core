@@ -12,7 +12,8 @@ class SensorEventBus : public EventBus {
 private:
     static constexpr int k_stack_size = 4096;
 
-    SensorEventBus() : EventBus("sensor_event_bus", k_stack_size) {
+    SensorEventBus() :
+        EventBus("sensor_event_bus", k_stack_size) {
         RegisterChannel(SensorEventsChannel::GetInstance());
     }
 

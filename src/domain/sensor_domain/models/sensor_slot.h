@@ -10,7 +10,9 @@ struct SensorSlot {
 
     uint16_t index = kInvalid;
 
-    [[nodiscard]] constexpr bool IsValid() const { return index != kInvalid; }
+    [[nodiscard]] constexpr bool IsValid() const {
+        return index != kInvalid;
+    }
 
     constexpr bool operator==(const SensorSlot&) const = default;
 };

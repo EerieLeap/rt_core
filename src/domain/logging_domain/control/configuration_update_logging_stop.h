@@ -5,22 +5,22 @@
 #include <memory>
 #include <optional>
 
+#include "domain/configuration_domain/services/configuration_service.h"
 #include "subsys/event_bus/dispatch_guard.h"
 #include "subsys/threading/work_queue_task.h"
 #include "subsys/threading/work_queue_task_result.h"
 #include "subsys/threading/work_queue_thread.h"
-#include "domain/configuration_domain/services/configuration_service.h"
 
 #include "i_logging_command_sender.h"
 #include "i_logging_control.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 
 // Stops logging on every unit when a configuration is stored on this one after it has started (L9):
 // the unit's own control stops for all units (a writer stops for good and its network half sends the
@@ -55,7 +55,8 @@ public:
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
         std::shared_ptr<ILoggingControl> logging_control,
         std::shared_ptr<ILoggingCommandSender> stop_sender,
-        UpdateHandler on_update = nullptr);
+        UpdateHandler on_update = nullptr
+    );
 
     // Detaches the guard (waits for a report in its body), clears the stored handler if Start() set it,
     // cancels the broadcast and waits for one in progress. Not from inside a report, nor on the

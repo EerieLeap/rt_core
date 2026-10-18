@@ -53,11 +53,16 @@ public:
     using IFsService::ListFiles;
     using IFsService::WriteFile;
 
-    explicit SwitchableFsService(std::shared_ptr<IFsService> inner, bool is_available = true)
-        : available(is_available), inner_(std::move(inner)) {}
+    explicit SwitchableFsService(std::shared_ptr<IFsService> inner, bool is_available = true) :
+        available(is_available),
+        inner_(std::move(inner)) {}
 
-    bool Initialize() override { return inner_->Initialize(); }
-    bool IsAvailable() const override { return available && inner_->IsAvailable(); }
+    bool Initialize() override {
+        return inner_->Initialize();
+    }
+    bool IsAvailable() const override {
+        return available && inner_->IsAvailable();
+    }
 
     bool WriteFile(std::string_view path, const void* data, size_t size, bool append) override {
         return available && inner_->WriteFile(path, data, size, append);
@@ -76,10 +81,18 @@ public:
         return available ? inner_->OpenFile(path, flags, file) : -ENODEV;
     }
 
-    bool CreateDirectory(std::string_view path) override { return available && inner_->CreateDirectory(path); }
-    bool Exists(std::string_view path) const override { return available && inner_->Exists(path); }
-    bool DeleteFile(std::string_view path) override { return available && inner_->DeleteFile(path); }
-    bool DeleteRecursive(std::string_view path) override { return available && inner_->DeleteRecursive(path); }
+    bool CreateDirectory(std::string_view path) override {
+        return available && inner_->CreateDirectory(path);
+    }
+    bool Exists(std::string_view path) const override {
+        return available && inner_->Exists(path);
+    }
+    bool DeleteFile(std::string_view path) override {
+        return available && inner_->DeleteFile(path);
+    }
+    bool DeleteRecursive(std::string_view path) override {
+        return available && inner_->DeleteRecursive(path);
+    }
     int Rename(std::string_view from, std::string_view to) override {
         return available ? inner_->Rename(from, to) : -ENODEV;
     }
@@ -88,8 +101,13 @@ public:
         return available ? inner_->ListFiles(path) : std::vector<std::string>{};
     }
 
-    int ListDirectory(std::string_view path, size_t first, size_t max_entries,
-        std::vector<DirectoryEntry>& entries, size_t& count) const override {
+    int ListDirectory(
+        std::string_view path,
+        size_t first,
+        size_t max_entries,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
 
         if(!available) {
             entries.clear();
@@ -105,9 +123,15 @@ public:
         return available ? inner_->GetFileSize(path) : std::nullopt;
     }
 
-    uint64_t GetTotalSpace() const override { return available ? inner_->GetTotalSpace() : 0; }
-    uint64_t GetUsedSpace() const override { return available ? inner_->GetUsedSpace() : 0; }
-    bool Format() override { return available && inner_->Format(); }
+    uint64_t GetTotalSpace() const override {
+        return available ? inner_->GetTotalSpace() : 0;
+    }
+    uint64_t GetUsedSpace() const override {
+        return available ? inner_->GetUsedSpace() : 0;
+    }
+    bool Format() override {
+        return available && inner_->Format();
+    }
 
 private:
     std::shared_ptr<IFsService> inner_;

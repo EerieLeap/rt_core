@@ -86,7 +86,9 @@ ZTEST(sdmmc_service, test_SdMonitor_tracks_card_removal_and_insertion) {
     auto* sdmmc_service = GetSdmmcService();
 
     zassert_true(sdmmc_service->Initialize());
-    sdmmc_service->RegisterIsSdCardPresentHandler([] { return atomic_get(&card_present) == 1; });
+    sdmmc_service->RegisterIsSdCardPresentHandler([] {
+        return atomic_get(&card_present) == 1;
+    });
 
     zassert_equal(sdmmc_service->SdMonitorStart(), 0);
     zassert_true(WaitForAvailability(sdmmc_service, true));
@@ -131,7 +133,9 @@ ZTEST(sdmmc_service, test_destructor_stops_the_monitor) {
         SdmmcService local_service(DtFs::GetInternalFsMp(), k_disk_name);
 
         zassert_true(local_service.Initialize());
-        local_service.RegisterIsSdCardPresentHandler([] { return true; });
+        local_service.RegisterIsSdCardPresentHandler([] {
+            return true;
+        });
         zassert_equal(local_service.SdMonitorStart(), 0);
 
         k_msleep(100);

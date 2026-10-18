@@ -5,10 +5,10 @@
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/threading/service_base.h"
 
-#include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
-#include "subsys/cdmp/utilities/cdmp_status_machine.h"
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/models/cdmp_message.h"
+#include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
+#include "subsys/cdmp/utilities/cdmp_status_machine.h"
 
 #include "i_cdmp_canbus_service.h"
 
@@ -16,11 +16,11 @@ namespace eerie_leap::subsys::cdmp::services {
 
 using eerie_leap::subsys::canbus::CanFrameHandler;
 using eerie_leap::subsys::canbus::CanId;
+using eerie_leap::subsys::cdmp::models::CdmpDevice;
+using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
+using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
 using eerie_leap::subsys::threading::ServiceBase;
 using eerie_leap::subsys::threading::ServiceState;
-using eerie_leap::subsys::cdmp::models::CdmpDevice;
-using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
-using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
 
 class CdmpCanbusServiceBase : public ServiceBase<ICdmpCanbusService> {
 private:
@@ -46,9 +46,7 @@ protected:
     int RegisterReceiveHandler(const CanId& can_id, CanFrameHandler handler);
 
 public:
-    CdmpCanbusServiceBase(
-        std::shared_ptr<CdmpCanIdManager> can_id_manager,
-        std::shared_ptr<CdmpDevice> device);
+    CdmpCanbusServiceBase(std::shared_ptr<CdmpCanIdManager> can_id_manager, std::shared_ptr<CdmpDevice> device);
 
     virtual ~CdmpCanbusServiceBase();
 

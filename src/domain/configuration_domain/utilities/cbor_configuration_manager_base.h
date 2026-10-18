@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <eerie_memory.hpp>
 
 #include "configuration/services/cbor_configuration_service.h"
 #include "subsys/threading/scoped_mutex.h"
@@ -20,11 +20,12 @@
 namespace eerie_leap::domain::configuration_domain::utilities {
 
 // Derived classes call LoadOrCreateDefault() from their constructor, once their parser exists.
-template <typename TConfiguration, typename TCborConfig>
+template<typename TConfiguration, typename TCborConfig>
 class CborConfigurationManagerBase : public ICborConfigurationManager {
 private:
     const char* name_;
-    std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>> cbor_configuration_service_;
+    std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>>
+        cbor_configuration_service_;
     std::shared_ptr<TConfiguration> configuration_;
     // Get() runs on any thread (CDMP, shell, the log writer's start) while an apply replaces the
     // pointer on the configuration work queue; copying a shared_ptr that is being assigned is a race.
@@ -126,8 +127,11 @@ private:
 protected:
     CborConfigurationManagerBase(
         const char* name,
-        std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>> cbor_configuration_service)
-            : name_(name), cbor_configuration_service_(std::move(cbor_configuration_service)) {
+        std::unique_ptr<eerie_leap::configuration::services::CborConfigurationService<TCborConfig>>
+            cbor_configuration_service
+    ) :
+        name_(name),
+        cbor_configuration_service_(std::move(cbor_configuration_service)) {
 
         k_mutex_init(&configuration_mutex_);
         k_mutex_init(&stored_handler_mutex_);

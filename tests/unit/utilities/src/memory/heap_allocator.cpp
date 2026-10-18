@@ -6,10 +6,10 @@
 
 #include "utilities/memory/heap_allocator.h"
 
+using eerie_leap::utilities::memory::ext_unique_ptr;
 using eerie_leap::utilities::memory::ExtString;
 using eerie_leap::utilities::memory::ExtVector;
 using eerie_leap::utilities::memory::HeapAllocator;
-using eerie_leap::utilities::memory::ext_unique_ptr;
 using eerie_leap::utilities::memory::make_shared_ext;
 using eerie_leap::utilities::memory::make_unique_ext;
 
@@ -21,24 +21,30 @@ struct Tracked {
 
     int value;
 
-    explicit Tracked(int v = 0) : value(v) {
+    explicit Tracked(int v = 0) :
+        value(v) {
         ++live;
         ++constructed;
     }
 
-    Tracked(const Tracked& other) : value(other.value) {
+    Tracked(const Tracked& other) :
+        value(other.value) {
         ++live;
         ++constructed;
     }
 
-    ~Tracked() { --live; }
+    ~Tracked() {
+        --live;
+    }
 };
 
 int Tracked::live = 0;
 int Tracked::constructed = 0;
 
 struct ThrowingCtor {
-    ThrowingCtor() { throw std::runtime_error("boom"); }
+    ThrowingCtor() {
+        throw std::runtime_error("boom");
+    }
 };
 
 void ResetTracked() {
@@ -58,9 +64,9 @@ ZTEST(heap_allocator, test_allocate_and_deallocate) {
     zassert_not_null(block);
     zassert_equal(reinterpret_cast<uintptr_t>(block) % alignof(uint32_t), 0);
 
-    for (uint32_t i = 0; i < 8; ++i)
+    for(uint32_t i = 0; i < 8; ++i)
         block[i] = i * 7;
-    for (uint32_t i = 0; i < 8; ++i)
+    for(uint32_t i = 0; i < 8; ++i)
         zassert_equal(block[i], i * 7);
 
     allocator.deallocate(block, 8);
@@ -73,11 +79,11 @@ ZTEST(heap_allocator, test_allocate_zero_sized_request) {
     uint8_t* block = nullptr;
     try {
         block = allocator.allocate(0);
-    } catch (const std::bad_alloc&) {
+    } catch(const std::bad_alloc&) {
         threw = true;
     }
 
-    if (!threw)
+    if(!threw)
         allocator.deallocate(block, 0);
 }
 
@@ -88,11 +94,11 @@ ZTEST(heap_allocator, test_allocate_failure_throws_bad_alloc) {
     uint8_t* block = nullptr;
     try {
         block = allocator.allocate(64 * 1024 * 1024);
-    } catch (const std::bad_alloc&) {
+    } catch(const std::bad_alloc&) {
         threw = true;
     }
 
-    if (!threw)
+    if(!threw)
         allocator.deallocate(block, 64 * 1024 * 1024);
 
     zassert_true(threw, "oversized allocation should throw std::bad_alloc");
@@ -102,13 +108,13 @@ ZTEST(heap_allocator, test_reallocate_preserves_contents) {
     HeapAllocator<uint32_t> allocator;
 
     uint32_t* block = allocator.allocate(4);
-    for (uint32_t i = 0; i < 4; ++i)
+    for(uint32_t i = 0; i < 4; ++i)
         block[i] = i + 1;
 
     block = allocator.reallocate(block, 4, 16);
 
     zassert_not_null(block);
-    for (uint32_t i = 0; i < 4; ++i)
+    for(uint32_t i = 0; i < 4; ++i)
         zassert_equal(block[i], i + 1);
 
     allocator.deallocate(block, 16);
@@ -118,7 +124,7 @@ ZTEST(heap_allocator, test_reallocate_shrinks) {
     HeapAllocator<uint32_t> allocator;
 
     uint32_t* block = allocator.allocate(16);
-    for (uint32_t i = 0; i < 16; ++i)
+    for(uint32_t i = 0; i < 16; ++i)
         block[i] = i;
 
     block = allocator.reallocate(block, 16, 2);
@@ -159,7 +165,7 @@ ZTEST(heap_allocator, test_is_stateless_and_always_equal) {
 ZTEST(heap_allocator, test_works_with_std_vector) {
     std::vector<int, HeapAllocator<int>> values;
 
-    for (int i = 0; i < 256; ++i)
+    for(int i = 0; i < 256; ++i)
         values.push_back(i);
 
     zassert_equal(values.size(), 256);
@@ -170,7 +176,7 @@ ZTEST(heap_allocator, test_works_with_std_vector) {
 ZTEST(heap_allocator, test_ExtVector) {
     ExtVector bytes;
 
-    for (uint8_t i = 0; i < 64; ++i)
+    for(uint8_t i = 0; i < 64; ++i)
         bytes.push_back(i);
 
     zassert_equal(bytes.size(), 64);
@@ -243,7 +249,7 @@ ZTEST(heap_allocator, test_make_unique_ext_rethrows_constructor_failure) {
     try {
         auto value = make_unique_ext<ThrowingCtor>();
         (void)value;
-    } catch (const std::runtime_error&) {
+    } catch(const std::runtime_error&) {
         threw = true;
     }
 

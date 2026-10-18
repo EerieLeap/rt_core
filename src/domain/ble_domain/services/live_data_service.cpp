@@ -12,9 +12,10 @@ using eerie_leap::subsys::threading::ScopedMutex;
 
 LiveDataService::LiveDataService(
     std::shared_ptr<IBleNotifier> notifier,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
-        : notifier_(std::move(notifier)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)) {
+    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame
+) :
+    notifier_(std::move(notifier)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)) {
 
     k_mutex_init(&lock_);
     sample_work_.service = this;
@@ -36,8 +37,8 @@ size_t LiveDataService::GetCapacity() const {
     return std::min(MAX_SENSORS, (size - LiveDataEncoder::HEADER_SIZE) / LiveDataEncoder::ENTRY_SIZE);
 }
 
-LiveDataService::SubscribeResult LiveDataService::Subscribe(
-    std::span<const uint32_t> sensor_id_hashes, uint32_t period_ms) {
+LiveDataService::SubscribeResult
+LiveDataService::Subscribe(std::span<const uint32_t> sensor_id_hashes, uint32_t period_ms) {
 
     const size_t capacity = GetCapacity();
     if(capacity == 0)

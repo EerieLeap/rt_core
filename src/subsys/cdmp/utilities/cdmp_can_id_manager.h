@@ -52,23 +52,45 @@ public:
         base_can_id_ = base_can_id;
     }
 
-    uint32_t GetBaseCanId() const { return base_can_id_; }
+    uint32_t GetBaseCanId() const {
+        return base_can_id_;
+    }
 
     /** @name Identifiers; CDMP uses standard 11-bit identifiers only */
     ///@{
-    CanId GetManagementCanId() const { return CanId::Standard(base_can_id_ + MANAGEMENT_OFFSET); }
-    CanId GetDiscoveryRequestCanId() const { return GetManagementCanId(); }
-    CanId GetDiscoveryResponseCanId() const { return GetManagementCanId(); }
-    CanId GetIdClaimRequestCanId() const { return GetManagementCanId(); }
-    CanId GetIdClaimResponseCanId() const { return GetManagementCanId(); }
+    CanId GetManagementCanId() const {
+        return CanId::Standard(base_can_id_ + MANAGEMENT_OFFSET);
+    }
+    CanId GetDiscoveryRequestCanId() const {
+        return GetManagementCanId();
+    }
+    CanId GetDiscoveryResponseCanId() const {
+        return GetManagementCanId();
+    }
+    CanId GetIdClaimRequestCanId() const {
+        return GetManagementCanId();
+    }
+    CanId GetIdClaimResponseCanId() const {
+        return GetManagementCanId();
+    }
 
-    CanId GetHeartbeatCanId() const { return CanId::Standard(base_can_id_ + HEARTBEAT_OFFSET); }
+    CanId GetHeartbeatCanId() const {
+        return CanId::Standard(base_can_id_ + HEARTBEAT_OFFSET);
+    }
 
-    CanId GetCommandRequestCanId() const { return CanId::Standard(base_can_id_ + COMMAND_OFFSET); }
-    CanId GetCommandResponseCanId() const { return CanId::Standard(base_can_id_ + COMMAND_RESPONSE_OFFSET); }
+    CanId GetCommandRequestCanId() const {
+        return CanId::Standard(base_can_id_ + COMMAND_OFFSET);
+    }
+    CanId GetCommandResponseCanId() const {
+        return CanId::Standard(base_can_id_ + COMMAND_RESPONSE_OFFSET);
+    }
 
-    CanId GetStateChangeRequestCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_OFFSET); }
-    CanId GetStateChangeResponseCanId() const { return CanId::Standard(base_can_id_ + STATE_CHANGE_RESPONSE_OFFSET); }
+    CanId GetStateChangeRequestCanId() const {
+        return CanId::Standard(base_can_id_ + STATE_CHANGE_OFFSET);
+    }
+    CanId GetStateChangeResponseCanId() const {
+        return CanId::Standard(base_can_id_ + STATE_CHANGE_RESPONSE_OFFSET);
+    }
 
     /** @throws std::invalid_argument if @p capability_bit is above 31. */
     CanId GetCapabilityCanId(uint8_t capability_bit) const {

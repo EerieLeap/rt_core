@@ -14,13 +14,24 @@ namespace fake_gpio_test {
 
 class FakeGpio : public eerie_leap::subsys::gpio::IGpio {
 public:
-    explicit FakeGpio(int channel_count = 4) : channel_count_(channel_count) {}
+    explicit FakeGpio(int channel_count = 4) :
+        channel_count_(channel_count) {}
 
-    int Initialize() override { return 0; }
-    bool ReadChannel(int) override { return false; }
-    int GetChannelCount() override { return channel_count_; }
+    int Initialize() override {
+        return 0;
+    }
+    bool ReadChannel(int) override {
+        return false;
+    }
+    int GetChannelCount() override {
+        return channel_count_;
+    }
 
-    int RegisterChannelChangedHandler(int, eerie_leap::subsys::gpio::GpioEdge, eerie_leap::subsys::gpio::GpioChannelHandler) override {
+    int RegisterChannelChangedHandler(
+        int,
+        eerie_leap::subsys::gpio::GpioEdge,
+        eerie_leap::subsys::gpio::GpioChannelHandler
+    ) override {
         if(is_failing_)
             throw std::logic_error("GPIO channel refused");
 
@@ -36,9 +47,13 @@ public:
     }
 
     // From now on every registration throws.
-    void FailRegistrations() { is_failing_ = true; }
+    void FailRegistrations() {
+        is_failing_ = true;
+    }
     // The handlers that are registered now.
-    [[nodiscard]] int GetHandlerCount() const { return handlers_; }
+    [[nodiscard]] int GetHandlerCount() const {
+        return handlers_;
+    }
 
 private:
     const int channel_count_;

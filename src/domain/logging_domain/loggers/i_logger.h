@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 #include <streambuf>
 
 namespace eerie_leap::domain::logging_domain::loggers {

@@ -17,7 +17,9 @@ namespace {
 
 class StubTimeProvider : public ITimeProvider {
 public:
-    explicit StubTimeProvider(milliseconds value, milliseconds step = 0ms) : value_(value), step_(step) { }
+    explicit StubTimeProvider(milliseconds value, milliseconds step = 0ms) :
+        value_(value),
+        step_(step) {}
 
     std::chrono::system_clock::time_point GetTime() override {
         auto current = value_;
@@ -27,7 +29,9 @@ public:
         return TimeHelpers::FromMilliseconds(current);
     }
 
-    int calls() const { return calls_; }
+    int calls() const {
+        return calls_;
+    }
 
 private:
     milliseconds value_;
@@ -41,11 +45,12 @@ struct Fixture {
     std::shared_ptr<TimeService> service;
 };
 
-Fixture MakeFixture(milliseconds rtc_value = 1761106217000ms, milliseconds boot_value = 1234ms, milliseconds step = 0ms) {
+Fixture
+MakeFixture(milliseconds rtc_value = 1761106217000ms, milliseconds boot_value = 1234ms, milliseconds step = 0ms) {
     auto rtc_provider = std::make_shared<StubTimeProvider>(rtc_value, step);
     auto boot_provider = std::make_shared<StubTimeProvider>(boot_value, step);
 
-    return {rtc_provider, boot_provider, std::make_shared<TimeService>(rtc_provider, boot_provider)};
+    return { rtc_provider, boot_provider, std::make_shared<TimeService>(rtc_provider, boot_provider) };
 }
 
 } // namespace
@@ -123,8 +128,9 @@ ZTEST(time_service, test_service_keeps_the_providers_alive) {
 }
 
 ZTEST(time_service, test_service_is_usable_through_the_interface) {
-    std::shared_ptr<ITimeService> service =
-        std::make_shared<TimeService>(std::make_shared<RtcProvider>(), std::make_shared<BootElapsedTimeProvider>());
+    std::shared_ptr<ITimeService> service = std::make_shared<TimeService>(
+        std::make_shared<RtcProvider>(), std::make_shared<BootElapsedTimeProvider>()
+    );
 
     zassert_true(service->GetCurrentTime() > service->GetTimeSinceBoot());
     zassert_true(TimeHelpers::ToMilliseconds(service->GetTimeSinceBoot()) >= 0ms);

@@ -3,11 +3,11 @@
 // withdraws both when it goes. The volume of the suite serves as the SD card.
 #ifdef CONFIG_EERIE_LEAP_ASSETS
 
-#include <memory>
+    #include <memory>
 
-#include <zephyr/ztest.h>
+    #include <zephyr/ztest.h>
 
-#include "script_assets_test_support.h"
+    #include "script_assets_test_support.h"
 
 using namespace script_assets_test;
 
@@ -52,8 +52,10 @@ ZTEST(canbus_controller_assets, test_nothing_is_registered_without_an_sd_service
     {
         // Without an SD service the script path is not checked, so the message may name any script.
         auto without_sd = MakeCanbusController(rig, nullptr, rig.assets);
-        zassert_equal(InitializeWithMessages(*without_sd, { { 0, 0x100, kCanScript } }), 0,
-            "A unit without an SD card initializes");
+        zassert_equal(
+            InitializeWithMessages(*without_sd, { { 0, 0x100, kCanScript } }), 0,
+            "A unit without an SD card initializes"
+        );
         zassert_true(rig.assets->GetProviders().empty(), "No SD service, no CAN scripts");
         zassert_false(rig.assets->IsReferenced(kCanScript), "and no referrer, though a message uses the script");
     }
@@ -69,20 +71,29 @@ ZTEST(canbus_controller_assets, test_nothing_is_registered_without_an_sd_service
 
 ZTEST(canbus_controller_assets, test_a_script_is_referenced_by_any_message_on_any_channel) {
     auto rig = MakeRig("can_assets_referrer_wq");
-    for(const char* script : {kCanScript, kDisabledCanScript, kCanScriptInSensorDirectory})
+    for(const char* script : { kCanScript, kDisabledCanScript, kCanScriptInSensorDirectory })
         WriteScript(*rig.fs_service, script);
 
     auto controller = MakeCanbusController(rig, rig.sd, rig.assets);
-    zassert_equal(InitializeWithMessages(*controller, {
-        { 0, 0x100, kCanScript },
-        { 0, 0x101, kDisabledCanScript, false },
-        { 0, 0x102, "" },
-        { 1, 0x200, kCanScriptInSensorDirectory },
-    }), 0);
+    zassert_equal(
+        InitializeWithMessages(
+            *controller,
+            {
+                { 0, 0x100, kCanScript },
+                { 0, 0x101, kDisabledCanScript, false },
+                { 0, 0x102, "" },
+                { 1, 0x200, kCanScriptInSensorDirectory },
+            }
+        ),
+        0
+    );
 
     zassert_true(rig.assets->IsReferenced(kCanScript), "A message uses the script");
     zassert_true(rig.assets->IsReferenced(kDisabledCanScript), "A disabled message keeps its script");
-    zassert_true(rig.assets->IsReferenced(kCanScriptInSensorDirectory), "A message of another channel counts, and a script of the other kind's directory");
+    zassert_true(
+        rig.assets->IsReferenced(kCanScriptInSensorDirectory),
+        "A message of another channel counts, and a script of the other kind's directory"
+    );
 
     zassert_true(rig.assets->IsReferenced("SCRIPTS/Can/A.LUA"), "FAT folds the case of a name");
     zassert_true(rig.assets->IsReferenced("./scripts//can/a.lua"), "Empty names and . name nothing");
@@ -99,10 +110,16 @@ ZTEST(canbus_controller_assets, test_only_deleting_a_referenced_script_is_refuse
     WriteScript(*rig.fs_service, kDisabledCanScript);
 
     auto controller = MakeCanbusController(rig, rig.sd, rig.assets);
-    zassert_equal(InitializeWithMessages(*controller, {
-        { 0, 0x100, kCanScript },
-        { 1, 0x200, kDisabledCanScript, false },
-    }), 0);
+    zassert_equal(
+        InitializeWithMessages(
+            *controller,
+            {
+                { 0, 0x100, kCanScript },
+                { 1, 0x200, kDisabledCanScript, false },
+            }
+        ),
+        0
+    );
 
     const auto provider = rig.assets->Find(AssetKind::CAN_SCRIPTS);
     zassert_not_null(provider.get());
@@ -147,7 +164,9 @@ ZTEST(canbus_controller_assets, test_a_script_of_either_kind_is_kept_while_eithe
     // The sensors' controller goes: the CAN message still uses its script, the sensor no longer does.
     sensors.reset();
     zassert_true(rig.assets->IsReferenced(kCanScriptInSensorDirectory));
-    zassert_false(rig.assets->IsReferenced(kSensorScriptInCanDirectory), "The sensors' referrer went with its controller");
+    zassert_false(
+        rig.assets->IsReferenced(kSensorScriptInCanDirectory), "The sensors' referrer went with its controller"
+    );
     zassert_is_null(rig.assets->Find(AssetKind::SENSOR_SCRIPTS).get());
     zassert_not_null(rig.assets->Find(AssetKind::CAN_SCRIPTS).get(), "The CAN scripts stay");
 }
@@ -168,14 +187,18 @@ ZTEST(canbus_controller_assets, test_destroying_the_controller_withdraws_the_kin
 
     zassert_is_null(rig.assets->Find(AssetKind::CAN_SCRIPTS).get(), "The CAN scripts are no longer served");
     zassert_false(rig.assets->IsReferenced(kCanScript), "and the messages no longer refer to anything");
-    zassert_false(provider->is_in_use(AssetAccess::DELETE, kCanScriptName),
-        "A provider found before keeps working, and refuses nothing");
+    zassert_false(
+        provider->is_in_use(AssetAccess::DELETE, kCanScriptName),
+        "A provider found before keeps working, and refuses nothing"
+    );
 
     std::weak_ptr<AssetsManager> weak_assets = rig.assets;
     rig.assets.reset();
 
     zassert_true(weak_assets.expired(), "Nothing the controller registered holds the registry");
-    zassert_false(provider->is_in_use(AssetAccess::DELETE, kCanScriptName), "A provider outliving its registry refuses nothing");
+    zassert_false(
+        provider->is_in_use(AssetAccess::DELETE, kCanScriptName), "A provider outliving its registry refuses nothing"
+    );
 }
 
 #endif // CONFIG_EERIE_LEAP_ASSETS

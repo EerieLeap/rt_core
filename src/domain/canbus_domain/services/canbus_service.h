@@ -1,26 +1,26 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <unordered_map>
-#include <functional>
 
+#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
 #include "domain/canbus_domain/models/can_channel_configuration.h"
 #include "domain/canbus_domain/models/canbus_com_configuration.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/threading/work_queue_thread.h"
-#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
 
 namespace eerie_leap::domain::canbus_domain::services {
 
+using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
+using eerie_leap::domain::canbus_domain::models::CanbusComConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
-using eerie_leap::domain::canbus_domain::models::CanbusComConfiguration;
-using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
-using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
-using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 
 class CanbusService {
 public:
@@ -51,7 +51,8 @@ public:
     CanbusService(
         std::function<const device*(uint8_t)> dt_canbus_provider,
         std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager,
-        std::shared_ptr<WorkQueueThread> config_work_queue_thread = nullptr);
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread = nullptr
+    );
     void Configure();
 
     [[nodiscard]] std::shared_ptr<CanbusProxy> GetCanbus(uint8_t bus_channel) const;
@@ -63,7 +64,8 @@ public:
     /** @brief The configuration in use; kept alive by the returned pointer while a new one replaces it. */
     [[nodiscard]] std::shared_ptr<const CanbusConfiguration> GetConfiguration() const;
     [[nodiscard]] const CanChannelConfiguration* GetChannelConfiguration(uint8_t bus_channel) const;
-    [[nodiscard]] std::shared_ptr<CanMessageConfiguration> GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const;
+    [[nodiscard]] std::shared_ptr<CanMessageConfiguration>
+    GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const;
 
     int RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler);
     bool UnregisterConfigurationResetHandler(int handler_id);

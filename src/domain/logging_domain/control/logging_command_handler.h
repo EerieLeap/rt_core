@@ -2,15 +2,15 @@
 
 #include <memory>
 
-#include "subsys/event_bus/dispatch_guard.h"
 #include "domain/canbus_com_domain/services/canbus_com_service.h"
+#include "subsys/event_bus/dispatch_guard.h"
 
 #include "i_logging_control.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
-using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
+using eerie_leap::subsys::event_bus::DispatchGuard;
 
 // Serves the CDMP LOGGING command on every unit with a COM service, in both roles: the command goes to
 // the control's HandleLoggingCommand(), which decides. A unit that logs takes a start or a stop as a
@@ -38,7 +38,8 @@ public:
     // Registers the handler. Throws std::invalid_argument for a null argument.
     LoggingCommandHandler(
         std::shared_ptr<CanbusComService> canbus_com_service,
-        std::shared_ptr<ILoggingControl> logging_control);
+        std::shared_ptr<ILoggingControl> logging_control
+    );
 
     // Detaches the guard, waiting for a call in progress, then unsets the handler; a call that
     // already took the handler finishes on its own reference and is answered FAILURE. Not from the

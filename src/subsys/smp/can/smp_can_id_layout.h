@@ -30,12 +30,15 @@ public:
     constexpr SmpCanIdLayout() = default;
 
     /** @throws std::invalid_argument if the base fails IsValidBase(). */
-    constexpr explicit SmpCanIdLayout(uint32_t base) : base_(base) {
+    constexpr explicit SmpCanIdLayout(uint32_t base) :
+        base_(base) {
         if(!IsValidBase(base))
             throw std::invalid_argument("SMP CAN ID base must be 29-bit with the address bits clear");
     }
 
-    [[nodiscard]] constexpr uint32_t GetBase() const { return base_; }
+    [[nodiscard]] constexpr uint32_t GetBase() const {
+        return base_;
+    }
 
     /** @brief Identifier of a frame from @p source to @p target. */
     [[nodiscard]] constexpr uint32_t MakeId(uint8_t target, uint8_t source) const {
@@ -53,9 +56,13 @@ public:
     }
 
     /** @brief Target device ID of an SMP identifier. */
-    static constexpr uint8_t GetTarget(uint32_t id) { return static_cast<uint8_t>(id >> 8); }
+    static constexpr uint8_t GetTarget(uint32_t id) {
+        return static_cast<uint8_t>(id >> 8);
+    }
     /** @brief Source device ID of an SMP identifier. */
-    static constexpr uint8_t GetSource(uint32_t id) { return static_cast<uint8_t>(id); }
+    static constexpr uint8_t GetSource(uint32_t id) {
+        return static_cast<uint8_t>(id);
+    }
 };
 
 } // namespace eerie_leap::subsys::smp::can

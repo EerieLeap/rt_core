@@ -39,7 +39,10 @@ const bt_gatt_attr AccessPointService::attributes_[] = {
         BT_UUID_ACCESS_POINT_SMP,
         BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP | BT_GATT_CHRC_NOTIFY,
         BT_GATT_PERM_WRITE_ENCRYPT,
-        nullptr, &SmpWriteCallback, nullptr),
+        nullptr,
+        &SmpWriteCallback,
+        nullptr
+    ),
     // Centrals subscribe while connecting, possibly before pairing is done, so subscribing stays open.
     BT_GATT_CCC(nullptr, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 
@@ -47,7 +50,10 @@ const bt_gatt_attr AccessPointService::attributes_[] = {
         BT_UUID_ACCESS_POINT_LIVE,
         BT_GATT_CHRC_NOTIFY,
         BT_GATT_PERM_NONE,
-        nullptr, nullptr, nullptr),
+        nullptr,
+        nullptr,
+        nullptr
+    ),
     BT_GATT_CCC(nullptr, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 
     // Readable without pairing, so a client can check the protocol version first.
@@ -55,14 +61,16 @@ const bt_gatt_attr AccessPointService::attributes_[] = {
         BT_UUID_ACCESS_POINT_INFO,
         BT_GATT_CHRC_READ,
         BT_GATT_PERM_READ,
-        &InfoReadCallback, nullptr, nullptr),
+        &InfoReadCallback,
+        nullptr,
+        nullptr
+    ),
 };
 
-const STRUCT_SECTION_ITERABLE(bt_gatt_service_static, AccessPointService::gatt_service_) =
-    BT_GATT_SERVICE(attributes_);
+const STRUCT_SECTION_ITERABLE(bt_gatt_service_static, AccessPointService::gatt_service_) = BT_GATT_SERVICE(attributes_);
 
-AccessPointService::AccessPointService()
-    : smp_notifier_(std::make_shared<Notifier>(&attributes_[SMP_VALUE_INDEX], SmpSentCallback)),
+AccessPointService::AccessPointService() :
+    smp_notifier_(std::make_shared<Notifier>(&attributes_[SMP_VALUE_INDEX], SmpSentCallback)),
     live_notifier_(std::make_shared<Notifier>(&attributes_[LIVE_VALUE_INDEX], LiveSentCallback)) {
 
     AccessPointService* expected = nullptr;
@@ -101,8 +109,9 @@ void AccessPointService::Initialize(Callbacks callbacks, std::span<const uint8_t
     });
 }
 
-AccessPointService::Notifier::Notifier(const bt_gatt_attr* attribute, bt_gatt_complete_func_t on_sent)
-    : attribute_(attribute), on_sent_(on_sent) {}
+AccessPointService::Notifier::Notifier(const bt_gatt_attr* attribute, bt_gatt_complete_func_t on_sent) :
+    attribute_(attribute),
+    on_sent_(on_sent) {}
 
 size_t AccessPointService::Notifier::GetMaxNotificationSize() const {
     bt_conn* conn = Ble::AcquireActiveConn();
@@ -140,14 +149,15 @@ ssize_t AccessPointService::SmpWriteCallback(
     const void* buf,
     uint16_t len,
     uint16_t offset,
-    uint8_t /*flags*/) {
+    uint8_t /*flags*/
+) {
 
     if(offset != 0)
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 
     AccessPointService* service = instance_.load();
     if(service != nullptr && service->callbacks_.on_smp_write) {
-        service->callbacks_.on_smp_write({static_cast<const uint8_t*>(buf), len});
+        service->callbacks_.on_smp_write({ static_cast<const uint8_t*>(buf), len });
         service->OnSmpActivity();
     }
 
@@ -155,7 +165,12 @@ ssize_t AccessPointService::SmpWriteCallback(
 }
 
 ssize_t AccessPointService::InfoReadCallback(
-    bt_conn* conn, const bt_gatt_attr* attr, void* buf, uint16_t len, uint16_t offset) {
+    bt_conn* conn,
+    const bt_gatt_attr* attr,
+    void* buf,
+    uint16_t len,
+    uint16_t offset
+) {
 
     AccessPointService* service = instance_.load();
     if(service == nullptr)

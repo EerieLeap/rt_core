@@ -27,7 +27,8 @@ private:
     void* owner_;
 
 public:
-    explicit DispatchGuard(void* owner) : owner_(owner) {
+    explicit DispatchGuard(void* owner) :
+        owner_(owner) {
         k_mutex_init(&lock_);
     }
 

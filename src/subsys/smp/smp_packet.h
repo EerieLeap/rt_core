@@ -2,14 +2,16 @@
 
 #include <memory>
 
-#include <zephyr/net_buf.h>
 #include <zephyr/mgmt/mcumgr/smp/smp.h>
+#include <zephyr/net_buf.h>
 
 namespace eerie_leap::subsys::smp {
 
 /** @brief Returns a packet to the MCUmgr pool. */
 struct SmpPacketDeleter {
-    void operator()(net_buf* packet) const { smp_packet_free(packet); }
+    void operator()(net_buf* packet) const {
+        smp_packet_free(packet);
+    }
 };
 
 /** @brief An owned MCUmgr net_buf from the shared SMP pool. */

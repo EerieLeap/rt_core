@@ -6,11 +6,13 @@
 #include <string_view>
 #include <utility>
 
-#include <zephyr/mgmt/mcumgr/mgmt/mgmt.h>
-#include <zephyr/mgmt/mcumgr/smp/smp.h>
 #include <zcbor_common.h>
 #include <zcbor_decode.h>
 #include <zcbor_encode.h>
+#include <zephyr/mgmt/mcumgr/mgmt/mgmt.h>
+#include <zephyr/mgmt/mcumgr/smp/smp.h>
+
+// Not self-contained: it needs the zcbor types above, so it stays in a block of its own after them.
 #include <mgmt/mcumgr/util/zcbor_bulk.h>
 
 #include "smp_group_id.h"
@@ -87,7 +89,9 @@ protected:
 
 public:
     /** @brief Unregisters; a handler still running on the MCUmgr work queue is not waited for. */
-    ~SmpGroup() { Unregister(); }
+    ~SmpGroup() {
+        Unregister();
+    }
 
     SmpGroup(const SmpGroup&) = delete;
     SmpGroup& operator=(const SmpGroup&) = delete;
@@ -116,7 +120,9 @@ public:
         registered_ = nullptr;
     }
 
-    [[nodiscard]] bool IsRegistered() const { return registered_ == this; }
+    [[nodiscard]] bool IsRegistered() const {
+        return registered_ == this;
+    }
 };
 
 } // namespace eerie_leap::subsys::smp

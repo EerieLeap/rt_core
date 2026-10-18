@@ -8,8 +8,8 @@
 
 #include <zephyr/kernel.h>
 
-#include <lua.h>
 #include <lauxlib.h>
+#include <lua.h>
 #include <lualib.h>
 
 #include "subsys/threading/scoped_mutex.h"
@@ -36,7 +36,7 @@ public:
     struct MemoryBudget {
         size_t used = 0;
         size_t peak = 0;
-        size_t limit = 0;   // 0 = unlimited
+        size_t limit = 0; // 0 = unlimited
     };
 
 private:
@@ -65,8 +65,9 @@ public:
 
     LuaScript(const LuaScript&) = delete;
     LuaScript& operator=(const LuaScript&) = delete;
-    LuaScript(LuaScript&& other) noexcept
-        : state_(other.state_), context_(std::move(other.context_)) {
+    LuaScript(LuaScript&& other) noexcept :
+        state_(other.state_),
+        context_(std::move(other.context_)) {
         other.state_ = nullptr;
     }
 
@@ -75,10 +76,16 @@ public:
     static LuaScript Create();
     static LuaScript CreateExt();
 
-    bool IsValid() const { return state_ != nullptr; }
-    lua_State* GetState() { return state_; }
+    bool IsValid() const {
+        return state_ != nullptr;
+    }
+    lua_State* GetState() {
+        return state_;
+    }
 
-    [[nodiscard]] ScopedMutex Lock() { return ScopedMutex(context_->mutex); }
+    [[nodiscard]] ScopedMutex Lock() {
+        return ScopedMutex(context_->mutex);
+    }
 
     // Runs @p script in the global environment. For a state that hosts a single script.
     void Load(const std::span<const uint8_t>& script);
@@ -91,7 +98,9 @@ public:
     int FindFunction(int environment_ref, const char* name);
 
     // Pushes the referenced value for a call; the caller handles the stack from there.
-    void PushRef(int ref) { lua_rawgeti(state_, LUA_REGISTRYINDEX, ref); }
+    void PushRef(int ref) {
+        lua_rawgeti(state_, LUA_REGISTRYINDEX, ref);
+    }
     void Release(int& ref);
 
     void RegisterGlobalFunction(const std::string& name, lua_CFunction func, void* object = nullptr);
@@ -100,8 +109,12 @@ public:
     // spread over calls instead of landing on one sample.
     void CollectStep();
 
-    void SetMemoryLimit(size_t bytes) { context_->budget.limit = bytes; }
-    const MemoryBudget& GetMemoryBudget() const { return context_->budget; }
+    void SetMemoryLimit(size_t bytes) {
+        context_->budget.limit = bytes;
+    }
+    const MemoryBudget& GetMemoryBudget() const {
+        return context_->budget;
+    }
 
     // Bytes the state holds; the counter for a CreateExt() state, Lua's own figure otherwise.
     size_t GetMemoryUsed() const;

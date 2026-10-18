@@ -45,7 +45,7 @@ inline std::string ReadText(std::string_view relative_path) {
     if(!fs_service->ReadFile(relative_path, buffer.data(), buffer.size(), read_size))
         return {};
 
-    return {buffer.data(), read_size};
+    return { buffer.data(), read_size };
 }
 
 inline std::string MakeText(size_t size) {

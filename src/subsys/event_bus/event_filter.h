@@ -13,7 +13,9 @@ concept EventFilter = requires(T filter, const Event<EventTypeEnum, PayloadTypeE
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
 struct AcceptAllFilter {
-    bool operator()(const Event<EventTypeEnum, PayloadTypeEnum>&) const { return true; }
+    bool operator()(const Event<EventTypeEnum, PayloadTypeEnum>&) const {
+        return true;
+    }
 };
 
 } // namespace eerie_leap::subsys::event_bus

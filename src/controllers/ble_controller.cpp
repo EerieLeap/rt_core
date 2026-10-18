@@ -9,10 +9,11 @@ LOG_MODULE_REGISTER(ble_controller_logger);
 BleController::BleController(
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::shared_ptr<ISmpForwarder> smp_forwarder)
-    : sensors_processing_service_(std::move(sensors_processing_service)),
-      sensor_readings_frame_(std::move(sensor_readings_frame)),
-      smp_forwarder_(std::move(smp_forwarder)) {}
+    std::shared_ptr<ISmpForwarder> smp_forwarder
+) :
+    sensors_processing_service_(std::move(sensors_processing_service)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)),
+    smp_forwarder_(std::move(smp_forwarder)) {}
 
 int BleController::Initialize() {
     ble_service_ = &BleService::Create(sensors_processing_service_, sensor_readings_frame_, smp_forwarder_);

@@ -20,6 +20,14 @@ update` for you, so the workspace is ready once the container is up.
 
 Copy `.vscode_example/` to `.vscode/` to pick up the editor tasks.
 
+### Formatting
+
+Sources follow [`.clang-format`](.clang-format), written for clang-format 23.1.1
+(`pip install clang-format==23.1.1`, already in the dev container). `scripts/format.sh` checks
+the tree, `scripts/format.sh --fix` reformats it and `--changed` limits either to changed files.
+[`.clang-format-ignore`](.clang-format-ignore) lists generated and vendored code. The nested
+modules carry the same config, and CI fails if the copies drift.
+
 ## Tests
 
 ```sh

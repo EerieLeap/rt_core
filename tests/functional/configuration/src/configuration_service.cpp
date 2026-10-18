@@ -2,15 +2,15 @@
 #include <optional>
 #include <zephyr/ztest.h>
 
-#include "utilities/cbor/cbor_helpers.hpp"
-#include "configuration/cbor/cbor_system_config/cbor_system_config.h"
-#include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
+#include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
+#include "configuration/cbor/cbor_system_config/cbor_system_config.h"
 #include "configuration/services/cbor_configuration_service.h"
+#include "utilities/cbor/cbor_helpers.hpp"
 
 #include "subsys/device_tree/dt_fs.h"
-#include "subsys/fs/services/i_fs_service.h"
 #include "subsys/fs/services/fs_service.h"
+#include "subsys/fs/services/i_fs_service.h"
 #include "subsys/threading/work_queue_thread.h"
 
 using namespace eerie_leap::utilities::cbor;
@@ -41,7 +41,9 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_config_successfully_save
     auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
-    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
+    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service
+    );
 
     auto save_res = system_config_service->Save(&system_config);
     zassert_true(save_res);
@@ -58,7 +60,9 @@ ZTEST(configuration_service, test_CborSystemConfig_Load_config_successfully_save
     auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
-    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
+    auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service
+    );
 
     auto save_res = system_config_service->Save(&system_config);
     zassert_true(save_res);
@@ -82,11 +86,13 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_are_delegated_t
     fs_service->Format();
 
     auto work_queue_thread = std::make_shared<WorkQueueThread>(
-        "config_wq_delegated", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY);
+        "config_wq_delegated", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY
+    );
     zassert_true(work_queue_thread->Initialize());
 
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
-        "system_config", fs_service, work_queue_thread);
+        "system_config", fs_service, work_queue_thread
+    );
 
     zassert_true(system_config_service->Save(&system_config));
 
@@ -111,11 +117,13 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock
     fs_service->Format();
 
     auto work_queue_thread = std::make_shared<WorkQueueThread>(
-        "config_wq_reentrant", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY);
+        "config_wq_reentrant", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY
+    );
     zassert_true(work_queue_thread->Initialize());
 
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
-        "system_config", fs_service, work_queue_thread);
+        "system_config", fs_service, work_queue_thread
+    );
 
     bool saved = false;
     std::optional<LoadedConfig<CborSystemConfig>> loaded_config;
@@ -131,8 +139,10 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock
         k_sem_give(&done);
     });
 
-    zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0,
-        "Save/Load deadlocked when called from their own work queue thread");
+    zassert_equal(
+        k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0,
+        "Save/Load deadlocked when called from their own work queue thread"
+    );
     zassert_true(saved);
     zassert_true(loaded_config.has_value());
     zassert_equal(loaded_config.value().config->device_id, 33);
@@ -173,11 +183,13 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_n
     fs_service->Format();
 
     auto work_queue_thread = std::make_shared<WorkQueueThread>(
-        "config_wq_contended", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY);
+        "config_wq_contended", CONFIG_QUEUE_STACK_SIZE, CONFIG_QUEUE_PRIORITY
+    );
     zassert_true(work_queue_thread->Initialize());
 
     auto system_config_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
-        "system_config", fs_service, work_queue_thread);
+        "system_config", fs_service, work_queue_thread
+    );
 
     bool queue_saved = false;
     k_sem started;
@@ -196,16 +208,20 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_n
     });
     zassert_equal(k_sem_take(&started, K_MSEC(SYNC_TIMEOUT_MS)), 0);
 
-    ContendingSave contending{.service = system_config_service.get(), .config = &thread_config, .saved = false};
+    ContendingSave contending{ .service = system_config_service.get(), .config = &thread_config, .saved = false };
     k_thread saver;
-    k_thread_create(&saver, contending_saver_stack, K_THREAD_STACK_SIZEOF(contending_saver_stack),
-        SaveFromAnotherThread, &contending, nullptr, nullptr, CONFIG_QUEUE_PRIORITY, 0, K_NO_WAIT);
+    k_thread_create(
+        &saver, contending_saver_stack, K_THREAD_STACK_SIZEOF(contending_saver_stack), SaveFromAnotherThread,
+        &contending, nullptr, nullptr, CONFIG_QUEUE_PRIORITY, 0, K_NO_WAIT
+    );
     k_msleep(50);
 
     k_sem_give(&release);
 
-    zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0,
-        "Save() on the work queue waited for a thread that was waiting for the queue");
+    zassert_equal(
+        k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0,
+        "Save() on the work queue waited for a thread that was waiting for the queue"
+    );
     zassert_equal(k_thread_join(&saver, K_MSEC(SYNC_TIMEOUT_MS)), 0);
     zassert_true(queue_saved);
     zassert_true(contending.saved);
@@ -223,11 +239,9 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     std::string sensor_1_name = "name 1";
     std::string sensor_1_unit = "km/h";
     std::string sensor_1_description = "";
-    CborSensorMetadataConfig metadata_config_1 = {
-        .name = CborHelpers::ToZcborString(sensor_1_name),
+    CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
         .unit = CborHelpers::ToZcborString(sensor_1_unit),
-        .description = CborHelpers::ToZcborString(sensor_1_description)
-    };
+        .description = CborHelpers::ToZcborString(sensor_1_description) };
 
     std::string sensor_1_expression = "({var_d} + {y}) * 4";
     CborSensorConfigurationConfig configuration_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -250,19 +264,12 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     std::string sensor_2_name = "name 2";
     std::string sensor_2_unit = "m/s";
     std::string sensor_2_description = "";
-    CborSensorMetadataConfig metadata_config_2 = {
-        .name = CborHelpers::ToZcborString(sensor_2_name),
+    CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
         .unit = CborHelpers::ToZcborString(sensor_2_unit),
-        .description = CborHelpers::ToZcborString(sensor_2_description)
-    };
+        .description = CborHelpers::ToZcborString(sensor_2_description) };
 
     CborSensorCalibrationDataMap calibration_data_map_2(std::allocator_arg, Mrm::GetDefaultPmr());
-    calibration_data_map_2.float32float = {
-        { 1.0, 2.0 },
-        { 1.1, 2.1 },
-        { 1.2, 2.2 },
-        { 1.3, 2.3 }
-    };
+    calibration_data_map_2.float32float = { { 1.0, 2.0 }, { 1.1, 2.1 }, { 1.2, 2.2 }, { 1.3, 2.3 } };
 
     std::string sensor_2_expression = "({x} - 8 * {var_d}) / {f}";
     CborSensorConfigurationConfig configuration_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -290,7 +297,9 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
-    auto cbor_sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service);
+    auto cbor_sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>(
+        "sensors_config", fs_service
+    );
 
     auto save_res = cbor_sensors_config_service->Save(&sensors_config);
     zassert_true(save_res);
@@ -301,11 +310,9 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     std::string sensor_1_name = "name 3";
     std::string sensor_1_unit = "km/h";
     std::string sensor_1_description = "";
-    CborSensorMetadataConfig metadata_config_1 = {
-        .name = CborHelpers::ToZcborString(sensor_1_name),
+    CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
         .unit = CborHelpers::ToZcborString(sensor_1_unit),
-        .description = CborHelpers::ToZcborString(sensor_1_description)
-    };
+        .description = CborHelpers::ToZcborString(sensor_1_description) };
 
     std::string sensor_1_expression = "({var_d} + {y}) * 4";
     CborSensorConfigurationConfig configuration_config_1(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -330,19 +337,12 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     std::string sensor_2_name = "name 4";
     std::string sensor_2_unit = "m/s";
     std::string sensor_2_description = "Some description 4";
-    CborSensorMetadataConfig metadata_config_2 = {
-        .name = CborHelpers::ToZcborString(sensor_2_name),
+    CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
         .unit = CborHelpers::ToZcborString(sensor_2_unit),
-        .description = CborHelpers::ToZcborString(sensor_2_description)
-    };
+        .description = CborHelpers::ToZcborString(sensor_2_description) };
 
     CborSensorCalibrationDataMap calibration_data_map_2(std::allocator_arg, Mrm::GetDefaultPmr());
-    calibration_data_map_2.float32float = {
-        { 1.0, 2.0 },
-        { 1.1, 2.1 },
-        { 1.2, 2.2 },
-        { 1.3, 2.3 }
-    };
+    calibration_data_map_2.float32float = { { 1.0, 2.0 }, { 1.1, 2.1 }, { 1.2, 2.2 }, { 1.3, 2.3 } };
 
     std::string sensor_2_expression = "({x} - 8 * {var_d}) / {f}";
     CborSensorConfigurationConfig configuration_config_2(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -373,7 +373,9 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
-    auto sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service);
+    auto sensors_config_service = std::make_unique<CborConfigurationService<CborSensorsConfig>>(
+        "sensors_config", fs_service
+    );
 
     // Save config
     auto save_res = sensors_config_service->Save(&sensors_config);
@@ -387,11 +389,19 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     zassert_equal(loaded_sensors_config->CborSensorConfig_m.size(), 2);
 
     // Verify first sensor
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].id).c_str(), sensor_1_id.c_str());
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].id).c_str(), sensor_1_id.c_str()
+    );
     zassert_true(loaded_sensors_config->CborSensorConfig_m[0].is_enabled);
 
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].metadata.name).c_str(), sensor_1_name.c_str());
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].metadata.unit).c_str(), sensor_1_unit.c_str());
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].metadata.name).c_str(),
+        sensor_1_name.c_str()
+    );
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].metadata.unit).c_str(),
+        sensor_1_unit.c_str()
+    );
 
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.type, 1);
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.channel, 6);
@@ -400,17 +410,31 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     zassert_false(loaded_sensors_config->CborSensorConfig_m[0].configuration.calibration_table_present);
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.interpolation_method, 1);
     zassert_true(loaded_sensors_config->CborSensorConfig_m[0].configuration.expression_present);
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].configuration.expression).c_str(), sensor_1_expression.c_str());
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[0].configuration.expression).c_str(),
+        sensor_1_expression.c_str()
+    );
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.debounce_ms, 30);
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[0].configuration.input_mode, 1);
 
     // Verify second sensor
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].id).c_str(), sensor_2_id.c_str());
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].id).c_str(), sensor_2_id.c_str()
+    );
     zassert_false(loaded_sensors_config->CborSensorConfig_m[1].is_enabled);
 
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.name).c_str(), sensor_2_name.c_str());
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.unit).c_str(), sensor_2_unit.c_str());
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.description).c_str(), sensor_2_description.c_str());
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.name).c_str(),
+        sensor_2_name.c_str()
+    );
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.unit).c_str(),
+        sensor_2_unit.c_str()
+    );
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].metadata.description).c_str(),
+        sensor_2_description.c_str()
+    );
 
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.type, 1);
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.channel, 6);
@@ -418,17 +442,43 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.sampling_rate_ms, 250);
     zassert_true(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table_present);
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float.size(), 4);
-    zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[0].float32float_key, 1.0F);
-    zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[0].float32float, 2.0F);
-    zassert_between_inclusive(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[1].float32float_key, 1.09F, 1.11F);
-    zassert_between_inclusive(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[1].float32float, 2.09F, 2.11F);
-    zassert_between_inclusive(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[2].float32float_key, 1.19F, 1.21F);
-    zassert_between_inclusive(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[2].float32float, 2.19F, 2.21F);
-    zassert_between_inclusive(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[3].float32float_key, 1.29F, 1.31F);
-    zassert_between_inclusive(loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[3].float32float, 2.29F, 2.31F);
+    zassert_equal(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[0].float32float_key,
+        1.0F
+    );
+    zassert_equal(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[0].float32float, 2.0F
+    );
+    zassert_between_inclusive(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[1].float32float_key,
+        1.09F, 1.11F
+    );
+    zassert_between_inclusive(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[1].float32float,
+        2.09F, 2.11F
+    );
+    zassert_between_inclusive(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[2].float32float_key,
+        1.19F, 1.21F
+    );
+    zassert_between_inclusive(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[2].float32float,
+        2.19F, 2.21F
+    );
+    zassert_between_inclusive(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[3].float32float_key,
+        1.29F, 1.31F
+    );
+    zassert_between_inclusive(
+        loaded_sensors_config->CborSensorConfig_m[1].configuration.calibration_table.float32float[3].float32float,
+        2.29F, 2.31F
+    );
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.interpolation_method, 1);
     zassert_true(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression_present);
-    zassert_str_equal(CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression).c_str(), sensor_2_expression.c_str());
+    zassert_str_equal(
+        CborHelpers::ToStdString(loaded_sensors_config->CborSensorConfig_m[1].configuration.expression).c_str(),
+        sensor_2_expression.c_str()
+    );
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.debounce_ms, 0);
     zassert_equal(loaded_sensors_config->CborSensorConfig_m[1].configuration.input_mode, 0);
 }
@@ -453,17 +503,16 @@ ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_save
     CborCanbusConfig canbus_config(std::allocator_arg, Mrm::GetDefaultPmr());
     canbus_config.CborCanChannelConfig_m.push_back(std::move(channel_config));
     canbus_config.com_config = {
-        .bus_channel = -1,
-        .cdmp_base_can_id = 0x600,
-        .smp_can_id_base = 0x1E000000,
-        .smp_bus_share_percent = 40
+        .bus_channel = -1, .cdmp_base_can_id = 0x600, .smp_can_id_base = 0x1E000000, .smp_bus_share_percent = 40
     };
 
     DtFs::InitInternalFs();
     auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
-    auto canbus_config_service = std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service);
+    auto canbus_config_service = std::make_unique<CborConfigurationService<CborCanbusConfig>>(
+        "canbus_config", fs_service
+    );
 
     zassert_true(canbus_config_service->Save(&canbus_config));
 
@@ -476,8 +525,10 @@ ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_save
     zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m.size(), 1);
     zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].frame_id, 0x123);
     zassert_false(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].is_enabled);
-    zassert_equal(loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].send_interval_ms, 100,
-        "A disabled message keeps its send interval");
+    zassert_equal(
+        loaded_canbus_config.CborCanChannelConfig_m[0].CborCanMessageConfig_m[0].send_interval_ms, 100,
+        "A disabled message keeps its send interval"
+    );
 
     zassert_equal(loaded_canbus_config.com_config.bus_channel, -1, "An unset COM channel is stored as -1");
     zassert_equal(loaded_canbus_config.com_config.cdmp_base_can_id, 0x600);

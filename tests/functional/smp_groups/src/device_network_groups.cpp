@@ -3,21 +3,21 @@
 
 #include <zephyr/ztest.h>
 
-#include "domain/system_domain/smp/device_mgmt_group.h"
 #include "domain/canbus_com_domain/smp/network_mgmt_group.h"
+#include "domain/system_domain/smp/device_mgmt_group.h"
 
-#include "smp_groups_test_support.h"
 #include "cdmp_test_features.h"
+#include "smp_groups_test_support.h"
 
-using eerie_leap::tests::LOGGER_FEATURES;
 using eerie_leap::tests::DISPLAY_FEATURES;
+using eerie_leap::tests::LOGGER_FEATURES;
 
 using namespace smp_groups_test;
 
-using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::domain::canbus_com_domain::smp::NetworkMgmtGroup;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::domain::system_domain::smp::DeviceMgmtGroup;
-using eerie_leap::domain::canbus_com_domain::smp::NetworkMgmtGroup;
+using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
 
 namespace {
 
@@ -79,7 +79,9 @@ ZTEST(smp_device_group, test_info_without_cdmp_has_no_identity) {
 }
 
 ZTEST(smp_device_group, test_info_reports_the_sensor_inputs) {
-    DeviceMgmtGroup group(BUILD_NUMBER, nullptr, SensorCapabilities{ .adc_channels = 4, .gpio_channels = 8, .sensors_max = 64 });
+    DeviceMgmtGroup group(
+        BUILD_NUMBER, nullptr, SensorCapabilities{ .adc_channels = 4, .gpio_channels = 8, .sensors_max = 64 }
+    );
     group.Register();
     SmpTestClient client;
 
@@ -116,7 +118,7 @@ ZTEST_SUITE(smp_network_group, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(smp_network_group, test_devices_lists_the_network) {
     auto network_info = std::make_shared<FakeNetworkInfo>();
-    network_info->devices = {MakeDevice(2), MakeDevice(5), MakeDevice(9)};
+    network_info->devices = { MakeDevice(2), MakeDevice(5), MakeDevice(9) };
     NetworkMgmtGroup group(network_info);
     group.Register();
     SmpTestClient client;
@@ -136,7 +138,7 @@ ZTEST(smp_network_group, test_devices_lists_the_network) {
 
 ZTEST(smp_network_group, test_empty_request_lists_from_the_first_device) {
     auto network_info = std::make_shared<FakeNetworkInfo>();
-    network_info->devices = {MakeDevice(4)};
+    network_info->devices = { MakeDevice(4) };
     NetworkMgmtGroup group(network_info);
     group.Register();
     SmpTestClient client;
@@ -158,8 +160,10 @@ ZTEST(smp_network_group, test_a_large_network_is_paged) {
     std::vector<uint32_t> ids;
     size_t pages = 0;
     while(ids.size() < 50) {
-        auto response = client.Read(SmpGroupId::NETWORK, std::to_underlying(NetworkMgmtGroup::Command::DEVICES),
-            CborMap().Put("off", ids.size()).Build());
+        auto response = client.Read(
+            SmpGroupId::NETWORK, std::to_underlying(NetworkMgmtGroup::Command::DEVICES),
+            CborMap().Put("off", ids.size()).Build()
+        );
         zassert_true(response.IsOk());
         zassert_equal(response.Value("total"), 50);
         zassert_false(response.entries.empty());

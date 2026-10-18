@@ -55,14 +55,17 @@ uint8_t GetVariantIndex(const ChannelBlock& channel) {
 
 } // namespace
 
-RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) : channel_group_(&channel_group) {
+RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) :
+    channel_group_(&channel_group) {
     if(channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel))
         throw std::runtime_error("A VLSD channel group has no fixed length records");
 
     const auto invalidation_bytes = channel_group.GetInvalidationBytes();
     if(invalidation_bytes > kMaxInvalidationBytes) {
-        throw std::runtime_error("Record of " + std::to_string(invalidation_bytes) + " invalidation bytes exceeds the "
-            + std::to_string(kMaxInvalidationBytes) + " byte limit");
+        throw std::runtime_error(
+            "Record of " + std::to_string(invalidation_bytes) + " invalidation bytes exceeds the "
+            + std::to_string(kMaxInvalidationBytes) + " byte limit"
+        );
     }
 
     const auto record_id_size = channel_group.GetRecordIdSizeBytes();
@@ -70,14 +73,18 @@ RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) : channel_group_(&c
     const uint64_t record_size = data_end + invalidation_bytes;
 
     if(record_size > kMaxRecordBytes) {
-        throw std::runtime_error("Record of " + std::to_string(record_size)
-            + " bytes exceeds the " + std::to_string(kMaxRecordBytes) + " byte limit");
+        throw std::runtime_error(
+            "Record of " + std::to_string(record_size) + " bytes exceeds the " + std::to_string(kMaxRecordBytes)
+            + " byte limit"
+        );
     }
 
     const auto channels = channel_group.GetChannels();
     if(channels.size() > kMaxFields) {
-        throw std::runtime_error("Record of " + std::to_string(channels.size())
-            + " channels exceeds the " + std::to_string(kMaxFields) + " channel limit");
+        throw std::runtime_error(
+            "Record of " + std::to_string(channels.size()) + " channels exceeds the " + std::to_string(kMaxFields)
+            + " channel limit"
+        );
     }
 
     for(const auto& channel : channels) {
@@ -88,18 +95,18 @@ RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) : channel_group_(&c
         if(channel->HasInvalidationBit()) {
             const auto position = channel->GetInvalidationBitPosition();
             if(position >= invalidation_bytes * 8) {
-                throw std::runtime_error("Invalidation bit " + std::to_string(position)
-                    + " is outside the group's " + std::to_string(invalidation_bytes) + " invalidation bytes");
+                throw std::runtime_error(
+                    "Invalidation bit " + std::to_string(position) + " is outside the group's "
+                    + std::to_string(invalidation_bytes) + " invalidation bytes"
+                );
             }
 
             invalidation_bits_ |= 1U << position;
         }
 
-        fields_[field_count_++] = Field {
-            .offset = static_cast<uint16_t>(offset),
+        fields_[field_count_++] = Field{ .offset = static_cast<uint16_t>(offset),
             .size = static_cast<uint8_t>(channel->GetDataSizeBytes()),
-            .variant_index = GetVariantIndex(*channel)
-        };
+            .variant_index = GetVariantIndex(*channel) };
     }
 
     const auto record_id = channel_group.GetRecordIdData();
@@ -124,9 +131,12 @@ uint64_t RecordWriter::Write(std::streambuf& stream, std::span<const MdfValue> v
         if(values[i].index() != field.variant_index)
             throw std::runtime_error("Value type does not match the channel data type");
 
-        std::visit([this, &field](const auto& value) {
-            std::memcpy(record_.data() + field.offset, &value, sizeof(value));
-        }, values[i]);
+        std::visit(
+            [this, &field](const auto& value) {
+                std::memcpy(record_.data() + field.offset, &value, sizeof(value));
+            },
+            values[i]
+        );
     }
 
     // The low bytes of the mask, as the host is little endian: bit i is bit i % 8 of byte i / 8.

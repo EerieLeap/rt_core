@@ -5,12 +5,12 @@
 
 #include <zephyr/kernel.h>
 
-#include "subsys/threading/service_base.h"
-#include "subsys/threading/work_queue_thread.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
 #include "domain/canbus_domain/models/can_message_configuration.h"
 #include "domain/canbus_domain/services/canbus_service.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/threading/service_base.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "canbus_task.hpp"
 
@@ -18,14 +18,14 @@ namespace eerie_leap::domain::canbus_domain::services {
 
 namespace threading = eerie_leap::subsys::threading;
 
-using threading::ServiceBase;
-using threading::ServiceState;
-using threading::WorkQueueThread;
-using threading::WorkQueueTaskResult;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using threading::ServiceBase;
+using threading::ServiceState;
+using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
 class CanbusSchedulerService final : public ServiceBase<> {
 private:
@@ -43,7 +43,8 @@ private:
 
     void StartTasks();
     void CancelTasks();
-    std::unique_ptr<CanbusTask> CreateTask(uint8_t bus_channel, std::shared_ptr<CanMessageConfiguration> message_configuration);
+    std::unique_ptr<CanbusTask>
+    CreateTask(uint8_t bus_channel, std::shared_ptr<CanMessageConfiguration> message_configuration);
     static WorkQueueTaskResult ProcessCanbusWorkTask(CanbusTask* task);
 
     void InitializeScript(const CanMessageConfiguration& message_configuration);
@@ -58,10 +59,13 @@ public:
     CanbusSchedulerService(
         std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager,
         std::shared_ptr<CanbusService> canbus_service,
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
+        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame
+    );
     ~CanbusSchedulerService() override = default;
 
-    [[nodiscard]] bool IsPausable() const noexcept override { return true; }
+    [[nodiscard]] bool IsPausable() const noexcept override {
+        return true;
+    }
 
     bool Restart();
 };

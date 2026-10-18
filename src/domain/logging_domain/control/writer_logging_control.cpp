@@ -12,10 +12,11 @@ LOG_MODULE_REGISTER(writer_logging_control_logger);
 WriterLoggingControl::WriterLoggingControl(
     std::shared_ptr<ILoggingControl> local,
     std::shared_ptr<ILoggingControl> network,
-    uint32_t own_uid)
-        : local_(std::move(local)),
-        network_(std::move(network)),
-        own_uid_(own_uid) {
+    uint32_t own_uid
+) :
+    local_(std::move(local)),
+    network_(std::move(network)),
+    own_uid_(own_uid) {
 
     if(local_ == nullptr)
         throw std::invalid_argument("The writer logging control needs the unit's writer.");
@@ -46,8 +47,10 @@ void WriterLoggingControl::Route(uint32_t target_uid, bool is_start) {
     if(network_ == nullptr) {
         // Nothing to send to: a request for all units is served by the writer alone.
         if(!is_all)
-            LOG_WRN("Logging %s for uid %u is dropped: this unit has no CDMP network.",
-                is_start ? "start" : "stop", static_cast<unsigned>(target_uid));
+            LOG_WRN(
+                "Logging %s for uid %u is dropped: this unit has no CDMP network.", is_start ? "start" : "stop",
+                static_cast<unsigned>(target_uid)
+            );
         return;
     }
 

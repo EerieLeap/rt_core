@@ -9,7 +9,7 @@ class AdcSimulator : public IAdc {
 private:
     static constexpr int CHANNEL_COUNT = 8;
 
-    AdcStats stats_ {};
+    AdcStats stats_{};
 
 public:
     AdcSimulator() = default;
@@ -22,4 +22,4 @@ public:
     [[nodiscard]] AdcStats GetStats() const override;
 };
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc

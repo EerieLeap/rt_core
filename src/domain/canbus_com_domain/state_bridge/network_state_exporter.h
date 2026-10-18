@@ -16,10 +16,10 @@
 
 namespace eerie_leap::domain::canbus_com_domain::state_bridge {
 
+using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
 using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 
 /**
  * @brief Shares this unit's state on the descriptor's channel with the other units, on a unit that
@@ -54,8 +54,9 @@ private:
         bool is_shared = false;
         bool is_withdrawn = false;
 
-        explicit Record(std::shared_ptr<INetworkStateTransport> record_transport)
-            : transport(std::move(record_transport)), current(TDescriptor::Initial()) {
+        explicit Record(std::shared_ptr<INetworkStateTransport> record_transport) :
+            transport(std::move(record_transport)),
+            current(TDescriptor::Initial()) {
 
             k_mutex_init(&lock);
 
@@ -99,14 +100,18 @@ public:
      *
      * @throws std::runtime_error if the channel refuses the subscription; the record is withdrawn.
      */
-    explicit NetworkStateExporter(std::shared_ptr<INetworkStateTransport> transport)
-        : record_(std::make_shared<Record>(std::move(transport))) {
+    explicit NetworkStateExporter(std::shared_ptr<INetworkStateTransport> transport) :
+        record_(std::make_shared<Record>(std::move(transport))) {
 
         subscription_ = CreateScopedSubscription(
-            Channel::GetInstance(),
-            TDescriptor::EVENT_TYPE,
-            [](const EventMessage& event) { return event.source_id != IMPORTED_EVENT_SOURCE_ID; },
-            [record = record_](const EventMessage& event) { record->Update(event); });
+            Channel::GetInstance(), TDescriptor::EVENT_TYPE,
+            [](const EventMessage& event) {
+                return event.source_id != IMPORTED_EVENT_SOURCE_ID;
+            },
+            [record = record_](const EventMessage& event) {
+                record->Update(event);
+            }
+        );
 
         if(subscription_ == nullptr) {
             record_->Withdraw();

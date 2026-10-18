@@ -12,15 +12,15 @@
 #include <utility>
 #include <vector>
 
+#include <zcbor_decode.h>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <zcbor_decode.h>
 
-#include "subsys/smp/smp_header.h"
-#include "subsys/smp/smp_packet.h"
-#include "subsys/smp/i_smp_forwarder.h"
 #include "subsys/bluetooth/i_ble_notifier.h"
 #include "subsys/smp/ble/smp_ble_router.h"
+#include "subsys/smp/i_smp_forwarder.h"
+#include "subsys/smp/smp_header.h"
+#include "subsys/smp/smp_packet.h"
 
 namespace smp_ble_test {
 
@@ -31,7 +31,8 @@ using Bytes = std::vector<uint8_t>;
 
 inline constexpr int RESPONSE_TIMEOUT_MS = 2000;
 
-inline Bytes MakePacket(SmpOperation operation, uint16_t group, uint8_t command_id, uint8_t sequence, const Bytes& body) {
+inline Bytes
+MakePacket(SmpOperation operation, uint16_t group, uint8_t command_id, uint8_t sequence, const Bytes& body) {
     const SmpHeader header{
         .operation = operation,
         .version = 1,
@@ -63,7 +64,7 @@ inline Bytes CborText(std::string_view text) {
 
 // os group (0), echo (0): {"d": text}
 inline Bytes MakeEchoRequest(std::string_view text, uint8_t sequence, SmpOperation operation = SmpOperation::WRITE) {
-    Bytes body = {0xA1, 0x61, 'd'};
+    Bytes body = { 0xA1, 0x61, 'd' };
     auto value = CborText(text);
     body.insert(body.end(), value.begin(), value.end());
 
@@ -71,7 +72,7 @@ inline Bytes MakeEchoRequest(std::string_view text, uint8_t sequence, SmpOperati
 }
 
 inline Bytes Routed(uint8_t route, const Bytes& packet) {
-    Bytes routed = {route};
+    Bytes routed = { route };
     routed.insert(routed.end(), packet.begin(), packet.end());
 
     return routed;
@@ -114,11 +115,13 @@ inline std::vector<RoutedPacket> SplitStream(const Bytes& stream) {
         if(stream.size() - offset < 1 + size)
             break;
 
-        packets.push_back({
-            .route = stream[offset],
-            .header = *header,
-            .packet = Bytes(stream.begin() + offset + 1, stream.begin() + offset + 1 + size),
-        });
+        packets.push_back(
+            {
+                .route = stream[offset],
+                .header = *header,
+                .packet = Bytes(stream.begin() + offset + 1, stream.begin() + offset + 1 + size),
+            }
+        );
         offset += 1 + size;
     }
 
@@ -137,7 +140,8 @@ inline std::optional<std::string> FindText(std::span<const uint8_t> body, std::s
             return std::nullopt;
 
         zcbor_string value{};
-        if(std::string_view(reinterpret_cast<const char*>(name.value), name.len) == key && zcbor_tstr_decode(zsd, &value))
+        if(std::string_view(reinterpret_cast<const char*>(name.value), name.len) == key
+            && zcbor_tstr_decode(zsd, &value))
             return std::string(reinterpret_cast<const char*>(value.value), value.len);
 
         if(!zcbor_any_skip(zsd, nullptr))
@@ -158,7 +162,8 @@ inline std::optional<int32_t> FindInt(std::span<const uint8_t> body, std::string
             return std::nullopt;
 
         int32_t value = 0;
-        if(std::string_view(reinterpret_cast<const char*>(name.value), name.len) == key && zcbor_int32_decode(zsd, &value))
+        if(std::string_view(reinterpret_cast<const char*>(name.value), name.len) == key
+            && zcbor_int32_decode(zsd, &value))
             return value;
 
         if(!zcbor_any_skip(zsd, nullptr))
@@ -187,7 +192,9 @@ private:
     std::vector<size_t> sizes_;
 
 public:
-    FakeLink() { k_mutex_init(&lock_); }
+    FakeLink() {
+        k_mutex_init(&lock_);
+    }
 
     void SetMaxSize(size_t size) {
         k_mutex_lock(&lock_, K_FOREVER);
@@ -264,8 +271,12 @@ public:
     std::vector<std::pair<uint8_t, Bytes>> forwarded;
     std::shared_ptr<ISmpResponseSink> response_sink;
 
-    [[nodiscard]] uint8_t GetAddress() const override { return address; }
-    [[nodiscard]] bool IsReachable(uint8_t target) const override { return reachable.contains(target); }
+    [[nodiscard]] uint8_t GetAddress() const override {
+        return address;
+    }
+    [[nodiscard]] bool IsReachable(uint8_t target) const override {
+        return reachable.contains(target);
+    }
 
     bool Forward(uint8_t target, SmpPacket packet) override {
         if(!accept)
@@ -275,7 +286,9 @@ public:
         return true;
     }
 
-    void SetResponseSink(std::shared_ptr<ISmpResponseSink> sink) override { response_sink = std::move(sink); }
+    void SetResponseSink(std::shared_ptr<ISmpResponseSink> sink) override {
+        response_sink = std::move(sink);
+    }
 };
 
 struct RouterHarness {

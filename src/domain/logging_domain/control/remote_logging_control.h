@@ -10,13 +10,13 @@
 
 #include <zephyr/kernel.h>
 
+#include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "subsys/cdmp/models/cdmp_device_info.h"
 #include "subsys/cdmp/services/i_cdmp_network_info.h"
 #include "subsys/event_bus/dispatch_guard.h"
 #include "subsys/event_bus/i_scoped_subscription.h"
 #include "subsys/threading/work_queue_task_result.h"
 #include "subsys/threading/work_queue_thread.h"
-#include "domain/logging_domain/event_bus/logging_events_channel.h"
 
 #include "i_logging_command_sender.h"
 #include "i_logging_control.h"
@@ -25,6 +25,7 @@
 
 namespace eerie_leap::domain::logging_domain::control {
 
+using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::subsys::event_bus::AnySubscription;
@@ -32,7 +33,6 @@ using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 
 // Logging control of a unit without a log writer: a request becomes the CDMP LOGGING command, sent
 // from the configuration work queue, and IsActive() follows the logging status the units share
@@ -125,7 +125,8 @@ public:
         std::shared_ptr<ILoggingCommandSender> command_sender,
         std::shared_ptr<ILoggingRestartMonitor> restart_monitor = nullptr,
         std::shared_ptr<const ICdmpNetworkInfo> network_info = nullptr,
-        Mode mode = Mode::Remote);
+        Mode mode = Mode::Remote
+    );
 
     // Withdraws the restart handler, the status subscription and the task, waiting for a send in
     // progress; sends nothing. No request may come in during or after it, and it must not run inside

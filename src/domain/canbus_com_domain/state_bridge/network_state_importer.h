@@ -84,12 +84,14 @@ public:
      *
      * @throws std::runtime_error if the transport refuses the handler.
      */
-    explicit NetworkStateImporter(std::shared_ptr<INetworkStateTransport> transport)
-        : transport_(std::move(transport)) {
+    explicit NetworkStateImporter(std::shared_ptr<INetworkStateTransport> transport) :
+        transport_(std::move(transport)) {
 
         handler_id_ = transport_->RegisterStateHandler(
-            TDescriptor::STATE_TYPE,
-            [this](CanbusComStateType /*state_type*/) { OnStatesChanged(); });
+            TDescriptor::STATE_TYPE, [this](CanbusComStateType /*state_type*/) {
+                OnStatesChanged();
+            }
+        );
 
         if(handler_id_ < 0)
             throw std::runtime_error("Network state importer failed to register its state handler");

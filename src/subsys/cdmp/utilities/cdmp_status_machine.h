@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <unordered_map>
-#include <functional>
 
 #include <zephyr/kernel.h>
 
@@ -41,7 +41,9 @@ public:
 
     // Validation
     bool CanTransitionTo(CdmpDeviceStatus new_status) const;
-    bool IsOnline() const { return GetCurrentStatus() == CdmpDeviceStatus::ONLINE; }
+    bool IsOnline() const {
+        return GetCurrentStatus() == CdmpDeviceStatus::ONLINE;
+    }
     bool IsOperational() const;
 };
 

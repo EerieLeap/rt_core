@@ -8,23 +8,23 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/ztest.h>
-#include <zephyr/drivers/adc/adc_emul.h>
 #include <eerie_memory.hpp>
+#include <zephyr/drivers/adc/adc_emul.h>
+#include <zephyr/ztest.h>
 
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/voltage_interpolator/calibration_data.h"
 #include "utilities/voltage_interpolator/interpolation_method.h"
 
+#include "subsys/adc/adc_emulator.h"
+#include "subsys/adc/adc_manager.h"
+#include "subsys/adc/i_adc.h"
 #include "subsys/device_tree/dt_adc.h"
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/fs_service.h"
-#include "subsys/adc/i_adc.h"
-#include "subsys/adc/adc_emulator.h"
-#include "subsys/adc/adc_manager.h"
 #include "subsys/gpio/i_gpio.h"
-#include "subsys/time/rtc_provider.h"
 #include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
 #include "subsys/time/time_service.h"
 
 #include "configuration/cbor/cbor_adc_config/cbor_adc_config.h"
@@ -46,25 +46,7 @@
 // configurations and the services every processing test builds.
 namespace processing_test_support {
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::configuration::services::CborConfigurationService;
-using eerie_leap::utilities::voltage_interpolator::CalibrationData;
-using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
-using eerie_leap::subsys::device_tree::DtAdc;
-using eerie_leap::subsys::device_tree::DtFs;
-using eerie_leap::subsys::fs::services::FsService;
-using eerie_leap::subsys::adc::AdcCapabilities;
-using eerie_leap::subsys::adc::AdcEmulator;
-using eerie_leap::subsys::adc::AdcError;
-using eerie_leap::subsys::adc::AdcManager;
-using eerie_leap::subsys::adc::AdcSampleRequest;
-using eerie_leap::subsys::adc::AdcStats;
-using eerie_leap::subsys::adc::IAdc;
-using eerie_leap::subsys::adc::IAdcManager;
-using eerie_leap::subsys::gpio::IGpio;
-using eerie_leap::subsys::time::BootElapsedTimeProvider;
-using eerie_leap::subsys::time::RtcProvider;
-using eerie_leap::subsys::time::TimeService;
 using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
 using eerie_leap::domain::adc_domain::models::AdcChannelConfiguration;
 using eerie_leap::domain::adc_domain::models::AdcConfiguration;
@@ -77,6 +59,24 @@ using eerie_leap::domain::sensor_domain::models::SensorType;
 using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
 using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::adc::AdcCapabilities;
+using eerie_leap::subsys::adc::AdcEmulator;
+using eerie_leap::subsys::adc::AdcError;
+using eerie_leap::subsys::adc::AdcManager;
+using eerie_leap::subsys::adc::AdcSampleRequest;
+using eerie_leap::subsys::adc::AdcStats;
+using eerie_leap::subsys::adc::IAdc;
+using eerie_leap::subsys::adc::IAdcManager;
+using eerie_leap::subsys::device_tree::DtAdc;
+using eerie_leap::subsys::device_tree::DtFs;
+using eerie_leap::subsys::fs::services::FsService;
+using eerie_leap::subsys::gpio::IGpio;
+using eerie_leap::subsys::time::BootElapsedTimeProvider;
+using eerie_leap::subsys::time::RtcProvider;
+using eerie_leap::subsys::time::TimeService;
+using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::utilities::voltage_interpolator::CalibrationData;
+using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
 
 // vref 3300 mV, gain 1, 12 bits on the overlay's first emulated ADC.
 constexpr float kEmulLsbVolts = 3.3F / 4096.0F;
@@ -97,13 +97,16 @@ public:
     int failing_channel = -1;
 
     int requests = 0;
-    std::array<uint8_t, kMaxChannels> last_channels {};
+    std::array<uint8_t, kMaxChannels> last_channels{};
     size_t last_channel_count = 0;
     uint16_t last_samples = 0;
 
-    explicit FakeAdc(int channel_count) : channel_count_(channel_count) {}
+    explicit FakeAdc(int channel_count) :
+        channel_count_(channel_count) {}
 
-    bool Initialize() override { return true; }
+    bool Initialize() override {
+        return true;
+    }
 
     void Sample(const AdcSampleRequest& request) noexcept override {
         requests++;
@@ -125,14 +128,19 @@ public:
         }
     }
 
-    [[nodiscard]] int GetChannelCount() const override { return channel_count_; }
-    [[nodiscard]] AdcCapabilities GetCapabilities() const override { return {}; }
-    [[nodiscard]] AdcStats GetStats() const override { return { .requests = static_cast<uint32_t>(requests) }; }
+    [[nodiscard]] int GetChannelCount() const override {
+        return channel_count_;
+    }
+    [[nodiscard]] AdcCapabilities GetCapabilities() const override {
+        return {};
+    }
+    [[nodiscard]] AdcStats GetStats() const override {
+        return { .requests = static_cast<uint32_t>(requests) };
+    }
 };
 
 inline std::shared_ptr<TimeService> MakeTimeService() {
-    return std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+    return std::make_shared<TimeService>(std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
 }
 
 inline std::shared_ptr<FsService> MakeFormattedFsService() {
@@ -157,7 +165,7 @@ inline std::shared_ptr<AdcEmulator> MakeEmulator() {
 }
 
 inline std::shared_ptr<AdcManager> MakeAdcManager(std::shared_ptr<IAdc> adc) {
-    auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>> { std::move(adc) });
+    auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ std::move(adc) });
     zassert_true(adc_manager->Initialize());
 
     return adc_manager;
@@ -171,8 +179,8 @@ inline void DriveConstant(AdcEmulator& adc, int channel, uint32_t mv) {
     zassert_ok(adc_emul_const_value_set(info.adc_device, info.channel_configs.at(channel).channel_id, mv));
 }
 
-inline std::shared_ptr<AdcCalibrator> MakeCalibrator(
-    std::initializer_list<CalibrationData> table, AdcRange range = AdcRange::Default()) {
+inline std::shared_ptr<AdcCalibrator>
+MakeCalibrator(std::initializer_list<CalibrationData> table, AdcRange range = AdcRange::Default()) {
 
     auto calibration_table = std::make_shared<std::pmr::vector<CalibrationData>>(table, Mrm::GetDefaultPmr());
 
@@ -181,8 +189,8 @@ inline std::shared_ptr<AdcCalibrator> MakeCalibrator(
 
 // One calibrator shared by every channel, as a hand-made configuration rather than one the
 // manager padded.
-inline std::shared_ptr<AdcConfiguration> MakeAdcConfiguration(
-    size_t channel_count, uint16_t samples, std::shared_ptr<AdcCalibrator> calibrator) {
+inline std::shared_ptr<AdcConfiguration>
+MakeAdcConfiguration(size_t channel_count, uint16_t samples, std::shared_ptr<AdcCalibrator> calibrator) {
 
     auto channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>();
     for(size_t i = 0; i < channel_count; i++)
@@ -202,7 +210,7 @@ inline std::shared_ptr<Sensor> MakeAnalogSensor(std::string_view id, int channel
     sensor->configuration.channel = channel;
     sensor->configuration.sampling_rate_ms = sampling_rate_ms;
     sensor->configuration.interpolation_method = InterpolationMethod::LINEAR;
-    sensor->configuration.calibration_table = { {0.0F, 0.0F}, {5.0F, 100.0F} };
+    sensor->configuration.calibration_table = { { 0.0F, 0.0F }, { 5.0F, 100.0F } };
 
     return sensor;
 }
@@ -216,12 +224,13 @@ inline std::shared_ptr<Sensor> MakeVirtualSensor(std::string_view id, const char
     return sensor;
 }
 
-inline std::shared_ptr<AdcConfigurationManager> MakeAdcConfigurationManager(
-    std::shared_ptr<FsService> fs_service, std::shared_ptr<IAdcManager> adc_manager) {
+inline std::shared_ptr<AdcConfigurationManager>
+MakeAdcConfigurationManager(std::shared_ptr<FsService> fs_service, std::shared_ptr<IAdcManager> adc_manager) {
 
     return std::make_shared<AdcConfigurationManager>(
         std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", std::move(fs_service)),
-        std::move(adc_manager));
+        std::move(adc_manager)
+    );
 }
 
 // A processing service wired the way SensorsController wires it, without CAN, over a stored
@@ -242,26 +251,25 @@ inline ProcessingRig MakeProcessingRig(
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     int adc_channel_count,
-    std::shared_ptr<IGpio> gpio = nullptr) {
+    std::shared_ptr<IGpio> gpio = nullptr
+) {
 
     ProcessingRig rig;
     rig.time_service = MakeTimeService();
     rig.frame = std::make_shared<SensorReadingsFrame>();
 
     rig.sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", std::move(fs_service)),
-        nullptr,
-        gpio != nullptr ? gpio->GetChannelCount() : 0,
-        adc_channel_count);
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", std::move(fs_service)), nullptr,
+        gpio != nullptr ? gpio->GetChannelCount() : 0, adc_channel_count
+    );
     zassert_true(rig.sensors_configuration_manager->Update(sensors), "The sensors configuration is valid");
 
     rig.processing_service = std::make_shared<SensorsProcessingService>(
-        rig.sensors_configuration_manager,
-        rig.frame,
-        rig.time_service,
+        rig.sensors_configuration_manager, rig.frame, rig.time_service,
         gpio != nullptr ? std::make_shared<IsrSensorReaderFactory>(rig.time_service, gpio) : nullptr,
         std::make_shared<SensorReaderFactory>(rig.time_service, gpio, std::move(adc_manager)),
-        std::move(adc_configuration_manager));
+        std::move(adc_configuration_manager)
+    );
     zassert_true(rig.processing_service->Initialize());
 
     return rig;

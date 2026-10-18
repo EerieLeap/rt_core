@@ -8,16 +8,16 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/crc.h>
 #include <zephyr/ztest.h>
 
+#include "cdmp_test_features.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/threading/work_queue_thread.h"
 #include "subsys/cdmp/models/messages/cdmp_command_request_message.h"
 #include "subsys/cdmp/models/messages/cdmp_discovery_response_message.h"
 #include "subsys/cdmp/models/messages/cdmp_heartbeat_message.h"
@@ -27,10 +27,10 @@
 #include "subsys/cdmp/services/cdmp_command_service.h"
 #include "subsys/cdmp/services/cdmp_network_service.h"
 #include "subsys/cdmp/services/cdmp_state_service.h"
-#include "cdmp_test_features.h"
+#include "subsys/threading/work_queue_thread.h"
 
-using eerie_leap::tests::LOGGER_FEATURES;
 using eerie_leap::tests::DISPLAY_FEATURES;
+using eerie_leap::tests::LOGGER_FEATURES;
 
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::models;
@@ -71,27 +71,24 @@ void ResetLoopbackDevice(void* /*fixture*/) {
 
 Bytes NotificationFrame(uint8_t source, uint8_t version, uint8_t state_type, const Bytes& data) {
     const CdmpStateChangeMessage message{
-        .source_device_id = source,
-        .version = version,
-        .state_type = state_type,
-        .data = CdmpStateData(data)};
+        .source_device_id = source, .version = version, .state_type = state_type, .data = CdmpStateData(data)
+    };
 
     CdmpStateChangeMessage::Frame frame{};
     const size_t size = message.ToCanFrame(frame);
 
-    return {frame.begin(), frame.begin() + size};
+    return { frame.begin(), frame.begin() + size };
 }
 
 Bytes ToBytes(const CdmpStateData& data) {
-    return {data.GetData().begin(), data.GetData().end()};
+    return { data.GetData().begin(), data.GetData().end() };
 }
 
 CdmpCommandRequestMessage SyncRequest(uint8_t target) {
-    return {
-        .target_device_id = target,
+    return { .target_device_id = target,
         .command_code = std::to_underlying(CdmpServiceCommandCode::STATE_SYNC_REQUEST),
         .transaction_id = 0x42,
-        .data = {}};
+        .data = {} };
 }
 
 struct Record {
@@ -160,7 +157,8 @@ struct StateFixture {
     std::shared_ptr<WorkQueueThread> work_queue = std::make_shared<WorkQueueThread>(
         "cdmp_test_wq",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
-        CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY);
+        CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY
+    );
     std::shared_ptr<CdmpCanIdManager> can_id_manager = std::make_shared<CdmpCanIdManager>();
 
     // The services get the bus after Start(), without receive handlers, and the tests hand them
@@ -184,34 +182,34 @@ struct StateFixture {
         }
 
         auto running_canbus = std::make_unique<Canbus>(
-            CanbusConfig(LoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK));
+            CanbusConfig(LoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK)
+        );
         zassert_true(running_canbus->Initialize(), "Canbus::Initialize() failed");
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
 
         // The services may share one block filter for their IDs, which a different filter over the
         // same IDs would overlap, so the recorder registers the same filters and sorts by ID.
-        constexpr std::array recorded_offsets{
-            CdmpCanIdManager::COMMAND_OFFSET,
-            CdmpCanIdManager::STATE_CHANGE_OFFSET,
-            CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET};
+        constexpr std::array recorded_offsets{ CdmpCanIdManager::COMMAND_OFFSET, CdmpCanIdManager::STATE_CHANGE_OFFSET,
+            CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET };
 
         std::vector<CanFilter> filters;
         for(uint32_t offset : recorded_offsets) {
             const CanFilter filter = can_id_manager->GetReceiveFilter(
-                CanId::Standard(can_id_manager->GetBaseCanId() + offset));
+                CanId::Standard(can_id_manager->GetBaseCanId() + offset)
+            );
             if(std::find(filters.begin(), filters.end(), filter) == filters.end())
                 filters.push_back(filter);
         }
 
         for(const CanFilter& filter : filters) {
             const int handler_id = (*canbus)->RegisterFrameReceivedHandler(
-                filter,
-                [this, recorded_offsets](const CanFrame& frame) {
+                filter, [this, recorded_offsets](const CanFrame& frame) {
                     const uint32_t offset = frame.id - can_id_manager->GetBaseCanId();
                     if(std::find(recorded_offsets.begin(), recorded_offsets.end(), offset) != recorded_offsets.end())
                         bus_frames.Add(offset, frame);
-                });
+                }
+            );
             zassert_true(handler_id > 0, "Frame handler rejected: %d", handler_id);
             bus_handler_ids.push_back(handler_id);
         }
@@ -231,14 +229,16 @@ struct StateFixture {
     }
 
     std::array<ICdmpCanbusService*, 3> Services() {
-        return {network.get(), commands.get(), state.get()};
+        return { network.get(), commands.get(), state.get() };
     }
 
     /** @brief Returns once the work queued so far has run. */
     void DrainQueue() {
         k_sem done;
         k_sem_init(&done, 0, 1);
-        work_queue->Run([&done]() { k_sem_give(&done); });
+        work_queue->Run([&done]() {
+            k_sem_give(&done);
+        });
         zassert_equal(k_sem_take(&done, K_MSEC(FRAME_TIMEOUT_MS)), 0, "The work queue is stuck");
     }
 
@@ -254,17 +254,18 @@ struct StateFixture {
     }
 
     void AddPeer(uint8_t device_id, uint32_t uid) {
-        network->ProcessFrame(CdmpDiscoveryResponseMessage{
-            .device_id = device_id,
-            .uid = uid,
-            .features = LOGGER_FEATURES}.ToCanFrame());
+        network->ProcessFrame(
+            CdmpDiscoveryResponseMessage{ .device_id = device_id, .uid = uid, .features = LOGGER_FEATURES }.ToCanFrame()
+        );
     }
 
     void ClaimAgain(uint8_t device_id, uint32_t uid) {
-        network->ProcessFrame(CdmpIdClaimRequestMessage{
-            .claiming_device_id = device_id,
-            .uid = uid,
-            .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
+        network->ProcessFrame(
+            CdmpIdClaimRequestMessage{ .claiming_device_id = device_id,
+                .uid = uid,
+                .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+                .ToCanFrame()
+        );
     }
 
     void Receive(uint8_t source, uint8_t version, uint8_t state_type, const Bytes& data) {
@@ -272,21 +273,24 @@ struct StateFixture {
     }
 
     void Acknowledge(uint8_t responder, uint8_t version) {
-        state->ProcessStateChangeResponseFrame(CdmpStateChangeResponseMessage{
-            .responding_device_id = responder,
-            .source_device_id = OWN_ID,
-            .version = version,
-            .result_code = CdmpResultCode::SUCCESS}.ToCanFrame());
+        state->ProcessStateChangeResponseFrame(
+            CdmpStateChangeResponseMessage{ .responding_device_id = responder,
+                .source_device_id = OWN_ID,
+                .version = version,
+                .result_code = CdmpResultCode::SUCCESS }
+                .ToCanFrame()
+        );
     }
 
     // Through the network service, which passes it on to the state service.
     void Heartbeat(uint8_t device_id, uint8_t state_digest) {
-        network->UpdateDeviceFromHeartbeat({
-            .device_id = device_id,
-            .health_status = CdmpHealthStatus::OK,
-            .sequence_number = 0,
-            .features = 0,
-            .state_digest = state_digest});
+        network->UpdateDeviceFromHeartbeat(
+            { .device_id = device_id,
+                .health_status = CdmpHealthStatus::OK,
+                .sequence_number = 0,
+                .features = 0,
+                .state_digest = state_digest }
+        );
     }
 
     std::vector<CdmpRemoteState> Remote(uint8_t state_type) const {
@@ -342,7 +346,7 @@ ZTEST(cdmp_state, test_notification_from_a_peer_is_acknowledged_and_applied) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01, 0x02});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01, 0x02 });
 
     auto acknowledgement = fixture.WaitForAcknowledgement();
     zassert_true(acknowledgement.has_value());
@@ -354,7 +358,7 @@ ZTEST(cdmp_state, test_notification_from_a_peer_is_acknowledged_and_applied) {
     const auto remote = fixture.Remote(TYPE_A);
     zassert_equal(remote.size(), 1);
     zassert_equal(remote[0].device_id, PEER_ID);
-    zassert_true(remote[0].data == CdmpStateData(Bytes{0x01, 0x02}));
+    zassert_true(remote[0].data == CdmpStateData(Bytes{ 0x01, 0x02 }));
     zassert_true(fixture.Remote(TYPE_B).empty());
 }
 
@@ -363,15 +367,15 @@ ZTEST(cdmp_state, test_newer_version_replaces_and_older_is_ignored) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.Receive(PEER_ID, 5, TYPE_A, {0x01});
-    fixture.Receive(PEER_ID, 6, TYPE_A, {0x02});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}));
+    fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
+    fixture.Receive(PEER_ID, 6, TYPE_A, { 0x02 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }));
 
     // A late resend of an earlier change.
-    fixture.Receive(PEER_ID, 5, TYPE_A, {0x01});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}));
+    fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }));
 
-    for(uint8_t version : {5, 6, 5}) {
+    for(uint8_t version : { 5, 6, 5 }) {
         auto acknowledgement = fixture.WaitForAcknowledgement();
         zassert_true(acknowledgement.has_value(), "Every notification is acknowledged");
         zassert_equal(acknowledgement->version, version);
@@ -383,14 +387,14 @@ ZTEST(cdmp_state, test_version_comparison_wraps) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.Receive(PEER_ID, 250, TYPE_A, {0x01});
-    fixture.Receive(PEER_ID, 3, TYPE_A, {0x02});
+    fixture.Receive(PEER_ID, 250, TYPE_A, { 0x01 });
+    fixture.Receive(PEER_ID, 3, TYPE_A, { 0x02 });
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}), "3 follows 250 once the counter wraps");
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }), "3 follows 250 once the counter wraps");
 
-    fixture.Receive(PEER_ID, 200, TYPE_A, {0x03});
+    fixture.Receive(PEER_ID, 200, TYPE_A, { 0x03 });
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}), "200 is more than half the range behind 3");
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }), "200 is more than half the range behind 3");
 }
 
 ZTEST(cdmp_state, test_duplicate_is_acknowledged_without_reporting_a_change) {
@@ -399,21 +403,23 @@ ZTEST(cdmp_state, test_duplicate_is_acknowledged_without_reporting_a_change) {
     fixture.AddPeer(PEER_ID, PEER_UID);
 
     int calls = 0;
-    fixture.state->RegisterStateHandler(TYPE_A, [&calls](uint8_t) { calls++; });
+    fixture.state->RegisterStateHandler(TYPE_A, [&calls](uint8_t) {
+        calls++;
+    });
     fixture.DrainQueue();
     calls = 0;
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
     fixture.DrainQueue();
     zassert_equal(calls, 1);
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
     // The same version is the same change, whatever its data.
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x09});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x09 });
     fixture.DrainQueue();
 
     zassert_equal(calls, 1);
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}));
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x01 }));
     for(int i = 0; i < 3; i++)
         zassert_true(fixture.WaitForAcknowledgement().has_value(), "Duplicates are acknowledged too");
 }
@@ -423,7 +429,7 @@ ZTEST(cdmp_state, test_withdrawal_removes_the_copy) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
     fixture.Receive(PEER_ID, 2, TYPE_A, {});
 
     zassert_true(fixture.Remote(TYPE_A).empty());
@@ -432,10 +438,10 @@ ZTEST(cdmp_state, test_withdrawal_removes_the_copy) {
     zassert_true(acknowledgement.has_value(), "A withdrawal is acknowledged");
     zassert_equal(acknowledgement->version, 2);
 
-    fixture.Receive(PEER_ID, 4, TYPE_A, {0x04});
+    fixture.Receive(PEER_ID, 4, TYPE_A, { 0x04 });
     fixture.Receive(PEER_ID, 3, TYPE_A, {});
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x04}), "An older withdrawal does not remove a newer record");
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x04 }), "An older withdrawal does not remove a newer record");
 }
 
 ZTEST(cdmp_state, test_notifications_from_outside_the_device_table_are_ignored) {
@@ -445,24 +451,26 @@ ZTEST(cdmp_state, test_notifications_from_outside_the_device_table_are_ignored) 
     // From a device that has not joined the table yet. The table never holds this unit's own ID, so
     // its own notification, which a loopback controller hands back, is ignored by the own-ID check
     // and by the table check alike; this covers the outcome, not which of the two checks fires.
-    fixture.Receive(OWN_ID, 1, TYPE_A, {0x01});
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(OWN_ID, 1, TYPE_A, { 0x01 });
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
 
     zassert_true(fixture.Remote(TYPE_A).empty());
-    zassert_false(fixture.WaitForAcknowledgement(NO_FRAME_TIMEOUT_MS).has_value(),
-        "The unknown sender resends until it has joined the table");
+    zassert_false(
+        fixture.WaitForAcknowledgement(NO_FRAME_TIMEOUT_MS).has_value(),
+        "The unknown sender resends until it has joined the table"
+    );
 
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}));
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x01 }));
 }
 
 ZTEST(cdmp_state, test_notifications_are_ignored_while_offline) {
     StateFixture fixture;
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
 
     zassert_true(fixture.Remote(TYPE_A).empty());
     zassert_false(fixture.WaitForAcknowledgement(NO_FRAME_TIMEOUT_MS).has_value());
@@ -473,26 +481,29 @@ ZTEST(cdmp_state, test_digest_covers_own_records_in_type_order) {
     zassert_equal(fixture.device->GetStateDigest(), 0, "No records, digest 0");
 
     // The parameters the spec names: polynomial 0x07, initial value 0, no reflection, no final XOR.
-    const std::array<uint8_t, 9> check = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    const std::array<uint8_t, 9> check = { '1', '2', '3', '4', '5', '6', '7', '8', '9' };
     zassert_equal(crc8_ccitt(0, check.data(), check.size()), 0xF4);
 
     // Set out of order: type B gets version 1, type A version 2.
-    zassert_true(fixture.state->SetLocalState(TYPE_B, Bytes{0x07}));
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01, 0x02}));
+    zassert_true(fixture.state->SetLocalState(TYPE_B, Bytes{ 0x07 }));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01, 0x02 }));
 
-    zassert_equal(fixture.device->GetStateDigest(), Digest({{TYPE_A, 2, {0x01, 0x02}}, {TYPE_B, 1, {0x07}}}));
+    zassert_equal(fixture.device->GetStateDigest(), Digest({ { TYPE_A, 2, { 0x01, 0x02 } }, { TYPE_B, 1, { 0x07 } } }));
 
     // The current value again is no change.
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01, 0x02}));
-    zassert_equal(fixture.device->GetStateDigest(), Digest({{TYPE_A, 2, {0x01, 0x02}}, {TYPE_B, 1, {0x07}}}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01, 0x02 }));
+    zassert_equal(fixture.device->GetStateDigest(), Digest({ { TYPE_A, 2, { 0x01, 0x02 } }, { TYPE_B, 1, { 0x07 } } }));
 
     fixture.state->ClearLocalState(TYPE_A);
-    zassert_equal(fixture.device->GetStateDigest(), Digest({{TYPE_B, 1, {0x07}}}),
-        "A withdrawn record leaves the digest");
+    zassert_equal(
+        fixture.device->GetStateDigest(), Digest({ { TYPE_B, 1, { 0x07 } } }), "A withdrawn record leaves the digest"
+    );
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x05}));
-    zassert_equal(fixture.device->GetStateDigest(), Digest({{TYPE_A, 4, {0x05}}, {TYPE_B, 1, {0x07}}}),
-        "The withdrawal took version 3");
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x05 }));
+    zassert_equal(
+        fixture.device->GetStateDigest(), Digest({ { TYPE_A, 4, { 0x05 } }, { TYPE_B, 1, { 0x07 } } }),
+        "The withdrawal took version 3"
+    );
 
     fixture.state->ClearLocalState(TYPE_A);
     fixture.state->ClearLocalState(TYPE_B);
@@ -502,8 +513,8 @@ ZTEST(cdmp_state, test_digest_covers_own_records_in_type_order) {
 ZTEST(cdmp_state, test_invalid_local_states_are_rejected) {
     StateFixture fixture;
 
-    zassert_false(fixture.state->SetLocalState(0, Bytes{0x01}), "Type 0 is invalid");
-    zassert_false(fixture.state->SetLocalState(TYPE_A, Bytes{1, 2, 3, 4, 5, 6}), "At most 5 data bytes");
+    zassert_false(fixture.state->SetLocalState(0, Bytes{ 0x01 }), "Type 0 is invalid");
+    zassert_false(fixture.state->SetLocalState(TYPE_A, Bytes{ 1, 2, 3, 4, 5, 6 }), "At most 5 data bytes");
     zassert_equal(fixture.device->GetStateDigest(), 0);
 }
 
@@ -511,32 +522,33 @@ ZTEST(cdmp_state, test_local_records_fill_up_and_withdrawals_give_way) {
     StateFixture fixture;
 
     for(size_t i = 0; i < CONFIG_EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS; i++)
-        zassert_true(fixture.state->SetLocalState(TYPE_A + i, Bytes{0x01}));
+        zassert_true(fixture.state->SetLocalState(TYPE_A + i, Bytes{ 0x01 }));
 
-    zassert_false(fixture.state->SetLocalState(0xF0, Bytes{0x01}), "Every slot holds a record");
+    zassert_false(fixture.state->SetLocalState(0xF0, Bytes{ 0x01 }), "Every slot holds a record");
 
     // Offline, the withdrawal waits for the next ONLINE, but a new type may take its slot.
     fixture.state->ClearLocalState(TYPE_A);
 
-    zassert_true(fixture.state->SetLocalState(0xF0, Bytes{0x01}));
+    zassert_true(fixture.state->SetLocalState(0xF0, Bytes{ 0x01 }));
 }
 
 ZTEST(cdmp_state, test_changing_own_record_sends_it_and_the_same_value_sends_nothing) {
     StateFixture fixture;
     fixture.GoOnline();
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
 
     auto notification = fixture.WaitForNotification();
     zassert_true(notification.has_value());
     zassert_equal(notification->source_device_id, OWN_ID);
     zassert_equal(notification->version, 1);
     zassert_equal(notification->state_type, TYPE_A);
-    zassert_true(notification->data == CdmpStateData(Bytes{0x01}));
+    zassert_true(notification->data == CdmpStateData(Bytes{ 0x01 }));
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
-    zassert_false(fixture.WaitForNotification(NO_FRAME_TIMEOUT_MS).has_value(),
-        "No peer is online, so nothing is resent either");
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
+    zassert_false(
+        fixture.WaitForNotification(NO_FRAME_TIMEOUT_MS).has_value(), "No peer is online, so nothing is resent either"
+    );
 
     fixture.state->ClearLocalState(TYPE_A);
 
@@ -550,45 +562,45 @@ ZTEST(cdmp_state, test_same_uid_claim_makes_the_copies_stale) {
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 9, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 9, TYPE_A, { 0x01 });
 
     // The peer restarted, and its version counter with it.
     fixture.ClaimAgain(PEER_ID, PEER_UID);
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}), "A stale copy still feeds its consumers");
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x01 }), "A stale copy still feeds its consumers");
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x02});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}), "A stale copy takes any version");
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x02 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }), "A stale copy takes any version");
 
-    fixture.Receive(PEER_ID, 0, TYPE_A, {0x03});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}), "The applied record is fresh again");
+    fixture.Receive(PEER_ID, 0, TYPE_A, { 0x03 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }), "The applied record is fresh again");
 }
 
 ZTEST(cdmp_state, test_claim_with_another_uid_leaves_the_copies) {
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 9, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 9, TYPE_A, { 0x01 });
 
     fixture.ClaimAgain(PEER_ID, OTHER_PEER_UID);
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x02});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x02 });
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}), "A conflicting claim is no restart");
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x01 }), "A conflicting claim is no restart");
 }
 
 ZTEST(cdmp_state, test_matching_digest_clears_stale_marks) {
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 5, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
     fixture.ClaimAgain(PEER_ID, PEER_UID);
 
-    fixture.Heartbeat(PEER_ID, Digest({{TYPE_A, 5, {0x01}}}));
+    fixture.Heartbeat(PEER_ID, Digest({ { TYPE_A, 5, { 0x01 } } }));
 
     zassert_false(fixture.WaitForSyncRequest(NO_FRAME_TIMEOUT_MS).has_value(), "The copies match");
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x02});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}), "Fresh again, so an older version is ignored");
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x02 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x01 }), "Fresh again, so an older version is ignored");
 }
 
 // The mark is what a consumer of the copies cannot see otherwise: a record renewed with its old value
@@ -598,41 +610,41 @@ ZTEST(cdmp_state, test_remote_states_mark_stale_copies) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.Receive(PEER_ID, 5, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
     zassert_false(fixture.Remote(TYPE_A)[0].is_stale, "A record just received is current");
 
     fixture.ClaimAgain(PEER_ID, PEER_UID);
     auto remote = fixture.Remote(TYPE_A);
     zassert_equal(remote.size(), 1);
     zassert_true(remote[0].is_stale, "The restart marks it");
-    zassert_true(remote[0].data == CdmpStateData(Bytes{0x01}), "and leaves its value");
+    zassert_true(remote[0].data == CdmpStateData(Bytes{ 0x01 }), "and leaves its value");
 
-    fixture.Heartbeat(PEER_ID, Digest({{TYPE_A, 5, {0x01}}}));
+    fixture.Heartbeat(PEER_ID, Digest({ { TYPE_A, 5, { 0x01 } } }));
     zassert_false(fixture.Remote(TYPE_A)[0].is_stale, "A matching digest confirms the copy");
 
     fixture.ClaimAgain(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
     remote = fixture.Remote(TYPE_A);
     zassert_false(remote[0].is_stale, "The same value sent again renews it");
-    zassert_true(remote[0].data == CdmpStateData(Bytes{0x01}));
+    zassert_true(remote[0].data == CdmpStateData(Bytes{ 0x01 }));
 
-    fixture.Heartbeat(PEER_ID, Digest({{TYPE_A, 7, {0x09}}}));
+    fixture.Heartbeat(PEER_ID, Digest({ { TYPE_A, 7, { 0x09 } } }));
     zassert_true(fixture.Remote(TYPE_A)[0].is_stale, "A digest that differs marks it");
 
-    fixture.Receive(PEER_ID, 2, TYPE_A, {0x02});
+    fixture.Receive(PEER_ID, 2, TYPE_A, { 0x02 });
     remote = fixture.Remote(TYPE_A);
     zassert_false(remote[0].is_stale, "and the next record renews it");
-    zassert_true(remote[0].data == CdmpStateData(Bytes{0x02}));
+    zassert_true(remote[0].data == CdmpStateData(Bytes{ 0x02 }));
 }
 
 ZTEST(cdmp_state, test_digest_mismatch_marks_stale_and_requests_one_sync_per_interval) {
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 5, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
 
     // The peer restarted unseen, and its new record was lost.
-    const uint8_t peer_digest = Digest({{TYPE_A, 1, {0x02}}});
+    const uint8_t peer_digest = Digest({ { TYPE_A, 1, { 0x02 } } });
     fixture.Heartbeat(PEER_ID, peer_digest);
 
     auto request = fixture.WaitForSyncRequest();
@@ -640,16 +652,18 @@ ZTEST(cdmp_state, test_digest_mismatch_marks_stale_and_requests_one_sync_per_int
     zassert_equal(request->target_device_id, PEER_ID);
 
     // Its replay.
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x02});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}), "The stale copy took the lower version");
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x02 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }), "The stale copy took the lower version");
 
     fixture.Heartbeat(PEER_ID, 0x00);
 
-    zassert_false(fixture.WaitForSyncRequest(NO_FRAME_TIMEOUT_MS).has_value(),
-        "At most one request per source and heartbeat interval");
+    zassert_false(
+        fixture.WaitForSyncRequest(NO_FRAME_TIMEOUT_MS).has_value(),
+        "At most one request per source and heartbeat interval"
+    );
 
-    fixture.Receive(PEER_ID, 0, TYPE_A, {0x03});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x03}), "The second mismatch still marks the copies stale");
+    fixture.Receive(PEER_ID, 0, TYPE_A, { 0x03 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x03 }), "The second mismatch still marks the copies stale");
 }
 
 ZTEST(cdmp_state, test_mismatch_without_copies_requests_sync) {
@@ -660,7 +674,7 @@ ZTEST(cdmp_state, test_mismatch_without_copies_requests_sync) {
     fixture.Heartbeat(PEER_ID, 0x00);
     zassert_false(fixture.WaitForSyncRequest(NO_FRAME_TIMEOUT_MS).has_value(), "No records on either side");
 
-    fixture.Heartbeat(PEER_ID, Digest({{TYPE_A, 1, {0x01}}}));
+    fixture.Heartbeat(PEER_ID, Digest({ { TYPE_A, 1, { 0x01 } } }));
 
     auto request = fixture.WaitForSyncRequest();
     zassert_true(request.has_value(), "This unit missed every record of the peer");
@@ -671,28 +685,30 @@ ZTEST(cdmp_state, test_fresh_digest_drops_stale_copies_the_source_withdrew) {
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
-    fixture.Receive(PEER_ID, 2, TYPE_B, {0x02});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
+    fixture.Receive(PEER_ID, 2, TYPE_B, { 0x02 });
 
     int calls = 0;
-    fixture.state->RegisterStateHandler(TYPE_B, [&calls](uint8_t) { calls++; });
+    fixture.state->RegisterStateHandler(TYPE_B, [&calls](uint8_t) {
+        calls++;
+    });
     fixture.DrainQueue();
     calls = 0;
 
     // The peer withdrew type B, and this unit missed it.
-    const uint8_t peer_digest = Digest({{TYPE_A, 1, {0x01}}});
+    const uint8_t peer_digest = Digest({ { TYPE_A, 1, { 0x01 } } });
     fixture.Heartbeat(PEER_ID, peer_digest);
     zassert_true(fixture.WaitForSyncRequest().has_value());
 
     // The replay brings type A only.
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_B, {0x02}), "Kept until the next heartbeat");
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_B, { 0x02 }), "Kept until the next heartbeat");
 
     fixture.Heartbeat(PEER_ID, peer_digest);
     fixture.DrainQueue();
 
     zassert_true(fixture.Remote(TYPE_B).empty(), "The fresh copies match, so the stale one was withdrawn");
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x01}));
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x01 }));
     zassert_equal(calls, 1);
 }
 
@@ -700,7 +716,7 @@ ZTEST(cdmp_state, test_restarted_source_without_records_drops_its_copies) {
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 7, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 7, TYPE_A, { 0x01 });
     fixture.ClaimAgain(PEER_ID, PEER_UID);
 
     // Back online before it has set any record.
@@ -715,11 +731,13 @@ ZTEST(cdmp_state, test_departure_drops_the_source_copies) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
     fixture.AddPeer(OTHER_PEER_ID, OTHER_PEER_UID);
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
-    fixture.Receive(OTHER_PEER_ID, 1, TYPE_A, {0x02});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
+    fixture.Receive(OTHER_PEER_ID, 1, TYPE_A, { 0x02 });
 
     int calls = 0;
-    fixture.state->RegisterStateHandler(TYPE_A, [&calls](uint8_t) { calls++; });
+    fixture.state->RegisterStateHandler(TYPE_A, [&calls](uint8_t) {
+        calls++;
+    });
     fixture.DrainQueue();
     calls = 0;
 
@@ -736,15 +754,17 @@ ZTEST(cdmp_state, test_leaving_online_drops_all_copies_stops_resending_and_keeps
     StateFixture fixture;
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
 
     int calls = 0;
-    fixture.state->RegisterStateHandler(TYPE_A, [&calls](uint8_t) { calls++; });
+    fixture.state->RegisterStateHandler(TYPE_A, [&calls](uint8_t) {
+        calls++;
+    });
     fixture.DrainQueue();
     calls = 0;
 
     // The peer does not acknowledge, so the change would be resent after 50 ms.
-    zassert_true(fixture.state->SetLocalState(TYPE_B, Bytes{0x02}));
+    zassert_true(fixture.state->SetLocalState(TYPE_B, Bytes{ 0x02 }));
     zassert_true(fixture.WaitForNotification().has_value());
 
     fixture.device->Reset();
@@ -753,7 +773,7 @@ ZTEST(cdmp_state, test_leaving_online_drops_all_copies_stops_resending_and_keeps
     zassert_false(fixture.WaitForNotification(RESEND_WINDOW_MS).has_value(), "Leaving ONLINE stops the resends");
     zassert_true(fixture.Remote(TYPE_A).empty());
     zassert_equal(calls, 1);
-    zassert_equal(fixture.device->GetStateDigest(), Digest({{TYPE_B, 1, {0x02}}}));
+    zassert_equal(fixture.device->GetStateDigest(), Digest({ { TYPE_B, 1, { 0x02 } } }));
 
     fixture.GoOnline();
 
@@ -770,14 +790,18 @@ ZTEST(cdmp_state, test_records_beyond_the_capacity_are_dropped_and_skip_the_dige
 
     constexpr size_t CAPACITY = CONFIG_EERIE_LEAP_CDMP_STATE_MAX_REMOTE_RECORDS;
     for(size_t i = 0; i <= CAPACITY; i++)
-        fixture.Receive(PEER_ID, 1, static_cast<uint8_t>(TYPE_A + i), {0x01});
+        fixture.Receive(PEER_ID, 1, static_cast<uint8_t>(TYPE_A + i), { 0x01 });
 
-    zassert_true(fixture.HasRemote(PEER_ID, static_cast<uint8_t>(TYPE_A + CAPACITY - 1), {0x01}), "What fits is kept");
+    zassert_true(
+        fixture.HasRemote(PEER_ID, static_cast<uint8_t>(TYPE_A + CAPACITY - 1), { 0x01 }), "What fits is kept"
+    );
     zassert_true(fixture.Remote(static_cast<uint8_t>(TYPE_A + CAPACITY)).empty());
 
     fixture.Heartbeat(PEER_ID, 0x00);
-    zassert_false(fixture.WaitForSyncRequest(NO_FRAME_TIMEOUT_MS).has_value(),
-        "Its copies are incomplete, so its digest is not checked");
+    zassert_false(
+        fixture.WaitForSyncRequest(NO_FRAME_TIMEOUT_MS).has_value(),
+        "Its copies are incomplete, so its digest is not checked"
+    );
 
     // The peer withdraws a record, which makes room.
     fixture.Receive(PEER_ID, 2, TYPE_A, {});
@@ -803,14 +827,14 @@ ZTEST(cdmp_state, test_state_handler_runs_on_registration_and_on_changes) {
     zassert_equal(calls[0], TYPE_A);
     zassert_true(is_on_work_queue);
 
-    fixture.Receive(PEER_ID, 1, TYPE_A, {0x01});
-    fixture.Receive(PEER_ID, 2, TYPE_B, {0x01});
+    fixture.Receive(PEER_ID, 1, TYPE_A, { 0x01 });
+    fixture.Receive(PEER_ID, 2, TYPE_B, { 0x01 });
     fixture.DrainQueue();
 
     zassert_equal(calls.size(), 2, "Only changes of its own type");
 
     fixture.state->UnregisterStateHandler(handler_id);
-    fixture.Receive(PEER_ID, 3, TYPE_A, {0x02});
+    fixture.Receive(PEER_ID, 3, TYPE_A, { 0x02 });
     fixture.DrainQueue();
 
     zassert_equal(calls.size(), 2);
@@ -821,21 +845,23 @@ ZTEST(cdmp_state, test_malformed_frames_are_dropped_without_a_response) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    fixture.state->ProcessStateChangeFrame(Bytes{PEER_ID, 1});
-    fixture.state->ProcessStateChangeFrame(Bytes{PEER_ID, 1, TYPE_A, 1, 2, 3, 4, 5, 6});
-    fixture.state->ProcessStateChangeFrame(Bytes{PEER_ID, 1, 0x00, 0x01});
+    fixture.state->ProcessStateChangeFrame(Bytes{ PEER_ID, 1 });
+    fixture.state->ProcessStateChangeFrame(Bytes{ PEER_ID, 1, TYPE_A, 1, 2, 3, 4, 5, 6 });
+    fixture.state->ProcessStateChangeFrame(Bytes{ PEER_ID, 1, 0x00, 0x01 });
 
-    zassert_false(fixture.WaitForAcknowledgement(NO_FRAME_TIMEOUT_MS).has_value(),
-        "Too short, too long or of type 0: not acknowledged");
+    zassert_false(
+        fixture.WaitForAcknowledgement(NO_FRAME_TIMEOUT_MS).has_value(),
+        "Too short, too long or of type 0: not acknowledged"
+    );
     zassert_true(fixture.Remote(TYPE_A).empty());
     zassert_true(fixture.Remote(0x00).empty());
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     auto notification = fixture.WaitForNotification();
     zassert_true(notification.has_value());
 
     // Without its result code.
-    fixture.state->ProcessStateChangeResponseFrame(Bytes{PEER_ID, OWN_ID, notification->version});
+    fixture.state->ProcessStateChangeResponseFrame(Bytes{ PEER_ID, OWN_ID, notification->version });
 
     auto resend = fixture.WaitForNotification();
     zassert_true(resend.has_value(), "A truncated acknowledgement is none");
@@ -848,15 +874,17 @@ ZTEST(cdmp_state, test_departed_peer_leaves_the_acknowledgement_sets) {
     fixture.AddPeer(PEER_ID, PEER_UID);
     fixture.AddPeer(OTHER_PEER_ID, OTHER_PEER_UID);
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     auto notification = fixture.WaitForNotification();
     zassert_true(notification.has_value());
 
     fixture.network->RemoveDevice(PEER_ID);
     fixture.Acknowledge(OTHER_PEER_ID, notification->version);
 
-    zassert_false(fixture.WaitForNotification(RESEND_WINDOW_MS).has_value(),
-        "The remaining peer acknowledged, and the one that left is not waited for");
+    zassert_false(
+        fixture.WaitForNotification(RESEND_WINDOW_MS).has_value(),
+        "The remaining peer acknowledged, and the one that left is not waited for"
+    );
 }
 
 ZTEST(cdmp_state, test_sync_request_skips_a_withdrawal_still_being_resent) {
@@ -865,8 +893,8 @@ ZTEST(cdmp_state, test_sync_request_skips_a_withdrawal_still_being_resent) {
     // It never acknowledges, so the withdrawal keeps its slot through its resends.
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
-    zassert_true(fixture.state->SetLocalState(TYPE_B, Bytes{0x02}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
+    zassert_true(fixture.state->SetLocalState(TYPE_B, Bytes{ 0x02 }));
     fixture.state->ClearLocalState(TYPE_B);
 
     const auto result = fixture.state->ProcessSyncRequest(SyncRequest(OWN_ID));
@@ -880,7 +908,7 @@ ZTEST(cdmp_state, test_sync_request_skips_a_withdrawal_still_being_resent) {
 ZTEST(cdmp_state, test_broadcast_sync_request_is_replayed_after_the_stagger) {
     StateFixture fixture;
     fixture.GoOnline(30);
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     zassert_true(fixture.WaitForNotification().has_value());
 
     // Twenty devices with lower IDs put this unit 100 ms into the stagger.
@@ -890,17 +918,21 @@ ZTEST(cdmp_state, test_broadcast_sync_request_is_replayed_after_the_stagger) {
     zassert_equal(stagger, 20 * CdmpConstants::STAGGERED_MESSAGE_TIME_OFFSET_MS);
 
     const int64_t requested_ms = k_uptime_get();
-    zassert_false(fixture.state->ProcessSyncRequest(SyncRequest(CdmpDevice::DEVICE_ID_BROADCAST)).has_value(),
-        "A broadcast request gets no response");
+    zassert_false(
+        fixture.state->ProcessSyncRequest(SyncRequest(CdmpDevice::DEVICE_ID_BROADCAST)).has_value(),
+        "A broadcast request gets no response"
+    );
 
     auto replay = fixture.WaitForNotification();
     const int64_t elapsed_ms = k_uptime_get() - requested_ms;
 
     zassert_true(replay.has_value(), "Every unit replays its records to a broadcast request");
     zassert_equal(replay->state_type, TYPE_A);
-    zassert_true(elapsed_ms >= stagger - TIMING_TOLERANCE_BELOW_MS,
-        "Replayed %lld ms after the request, before the %lld ms stagger",
-        static_cast<long long>(elapsed_ms), static_cast<long long>(stagger));
+    zassert_true(
+        elapsed_ms >= stagger - TIMING_TOLERANCE_BELOW_MS,
+        "Replayed %lld ms after the request, before the %lld ms stagger", static_cast<long long>(elapsed_ms),
+        static_cast<long long>(stagger)
+    );
 }
 
 ZTEST(cdmp_state, test_stopped_service_sends_nothing_while_the_device_is_still_online) {
@@ -910,12 +942,13 @@ ZTEST(cdmp_state, test_stopped_service_sends_nothing_while_the_device_is_still_o
     // CdmpService stops its services before the device leaves ONLINE.
     zassert_true(fixture.state->Stop());
 
-    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(fixture.state->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     zassert_false(fixture.state->ProcessSyncRequest(SyncRequest(OWN_ID)).has_value(), "No answer once stopped");
     zassert_false(fixture.state->ProcessSyncRequest(SyncRequest(CdmpDevice::DEVICE_ID_BROADCAST)).has_value());
 
-    zassert_false(fixture.WaitForNotification(NO_FRAME_TIMEOUT_MS).has_value(),
-        "Neither the change nor a replay is sent");
+    zassert_false(
+        fixture.WaitForNotification(NO_FRAME_TIMEOUT_MS).has_value(), "Neither the change nor a replay is sent"
+    );
 
     zassert_true(fixture.state->Start());
 
@@ -932,7 +965,7 @@ ZTEST(cdmp_state, test_record_left_behind_by_other_changes_is_stamped_again) {
 
     // Each change is sent before the next one is made, as when they come slowly.
     const auto set = [&fixture](uint8_t state_type, uint8_t value) {
-        zassert_true(fixture.state->SetLocalState(state_type, Bytes{value}));
+        zassert_true(fixture.state->SetLocalState(state_type, Bytes{ value }));
         fixture.DrainQueue();
     };
 
@@ -954,8 +987,10 @@ ZTEST(cdmp_state, test_record_left_behind_by_other_changes_is_stamped_again) {
 
     zassert_true(versions_of_a.size() > 2, "TYPE_A was sent again, unchanged, while TYPE_B changed");
     for(size_t i = 1; i < versions_of_a.size(); i++) {
-        zassert_true(static_cast<int8_t>(versions_of_a[i] - versions_of_a[i - 1]) > 0,
-            "Version %d of TYPE_A does not compare as newer than %d", versions_of_a[i], versions_of_a[i - 1]);
+        zassert_true(
+            static_cast<int8_t>(versions_of_a[i] - versions_of_a[i - 1]) > 0,
+            "Version %d of TYPE_A does not compare as newer than %d", versions_of_a[i], versions_of_a[i - 1]
+        );
     }
 
     // A receiver given the same notifications from a peer ends with both current values.
@@ -963,8 +998,8 @@ ZTEST(cdmp_state, test_record_left_behind_by_other_changes_is_stamped_again) {
     for(const auto& notification : notifications)
         fixture.Receive(PEER_ID, notification.version, notification.state_type, ToBytes(notification.data));
 
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, {0x02}), "The last change of TYPE_A was applied");
-    zassert_true(fixture.HasRemote(PEER_ID, TYPE_B, {129}));
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }), "The last change of TYPE_A was applied");
+    zassert_true(fixture.HasRemote(PEER_ID, TYPE_B, { 129 }));
 }
 
 ZTEST(cdmp_state, test_next_heartbeat_requests_a_sync_again_even_if_early) {
@@ -972,7 +1007,7 @@ ZTEST(cdmp_state, test_next_heartbeat_requests_a_sync_again_even_if_early) {
     fixture.GoOnline();
     fixture.AddPeer(PEER_ID, PEER_UID);
 
-    const uint8_t peer_digest = Digest({{TYPE_A, 1, {0x01}}});
+    const uint8_t peer_digest = Digest({ { TYPE_A, 1, { 0x01 } } });
     fixture.Heartbeat(PEER_ID, peer_digest);
     zassert_true(fixture.WaitForSyncRequest().has_value());
 
@@ -989,7 +1024,7 @@ ZTEST(cdmp_state, test_next_heartbeat_requests_a_sync_again_even_if_early) {
 ZTEST_SUITE(cdmp_state_messages, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(cdmp_state_messages, test_notification_round_trips) {
-    const Bytes frame = NotificationFrame(3, 200, 0x42, {0x0A, 0x0B, 0x0C, 0x0D, 0x0E});
+    const Bytes frame = NotificationFrame(3, 200, 0x42, { 0x0A, 0x0B, 0x0C, 0x0D, 0x0E });
 
     zassert_equal(frame.size(), 8);
     zassert_equal(frame[0], 3);
@@ -1001,7 +1036,7 @@ ZTEST(cdmp_state_messages, test_notification_round_trips) {
     zassert_equal(message.source_device_id, 3);
     zassert_equal(message.version, 200);
     zassert_equal(message.state_type, 0x42);
-    zassert_true(message.data == CdmpStateData(Bytes{0x0A, 0x0B, 0x0C, 0x0D, 0x0E}));
+    zassert_true(message.data == CdmpStateData(Bytes{ 0x0A, 0x0B, 0x0C, 0x0D, 0x0E }));
 
     const auto withdrawal = CdmpStateChangeMessage::FromCanFrame(NotificationFrame(3, 201, 0x42, {}));
     zassert_true(withdrawal.data.IsEmpty(), "A 3-byte frame withdraws the record");
@@ -1018,14 +1053,22 @@ ZTEST(cdmp_state_messages, test_malformed_frames_are_rejected) {
         return false;
     };
 
-    const Bytes short_notification = {3, 1};
-    const Bytes long_notification = {3, 1, 0x10, 1, 2, 3, 4, 5, 6};
-    const Bytes short_response = {2, 3, 1};
+    const Bytes short_notification = { 3, 1 };
+    const Bytes long_notification = { 3, 1, 0x10, 1, 2, 3, 4, 5, 6 };
+    const Bytes short_response = { 2, 3, 1 };
 
-    zassert_true(is_rejected([&] { (void)CdmpStateChangeMessage::FromCanFrame(short_notification); }));
-    zassert_true(is_rejected([&] { (void)CdmpStateChangeMessage::FromCanFrame(long_notification); }));
-    zassert_true(is_rejected([&] { (void)CdmpStateChangeResponseMessage::FromCanFrame(short_response); }));
-    zassert_true(is_rejected([] { (void)CdmpStateData(Bytes{1, 2, 3, 4, 5, 6}); }));
+    zassert_true(is_rejected([&] {
+        (void)CdmpStateChangeMessage::FromCanFrame(short_notification);
+    }));
+    zassert_true(is_rejected([&] {
+        (void)CdmpStateChangeMessage::FromCanFrame(long_notification);
+    }));
+    zassert_true(is_rejected([&] {
+        (void)CdmpStateChangeResponseMessage::FromCanFrame(short_response);
+    }));
+    zassert_true(is_rejected([] {
+        (void)CdmpStateData(Bytes{ 1, 2, 3, 4, 5, 6 });
+    }));
 
     // The receive path parses without exceptions.
     zassert_false(CdmpStateChangeMessage::TryFromCanFrame(short_notification).has_value());
@@ -1036,10 +1079,8 @@ ZTEST(cdmp_state_messages, test_malformed_frames_are_rejected) {
 
 ZTEST(cdmp_state_messages, test_response_round_trips) {
     const CdmpStateChangeResponseMessage sent{
-        .responding_device_id = 2,
-        .source_device_id = 3,
-        .version = 77,
-        .result_code = CdmpResultCode::SUCCESS};
+        .responding_device_id = 2, .source_device_id = 3, .version = 77, .result_code = CdmpResultCode::SUCCESS
+    };
 
     const auto frame = sent.ToCanFrame();
     zassert_equal(frame.size(), 4);

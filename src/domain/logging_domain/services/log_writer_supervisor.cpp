@@ -5,26 +5,26 @@
 
 #include <zephyr/logging/log.h>
 
-#include "subsys/event_bus/event_channel.h"
-#include "domain/system_domain/models/system_configuration.h"
 #include "domain/logging_domain/event_bus/logging_event_type.h"
 #include "domain/logging_domain/event_bus/logging_payload_type.h"
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
 #include "domain/logging_domain/loggers/logger_metadata.h"
 #include "domain/logging_domain/loggers/mdf4_logger_sensor_reading.h"
+#include "domain/system_domain/models/system_configuration.h"
+#include "subsys/event_bus/event_channel.h"
 
 #include "log_writer_supervisor.h"
 
 namespace eerie_leap::domain::logging_domain::services {
 
-using eerie_leap::subsys::event_bus::CreateScopedSubscription;
-using eerie_leap::subsys::threading::ServiceState;
-using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::domain::logging_domain::event_bus::GetReasonName;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
 using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
 using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
+using eerie_leap::domain::system_domain::models::SystemConfiguration;
+using eerie_leap::subsys::event_bus::CreateScopedSubscription;
+using eerie_leap::subsys::threading::ServiceState;
 
 LOG_MODULE_REGISTER(log_writer_supervisor_logger);
 
@@ -85,9 +85,12 @@ private:
     std::shared_ptr<State> state_;
 
 public:
-    explicit DependentLogWriter(std::shared_ptr<State> state) : state_(std::move(state)) {}
+    explicit DependentLogWriter(std::shared_ptr<State> state) :
+        state_(std::move(state)) {}
 
-    bool Initialize() override { return true; }
+    bool Initialize() override {
+        return true;
+    }
 
     bool Start() override {
         state_->CheckThread();
@@ -125,16 +128,16 @@ namespace {
 LoggerMetadata CreateLoggerMetadata(
     SensorsConfigurationManager& sensors_configuration_manager,
     const std::string& tool_id,
-    const LogWriterSupervisor::DeviceIdProvider& device_id_provider) {
+    const LogWriterSupervisor::DeviceIdProvider& device_id_provider
+) {
 
     LoggerMetadata metadata;
 
     metadata.device_name = CONFIG_BOARD;
     metadata.tool_id = tool_id;
     // The same version as the sw_version property, so a file names one software version.
-    metadata.tool_version = std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MAJOR)
-        + "." + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MINOR)
-        + "." + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_PATCH);
+    metadata.tool_version = std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MAJOR) + "."
+        + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MINOR) + "." + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_PATCH);
     metadata.product_id = CONFIG_EERIE_LEAP_PRODUCT_ID;
     metadata.hw_version = SystemConfiguration::hw_version;
     metadata.sw_version = SystemConfiguration::sw_version;
@@ -158,13 +161,12 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::string tool_id,
-    LogWriterSupervisor::DeviceIdProvider device_id_provider) {
+    LogWriterSupervisor::DeviceIdProvider device_id_provider
+) {
 
     return [logging_configuration_manager = std::move(logging_configuration_manager),
-            sensors_configuration_manager = std::move(sensors_configuration_manager),
-            tool_id = std::move(tool_id),
-            device_id_provider = std::move(device_id_provider)]() -> std::shared_ptr<ILogger<SensorReading>> {
-
+               sensors_configuration_manager = std::move(sensors_configuration_manager), tool_id = std::move(tool_id),
+               device_id_provider = std::move(device_id_provider)]() -> std::shared_ptr<ILogger<SensorReading>> {
         const auto sensors = sensors_configuration_manager->Get();
         const auto logging_configuration = logging_configuration_manager->Get();
 
@@ -172,9 +174,9 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
             return nullptr;
 
         return std::make_shared<Mdf4LoggerSensorReading>(
-            *logging_configuration,
-            *sensors,
-            CreateLoggerMetadata(*sensors_configuration_manager, tool_id, device_id_provider));
+            *logging_configuration, *sensors,
+            CreateLoggerMetadata(*sensors_configuration_manager, tool_id, device_id_provider)
+        );
     };
 }
 
@@ -186,14 +188,15 @@ LogWriterSupervisor::LogWriterSupervisor(
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::string tool_id,
-    DeviceIdProvider device_id_provider)
-        : config_work_queue_thread_(std::move(config_work_queue_thread)),
-        logging_configuration_manager_(std::move(logging_configuration_manager)),
-        sensors_configuration_manager_(std::move(sensors_configuration_manager)),
-        tool_id_(std::move(tool_id)),
-        device_id_provider_(std::move(device_id_provider)),
-        state_(std::make_shared<State>()),
-        guard_(std::make_shared<DispatchGuard>(this)) {
+    DeviceIdProvider device_id_provider
+) :
+    config_work_queue_thread_(std::move(config_work_queue_thread)),
+    logging_configuration_manager_(std::move(logging_configuration_manager)),
+    sensors_configuration_manager_(std::move(sensors_configuration_manager)),
+    tool_id_(std::move(tool_id)),
+    device_id_provider_(std::move(device_id_provider)),
+    state_(std::make_shared<State>()),
+    guard_(std::make_shared<DispatchGuard>(this)) {
 
     state_->log_writer_service = std::move(log_writer_service);
     state_->config_work_queue_thread = config_work_queue_thread_;
@@ -221,17 +224,19 @@ bool LogWriterSupervisor::Initialize() {
 
     try {
         task_ = config_work_queue_thread_->CreateTask(
-            [](LogWriterSupervisor* supervisor) { return supervisor->Process(); }, this);
+            [](LogWriterSupervisor* supervisor) {
+                return supervisor->Process();
+            },
+            this
+        );
     } catch(const std::exception& e) {
         LOG_ERR("Failed to create the log writer supervisor's task: %s", e.what());
         return false;
     }
 
-    state_->log_writer_service->SetLoggerFactory(MakeLoggerFactory(
-        logging_configuration_manager_,
-        sensors_configuration_manager_,
-        tool_id_,
-        device_id_provider_));
+    state_->log_writer_service->SetLoggerFactory(
+        MakeLoggerFactory(logging_configuration_manager_, sensors_configuration_manager_, tool_id_, device_id_provider_)
+    );
 
     // The composition root decides which bus carries the channel. Until one does, IsActive() stays
     // false and a failed session is stopped only by the task's next run (a request or a stored
@@ -242,11 +247,13 @@ bool LogWriterSupervisor::Initialize() {
 
     // The writer publishes asynchronously, so this runs on the bus thread, never on the writer's.
     status_subscription_ = CreateScopedSubscription(
-        channel,
-        LoggingEventType::StatusUpdated,
+        channel, LoggingEventType::StatusUpdated,
         [guard = guard_, this](const LoggingEventsChannel::EventMessage& event) {
-            guard->Dispatch([&] { OnStatusUpdated(event); });
-        });
+            guard->Dispatch([&] {
+                OnStatusUpdated(event);
+            });
+        }
+    );
     if(status_subscription_ == nullptr) {
         LOG_ERR("Failed to subscribe to the log writer status.");
         return false;

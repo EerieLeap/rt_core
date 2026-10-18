@@ -30,33 +30,33 @@ namespace detail {
 constexpr uint16_t GetBuildFeatures() {
     uint16_t features = 0;
 
-    #if CONFIG_EERIE_LEAP_FEATURES_ANALOG_INPUTS
-        features |= ToMask(ProductFeature::ANALOG_INPUTS);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_ANALOG_INPUTS
+    features |= ToMask(ProductFeature::ANALOG_INPUTS);
+#endif
 
-    #if CONFIG_EERIE_LEAP_FEATURES_DIGITAL_INPUTS
-        features |= ToMask(ProductFeature::DIGITAL_INPUTS);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_DIGITAL_INPUTS
+    features |= ToMask(ProductFeature::DIGITAL_INPUTS);
+#endif
 
-    #if CONFIG_EERIE_LEAP_FEATURES_CANBUS
-        features |= ToMask(ProductFeature::CANBUS);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_CANBUS
+    features |= ToMask(ProductFeature::CANBUS);
+#endif
 
-    #if CONFIG_EERIE_LEAP_FEATURES_LOGGING
-        features |= ToMask(ProductFeature::LOGGING);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_LOGGING
+    features |= ToMask(ProductFeature::LOGGING);
+#endif
 
-    #if CONFIG_EERIE_LEAP_FEATURES_BLUETOOTH
-        features |= ToMask(ProductFeature::BLUETOOTH);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_BLUETOOTH
+    features |= ToMask(ProductFeature::BLUETOOTH);
+#endif
 
-    #if CONFIG_EERIE_LEAP_FEATURES_DISPLAY
-        features |= ToMask(ProductFeature::DISPLAY);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_DISPLAY
+    features |= ToMask(ProductFeature::DISPLAY);
+#endif
 
-    #if CONFIG_EERIE_LEAP_FEATURES_STORAGE
-        features |= ToMask(ProductFeature::STORAGE);
-    #endif
+#if CONFIG_EERIE_LEAP_FEATURES_STORAGE
+    features |= ToMask(ProductFeature::STORAGE);
+#endif
 
     return features;
 }

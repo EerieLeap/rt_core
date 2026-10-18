@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory_resource>
 #include <cstdint>
+#include <memory_resource>
 #include <string>
 #include <vector>
 
@@ -23,17 +23,17 @@ struct CanChannelConfiguration {
     uint32_t data_bitrate = 0;
     std::pmr::vector<std::shared_ptr<CanMessageConfiguration>> message_configurations;
 
-    CanChannelConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : message_configurations(alloc) {}
+    CanChannelConfiguration(std::allocator_arg_t, allocator_type alloc) :
+        message_configurations(alloc) {}
 
     CanChannelConfiguration(const CanChannelConfiguration&) = delete;
-	CanChannelConfiguration& operator=(const CanChannelConfiguration&) noexcept = default;
-	CanChannelConfiguration& operator=(CanChannelConfiguration&&) noexcept = default;
-	CanChannelConfiguration(CanChannelConfiguration&&) noexcept = default;
-	~CanChannelConfiguration() = default;
+    CanChannelConfiguration& operator=(const CanChannelConfiguration&) noexcept = default;
+    CanChannelConfiguration& operator=(CanChannelConfiguration&&) noexcept = default;
+    CanChannelConfiguration(CanChannelConfiguration&&) noexcept = default;
+    ~CanChannelConfiguration() = default;
 
-    CanChannelConfiguration(CanChannelConfiguration&& other, allocator_type alloc)
-        : type(other.type),
+    CanChannelConfiguration(CanChannelConfiguration&& other, allocator_type alloc) :
+        type(other.type),
         is_extended_id(other.is_extended_id),
         bus_channel(other.bus_channel),
         bitrate(other.bitrate),

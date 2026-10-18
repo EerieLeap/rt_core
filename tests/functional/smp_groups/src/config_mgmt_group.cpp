@@ -7,17 +7,17 @@
 #include <zephyr/sys/crc.h>
 #include <zephyr/ztest.h>
 
-#include "subsys/threading/work_queue_thread.h"
 #include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/configuration_domain/smp/config_mgmt_group.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "smp_groups_test_support.h"
 
 using namespace smp_groups_test;
 
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::configuration_domain::smp::ConfigMgmtGroup;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 using Command = ConfigMgmtGroup::Command;
 using Error = ConfigMgmtGroup::Error;
@@ -40,8 +40,10 @@ uint8_t Id(Command command) {
 
 void AssertError(const Response& response, Error error) {
     zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::CONFIG));
-    zassert_equal(response.error.value_or(0), std::to_underlying(error),
-        "Expected error %u, got %u", std::to_underlying(error), response.error.value_or(0));
+    zassert_equal(
+        response.error.value_or(0), std::to_underlying(error), "Expected error %u, got %u", std::to_underlying(error),
+        response.error.value_or(0)
+    );
 }
 
 // What the service's stored handler saw: the type and the thread, in order.
@@ -54,7 +56,9 @@ struct Reports {
     k_mutex lock;
     std::vector<Entry> entries;
 
-    Reports() { k_mutex_init(&lock); }
+    Reports() {
+        k_mutex_init(&lock);
+    }
 
     std::vector<Entry> Get() {
         k_mutex_lock(&lock, K_FOREVER);
@@ -83,7 +87,7 @@ public:
         configuration_service->RegisterCborConfigurationManager(ConfigurationService::Type::Ui, ui, UI_MAX_SIZE);
         configuration_service->RegisterConfigurationStoredHandler([reports = reports](ConfigurationService::Type type) {
             k_mutex_lock(&reports->lock, K_FOREVER);
-            reports->entries.push_back({type, k_current_get()});
+            reports->entries.push_back({ type, k_current_get() });
             k_mutex_unlock(&reports->lock);
         });
 
@@ -103,11 +107,18 @@ public:
     }
 
     Response ReadChunk(uint32_t type, uint32_t offset) {
-        return client.Read(SmpGroupId::CONFIG, Id(Command::READ), CborMap().Put("type", type).Put("off", offset).Build());
+        return client.Read(
+            SmpGroupId::CONFIG, Id(Command::READ), CborMap().Put("type", type).Put("off", offset).Build()
+        );
     }
 
-    Response WriteFirst(uint32_t type, std::span<const uint8_t> chunk, uint32_t length, uint32_t crc,
-        std::optional<uint32_t> token = std::nullopt) {
+    Response WriteFirst(
+        uint32_t type,
+        std::span<const uint8_t> chunk,
+        uint32_t length,
+        uint32_t crc,
+        std::optional<uint32_t> token = std::nullopt
+    ) {
 
         CborMap body;
         body.Put("type", type).Put("off", 0).Put("len", length).Put("crc", crc).Put("data", chunk);
@@ -118,8 +129,10 @@ public:
     }
 
     Response WriteNext(uint32_t type, uint32_t offset, uint32_t token, std::span<const uint8_t> chunk) {
-        return client.Write(SmpGroupId::CONFIG, Id(Command::WRITE),
-            CborMap().Put("type", type).Put("off", offset).Put("tok", token).Put("data", chunk).Build());
+        return client.Write(
+            SmpGroupId::CONFIG, Id(Command::WRITE),
+            CborMap().Put("type", type).Put("off", offset).Put("tok", token).Put("data", chunk).Build()
+        );
     }
 
     // Returns the final response.
@@ -270,7 +283,9 @@ ZTEST_F(smp_config_group, test_chunked_write_applies_the_configuration) {
     zassert_not_equal(first.Value("tok"), 0);
 
     const uint32_t token = first.Value("tok");
-    auto second = harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE));
+    auto second = harness.WriteNext(
+        CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE)
+    );
     zassert_true(second.IsOk());
     zassert_equal(harness.canbus->apply_count, 0, "Nothing is applied before the last chunk");
 
@@ -373,10 +388,12 @@ ZTEST_F(smp_config_group, test_a_repeated_first_request_gets_the_sessions_token)
     zassert_equal(repeated.Value("tok"), first.Value("tok"));
 
     const uint32_t token = repeated.Value("tok");
-    zassert_true(harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token,
-        std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE)).IsOk());
-    zassert_true(harness.WriteNext(CANBUS, 2 * WRITE_CHUNK_SIZE, token,
-        std::span(data).subspan(2 * WRITE_CHUNK_SIZE)).IsOk());
+    zassert_true(harness
+            .WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE))
+            .IsOk());
+    zassert_true(
+        harness.WriteNext(CANBUS, 2 * WRITE_CHUNK_SIZE, token, std::span(data).subspan(2 * WRITE_CHUNK_SIZE)).IsOk()
+    );
     zassert_equal(harness.canbus->apply_count, 1);
     zassert_true(harness.canbus->stored == data);
 }
@@ -398,8 +415,11 @@ ZTEST_F(smp_config_group, test_only_an_exact_repeat_of_the_first_request_gets_th
     AssertError(harness.WriteFirst(UI, first_chunk, data.size(), Crc(data)), Error::BUSY);
 
     const uint32_t token = first.Value("tok");
-    zassert_true(harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token,
-        std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE)).IsOk(), "The session is untouched");
+    zassert_true(
+        harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE))
+            .IsOk(),
+        "The session is untouched"
+    );
     AssertError(harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data)), Error::BUSY);
 }
 
@@ -410,10 +430,13 @@ ZTEST_F(smp_config_group, test_wrong_token_is_rejected) {
     auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
     const uint32_t token = first.Value("tok");
 
-    AssertError(harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token + 1, std::span(data).subspan(WRITE_CHUNK_SIZE, 100)),
-        Error::BAD_TOKEN);
-    AssertError(harness.WriteNext(UI, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, 100)),
-        Error::BAD_TOKEN);
+    AssertError(
+        harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token + 1, std::span(data).subspan(WRITE_CHUNK_SIZE, 100)),
+        Error::BAD_TOKEN
+    );
+    AssertError(
+        harness.WriteNext(UI, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, 100)), Error::BAD_TOKEN
+    );
 }
 
 ZTEST_F(smp_config_group, test_wrong_offset_reports_where_to_resume) {
@@ -449,8 +472,10 @@ ZTEST_F(smp_config_group, test_idle_session_times_out) {
 
     k_msleep(CONFIG_EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS + 100);
 
-    AssertError(harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, 100)),
-        Error::BAD_TOKEN);
+    AssertError(
+        harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, 100)),
+        Error::BAD_TOKEN
+    );
     zassert_true(harness.WriteAll(UI, Pattern(100, 3), Crc(Pattern(100, 3))).IsOk(), "Another client may write now");
 }
 
@@ -477,8 +502,10 @@ ZTEST_F(smp_config_group, test_a_write_reports_its_type_from_the_configuration_q
     zassert_equal(reports[0].type, ConfigurationService::Type::Canbus);
     zassert_equal(reports[1].type, ConfigurationService::Type::Ui);
     for(const auto& report : reports) {
-        zassert_equal(report.thread, k_work_queue_thread_get(harness.work_queue->GetWorkQueue()),
-            "The report runs on the thread that applied the write");
+        zassert_equal(
+            report.thread, k_work_queue_thread_get(harness.work_queue->GetWorkQueue()),
+            "The report runs on the thread that applied the write"
+        );
     }
 }
 

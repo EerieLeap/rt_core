@@ -4,22 +4,22 @@
 #include <zephyr/ztest.h>
 
 #ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
-#include <array>
-#include <string_view>
+    #include <array>
+    #include <string_view>
 
-#include "subsys/assets/asset_kind.h"
-#include "subsys/assets/asset_store.h"
-#include "subsys/assets/assets_manager.h"
-#include "subsys/assets/smp/assets_mgmt_group.h"
+    #include "subsys/assets/asset_kind.h"
+    #include "subsys/assets/asset_store.h"
+    #include "subsys/assets/assets_manager.h"
+    #include "subsys/assets/smp/assets_mgmt_group.h"
 #endif
-#include "subsys/threading/work_queue_thread.h"
 #include "domain/configuration_domain/services/configuration_service.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "controllers/management_controller.h"
 
 #include "smp_groups_test_support.h"
 #ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
-#include "assets_test_support.h"
+    #include "assets_test_support.h"
 #endif
 
 using namespace smp_groups_test;
@@ -31,10 +31,10 @@ using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::assets::AssetStore;
 using eerie_leap::subsys::assets::smp::AssetsMgmtGroup;
 #endif
-using eerie_leap::domain::system_domain::smp::FilesMgmtGroup;
-using eerie_leap::domain::system_domain::models::SensorCapabilities;
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
+using eerie_leap::domain::system_domain::models::SensorCapabilities;
+using eerie_leap::domain::system_domain::smp::FilesMgmtGroup;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 namespace {
 
@@ -50,10 +50,13 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
 
     auto configuration_service = std::make_shared<ConfigurationService>();
     configuration_service->RegisterCborConfigurationManager(
-        ConfigurationService::Type::Ui, std::make_shared<FakeConfigurationManager>());
+        ConfigurationService::Type::Ui, std::make_shared<FakeConfigurationManager>()
+    );
 
-    ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER,
-        SensorCapabilities{ .adc_channels = 0, .gpio_channels = 1, .sensors_max = 64 });
+    ManagementController controller(
+        configuration_service, work_queue, nullptr, BUILD_NUMBER,
+        SensorCapabilities{ .adc_channels = 0, .gpio_channels = 1, .sensors_max = 64 }
+    );
     zassert_equal(controller.Initialize(), 0);
 
     SmpTestClient client;
@@ -88,12 +91,14 @@ ZTEST(management_controller, test_serves_the_files_group) {
         const auto response = client.Read(SmpGroupId::FILES, list, request);
 
         zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::FILES));
-        zassert_equal(response.error.value_or(0), std::to_underlying(FilesMgmtGroup::Error::NO_CARD),
-            "Served without an SD service, to say there is no card");
+        zassert_equal(
+            response.error.value_or(0), std::to_underlying(FilesMgmtGroup::Error::NO_CARD),
+            "Served without an SD service, to say there is no card"
+        );
     }
 
     auto card = std::make_shared<FakeFsService>();
-    card->directories["scripts"] = {{.name = "oil.lua", .size = 120}};
+    card->directories["scripts"] = { { .name = "oil.lua", .size = 120 } };
 
     ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt, card);
     zassert_equal(controller.Initialize(), 0);
@@ -119,16 +124,18 @@ ZTEST(management_controller, test_serves_the_assets_group) {
     volume->DeleteRecursive();
 
     // A provider keeps the span of its extensions, so they are in static storage.
-    static constexpr std::array<std::string_view, 1> extensions = {".png"};
+    static constexpr std::array<std::string_view, 1> extensions = { ".png" };
     auto registry = std::make_shared<AssetsManager>();
-    zassert_true(registry->Register({
-        .kind = AssetKind::IMAGES,
-        .name = "images",
-        .store = std::make_shared<AssetStore>(volume, "images"),
-        .extensions = extensions,
-        .access = eerie_leap::subsys::assets::ToMask(eerie_leap::subsys::assets::AssetAccess::READ),
-        .max_size = 0,
-    }));
+    zassert_true(registry->Register(
+        {
+            .kind = AssetKind::IMAGES,
+            .name = "images",
+            .store = std::make_shared<AssetStore>(volume, "images"),
+            .extensions = extensions,
+            .access = eerie_leap::subsys::assets::ToMask(eerie_leap::subsys::assets::AssetAccess::READ),
+            .max_size = 0,
+        }
+    ));
 
     const Bytes data = Pattern(40, 7);
     zassert_true(volume->WriteFile("images/logo.png", data.data(), data.size()));
@@ -136,8 +143,9 @@ ZTEST(management_controller, test_serves_the_assets_group) {
     auto configuration_service = std::make_shared<ConfigurationService>();
 
     {
-        ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt,
-            nullptr, registry);
+        ManagementController controller(
+            configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt, nullptr, registry
+        );
         zassert_equal(controller.Initialize(), 0);
 
         SmpTestClient client;
@@ -149,16 +157,23 @@ ZTEST(management_controller, test_serves_the_assets_group) {
         zassert_str_equal(kinds.entry_texts[0].at("name").c_str(), "images");
         zassert_true(kinds.entry_flags[0].at("avail"));
 
-        const auto listing = client.Read(SmpGroupId::ASSETS, std::to_underlying(AssetsMgmtGroup::Command::LIST),
-            CborMap().Put("kind", static_cast<uint32_t>(AssetKind::IMAGES)).Build());
+        const auto listing = client.Read(
+            SmpGroupId::ASSETS, std::to_underlying(AssetsMgmtGroup::Command::LIST),
+            CborMap().Put("kind", static_cast<uint32_t>(AssetKind::IMAGES)).Build()
+        );
         zassert_true(listing.IsOk());
         zassert_equal(listing.entries.size(), 1);
         zassert_str_equal(listing.entry_texts[0].at("name").c_str(), "logo.png");
         zassert_equal(listing.entries[0].at("size"), data.size());
 
-        const auto chunk = client.Read(SmpGroupId::ASSETS, std::to_underlying(AssetsMgmtGroup::Command::READ),
-            CborMap().Put("kind", static_cast<uint32_t>(AssetKind::IMAGES)).PutText("name", "logo.png").Put("off", 0)
-                .Build());
+        const auto chunk = client.Read(
+            SmpGroupId::ASSETS, std::to_underlying(AssetsMgmtGroup::Command::READ),
+            CborMap()
+                .Put("kind", static_cast<uint32_t>(AssetKind::IMAGES))
+                .PutText("name", "logo.png")
+                .Put("off", 0)
+                .Build()
+        );
         zassert_true(chunk.IsOk());
         zassert_true(chunk.bytes.at("data") == data);
     }

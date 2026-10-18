@@ -25,9 +25,13 @@ constexpr int FILL_ROUNDS = 16;
 struct GuardedBuffer {
     std::array<uint8_t, GUARD_LEN + MAX_PAYLOAD + GUARD_LEN> storage;
 
-    GuardedBuffer() { storage.fill(GUARD); }
+    GuardedBuffer() {
+        storage.fill(GUARD);
+    }
 
-    uint8_t* payload() { return storage.data() + GUARD_LEN; }
+    uint8_t* payload() {
+        return storage.data() + GUARD_LEN;
+    }
 
     bool GuardsIntact(size_t payload_len) const {
         for(size_t i = 0; i < GUARD_LEN; ++i) {
@@ -67,7 +71,7 @@ BitCoverage<T> SampleBits(bool secure = false) {
 // Returns the first payload index never written, or MAX_PAYLOAD when all of them were.
 size_t FindUnwrittenByte(bool secure) {
     GuardedBuffer buffer;
-    std::array<bool, MAX_PAYLOAD> written {};
+    std::array<bool, MAX_PAYLOAD> written{};
 
     // A byte landing on the guard value in every round is a ~2^-128 event.
     for(int round = 0; round < FILL_ROUNDS; ++round) {
@@ -128,7 +132,7 @@ ZTEST(rng, test_Get_secure_writes_every_requested_byte) {
 }
 
 ZTEST(rng, test_Get_does_not_write_outside_the_requested_length) {
-    constexpr size_t lengths[] = {1, 2, 3, 4, 5, 7, 8, 15, 16, 33, MAX_PAYLOAD};
+    constexpr size_t lengths[] = { 1, 2, 3, 4, 5, 7, 8, 15, 16, 33, MAX_PAYLOAD };
 
     for(auto length : lengths) {
         GuardedBuffer buffer;

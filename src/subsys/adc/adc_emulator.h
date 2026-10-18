@@ -2,9 +2,9 @@
 
 #ifdef CONFIG_ADC_EMUL
 
-#include <vector>
+    #include <vector>
 
-#include "adc.h"
+    #include "adc.h"
 
 namespace eerie_leap::subsys::adc {
 
@@ -15,8 +15,9 @@ private:
     std::vector<bool> externally_driven_;
 
 public:
-    explicit AdcEmulator(const AdcDTInfo& adc_dt_info)
-        : Adc(adc_dt_info), externally_driven_(adc_dt_info.channel_configs.size(), false) {}
+    explicit AdcEmulator(const AdcDTInfo& adc_dt_info) :
+        Adc(adc_dt_info),
+        externally_driven_(adc_dt_info.channel_configs.size(), false) {}
 
     void Sample(const AdcSampleRequest& request) noexcept override;
 
@@ -28,6 +29,6 @@ public:
     void OverrideCapabilities(const AdcCapabilities& capabilities);
 };
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc
 
 #endif // CONFIG_ADC_EMUL

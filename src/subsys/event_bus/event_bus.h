@@ -23,9 +23,9 @@ namespace eerie_leap::subsys::event_bus {
 
 namespace threading = eerie_leap::subsys::threading;
 
+using eerie_leap::utilities::memory::Mrm;
 using threading::ScopedMutex;
 using threading::WorkQueueThread;
-using eerie_leap::utilities::memory::Mrm;
 
 // Transport shared by one or more channels: owns the worker thread that drains their
 // queues. The bus never sees the events it carries, so channels whose event and
@@ -37,7 +37,7 @@ private:
     std::string bus_name_;
 
     EventChannelSlots channels_{};
-    std::atomic<size_t> channel_count_{0};
+    std::atomic<size_t> channel_count_{ 0 };
     k_mutex channels_mutex_;
 
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
@@ -64,18 +64,13 @@ public:
     void Wake() override;
 };
 
-inline EventBus::EventBus(std::string bus_name, int k_stack_size, int priority)
-    : bus_name_(std::move(bus_name)) {
+inline EventBus::EventBus(std::string bus_name, int k_stack_size, int priority) :
+    bus_name_(std::move(bus_name)) {
 
     k_sem_init(&processing_semaphore_, 1, 1);
     k_mutex_init(&channels_mutex_);
 
-    work_queue_thread_ = std::make_unique<WorkQueueThread>(
-        bus_name_,
-        k_stack_size,
-        priority,
-        true,
-        Mrm::GetExtPmr());
+    work_queue_thread_ = std::make_unique<WorkQueueThread>(bus_name_, k_stack_size, priority, true, Mrm::GetExtPmr());
 
     Initialize();
 }
@@ -111,16 +106,19 @@ inline int EventBus::RegisterChannel(IEventChannel& channel) {
     // Reported here as well as returned: registration happens in a bus constructor,
     // where the return value has nowhere to go and a miss would be silent.
     if(bound != nullptr) {
-        LOG_ERR("'%s' cannot register channel '%s', it already belongs to another bus",
-            bus_name_.c_str(), channel.GetName());
+        LOG_ERR(
+            "'%s' cannot register channel '%s', it already belongs to another bus", bus_name_.c_str(), channel.GetName()
+        );
 
         return -EEXIST;
     }
 
     size_t count = channel_count_.load(std::memory_order_relaxed);
     if(count == k_max_bus_channels) {
-        LOG_ERR("'%s' cannot register channel '%s', all %u slots are taken",
-            bus_name_.c_str(), channel.GetName(), static_cast<unsigned>(k_max_bus_channels));
+        LOG_ERR(
+            "'%s' cannot register channel '%s', all %u slots are taken", bus_name_.c_str(), channel.GetName(),
+            static_cast<unsigned>(k_max_bus_channels)
+        );
 
         return -ENOSPC;
     }
@@ -141,17 +139,17 @@ inline void EventBus::Wake() {
 
 inline threading::WorkQueueTaskResult EventBus::ProcessEventWork(EventBusTask* task) {
     if(k_sem_take(task->processing_semaphore, K_NO_WAIT) != 0) {
-        return {
-            .reschedule = false
-        };
+        return { .reschedule = false };
     }
 
     // A throw from a dispatch would otherwise keep the semaphore forever and wedge
     // the bus for the rest of the run.
     struct SemaphoreRelease {
         k_sem* sem;
-        ~SemaphoreRelease() { k_sem_give(sem); }
-    } release{task->processing_semaphore};
+        ~SemaphoreRelease() {
+            k_sem_give(sem);
+        }
+    } release{ task->processing_semaphore };
 
     size_t count = task->channel_count->load(std::memory_order_acquire);
 
@@ -166,9 +164,7 @@ inline threading::WorkQueueTaskResult EventBus::ProcessEventWork(EventBusTask* t
         }
     }
 
-    return {
-        .reschedule = false
-    };
+    return { .reschedule = false };
 }
 
 } // namespace eerie_leap::subsys::event_bus

@@ -4,15 +4,15 @@
 #include <cstdint>
 #include <vector>
 
-#include "subsys/smp/smp_header.h"
 #include "subsys/smp/can/smp_can_framer.h"
+#include "subsys/smp/smp_header.h"
 
 namespace smp_test {
 
 using eerie_leap::subsys::smp::SmpHeader;
 using eerie_leap::subsys::smp::SmpOperation;
-using eerie_leap::subsys::smp::can::SmpCanFramer;
 using eerie_leap::subsys::smp::can::SmpCanFrameFormat;
+using eerie_leap::subsys::smp::can::SmpCanFramer;
 
 using Frame = std::vector<uint8_t>;
 

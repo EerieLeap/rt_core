@@ -5,7 +5,7 @@
 namespace eerie_leap::subsys::mdf {
 
 MdfHelpers::ChannelDataType MdfHelpers::ToMdf4ChannelDataType(MdfDataType data_type) {
-    switch (data_type) {
+    switch(data_type) {
         case MdfDataType::Int32:
             return { mdf4::ChannelBlock::DataType::SignedIntegerLe, sizeof(int32_t) * 8 };
         case MdfDataType::Int64:

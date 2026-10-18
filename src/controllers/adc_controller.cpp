@@ -21,11 +21,12 @@ AdcController::AdcController(
     std::shared_ptr<IFsService> fs_service,
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
     std::shared_ptr<ConfigurationService> configuration_service,
-    std::shared_ptr<ITimeService> time_service)
-    : fs_service_(std::move(fs_service)),
-      config_work_queue_thread_(std::move(config_work_queue_thread)),
-      configuration_service_(std::move(configuration_service)),
-      time_service_(std::move(time_service)) {}
+    std::shared_ptr<ITimeService> time_service
+) :
+    fs_service_(std::move(fs_service)),
+    config_work_queue_thread_(std::move(config_work_queue_thread)),
+    configuration_service_(std::move(configuration_service)),
+    time_service_(std::move(time_service)) {}
 
 // The group dispatches to the calibration service, so it is unregistered before the service goes.
 AdcController::~AdcController() {
@@ -45,13 +46,16 @@ int AdcController::Initialize() {
     adc_manager_ = std::move(adc_manager);
 
     auto cbor_adc_config_service = std::make_unique<config_services::CborConfigurationService<CborAdcConfig>>(
-        ADC_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_);
+        ADC_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
+    );
     adc_configuration_manager_ = std::make_shared<AdcConfigurationManager>(
-        std::move(cbor_adc_config_service), adc_manager_);
+        std::move(cbor_adc_config_service), adc_manager_
+    );
 
     if(configuration_service_ != nullptr)
         configuration_service_->RegisterCborConfigurationManager(
-            ConfigurationService::Type::Adc, adc_configuration_manager_);
+            ConfigurationService::Type::Adc, adc_configuration_manager_
+        );
 
     InitializeCalibration();
 
@@ -84,7 +88,8 @@ void AdcController::InitializeCalibration() {
 
 #ifdef CONFIG_EERIE_LEAP_SMP
     calibration_mgmt_group_ = std::make_unique<CalibrationMgmtGroup>(
-        calibration_service_, adc_manager_->GetChannelCount());
+        calibration_service_, adc_manager_->GetChannelCount()
+    );
 #endif
 
     if(is_paused_service_registered_)

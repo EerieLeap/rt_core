@@ -30,7 +30,9 @@ namespace {
 uint64_t GetHeaderSize(LogWriterRig& rig) {
     MemoryStreamBuf stream;
     auto logger = rig.logger_factory();
-    zassert_true(logger->StartLogging(stream, rig.time_service->GetCurrentTime()), "the header could not be written to memory");
+    zassert_true(
+        logger->StartLogging(stream, rig.time_service->GetCurrentTime()), "the header could not be written to memory"
+    );
 
     return logger->GetBytesWritten();
 }
@@ -59,12 +61,15 @@ template<typename TCondition>
 bool PublishFramesUntil(LogWriterRig& rig, const Sensor& sensor, TCondition done, int64_t timeout_ms) {
     uint8_t sequence = 0;
 
-    return WaitFor([&] {
-        for(int i = 0; i < 2; i++)
-            PublishFrame(rig, sensor, sequence++, rig.time_service->GetCurrentTime());
+    return WaitFor(
+        [&] {
+            for(int i = 0; i < 2; i++)
+                PublishFrame(rig, sensor, sequence++, rig.time_service->GetCurrentTime());
 
-        return done();
-    }, timeout_ms);
+            return done();
+        },
+        timeout_ms
+    );
 }
 
 } // namespace
@@ -78,11 +83,27 @@ ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
 
     supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "Start must publish StatusUpdated");
-    zassert_true(WaitFor([&] { return supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return supervisor.IsActive();
+            },
+            1000
+        ),
+        "IsActive() must follow the event"
+    );
 
     supervisor.RequestStop(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(2), "Stop must publish StatusUpdated");
-    zassert_true(WaitFor([&] { return !supervisor.IsActive(); }, 1000), "IsActive() must follow the event");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return !supervisor.IsActive();
+            },
+            1000
+        ),
+        "IsActive() must follow the event"
+    );
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     k_msleep(100);
 
@@ -117,11 +138,20 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
 
     FillVolume(*rig.fs_service, filler_path);
 
-    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] {
-        return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
-    }, 5000), "a session on a full volume must end and be stopped");
-    zassert_equal(first_probe->stop_thread.load(), ConfigQueueThread(rig),
-        "the stop must run on the configuration work queue, not the writer thread");
+    zassert_true(
+        PublishFramesUntil(
+            rig, *sensors[1],
+            [&] {
+                return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
+            },
+            5000
+        ),
+        "a session on a full volume must end and be stopped"
+    );
+    zassert_equal(
+        first_probe->stop_thread.load(), ConfigQueueThread(rig),
+        "the stop must run on the configuration work queue, not the writer thread"
+    );
 
     zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
     const auto events = recorder.GetEvents();
@@ -160,21 +190,33 @@ ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
     auto& supervisor = AttachSupervisor(rig);
 
     auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
-    rig.log_writer_service->SetLoggerFactory([probe] { return probe; });
+    rig.log_writer_service->SetLoggerFactory([probe] {
+        return probe;
+    });
     probe->refuse_next_reading = true;
 
     PublishValue(rig, *sensors[0], 3, rig.time_service->GetCurrentTime());
     supervisor.RequestStart(ILoggingControl::kAllUnits);
 
     zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
-    zassert_true(WaitFor([&] {
-        return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
-    }, 2000), "the failed session must be stopped by the supervisor");
-    zassert_equal(probe->stop_thread.load(), ConfigQueueThread(rig),
-        "the stop must run on the configuration work queue, not the writer thread");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
+            },
+            2000
+        ),
+        "the failed session must be stopped by the supervisor"
+    );
+    zassert_equal(
+        probe->stop_thread.load(), ConfigQueueThread(rig),
+        "the stop must run on the configuration work queue, not the writer thread"
+    );
 
     k_msleep(350);
-    zassert_equal(probe->tick_times.size(), 1, "no tick may follow the one that failed (%zu ticks)", probe->tick_times.size());
+    zassert_equal(
+        probe->tick_times.size(), 1, "no tick may follow the one that failed (%zu ticks)", probe->tick_times.size()
+    );
 
     const auto stats = rig.log_writer_service->GetStats();
     zassert_equal(stats.write_errors, 1, "the refused record is one error (got %u)", stats.write_errors);
@@ -229,7 +271,9 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
 
     const auto stats = rig.log_writer_service->GetStats();
     zassert_equal(stats.write_errors, 0, "nothing may fail on an empty volume");
-    zassert_true(stats.rotations >= 2, "1.2 s of frames over a 1 KiB limit must rotate at least twice (got %u)", stats.rotations);
+    zassert_true(
+        stats.rotations >= 2, "1.2 s of frames over a 1 KiB limit must rotate at least twice (got %u)", stats.rotations
+    );
     zassert_equal(stats.frames, published_frames, "every frame is logged across the files (got %u)", stats.frames);
     zassert_false(rig.log_writer_service->HasFailed(), "a rotation is no failure");
 
@@ -249,7 +293,9 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
         total_bytes += files[i].content.size();
 
         if(i > 0)
-            zassert_true(files[i].start_time_ns > files[i - 1].start_time_ns, "file %zu must start after file %zu", i, i - 1);
+            zassert_true(
+                files[i].start_time_ns > files[i - 1].start_time_ns, "file %zu must start after file %zu", i, i - 1
+            );
 
         const auto records = ReadDataRecords(files[i].content);
         for(size_t j = 0; j < records.frame_times.size(); j++) {
@@ -261,12 +307,16 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
         }
     }
 
-    zassert_equal(sequences.size(), published_frames, "every frame must be in exactly one file (found %zu)", sequences.size());
+    zassert_equal(
+        sequences.size(), published_frames, "every frame must be in exactly one file (found %zu)", sequences.size()
+    );
     for(size_t i = 0; i < sequences.size(); i++)
         zassert_equal(sequences[i], i, "frame %zu is missing, repeated or out of order across the rotations", i);
 
-    zassert_equal(stats.bytes, total_bytes, "the byte count must cover every file (%llu, files %llu)",
-        static_cast<unsigned long long>(stats.bytes), static_cast<unsigned long long>(total_bytes));
+    zassert_equal(
+        stats.bytes, total_bytes, "the byte count must cover every file (%llu, files %llu)",
+        static_cast<unsigned long long>(stats.bytes), static_cast<unsigned long long>(total_bytes)
+    );
 }
 
 // The rotation closes the full file and opens the next one on the writer thread: the full file stops
@@ -286,9 +336,16 @@ ZTEST(log_writer_lifecycle, test_IsOpenFileFollowsARotation) {
     zassert_true(rig.log_writer_service->IsOpenFile(first_path), "the first file is open");
 
     // Published until the first rotation, then no more: a second one takes another kilobyte.
-    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] {
-        return rig.log_writer_service->GetStats().rotations >= 1;
-    }, 5000), "the frames must reach the size limit");
+    zassert_true(
+        PublishFramesUntil(
+            rig, *sensors[1],
+            [&] {
+                return rig.log_writer_service->GetStats().rotations >= 1;
+            },
+            5000
+        ),
+        "the frames must reach the size limit"
+    );
 
     const auto files = rig.fs_service->ListFiles(directory);
     zassert_equal(files.size(), 2, "one rotation leaves two files (found %zu)", files.size());
@@ -325,11 +382,20 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
     zassert_true(recorder.WaitForEventCount(1), "the start must succeed on a volume with the minimum free");
     FillVolume(*rig.fs_service, filler_path, 96 * 1024);
 
-    zassert_true(PublishFramesUntil(rig, *sensors[1], [&] {
-        return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
-    }, 5000), "a rotation without the minimum free must end the session, and the supervisor stop it");
-    zassert_equal(probes->Current()->stop_thread.load(), ConfigQueueThread(rig),
-        "the stop must run on the configuration work queue");
+    zassert_true(
+        PublishFramesUntil(
+            rig, *sensors[1],
+            [&] {
+                return rig.log_writer_service->HasFailed() && rig.log_writer_service->IsStopped();
+            },
+            5000
+        ),
+        "a rotation without the minimum free must end the session, and the supervisor stop it"
+    );
+    zassert_equal(
+        probes->Current()->stop_thread.load(), ConfigQueueThread(rig),
+        "the stop must run on the configuration work queue"
+    );
 
     zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
     const auto events = recorder.GetEvents();
@@ -383,12 +449,14 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), 3, "one file per start (found %zu)", files.size());
 
-    const char* intervals[] = {"100", "50", "50"};
+    const char* intervals[] = { "100", "50", "50" };
     for(size_t i = 0; i < files.size(); i++) {
         AssertFinalizedFile(files[i].content, files[i].path.c_str());
 
         const std::string property = std::string("<e name=\"logging_interval_ms\">") + intervals[i] + "</e>";
-        zassert_true(ContainsText(files[i].content, property), "file %zu must be written for a %s ms interval", i, intervals[i]);
+        zassert_true(
+            ContainsText(files[i].content, property), "file %zu must be written for a %s ms interval", i, intervals[i]
+        );
     }
 }
 
@@ -408,10 +476,14 @@ ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
     const auto stats = rig.log_writer_service->GetStats();
-    zassert_equal(stats.frames, SensorLimits::kRawCanQueueSize, "the queue holds %zu frames (logged %u)",
-        SensorLimits::kRawCanQueueSize, stats.frames);
-    zassert_equal(stats.frames_dropped, extra_frames, "the frames past the queue size are dropped (counted %u)",
-        stats.frames_dropped);
+    zassert_equal(
+        stats.frames, SensorLimits::kRawCanQueueSize, "the queue holds %zu frames (logged %u)",
+        SensorLimits::kRawCanQueueSize, stats.frames
+    );
+    zassert_equal(
+        stats.frames_dropped, extra_frames, "the frames past the queue size are dropped (counted %u)",
+        stats.frames_dropped
+    );
 
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
@@ -429,27 +501,37 @@ ZTEST(log_writer_lifecycle, test_StopWaitsForARunningTickAndFinalizes) {
     auto rig = MakeLogWriterRig(sensors);
 
     auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
-    rig.log_writer_service->SetLoggerFactory([probe] { return probe; });
+    rig.log_writer_service->SetLoggerFactory([probe] {
+        return probe;
+    });
     probe->hold_next_reading = true;
 
     PublishValue(rig, *sensors[0], 7, rig.time_service->GetCurrentTime());
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    zassert_equal(k_sem_take(&probe->held_reading_started, K_SECONDS(2)), 0, "the first tick must log the published value");
+    zassert_equal(
+        k_sem_take(&probe->held_reading_started, K_SECONDS(2)), 0, "the first tick must log the published value"
+    );
 
     const int64_t stop_start_ms = k_uptime_get();
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
     const int64_t stop_ms = k_uptime_get() - stop_start_ms;
 
     zassert_true(probe->is_held_reading_done.load(), "Stop must not return before the running tick finished");
-    zassert_true(probe->stop_found_held_reading_done.load(), "the file must be finalized after the running tick finished");
-    zassert_true(stop_ms >= ProbeLogger::kHoldMs / 2, "Stop returned after %lld ms, before the tick could finish",
-        static_cast<long long>(stop_ms));
+    zassert_true(
+        probe->stop_found_held_reading_done.load(), "the file must be finalized after the running tick finished"
+    );
+    zassert_true(
+        stop_ms >= ProbeLogger::kHoldMs / 2, "Stop returned after %lld ms, before the tick could finish",
+        static_cast<long long>(stop_ms)
+    );
 
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
     AssertFinalizedFile(files[0].content, "the file");
 
     const auto records = ReadDataRecords(files[0].content);
-    zassert_equal(records.value_times.size(), 1, "the record of the running tick must be in the file (found %zu)",
-        records.value_times.size());
+    zassert_equal(
+        records.value_times.size(), 1, "the record of the running tick must be in the file (found %zu)",
+        records.value_times.size()
+    );
 }

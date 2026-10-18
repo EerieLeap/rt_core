@@ -1,32 +1,32 @@
 #include <algorithm>
+#include <cstdio>
 #include <exception>
 #include <string>
-#include <cstdio>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "subsys/random/rng.h"
 #include "subsys/threading/scoped_mutex.h"
 #include "utilities/string/path_helpers.h"
-#include "domain/logging_domain/event_bus/logging_events_channel.h"
 
 #include "log_file_naming.h"
 #include "log_writer_service.h"
 
 // Deadlines are absolute uptime ticks, which the kernel only takes with 64-bit timeouts.
 #ifndef CONFIG_TIMEOUT_64BIT
-#error "The log writer needs CONFIG_TIMEOUT_64BIT for absolute deadlines."
+    #error "The log writer needs CONFIG_TIMEOUT_64BIT for absolute deadlines."
 #endif
 
 namespace eerie_leap::domain::logging_domain::services {
 
 using namespace eerie_leap::subsys::random;
 using namespace eerie_leap::utilities::string;
-using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 LOG_MODULE_REGISTER(log_writer_service_logger);
 
@@ -39,13 +39,14 @@ LogWriterService::LogWriterService(
     std::shared_ptr<IFsService> fs_service,
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::shared_ptr<ITimeService> time_service,
-    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame)
-        : work_queue_thread_(nullptr),
-        work_queue_task_(std::nullopt),
-        fs_service_(std::move(fs_service)),
-        logging_configuration_manager_(std::move(logging_configuration_manager)),
-        time_service_(std::move(time_service)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)) {
+    std::shared_ptr<SensorReadingsFrame> sensor_readings_frame
+) :
+    work_queue_thread_(nullptr),
+    work_queue_task_(std::nullopt),
+    fs_service_(std::move(fs_service)),
+    logging_configuration_manager_(std::move(logging_configuration_manager)),
+    time_service_(std::move(time_service)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)) {
 
     k_mutex_init(&open_file_mutex_);
 }
@@ -60,10 +61,7 @@ void LogWriterService::SetSizeLimitsForTesting(uint64_t max_log_size_bytes, uint
 }
 
 bool LogWriterService::DoInitialize() {
-    work_queue_thread_ = std::make_unique<WorkQueueThread>(
-        "log_writer_service",
-        thread_stack_size_,
-        thread_priority_);
+    work_queue_thread_ = std::make_unique<WorkQueueThread>("log_writer_service", thread_stack_size_, thread_priority_);
 
     if(!work_queue_thread_->Initialize()) {
         LOG_ERR("Failed to initialize the log writer work queue.");
@@ -75,8 +73,11 @@ bool LogWriterService::DoInitialize() {
     task->sensor_readings_frame = sensor_readings_frame_;
 
     work_queue_task_ = work_queue_thread_->CreateTask(
-        [this](LogWriterTask* writer_task) { return ProcessTick(*writer_task); },
-        std::move(task));
+        [this](LogWriterTask* writer_task) {
+            return ProcessTick(*writer_task);
+        },
+        std::move(task)
+    );
 
     LOG_INF("Log writer service initialized.");
 
@@ -125,7 +126,8 @@ bool LogWriterService::DoStart() {
     // The frame queues raw CAN frames whether or not logging runs. Whatever it holds now predates
     // this file and would, at the first tick, crowd out the frames that arrive after the start.
     auto& task = *work_queue_task_.value().GetUserdata();
-    while(sensor_readings_frame_->TakeRawCanFrames(task.raw_readings, task.raw_frames) > 0) {}
+    while(sensor_readings_frame_->TakeRawCanFrames(task.raw_readings, task.raw_frames) > 0) {
+    }
 
     if(!OpenLogFile(time_service_->GetCurrentTime()))
         return false;
@@ -137,9 +139,11 @@ bool LogWriterService::DoStart() {
     task.stream_buf = fs_stream_buf_.get();
     task.interval_ticks = static_cast<int64_t>(k_ms_to_ticks_ceil64(static_cast<uint64_t>(interval_ms)));
     task.burst_interval_ticks = static_cast<int64_t>(
-        k_ms_to_ticks_ceil64(static_cast<uint64_t>(std::max(interval_ms / 4, MIN_BURST_INTERVAL_MS))));
+        k_ms_to_ticks_ceil64(static_cast<uint64_t>(std::max(interval_ms / 4, MIN_BURST_INTERVAL_MS)))
+    );
     task.max_log_size_bytes = max_log_size_bytes_override_.value_or(
-        static_cast<uint64_t>(logging_configuration->max_log_size_mb) * 1024 * 1024);
+        static_cast<uint64_t>(logging_configuration->max_log_size_mb) * 1024 * 1024
+    );
     task.is_rotation_due = false;
     task.stats = LogWriterStats{};
     task.closed_files_bytes = 0;
@@ -192,9 +196,7 @@ LogWriterStats LogWriterService::GetStats() const {
 }
 
 void LogWriterService::PublishStatus(bool is_active, LoggingStatusReason reason) {
-    LoggingEventsChannel::EventMessage event {
-        .type = LoggingEventType::StatusUpdated
-    };
+    LoggingEventsChannel::EventMessage event{ .type = LoggingEventType::StatusUpdated };
 
     event.payload.insert_or_assign(LoggingPayloadType::IsActive, is_active);
     if(!is_active)
@@ -217,9 +219,10 @@ bool LogWriterService::HasMinimumFreeSpace() const {
     if(free_bytes >= min_free_space_bytes_)
         return true;
 
-    LOG_ERR("%llu bytes free on the log volume, %llu needed.",
-        static_cast<unsigned long long>(free_bytes),
-        static_cast<unsigned long long>(min_free_space_bytes_));
+    LOG_ERR(
+        "%llu bytes free on the log volume, %llu needed.", static_cast<unsigned long long>(free_bytes),
+        static_cast<unsigned long long>(min_free_space_bytes_)
+    );
 
     return false;
 }
@@ -229,11 +232,9 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
 
     for(int i = 0; i < 10; i++) {
         auto new_file_path = LogFileNaming::GetFilePath(
-            LogFileNaming::LOGS_DIR,
-            CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX,
-            start_time,
-            Rng::Get<uint16_t>(),
-            logger_->GetFileExtension());
+            LogFileNaming::LOGS_DIR, CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX, start_time, Rng::Get<uint16_t>(),
+            logger_->GetFileExtension()
+        );
 
         if(!fs_service_->Exists(new_file_path.ToString())) {
             file_path_ = new_file_path;
@@ -252,9 +253,8 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
     try {
         // Write mode keeps the stream seekable, which the MDF4 logger needs to finalize the file.
         fs_stream_buf_ = std::make_unique<FsServiceStreamBuf>(
-            fs_service_.get(),
-            file_path_.ToString(),
-            FsServiceStreamBuf::OpenMode::Write);
+            fs_service_.get(), file_path_.ToString(), FsServiceStreamBuf::OpenMode::Write
+        );
     } catch(const std::exception& e) {
         LOG_ERR("Failed to open the log file %s: %s", file_path_.CStr(), e.what());
         fs_stream_buf_.reset();
@@ -426,8 +426,7 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
             }
         }
 
-        task.is_rotation_due = task.max_log_size_bytes > 0
-            && task.logger->GetBytesWritten() >= task.max_log_size_bytes;
+        task.is_rotation_due = task.max_log_size_bytes > 0 && task.logger->GetBytesWritten() >= task.max_log_size_bytes;
     } catch(const std::exception& e) {
         task.stats.write_errors++;
         LOG_ERR("Failed to write the log file; logging stops. %s", e.what());
@@ -443,9 +442,8 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
     // The frame counts from 0 again when processing restarts under a running writer (a CAN
     // reconfiguration restarts it without the writer).
     const uint32_t dropped_count = task.sensor_readings_frame->GetDroppedRawCanFrameCount();
-    task.stats.frames_dropped += dropped_count >= task.last_dropped_count
-        ? dropped_count - task.last_dropped_count
-        : dropped_count;
+    task.stats.frames_dropped += dropped_count >= task.last_dropped_count ? dropped_count - task.last_dropped_count
+                                                                          : dropped_count;
     task.last_dropped_count = dropped_count;
 
     task.stats.bytes = task.closed_files_bytes + task.logger->GetBytesWritten();
@@ -459,9 +457,11 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
     if(task.stats.frames_dropped > task.dropped_at_last_warning
         && now_ms - task.last_drop_warning_ms >= DROP_WARNING_PERIOD_MS) {
 
-        LOG_WRN("%u raw CAN frames dropped before the log writer drained them (%u since the start); "
+        LOG_WRN(
+            "%u raw CAN frames dropped before the log writer drained them (%u since the start); "
             "EERIE_LEAP_DOMAIN_SENSOR_RAW_CAN_QUEUE_SIZE is too small for the frame rate.",
-            task.stats.frames_dropped - task.dropped_at_last_warning, task.stats.frames_dropped);
+            task.stats.frames_dropped - task.dropped_at_last_warning, task.stats.frames_dropped
+        );
 
         task.dropped_at_last_warning = task.stats.frames_dropped;
         task.last_drop_warning_ms = now_ms;
@@ -471,10 +471,13 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
     if(now_ms - task.last_stats_log_ms >= CONFIG_EERIE_LEAP_LOG_STATS_LOG_PERIOD_S * 1000) {
         task.last_stats_log_ms = now_ms;
         const auto& stats = task.stats;
-        LOG_INF("Log writer: ticks %u, readings %u, frames %u (dropped %u), bytes %llu, writes %u, syncs %u, rotations %u, overruns %u, errors %u, tick last/max %u/%u us",
+        LOG_INF(
+            "Log writer: ticks %u, readings %u, frames %u (dropped %u), bytes %llu, writes %u, syncs %u, rotations %u, "
+            "overruns %u, errors %u, tick last/max %u/%u us",
             stats.ticks, stats.readings, stats.frames, stats.frames_dropped,
-            static_cast<unsigned long long>(stats.bytes), stats.stream_writes, stats.syncs,
-            stats.rotations, stats.overruns, stats.write_errors, stats.tick_last_us, stats.tick_max_us);
+            static_cast<unsigned long long>(stats.bytes), stats.stream_writes, stats.syncs, stats.rotations,
+            stats.overruns, stats.write_errors, stats.tick_last_us, stats.tick_max_us
+        );
     }
 #endif
 
@@ -496,10 +499,7 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
     if(!atomic_get(&task.is_running))
         return { .reschedule = false };
 
-    return {
-        .reschedule = true,
-        .delay = K_TIMEOUT_ABS_TICKS(task.next_deadline)
-    };
+    return { .reschedule = true, .delay = K_TIMEOUT_ABS_TICKS(task.next_deadline) };
 }
 
 } // namespace eerie_leap::domain::logging_domain::services

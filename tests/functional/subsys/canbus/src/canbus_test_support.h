@@ -4,10 +4,10 @@
 #include <memory>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
 #include "subsys/canbus/canbus.h"
@@ -30,17 +30,14 @@ inline void ResetLoopbackDevice(void*) {
 }
 
 // The loopback controller only echoes frames back when it is in loopback mode.
-inline CanbusConfig MakeConfig(
-    CanbusType type = CanbusType::CLASSICAL_CAN,
-    uint32_t bitrate = 500000,
-    uint32_t data_bitrate = 0) {
+inline CanbusConfig
+MakeConfig(CanbusType type = CanbusType::CLASSICAL_CAN, uint32_t bitrate = 500000, uint32_t data_bitrate = 0) {
 
     return CanbusConfig(LoopbackDevice(), type, bitrate, data_bitrate, CAN_MODE_LOOPBACK);
 }
 
-inline std::unique_ptr<Canbus> MakeRunningCanbus(
-    CanbusType type = CanbusType::CLASSICAL_CAN,
-    uint32_t bitrate = 500000) {
+inline std::unique_ptr<Canbus>
+MakeRunningCanbus(CanbusType type = CanbusType::CLASSICAL_CAN, uint32_t bitrate = 500000) {
 
     auto canbus = std::make_unique<Canbus>(MakeConfig(type, bitrate));
 

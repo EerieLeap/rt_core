@@ -1,18 +1,18 @@
-#include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
-#include <zephyr/drivers/display.h>
-#include <zephyr/logging/log.h>
 #include <zephyr/display/cfb.h>
+#include <zephyr/drivers/display.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
-#include "cfb_fonts.h"
 #include "cfb.h"
+#include "cfb_fonts.h"
 
 LOG_MODULE_REGISTER(cfb_logger);
 
 namespace eerie_leap::subsys::cfb {
 
-Cfb::Cfb(const device* display_dev)
-    : display_dev_(display_dev),
+Cfb::Cfb(const device* display_dev) :
+    display_dev_(display_dev),
     work_queue_thread_(nullptr),
     work_queue_task_(std::nullopt) {}
 
@@ -29,19 +29,19 @@ bool Cfb::Initialize() {
         return false;
     }
 
-    if (display_set_pixel_format(display_dev_, PIXEL_FORMAT_MONO10) != 0) {
+    if(display_set_pixel_format(display_dev_, PIXEL_FORMAT_MONO10) != 0) {
         LOG_ERR("Failed to set pixel format");
         return false;
-	}
+    }
 
-    if (cfb_framebuffer_init(display_dev_)) {
-		LOG_ERR("Framebuffer initialization failed!");
-		return false;
-	}
+    if(cfb_framebuffer_init(display_dev_)) {
+        LOG_ERR("Framebuffer initialization failed!");
+        return false;
+    }
 
-	cfb_framebuffer_clear(display_dev_, true);
+    cfb_framebuffer_clear(display_dev_, true);
 
-	display_blanking_off(display_dev_);
+    display_blanking_off(display_dev_);
     cfb_framebuffer_finalize(display_dev_);
 
     SetFont(0);
@@ -62,10 +62,7 @@ bool Cfb::Initialize() {
 }
 
 void Cfb::InitializeThread() {
-    work_queue_thread_ = std::make_unique<WorkQueueThread>(
-        "display_service",
-        thread_stack_size_,
-        thread_priority_);
+    work_queue_thread_ = std::make_unique<WorkQueueThread>("display_service", thread_stack_size_, thread_priority_);
     work_queue_thread_->Initialize();
 
     auto task = std::make_unique<CfbTask>();
@@ -87,11 +84,7 @@ WorkQueueTaskResult Cfb::ProcessWorkTask(CfbTask* task) {
 
     cfb_framebuffer_finalize(task->display_dev);
 
-
-    return {
-        .reschedule = is_animation_running,
-        .delay = K_MSEC(1000 / task->frame_rate)
-    };
+    return { .reschedule = is_animation_running, .delay = K_MSEC(1000 / task->frame_rate) };
 }
 
 bool Cfb::Flush() {
@@ -142,7 +135,7 @@ bool Cfb::PrintStringLine(const char* str, const Coordinate& coordinate) {
 }
 
 bool Cfb::DrawPoint(const Coordinate& coordinate) {
-    cfb_position cbf_coordinate = {coordinate.x, coordinate.y};
+    cfb_position cbf_coordinate = { coordinate.x, coordinate.y };
 
     if(cfb_draw_point(display_dev_, &cbf_coordinate) != 0) {
         LOG_ERR("Failed to draw a point");
@@ -153,8 +146,8 @@ bool Cfb::DrawPoint(const Coordinate& coordinate) {
 }
 
 bool Cfb::DrawLine(const Coordinate& start, const Coordinate& end) {
-    cfb_position cbf_start = {start.x, start.y};
-    cfb_position cbf_end = {end.x, end.y};
+    cfb_position cbf_start = { start.x, start.y };
+    cfb_position cbf_end = { end.x, end.y };
 
     if(cfb_draw_line(display_dev_, &cbf_start, &cbf_end) != 0) {
         LOG_ERR("Failed to draw a line");
@@ -165,8 +158,8 @@ bool Cfb::DrawLine(const Coordinate& start, const Coordinate& end) {
 }
 
 bool Cfb::DrawRectangle(const Coordinate& start, const Coordinate& end) {
-    cfb_position cbf_start = {start.x, start.y};
-    cfb_position cbf_end = {end.x, end.y};
+    cfb_position cbf_start = { start.x, start.y };
+    cfb_position cbf_end = { end.x, end.y };
 
     if(cfb_draw_rect(display_dev_, &cbf_start, &cbf_end) != 0) {
         LOG_ERR("Failed to draw a rectangle");
@@ -177,7 +170,7 @@ bool Cfb::DrawRectangle(const Coordinate& start, const Coordinate& end) {
 }
 
 bool Cfb::DrawCircle(const Coordinate& center, uint16_t radius) {
-    cfb_position cbf_center = {center.x, center.y};
+    cfb_position cbf_center = { center.x, center.y };
 
     if(cfb_draw_circle(display_dev_, &cbf_center, radius) != 0) {
         LOG_ERR("Failed to draw a circle");
@@ -192,11 +185,8 @@ bool Cfb::InvertArea(const Coordinate& start, const Coordinate& end) {
     uint16_t width = std::abs(end.x - start.x);
 
     if(cfb_invert_area(
-        display_dev_,
-        start.x >= end.x ? end.x : start.x,
-        start.y >= end.y ? end.y : start.y,
-        width,
-        height) != 0) {
+           display_dev_, start.x >= end.x ? end.x : start.x, start.y >= end.y ? end.y : start.y, width, height
+       ) != 0) {
 
         LOG_ERR("Failed to invert an area");
         return false;
@@ -230,22 +220,21 @@ void Cfb::StopAnimation() {
 }
 
 void Cfb::PrintScreenInfo() {
-	uint16_t rows = cfb_get_display_parameter(display_dev_, CFB_DISPLAY_ROWS);
-	uint8_t ppt = cfb_get_display_parameter(display_dev_, CFB_DISPLAY_PPT);
+    uint16_t rows = cfb_get_display_parameter(display_dev_, CFB_DISPLAY_ROWS);
+    uint8_t ppt = cfb_get_display_parameter(display_dev_, CFB_DISPLAY_PPT);
     uint16_t cols = cfb_get_display_parameter(display_dev_, CFB_DISPLAY_COLS);
 
-    LOG_INF("x_res %d, y_res %d, ppt %d, rows %d, cols %d",
-        x_res_, y_res_, ppt, rows, cols);
+    LOG_INF("x_res %d, y_res %d, ppt %d, rows %d, cols %d", x_res_, y_res_, ppt, rows, cols);
 
     uint8_t font_width;
-	uint8_t font_height;
+    uint8_t font_height;
 
-	for(int idx = 0; idx < 42; idx++) {
-		if(cfb_get_font_size(display_dev_, idx, &font_width, &font_height))
-			break;
+    for(int idx = 0; idx < 42; idx++) {
+        if(cfb_get_font_size(display_dev_, idx, &font_width, &font_height))
+            break;
 
-		LOG_INF("font %d: width %d, height %d", idx, font_width, font_height);
-	}
+        LOG_INF("font %d: width %d, height %d", idx, font_width, font_height);
+    }
 }
 
-}  // namespace eerie_leap::subsys::cfb
+} // namespace eerie_leap::subsys::cfb

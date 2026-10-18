@@ -1,8 +1,8 @@
 #pragma once
 
 #include <atomic>
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 #include <zephyr/kernel.h>
 
 #include "subsys/cdmp/utilities/cdmp_status_machine.h"
@@ -35,10 +35,7 @@ public:
     static constexpr uint8_t DEVICE_ID_UNASSIGNED = 0x00;
     static constexpr uint8_t DEVICE_ID_BROADCAST = 0xFF;
 
-    CdmpDevice(
-        uint32_t uid,
-        uint16_t features,
-        CdmpDeviceStatus status = CdmpDeviceStatus::OFFLINE);
+    CdmpDevice(uint32_t uid, uint16_t features, CdmpDeviceStatus status = CdmpDeviceStatus::OFFLINE);
 
     // Status transitions
     void StartDiscovery();
@@ -49,26 +46,56 @@ public:
     void Reset();
 
     // Getters
-    CdmpStatusMachine& GetStatusMachine() { return *status_machine_; }
-    [[nodiscard]] uint8_t GetDeviceId() const { return device_id_; }
-    [[nodiscard]] uint32_t GetUniqueIdentifier() const { return uid_; }
-    [[nodiscard]] uint8_t GetProtocolVersion() const { return protocol_version_; }
-    [[nodiscard]] CdmpDeviceStatus GetStatus() const { return status_machine_->GetCurrentStatus(); }
-    [[nodiscard]] CdmpHealthStatus GetHealthStatus() const { return health_status_; }
+    CdmpStatusMachine& GetStatusMachine() {
+        return *status_machine_;
+    }
+    [[nodiscard]] uint8_t GetDeviceId() const {
+        return device_id_;
+    }
+    [[nodiscard]] uint32_t GetUniqueIdentifier() const {
+        return uid_;
+    }
+    [[nodiscard]] uint8_t GetProtocolVersion() const {
+        return protocol_version_;
+    }
+    [[nodiscard]] CdmpDeviceStatus GetStatus() const {
+        return status_machine_->GetCurrentStatus();
+    }
+    [[nodiscard]] CdmpHealthStatus GetHealthStatus() const {
+        return health_status_;
+    }
     /** @brief The feature mask this device sends in heartbeats and discovery responses. Any thread. */
-    [[nodiscard]] uint16_t GetFeatures() const { return features_.load(std::memory_order_relaxed); }
-    [[nodiscard]] uint64_t GetLastHeartbeatDeltaMs() const { return k_uptime_get() - last_heartbeat_; }
-    [[nodiscard]] uint8_t GetUptimeCounter() const { return uptime_counter_; }
-    [[nodiscard]] bool IsLowestIdOnNetwork() const { return is_lowest_id_on_network_; }
-    [[nodiscard]] uint32_t GetStaggeredMessageDelay() const { return staggered_message_delay_; }
+    [[nodiscard]] uint16_t GetFeatures() const {
+        return features_.load(std::memory_order_relaxed);
+    }
+    [[nodiscard]] uint64_t GetLastHeartbeatDeltaMs() const {
+        return k_uptime_get() - last_heartbeat_;
+    }
+    [[nodiscard]] uint8_t GetUptimeCounter() const {
+        return uptime_counter_;
+    }
+    [[nodiscard]] bool IsLowestIdOnNetwork() const {
+        return is_lowest_id_on_network_;
+    }
+    [[nodiscard]] uint32_t GetStaggeredMessageDelay() const {
+        return staggered_message_delay_;
+    }
     /** @brief CRC-8 over this unit's shared state records, sent in heartbeat byte 7. */
-    [[nodiscard]] uint8_t GetStateDigest() const { return state_digest_.load(std::memory_order_relaxed); }
+    [[nodiscard]] uint8_t GetStateDigest() const {
+        return state_digest_.load(std::memory_order_relaxed);
+    }
 
     // Setters
-    void SetDeviceId(uint8_t device_id) { device_id_ = device_id; }
-    void SetHealthStatus(CdmpHealthStatus health_status) { health_status_ = health_status; }
+    void SetDeviceId(uint8_t device_id) {
+        device_id_ = device_id;
+    }
+    void SetHealthStatus(CdmpHealthStatus health_status) {
+        health_status_ = health_status;
+    }
     /** @brief Replaces the feature mask; the next heartbeat carries it. Any thread. */
-    void SetFeatures(uint16_t features) { features_.store(features, std::memory_order_relaxed); }
+    void SetFeatures(uint16_t features) {
+        features_.store(features, std::memory_order_relaxed);
+    }
     /** @brief Sets or clears the bits of @p mask, leaving the others. Any thread. */
     void SetFeature(uint16_t mask, bool is_set) {
         if(is_set)
@@ -77,21 +104,29 @@ public:
             features_.fetch_and(static_cast<uint16_t>(~mask), std::memory_order_relaxed);
     }
     void UpdateHeartbeat();
-    void IncrementUptime() { uptime_counter_++; }
+    void IncrementUptime() {
+        uptime_counter_++;
+    }
     void SetIsLowestIdOnNetwork(bool is_lowest_id_on_network) {
         is_lowest_id_on_network_ = is_lowest_id_on_network;
     }
     void SetStaggeredMessageDelay(uint32_t staggered_message_delay) {
         staggered_message_delay_ = staggered_message_delay;
     }
-    void SetStateDigest(uint8_t state_digest) { state_digest_.store(state_digest, std::memory_order_relaxed); }
+    void SetStateDigest(uint8_t state_digest) {
+        state_digest_.store(state_digest, std::memory_order_relaxed);
+    }
 
     // Utility methods
-    bool IsOnline() const { return status_machine_->GetCurrentStatus() == CdmpDeviceStatus::ONLINE; }
+    bool IsOnline() const {
+        return status_machine_->GetCurrentStatus() == CdmpDeviceStatus::ONLINE;
+    }
 
     // Protocol version compatibility
     bool IsProtocolCompatible(uint8_t other_version) const;
-    static uint8_t GetCurrentProtocolVersion() { return 0x10; } // Version 1.0
+    static uint8_t GetCurrentProtocolVersion() {
+        return 0x10;
+    } // Version 1.0
 };
 
 } // namespace eerie_leap::subsys::cdmp::models

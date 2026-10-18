@@ -1,19 +1,19 @@
 #pragma once
 
-#include <span>
-#include <functional>
 #include <cstdint>
-#include <optional>
-#include <vector>
-#include <unordered_map>
+#include <functional>
 #include <memory_resource>
+#include <optional>
+#include <span>
+#include <unordered_map>
+#include <vector>
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
-#include <zephyr/sys/atomic.h>
+#include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 
 #include "./utilities/ad_buffer.hpp"
 
@@ -65,7 +65,7 @@ private:
     friend void DataLengthUpdated(bt_conn* conn, bt_conn_le_data_len_info* info);
     friend void SecurityChanged(bt_conn* conn, bt_security_t level, enum bt_security_err err);
 
-    friend void PairingFailed(struct bt_conn *conn, enum bt_security_err reason);
+    friend void PairingFailed(struct bt_conn* conn, enum bt_security_err reason);
 
     static void UpdateDataLength(bt_conn* conn);
     static void RestartAdvertisingWorkHandler(struct k_work* work);

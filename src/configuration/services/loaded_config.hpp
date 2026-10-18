@@ -1,11 +1,11 @@
 #pragma once
 
-#include <memory>
 #include <eerie_memory.hpp>
+#include <memory>
 
 namespace eerie_leap::configuration::services {
 
-template <typename T>
+template<typename T>
 struct LoadedConfig {
 public:
     std::pmr::vector<uint8_t> config_raw;
@@ -13,4 +13,4 @@ public:
     uint32_t checksum;
 };
 
-}
+} // namespace eerie_leap::configuration::services

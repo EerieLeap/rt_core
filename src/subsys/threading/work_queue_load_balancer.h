@@ -1,13 +1,13 @@
 #pragma once
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/mutex.h>
 
-#include "work_queue_thread.h"
 #include "work_queue_load_metrics.h"
+#include "work_queue_thread.h"
 
 namespace eerie_leap::subsys::threading {
 

@@ -29,9 +29,16 @@ public:
     int handlers = 0;
     int next_handler_id = 1;
 
-    int Initialize() override { return 0; }
-    bool ReadChannel(int channel) override { ARG_UNUSED(channel); return false; }
-    int GetChannelCount() override { return 4; }
+    int Initialize() override {
+        return 0;
+    }
+    bool ReadChannel(int channel) override {
+        ARG_UNUSED(channel);
+        return false;
+    }
+    int GetChannelCount() override {
+        return 4;
+    }
 
     int RegisterChannelChangedHandler(int channel, GpioEdge edge, GpioChannelHandler handler) override {
         ARG_UNUSED(channel);
@@ -71,11 +78,15 @@ ZTEST(start_failure, test_a_source_that_throws_leaves_nothing_running) {
     // The first reader attaches, the second throws.
     gpio->refused_registration = 1;
 
-    auto rig = MakeProcessingRig(fs_service, nullptr, nullptr, {
-        MakeIndicatorSensor("first", 0),
-        MakeIndicatorSensor("second", 1),
-        MakeVirtualSensor("polled", "40 + 2", 20),
-    }, 0, gpio);
+    auto rig = MakeProcessingRig(
+        fs_service, nullptr, nullptr,
+        {
+            MakeIndicatorSensor("first", 0),
+            MakeIndicatorSensor("second", 1),
+            MakeVirtualSensor("polled", "40 + 2", 20),
+        },
+        0, gpio
+    );
 
     bool is_thrown = false;
     try {

@@ -11,20 +11,20 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/crc.h>
 #include <zephyr/ztest.h>
 
+#include "cdmp_test_features.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/models/cdmp_message.h"
 #include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
 #include "subsys/cdmp/utilities/enums.h"
-#include "cdmp_test_features.h"
 
 using eerie_leap::tests::LOGGER_FEATURES;
 
@@ -67,42 +67,40 @@ inline void ResetLoopbackDevice() {
 
 inline Bytes NotificationFrame(uint8_t source, uint8_t version, uint8_t state_type, const Bytes& data) {
     const CdmpStateChangeMessage message{
-        .source_device_id = source,
-        .version = version,
-        .state_type = state_type,
-        .data = CdmpStateData(data)};
+        .source_device_id = source, .version = version, .state_type = state_type, .data = CdmpStateData(data)
+    };
 
     CdmpStateChangeMessage::Frame frame{};
     const size_t size = message.ToCanFrame(frame);
 
-    return {frame.begin(), frame.begin() + size};
+    return { frame.begin(), frame.begin() + size };
 }
 
 inline Bytes AcknowledgementFrame(uint8_t responder, uint8_t source, uint8_t version) {
-    const auto frame = CdmpStateChangeResponseMessage{
-        .responding_device_id = responder,
+    const auto frame = CdmpStateChangeResponseMessage{ .responding_device_id = responder,
         .source_device_id = source,
         .version = version,
-        .result_code = CdmpResultCode::SUCCESS}.ToCanFrame();
+        .result_code = CdmpResultCode::SUCCESS }
+                           .ToCanFrame();
 
-    return {frame.begin(), frame.end()};
+    return { frame.begin(), frame.end() };
 }
 
 inline Bytes SyncRequestFrame(uint8_t target, uint8_t transaction_id) {
-    return CdmpCommandRequestMessage{
-        .target_device_id = target,
+    return CdmpCommandRequestMessage{ .target_device_id = target,
         .command_code = std::to_underlying(CdmpServiceCommandCode::STATE_SYNC_REQUEST),
         .transaction_id = transaction_id,
-        .data = {0, 0, 0, 0, 0}}.ToCanFrame();
+        .data = { 0, 0, 0, 0, 0 } }
+        .ToCanFrame();
 }
 
 inline Bytes HeartbeatFrame(uint8_t device_id, uint8_t state_digest = 0, uint16_t features = 0) {
-    return CdmpHeartbeatMessage{
-        .device_id = device_id,
+    return CdmpHeartbeatMessage{ .device_id = device_id,
         .health_status = CdmpHealthStatus::OK,
         .sequence_number = 0,
         .features = features,
-        .state_digest = state_digest}.ToCanFrame();
+        .state_digest = state_digest }
+        .ToCanFrame();
 }
 
 struct Record {
@@ -155,10 +153,11 @@ public:
         Channel& channel = channels_.at(offset);
 
         k_mutex_lock(&lock_, K_FOREVER);
-        channel.frames.push_back({
-            .sequence = next_sequence_++,
-            .received_ms = k_uptime_get(),
-            .data = Bytes(frame.data.begin(), frame.data.end())});
+        channel.frames.push_back(
+            { .sequence = next_sequence_++,
+                .received_ms = k_uptime_get(),
+                .data = Bytes(frame.data.begin(), frame.data.end()) }
+        );
         k_mutex_unlock(&lock_);
 
         k_sem_give(&channel.received);
@@ -197,12 +196,16 @@ public:
 };
 
 inline BusRecorder::Match IsManagement(CdmpManagementMessageType type) {
-    return [type](const Bytes& frame) { return !frame.empty() && frame[0] == std::to_underlying(type); };
+    return [type](const Bytes& frame) {
+        return !frame.empty() && frame[0] == std::to_underlying(type);
+    };
 }
 
 // Notifications and acknowledgements carry their sender in byte 0.
 inline BusRecorder::Match IsFrom(uint8_t device_id) {
-    return [device_id](const Bytes& frame) { return !frame.empty() && frame[0] == device_id; };
+    return [device_id](const Bytes& frame) {
+        return !frame.empty() && frame[0] == device_id;
+    };
 }
 
 inline BusRecorder::Match IsSyncRequestTo(uint8_t target) {
@@ -244,13 +247,11 @@ protected:
         }
 
         for(const CanFilter& filter : filters) {
-            const int handler_id = (*canbus_)->RegisterFrameReceivedHandler(
-                filter,
-                [this](const CanFrame& frame) {
-                    const uint32_t offset = frame.id - ids.GetBaseCanId();
-                    if(frame.id >= ids.GetBaseCanId() && offset <= STATE_CHANGE_RESPONSE)
-                        bus.Add(offset, frame);
-                });
+            const int handler_id = (*canbus_)->RegisterFrameReceivedHandler(filter, [this](const CanFrame& frame) {
+                const uint32_t offset = frame.id - ids.GetBaseCanId();
+                if(frame.id >= ids.GetBaseCanId() && offset <= STATE_CHANGE_RESPONSE)
+                    bus.Add(offset, frame);
+            });
             zassert_true(handler_id > 0, "Frame handler rejected: %d", handler_id);
             recorder_handler_ids_.push_back(handler_id);
         }
@@ -303,20 +304,24 @@ public:
         zassert_true(StartUnit());
 
         zassert_true(bus.Wait(MANAGEMENT, IsManagement(CdmpManagementMessageType::DISCOVERY_REQUEST)).has_value());
-        SendAsPeer(MANAGEMENT, CdmpDiscoveryResponseMessage{
-            .device_id = PEER_ID,
-            .uid = PEER_UID,
-            .features = LOGGER_FEATURES}.ToCanFrame());
+        SendAsPeer(
+            MANAGEMENT,
+            CdmpDiscoveryResponseMessage{ .device_id = PEER_ID, .uid = PEER_UID, .features = LOGGER_FEATURES }
+                .ToCanFrame()
+        );
 
         auto claim = bus.Wait(MANAGEMENT, IsManagement(CdmpManagementMessageType::ID_CLAIM), STARTUP_TIMEOUT_MS);
         zassert_true(claim.has_value(), "The unit claims an ID after discovery");
         const auto claim_message = CdmpIdClaimRequestMessage::FromCanFrame(claim->data);
         zassert_equal(claim_message.claiming_device_id, OWN_ID);
-        SendAsPeer(MANAGEMENT, CdmpIdClaimResponseMessage{
-            .responding_device_id = PEER_ID,
-            .claiming_device_id = OWN_ID,
-            .claiming_device_uid = claim_message.uid,
-            .result = CdmpIdClaimResult::ACCEPT}.ToCanFrame());
+        SendAsPeer(
+            MANAGEMENT,
+            CdmpIdClaimResponseMessage{ .responding_device_id = PEER_ID,
+                .claiming_device_id = OWN_ID,
+                .claiming_device_uid = claim_message.uid,
+                .result = CdmpIdClaimResult::ACCEPT }
+                .ToCanFrame()
+        );
 
         zassert_true(WaitForStatus(CdmpDeviceStatus::ONLINE));
         zassert_equal(GetUnitDeviceId(), OWN_ID);
@@ -327,8 +332,10 @@ public:
      * request, which it answers like any other, after its stagger.
      */
     void Settle() {
-        zassert_true(bus.Wait(COMMAND, IsSyncRequestTo(CdmpDevice::DEVICE_ID_BROADCAST)).has_value(),
-            "Going online broadcasts STATE_SYNC_REQUEST");
+        zassert_true(
+            bus.Wait(COMMAND, IsSyncRequestTo(CdmpDevice::DEVICE_ID_BROADCAST)).has_value(),
+            "Going online broadcasts STATE_SYNC_REQUEST"
+        );
         k_msleep(NO_FRAME_TIMEOUT_MS);
     }
 

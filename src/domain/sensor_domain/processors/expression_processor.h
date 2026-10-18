@@ -3,14 +3,14 @@
 #include <memory>
 #include <optional>
 
-#include "subsys/expression_engine/expression_evaluator.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/processors/i_reading_processor.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/expression_engine/expression_evaluator.h"
 
 namespace eerie_leap::domain::sensor_domain::processors {
 
-using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
 
 class ExpressionProcessor : public IReadingProcessor {
 private:

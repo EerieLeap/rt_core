@@ -16,7 +16,8 @@ private:
     DtGpioProvider dt_gpio_provider_;
 
 public:
-    GpioFactory(DtGpioProvider dt_gpio_provider) : dt_gpio_provider_(dt_gpio_provider) {}
+    GpioFactory(DtGpioProvider dt_gpio_provider) :
+        dt_gpio_provider_(dt_gpio_provider) {}
 
     std::shared_ptr<IGpio> Create() {
 #ifdef CONFIG_GPIO_EMUL
@@ -33,4 +34,4 @@ public:
     }
 };
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

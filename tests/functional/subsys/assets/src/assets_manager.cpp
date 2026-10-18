@@ -36,7 +36,7 @@ using assets_test::MakeUnavailableStore;
 // binary that defines them; the assets_fat suite builds asset_store.cpp alone.
 namespace {
 
-std::atomic<bool> g_fail_allocations{false};
+std::atomic<bool> g_fail_allocations{ false };
 
 void* Allocate(size_t size) {
     if(g_fail_allocations.load())
@@ -55,29 +55,43 @@ void* Allocate(size_t size, const std::nothrow_t&) noexcept {
 
 } // namespace
 
-void* operator new(size_t size) { return Allocate(size); }
-void* operator new[](size_t size) { return Allocate(size); }
-void* operator new(size_t size, const std::nothrow_t& tag) noexcept { return Allocate(size, tag); }
-void* operator new[](size_t size, const std::nothrow_t& tag) noexcept { return Allocate(size, tag); }
-void operator delete(void* pointer) noexcept { std::free(pointer); }
-void operator delete[](void* pointer) noexcept { std::free(pointer); }
-void operator delete(void* pointer, size_t) noexcept { std::free(pointer); }
-void operator delete[](void* pointer, size_t) noexcept { std::free(pointer); }
+void* operator new(size_t size) {
+    return Allocate(size);
+}
+void* operator new[](size_t size) {
+    return Allocate(size);
+}
+void* operator new(size_t size, const std::nothrow_t& tag) noexcept {
+    return Allocate(size, tag);
+}
+void* operator new[](size_t size, const std::nothrow_t& tag) noexcept {
+    return Allocate(size, tag);
+}
+void operator delete(void* pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete(void* pointer, size_t) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer, size_t) noexcept {
+    std::free(pointer);
+}
 
 namespace {
 
 constexpr int k_helper_priority = 5;
 
 // Extensions live in static storage: a provider keeps only the span.
-constexpr std::array<std::string_view, 2> kImageExtensions = {".bin", ".png"};
+constexpr std::array<std::string_view, 2> kImageExtensions = { ".bin", ".png" };
 
 K_THREAD_STACK_DEFINE(referrer_helper_stack, 4096);
 k_thread referrer_helper;
 
-AssetProvider MakeProvider(
-    AssetKind kind,
-    std::string_view name,
-    std::shared_ptr<AssetStore> store = MakeUnavailableStore()) {
+AssetProvider
+MakeProvider(AssetKind kind, std::string_view name, std::shared_ptr<AssetStore> store = MakeUnavailableStore()) {
     return AssetProvider{
         .kind = kind,
         .name = name,
@@ -221,8 +235,9 @@ ZTEST(assets_manager, test_every_kind_can_be_registered) {
     AssetsManager manager;
 
     for(size_t kind = 0; kind < ASSET_KIND_COUNT; ++kind)
-        zassert_true(manager.Register(MakeProvider(static_cast<AssetKind>(kind), "kind")),
-            "Kind %d", static_cast<int>(kind));
+        zassert_true(
+            manager.Register(MakeProvider(static_cast<AssetKind>(kind), "kind")), "Kind %d", static_cast<int>(kind)
+        );
 
     zassert_equal(manager.GetProviders().size(), ASSET_KIND_COUNT);
 }
@@ -347,9 +362,15 @@ ZTEST(assets_manager, test_is_referenced_is_true_when_any_referrer_refers_to_the
     int sensors = 0;
     int can = 0;
 
-    manager.AddReferrer(&sensors, [](std::string_view path) { return path == "oil.lua"; });
-    manager.AddReferrer(&sensors, [](std::string_view path) { return path == "boost.lua"; });
-    manager.AddReferrer(&can, [](std::string_view path) { return path == "dash.lua"; });
+    manager.AddReferrer(&sensors, [](std::string_view path) {
+        return path == "oil.lua";
+    });
+    manager.AddReferrer(&sensors, [](std::string_view path) {
+        return path == "boost.lua";
+    });
+    manager.AddReferrer(&can, [](std::string_view path) {
+        return path == "dash.lua";
+    });
 
     zassert_true(manager.IsReferenced("oil.lua"));
     zassert_true(manager.IsReferenced("boost.lua"));
@@ -363,9 +384,15 @@ ZTEST(assets_manager, test_remove_referrers_removes_only_those_of_the_owner) {
     int can = 0;
     int unknown = 0;
 
-    manager.AddReferrer(&sensors, [](std::string_view path) { return path == "oil.lua"; });
-    manager.AddReferrer(&sensors, [](std::string_view path) { return path == "boost.lua"; });
-    manager.AddReferrer(&can, [](std::string_view path) { return path == "dash.lua"; });
+    manager.AddReferrer(&sensors, [](std::string_view path) {
+        return path == "oil.lua";
+    });
+    manager.AddReferrer(&sensors, [](std::string_view path) {
+        return path == "boost.lua";
+    });
+    manager.AddReferrer(&can, [](std::string_view path) {
+        return path == "dash.lua";
+    });
 
     manager.RemoveReferrers(&unknown);
 
@@ -397,9 +424,15 @@ ZTEST(assets_manager, test_unregistering_and_removing_referrers_never_throw) {
     int other = 0;
     const auto token = std::make_shared<int>(0);
 
-    manager.AddReferrer(&owner, [token](std::string_view path) { return path == "oil.lua"; });
-    manager.AddReferrer(&owner, [](std::string_view path) { return path == "boost.lua"; });
-    manager.AddReferrer(&other, [](std::string_view path) { return path == "dash.lua"; });
+    manager.AddReferrer(&owner, [token](std::string_view path) {
+        return path == "oil.lua";
+    });
+    manager.AddReferrer(&owner, [](std::string_view path) {
+        return path == "boost.lua";
+    });
+    manager.AddReferrer(&other, [](std::string_view path) {
+        return path == "dash.lua";
+    });
     zassert_true(manager.Register(MakeProvider(AssetKind::IMAGES, "images")));
     zassert_equal(token.use_count(), 2, "The referrer holds the token");
 
@@ -460,7 +493,9 @@ ZTEST(assets_manager, test_a_referrer_may_change_the_referrers_while_it_runs) {
     manager.AddReferrer(&owner, [registry, &owner, &calls](std::string_view) {
         ++calls;
         registry->RemoveReferrers(&owner);
-        registry->AddReferrer(&calls, [](std::string_view) { return false; });
+        registry->AddReferrer(&calls, [](std::string_view) {
+            return false;
+        });
 
         return true;
     });
@@ -489,9 +524,10 @@ ZTEST(assets_manager, test_referrers_run_without_the_registry_lock) {
         return false;
     });
 
-    k_thread_create(&referrer_helper, referrer_helper_stack, K_THREAD_STACK_SIZEOF(referrer_helper_stack),
-        AskIfReferenced, new std::shared_ptr<BlockedReferrer>(state), nullptr, nullptr,
-        k_helper_priority, 0, K_NO_WAIT);
+    k_thread_create(
+        &referrer_helper, referrer_helper_stack, K_THREAD_STACK_SIZEOF(referrer_helper_stack), AskIfReferenced,
+        new std::shared_ptr<BlockedReferrer>(state), nullptr, nullptr, k_helper_priority, 0, K_NO_WAIT
+    );
 
     zassert_ok(k_sem_take(&blocked->entered, K_SECONDS(2)), "The helper never reached the referrer");
 
@@ -502,7 +538,9 @@ ZTEST(assets_manager, test_referrers_run_without_the_registry_lock) {
     const bool registered = blocked->manager.Register(MakeProvider(AssetKind::IMAGES, "images"));
     const bool found = blocked->manager.Find(AssetKind::IMAGES) != nullptr;
     const size_t listed = blocked->manager.GetProviders().size();
-    blocked->manager.AddReferrer(&listed, [](std::string_view) { return false; });
+    blocked->manager.AddReferrer(&listed, [](std::string_view) {
+        return false;
+    });
     blocked->manager.RemoveReferrers(&listed);
     blocked->manager.Unregister(AssetKind::IMAGES);
 
@@ -515,6 +553,7 @@ ZTEST(assets_manager, test_referrers_run_without_the_registry_lock) {
     zassert_true(registered);
     zassert_true(found);
     zassert_equal(listed, 1);
-    zassert_true(elapsed < 1000, "The registry stayed locked for %d ms while a referrer ran",
-        static_cast<int>(elapsed));
+    zassert_true(
+        elapsed < 1000, "The registry stayed locked for %d ms while a referrer ran", static_cast<int>(elapsed)
+    );
 }

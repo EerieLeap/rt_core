@@ -1,8 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
-#include <chrono>
 
 #include <zephyr/kernel.h>
 #include <zephyr/timing/timing.h>
@@ -64,7 +64,7 @@ public:
      * @param func
      * @return float Execution time in microseconds
      */
-    template <typename Func>
+    template<typename Func>
     static float MeasureExecutionTimeUs(Func&& func) {
         timing_t start_time, end_time;
 

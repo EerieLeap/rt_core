@@ -11,13 +11,13 @@
 // anything, or runs without a COM service where the order of a request matters.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
-#include <memory>
-#include <optional>
-#include <vector>
+    #include <memory>
+    #include <optional>
+    #include <vector>
 
-#include <zephyr/ztest.h>
+    #include <zephyr/ztest.h>
 
-#include "domain/system_domain/configuration/system_configuration_manager.h"
+    #include "domain/system_domain/configuration/system_configuration_manager.h"
 
 using namespace logging_controller_test;
 
@@ -84,13 +84,17 @@ public:
         });
     }
 
-    ~HeldSensorsStore() { Release(); }
+    ~HeldSensorsStore() {
+        Release();
+    }
 
     [[nodiscard]] bool WaitUntilStored(int timeout_ms = k_wait_ms) {
         return k_sem_take(&context_->stored, Ms(timeout_ms)) == 0 && context_->result;
     }
 
-    void Release() { k_sem_give(&context_->release); }
+    void Release() {
+        k_sem_give(&context_->release);
+    }
 };
 
 // The unit: with or without a scripted peer on its CDMP bus, the real sensor pipeline, and a controller
@@ -99,8 +103,8 @@ struct Fixture {
     std::unique_ptr<Harness> harness;
     std::shared_ptr<FakeGpio> gpio = std::make_shared<FakeGpio>(4);
     // Subscribed before the controller's triggers, so it runs first in a dispatch.
-    SensorsBlocker blocker {SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated};
-    SensorProbe switch_probe {"switch"};
+    SensorsBlocker blocker{ SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated };
+    SensorProbe switch_probe{ "switch" };
     StatusLog log;
     std::unique_ptr<ProcessingRig> rig;
     std::unique_ptr<Peer> peer;
@@ -118,7 +122,8 @@ struct Fixture {
         std::initializer_list<std::string_view> triggers = {},
         bool has_com = true,
         bool starts = true,
-        bool has_seed = false) {
+        bool has_seed = false
+    ) {
 
         if(has_com) {
             harness = std::make_unique<Harness>();
@@ -133,10 +138,12 @@ struct Fixture {
         Parts parts;
         parts.com = has_com ? harness->com : nullptr;
         controller = MakeController(*rig, std::move(parts));
-        zassert_equal(controller->Initialize(triggers.size() > 0 ? StoresTriggersOn(triggers) : nullptr), 0,
-            "The controller initializes");
+        zassert_equal(
+            controller->Initialize(triggers.size() > 0 ? StoresTriggersOn(triggers) : nullptr), 0,
+            "The controller initializes"
+        );
         writer = controller->GetLogWriterService();
-        StoreLoggingConfiguration(*controller, {"switch"});
+        StoreLoggingConfiguration(*controller, { "switch" });
 
         rig->Register(*controller);
         rig->StartProcessing();
@@ -161,11 +168,15 @@ struct Fixture {
         display = MakeStandIn(service, Type::Display, "stand_in_display", rig->fs_service);
 
         canbus = std::make_shared<CanbusConfigurationManager>(
-            std::make_unique<CborConfigurationService<CborCanbusConfig>>("stand_in_canbus", rig->fs_service), nullptr);
+            std::make_unique<CborConfigurationService<CborCanbusConfig>>("stand_in_canbus", rig->fs_service), nullptr
+        );
         service.RegisterCborConfigurationManager(Type::Canbus, canbus);
 
         system = std::make_shared<SystemConfigurationManager>(
-            std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", rig->fs_service, TestConfigQueue()));
+            std::make_unique<CborConfigurationService<CborSystemConfig>>(
+                "system_config", rig->fs_service, TestConfigQueue()
+            )
+        );
         service.RegisterCborConfigurationManager(Type::System, system);
     }
 
@@ -174,7 +185,9 @@ struct Fixture {
         // This unit alone: a request for every unit would also broadcast the start.
         controller->GetControl()->RequestStart(controller->GetUnitUid());
         zassert_true(IsStarted(log.WaitForEntry()), "A request starts the writer");
-        zassert_true(WaitUntil([this] { return writer->IsRunning(); }));
+        zassert_true(WaitUntil([this] {
+            return writer->IsRunning();
+        }));
         zassert_equal(CountLogFiles(*rig->fs_service), 1U);
     }
 
@@ -200,7 +213,9 @@ struct Fixture {
     void AssertStartsAgain() {
         controller->GetControl()->RequestStart(controller->GetUnitUid());
         zassert_true(IsStarted(log.WaitForEntry()), "A new request starts a new session");
-        zassert_true(WaitUntil([this] { return writer->IsRunning() && CountLogFiles(*rig->fs_service) == 2; }));
+        zassert_true(WaitUntil([this] {
+            return writer->IsRunning() && CountLogFiles(*rig->fs_service) == 2;
+        }));
     }
 
     // The per-type check of rule 2. With a COM service the unit hears its own broadcast on the loopback
@@ -283,13 +298,14 @@ void StoreLogging() {
     configuration.logging_interval_ms = 200;
     configuration.max_log_size_mb = 0;
     configuration.sensor_configurations.emplace(
-        StringHelpers::GetHash("switch"), SensorLoggingConfiguration { .is_enabled = true });
+        StringHelpers::GetHash("switch"), SensorLoggingConfiguration{ .is_enabled = true }
+    );
 
     zassert_true(F().controller->GetConfigurationManager()->Update(configuration));
 }
 
 void StoreLoggingControl() {
-    zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({"switch"})));
+    zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({ "switch" })));
 }
 
 void StoreCanbus() {
@@ -318,18 +334,20 @@ void ReapplySensors() {
 // The write of a client, through the service, on the configuration queue.
 void WriteSensorsOverSmp() {
     const auto stored = F().rig->configuration_service->GetCborConfiguration(Type::Sensors);
-    QueuedApply apply(F().rig->configuration_service, Type::Sensors, std::vector<uint8_t>(stored.begin(), stored.end()));
+    QueuedApply apply(
+        F().rig->configuration_service, Type::Sensors, std::vector<uint8_t>(stored.begin(), stored.end())
+    );
     zassert_true(apply.WaitForSuccess(), "The write is applied");
 }
 
-// With a COM service the update also broadcasts the stop; without one the writer's own stop is all there is.
-#define WRITER_STOPS_FOR_GOOD(name, store) \
-    ZTEST(writer_updates, test_A##name##StopsLoggingForGood) { \
-        F().AssertTheStoreStopsLogging(true, store); \
-    } \
-    ZTEST(writer_updates, test_A##name##StopsLoggingForGoodWithoutAComService) { \
-        F().AssertTheStoreStopsLogging(false, store); \
-    }
+    // With a COM service the update also broadcasts the stop; without one the writer's own stop is all there is.
+    #define WRITER_STOPS_FOR_GOOD(name, store) \
+        ZTEST(writer_updates, test_A##name##StopsLoggingForGood) { \
+            F().AssertTheStoreStopsLogging(true, store); \
+        } \
+        ZTEST(writer_updates, test_A##name##StopsLoggingForGoodWithoutAComService) { \
+            F().AssertTheStoreStopsLogging(false, store); \
+        }
 
 WRITER_STOPS_FOR_GOOD(StoredSensorsConfiguration, StoreSensors)
 WRITER_STOPS_FOR_GOOD(StoredAdcConfiguration, StoreAdc)
@@ -342,7 +360,7 @@ WRITER_STOPS_FOR_GOOD(StoredDisplayConfiguration, StoreDisplay)
 WRITER_STOPS_FOR_GOOD(ShellReapplyOfTheStoredSensors, ReapplySensors)
 WRITER_STOPS_FOR_GOOD(SmpWriteOfTheSensors, WriteSensorsOverSmp)
 
-#undef WRITER_STOPS_FOR_GOOD
+    #undef WRITER_STOPS_FOR_GOOD
 
 // ======== Order ========
 
@@ -363,7 +381,9 @@ ZTEST(writer_updates, test_AStartRequestedAfterTheUpdatesStopWins) {
 
     zassert_true(IsStopped(F().log.WaitForEntry()), "The restart finalizes the file");
     zassert_true(IsStarted(F().log.WaitForEntry()), "and logging goes on in a new one: the later request wins");
-    zassert_true(WaitUntil([] { return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2; }));
+    zassert_true(WaitUntil([] {
+        return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2;
+    }));
     zassert_true(IsQuiet(F().log));
 }
 
@@ -373,7 +393,7 @@ ZTEST(writer_updates, test_ARejectedWriteStopsNothing) {
     F().Boot(Base());
     F().StartLogging();
 
-    QueuedApply apply(F().rig->configuration_service, Type::Sensors, std::vector<uint8_t> {0xFF, 0x01, 0x02});
+    QueuedApply apply(F().rig->configuration_service, Type::Sensors, std::vector<uint8_t>{ 0xFF, 0x01, 0x02 });
     zassert_false(apply.WaitForSuccess(), "Malformed CBOR is rejected");
     zassert_true(Flush());
 
@@ -413,10 +433,12 @@ ZTEST(writer_updates, test_ABootTimeStoreStopsNothing) {
     F().rig->Apply({ Indicator("switch", "0"), Analog("spare"), Analog("other"), Analog("added") });
     zassert_true(IsStopped(F().log.WaitForEntry()), "The file is finalized");
     zassert_true(IsStarted(F().log.WaitForEntry()), "and logging goes on in the next");
-    zassert_true(WaitUntil([] { return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2; }));
+    zassert_true(WaitUntil([] {
+        return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2;
+    }));
 
     StoreStandIn(F().ui);
-    zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({"switch"})));
+    zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({ "switch" })));
     zassert_true(Flush());
     zassert_false(F().peer->WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "Nothing is broadcast");
 
@@ -432,14 +454,16 @@ ZTEST(writer_updates, test_AStopFromAnotherUnitStopsTheWriterAndIsNotEchoed) {
     F().Boot(Base());
     F().StartLogging();
 
-    const auto result = F().peer->Broadcast({0x00});
+    const auto result = F().peer->Broadcast({ 0x00 });
     zassert_true(result.has_value(), "The unit answers the broadcast");
     zassert_equal(*result, CdmpResultCode::SUCCESS);
 
     zassert_true(IsStopped(F().log.WaitForEntry()), "The writer stops");
     zassert_true(F().writer->IsStopped());
-    zassert_false(F().peer->WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(),
-        "and the stop is not sent on: the other unit sent it to every unit");
+    zassert_false(
+        F().peer->WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(),
+        "and the stop is not sent on: the other unit sent it to every unit"
+    );
 }
 
 ZTEST(writer_updates, test_WithoutAComServiceAnUpdateStopsAndBroadcastsNothing) {
@@ -457,20 +481,24 @@ ZTEST(writer_updates, test_WithoutAComServiceAnUpdateStopsAndBroadcastsNothing) 
 
 // L3 with Start() called: a switch that is on at boot starts logging.
 ZTEST(writer_updates, test_ASwitchThatIsOnAtBootStillStarts) {
-    F().Boot(Base(), {"switch"}, false);
+    F().Boot(Base(), { "switch" }, false);
 
     zassert_true(IsStarted(F().log.WaitForEntry()), "A switch that is already on starts logging");
-    zassert_true(WaitUntil([] { return F().writer->IsRunning(); }));
+    zassert_true(WaitUntil([] {
+        return F().writer->IsRunning();
+    }));
     zassert_true(IsQuiet(F().log));
 }
 
 ZTEST(writer_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
-    F().Boot({Input("switch", 1), Analog("spare"), Analog("other")}, {"switch"}, true, true, true);
+    F().Boot({ Input("switch", 1), Analog("spare"), Analog("other") }, { "switch" }, true, true, true);
     F().RegisterOthers();
 
     PublishSensorValue("switch", kOn);
     zassert_true(IsStarted(F().log.WaitForEntry()), "A switch turned on starts logging");
-    zassert_true(WaitUntil([] { return F().writer->IsRunning(); }));
+    zassert_true(WaitUntil([] {
+        return F().writer->IsRunning();
+    }));
     zassert_true(IsStart(F().peer->WaitForBroadcast()), "and the other units: the trigger names every unit");
 
     StoreStandIn(F().ui);
@@ -484,23 +512,27 @@ ZTEST(writer_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
     PublishSensorValue("switch", kOff);
     PublishSensorValue("switch", kOn);
     zassert_true(IsStarted(F().log.WaitForEntry()), "A change after the update starts it");
-    zassert_true(WaitUntil([] { return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2; }));
+    zassert_true(WaitUntil([] {
+        return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2;
+    }));
 }
 
 // The triggers stored again: the update stops logging, the rebuilt trigger reads its switch, which is on,
 // as its baseline.
 ZTEST(writer_updates, test_ATriggerRebuiltByAnUpdateTakesItsSwitchAsABaseline) {
-    F().Boot({Input("switch", 1), Analog("spare"), Analog("other")}, {"switch"}, true, true, true);
+    F().Boot({ Input("switch", 1), Analog("spare"), Analog("other") }, { "switch" }, true, true, true);
 
     F().rig->Commit("switch", kOn);
     zassert_true(F().switch_probe.WaitForValue(kOn), "The publisher took the commit");
     zassert_true(F().blocker.Fence());
     zassert_true(IsStarted(F().log.WaitForEntry()), "The switch turned on");
-    zassert_true(WaitUntil([] { return F().writer->IsRunning(); }));
+    zassert_true(WaitUntil([] {
+        return F().writer->IsRunning();
+    }));
     zassert_true(IsStart(F().peer->WaitForBroadcast()), "and the other units follow");
 
     F().switch_probe.Clear();
-    zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({"switch"})));
+    zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({ "switch" })));
     zassert_true(Flush(), "The rebuild ran");
     F().AssertStoppedForGood();
     F().AssertOneStopBroadcast();

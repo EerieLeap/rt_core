@@ -37,10 +37,12 @@ public:
     using iterator = value_type*;
     using const_iterator = const value_type*;
 
-    static constexpr size_t capacity() { return k_max_payload_entries; }
+    static constexpr size_t capacity() {
+        return k_max_payload_entries;
+    }
 
 private:
-    std::array<value_type, k_max_payload_entries> entries_ { };
+    std::array<value_type, k_max_payload_entries> entries_{};
     uint8_t size_ = 0;
 
     // The slot for @p key: its entry when present, otherwise a fresh one (the last one when full).
@@ -49,11 +51,11 @@ private:
             return *it;
 
         if(size_ == k_max_payload_entries) {
-            entries_[size_ - 1] = value_type { key, EventData { } };
+            entries_[size_ - 1] = value_type{ key, EventData{} };
             return entries_[size_ - 1];
         }
 
-        entries_[size_] = value_type { key, EventData { } };
+        entries_[size_] = value_type{ key, EventData{} };
         return entries_[size_++];
     }
 
@@ -65,15 +67,31 @@ public:
             insert_or_assign(entry.first, entry.second);
     }
 
-    iterator begin() { return entries_.data(); }
-    iterator end() { return entries_.data() + size_; }
-    const_iterator begin() const { return entries_.data(); }
-    const_iterator end() const { return entries_.data() + size_; }
-    const_iterator cbegin() const { return begin(); }
-    const_iterator cend() const { return end(); }
+    iterator begin() {
+        return entries_.data();
+    }
+    iterator end() {
+        return entries_.data() + size_;
+    }
+    const_iterator begin() const {
+        return entries_.data();
+    }
+    const_iterator end() const {
+        return entries_.data() + size_;
+    }
+    const_iterator cbegin() const {
+        return begin();
+    }
+    const_iterator cend() const {
+        return end();
+    }
 
-    size_t size() const { return size_; }
-    bool empty() const { return size_ == 0; }
+    size_t size() const {
+        return size_;
+    }
+    bool empty() const {
+        return size_ == 0;
+    }
 
     iterator find(PayloadTypeEnum key) {
         for(iterator it = begin(); it != end(); ++it) {
@@ -93,7 +111,9 @@ public:
         return end();
     }
 
-    bool contains(PayloadTypeEnum key) const { return find(key) != end(); }
+    bool contains(PayloadTypeEnum key) const {
+        return find(key) != end();
+    }
 
     EventData& at(PayloadTypeEnum key) {
         auto it = find(key);
@@ -111,7 +131,9 @@ public:
         return it->second;
     }
 
-    EventData& operator[](PayloadTypeEnum key) { return Slot(key).second; }
+    EventData& operator[](PayloadTypeEnum key) {
+        return Slot(key).second;
+    }
 
     // Like std::unordered_map::emplace: keeps an existing entry.
     template<typename... Args>
@@ -125,7 +147,9 @@ public:
         return { &slot, true };
     }
 
-    std::pair<iterator, bool> insert(const value_type& entry) { return emplace(entry.first, entry.second); }
+    std::pair<iterator, bool> insert(const value_type& entry) {
+        return emplace(entry.first, entry.second);
+    }
 
     std::pair<iterator, bool> insert_or_assign(PayloadTypeEnum key, EventData value) {
         const bool existed = contains(key);
@@ -143,7 +167,7 @@ public:
         for(iterator next = it + 1; next != end(); ++it, ++next)
             *it = std::move(*next);
 
-        *it = value_type { };
+        *it = value_type{};
         --size_;
 
         return 1;
@@ -151,13 +175,13 @@ public:
 
     void clear() {
         for(auto& entry : *this)
-            entry = value_type { };
+            entry = value_type{};
 
         size_ = 0;
     }
 
     // Kept for callers written against the map; the storage is fixed.
-    void reserve(size_t) { }
+    void reserve(size_t) {}
 };
 
 template<concepts::EnumClassUint32 PayloadTypeEnum>

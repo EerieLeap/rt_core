@@ -5,9 +5,7 @@
 namespace eerie_leap::domain::logging_domain::configuration::parsers {
 
 static void InvalidLoggingConfiguration(std::string_view message) {
-    throw std::invalid_argument(
-        "Invalid Logging configuration. "
-        + std::string(message));
+    throw std::invalid_argument("Invalid Logging configuration. " + std::string(message));
 }
 
 void LoggingConfigurationValidator::Validate(const LoggingConfiguration& configuration) {

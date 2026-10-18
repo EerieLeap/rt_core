@@ -1,16 +1,16 @@
 #ifdef CONFIG_ADC
 
-#include <algorithm>
-#include <bit>
-#include <cerrno>
+    #include <algorithm>
+    #include <bit>
+    #include <cerrno>
 
-#include <zephyr/logging/log.h>
-#include <zephyr/kernel.h>
-#include <zephyr/sys/util.h>
+    #include <zephyr/kernel.h>
+    #include <zephyr/logging/log.h>
+    #include <zephyr/sys/util.h>
 
-#include "subsys/threading/scoped_mutex.h"
+    #include "subsys/threading/scoped_mutex.h"
 
-#include "adc.h"
+    #include "adc.h"
 
 namespace eerie_leap::subsys::adc {
 
@@ -44,7 +44,8 @@ bool Adc::Initialize() {
         return false;
     }
 
-    if(references_mv_.size() != channel_count || resolutions_.size() != channel_count
+    if(references_mv_.size() != channel_count
+        || resolutions_.size() != channel_count
         || oversampling_.size() != channel_count) {
         LOG_ERR("ADC device tree info is inconsistent");
         return false;
@@ -128,12 +129,11 @@ bool Adc::Initialize() {
 
     initialized_ = true;
 
-    LOG_INF("%s: %zu channels, burst=%s multi=%s oversampling=%u, ~%u us/conversion",
-        adc_device_->name, channel_count,
-        capabilities_.burst ? "yes" : "no",
-        capabilities_.multi_channel ? "yes" : "no",
-        oversampling_[0],
-        capabilities_.us_per_conversion);
+    LOG_INF(
+        "%s: %zu channels, burst=%s multi=%s oversampling=%u, ~%u us/conversion", adc_device_->name, channel_count,
+        capabilities_.burst ? "yes" : "no", capabilities_.multi_channel ? "yes" : "no", oversampling_[0],
+        capabilities_.us_per_conversion
+    );
 
     return true;
 }
@@ -149,8 +149,10 @@ bool Adc::Probe() {
 
     if(err < 0) {
         if(err == -ENOTSUP && oversampling_[0] != 0)
-            LOG_ERR("%s: the driver rejects oversampling %u from the device tree (%d)",
-                adc_device_->name, oversampling_[0], err);
+            LOG_ERR(
+                "%s: the driver rejects oversampling %u from the device tree (%d)", adc_device_->name, oversampling_[0],
+                err
+            );
         else
             LOG_ERR("%s: probe conversion failed (%d)", adc_device_->name, err);
 
@@ -159,12 +161,12 @@ bool Adc::Probe() {
 
     capabilities_.us_per_conversion = k_cyc_to_us_near32(cycles);
 
-#if defined(CONFIG_ADC_ESP32) && !defined(CONFIG_ADC_ESP32_DMA)
+    #if defined(CONFIG_ADC_ESP32) && !defined(CONFIG_ADC_ESP32_DMA)
     // The ESP32 oneshot driver rejects extra samplings and multi-channel sequences, logging an error
     // for each attempt, so the trials would only put errors into a clean boot log.
     capabilities_.burst = false;
     capabilities_.multi_channel = false;
-#else
+    #else
     if(CONFIG_EERIE_LEAP_ADC_BURST_CHUNK >= 2) {
         sequence = MakeSequence(0, first_mask, 2);
         capabilities_.burst = Read(sequence) == 0;
@@ -174,7 +176,7 @@ bool Adc::Probe() {
         sequence = MakeSequence(0, first_mask | BIT(channel_configs_[1].channel_id), 1);
         capabilities_.multi_channel = Read(sequence) == 0;
     }
-#endif
+    #endif
 
     return true;
 }
@@ -182,15 +184,13 @@ bool Adc::Probe() {
 adc_sequence Adc::MakeSequence(int channel, uint32_t mask, uint16_t samplings) {
     sequence_options_.extra_samplings = samplings - 1;
 
-    return adc_sequence {
-        .options = samplings > 1 ? &sequence_options_ : nullptr,
+    return adc_sequence{ .options = samplings > 1 ? &sequence_options_ : nullptr,
         .channels = mask,
         .buffer = burst_buffer_.data(),
         .buffer_size = burst_buffer_.size() * sizeof(uint16_t),
         .resolution = resolutions_[channel],
         .oversampling = oversampling_[channel],
-        .calibrate = false
-    };
+        .calibrate = false };
 }
 
 // The ESP32 driver documents that a conversion may time out while the analog block is shared
@@ -230,8 +230,7 @@ void Adc::Sample(const AdcSampleRequest& request) noexcept {
 
     stats_.requests++;
 
-    const auto samples = static_cast<uint16_t>(
-        std::clamp<int>(request.samples, 1, CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX));
+    const auto samples = static_cast<uint16_t>(std::clamp<int>(request.samples, 1, CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX));
     const size_t count = ValidateRequest(request);
 
     uint16_t remaining = samples;
@@ -378,6 +377,6 @@ AdcStats Adc::GetStats() const {
     return stats_;
 }
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc
 
 #endif // CONFIG_ADC

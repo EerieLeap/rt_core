@@ -1,9 +1,9 @@
 #pragma once
 
-#include <unordered_map>
-#include <typeindex>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
+#include <typeindex>
+#include <unordered_map>
 
 namespace eerie_leap::configuration::cbor {
 
@@ -23,16 +23,10 @@ public:
     using CborGetSerializingSizeFn = size_t (*)(const T&);
 
     template<typename T>
-    static void Register(
-        CborEncodeFn<T> encode,
-        CborDecodeFn<T> decode,
-        CborGetSerializingSizeFn<T> get_size)
-    {
-        registry_[std::type_index(typeid(T))] = {
-            .encode = reinterpret_cast<void*>(encode),
+    static void Register(CborEncodeFn<T> encode, CborDecodeFn<T> decode, CborGetSerializingSizeFn<T> get_size) {
+        registry_[std::type_index(typeid(T))] = { .encode = reinterpret_cast<void*>(encode),
             .decode = reinterpret_cast<void*>(decode),
-            .get_size = reinterpret_cast<void*>(get_size)
-        };
+            .get_size = reinterpret_cast<void*>(get_size) };
     }
 
     template<typename T>
@@ -44,11 +38,9 @@ public:
         };
 
         auto& funcs = registry_.at(std::type_index(typeid(T)));
-        return Result{
-            .encode = reinterpret_cast<CborEncodeFn<T>>(funcs.encode),
+        return Result{ .encode = reinterpret_cast<CborEncodeFn<T>>(funcs.encode),
             .decode = reinterpret_cast<CborDecodeFn<T>>(funcs.decode),
-            .get_size = reinterpret_cast<CborGetSerializingSizeFn<T>>(funcs.get_size)
-        };
+            .get_size = reinterpret_cast<CborGetSerializingSizeFn<T>>(funcs.get_size) };
     }
 
 private:

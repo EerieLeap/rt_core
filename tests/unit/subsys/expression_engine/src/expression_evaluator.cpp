@@ -3,8 +3,8 @@
 #include <vector>
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/expression_engine/expression_evaluator.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::expression_engine;

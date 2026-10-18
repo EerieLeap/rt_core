@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <span>
-#include <memory_resource>
 #include <functional>
+#include <memory_resource>
+#include <span>
 
 namespace eerie_leap::domain::configuration_domain::utilities {
 

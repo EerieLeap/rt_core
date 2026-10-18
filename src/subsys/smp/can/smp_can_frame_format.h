@@ -14,7 +14,7 @@ namespace eerie_leap::subsys::smp::can {
  */
 class SmpCanFrameFormat {
 private:
-    static constexpr std::array<size_t, 7> CAN_FD_LENGTHS = {12, 16, 20, 24, 32, 48, 64};
+    static constexpr std::array<size_t, 7> CAN_FD_LENGTHS = { 12, 16, 20, 24, 32, 48, 64 };
 
     bool is_can_fd_ = false;
 
@@ -35,9 +35,12 @@ public:
     /** @brief Classic CAN frames. */
     constexpr SmpCanFrameFormat() = default;
     /** @param is_can_fd True for CAN FD frames. */
-    constexpr explicit SmpCanFrameFormat(bool is_can_fd) : is_can_fd_(is_can_fd) {}
+    constexpr explicit SmpCanFrameFormat(bool is_can_fd) :
+        is_can_fd_(is_can_fd) {}
 
-    [[nodiscard]] constexpr bool IsCanFd() const { return is_can_fd_; }
+    [[nodiscard]] constexpr bool IsCanFd() const {
+        return is_can_fd_;
+    }
 
     /** @brief Length of every frame of a packet but the last. */
     [[nodiscard]] constexpr size_t GetFrameSize() const {
@@ -45,7 +48,9 @@ public:
     }
 
     /** @brief Packet bytes in every frame of a packet but the last. */
-    [[nodiscard]] constexpr size_t GetDataSize() const { return GetFrameSize() - 1; }
+    [[nodiscard]] constexpr size_t GetDataSize() const {
+        return GetFrameSize() - 1;
+    }
 
     /** @brief Smallest frame length that holds @p size bytes; above 8, CAN FD only has fixed lengths. */
     [[nodiscard]] constexpr size_t GetPaddedSize(size_t size) const {
@@ -83,7 +88,8 @@ public:
 
         return static_cast<uint32_t>(
             CAN_FD_NOMINAL_BIT_TIMES * NANOS_PER_SECOND / bitrate
-            + CAN_FD_DATA_BIT_TIMES * NANOS_PER_SECOND / data_bitrate);
+            + CAN_FD_DATA_BIT_TIMES * NANOS_PER_SECOND / data_bitrate
+        );
     }
 
     constexpr bool operator==(const SmpCanFrameFormat&) const = default;

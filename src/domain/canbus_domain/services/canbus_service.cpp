@@ -1,5 +1,5 @@
-#include <exception>
 #include <algorithm>
+#include <exception>
 #include <vector>
 
 #include <zephyr/logging/log.h>
@@ -17,10 +17,11 @@ LOG_MODULE_REGISTER(canbus_service_logger);
 CanbusService::CanbusService(
     std::function<const device*(uint8_t)> dt_canbus_provider,
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager,
-    std::shared_ptr<WorkQueueThread> config_work_queue_thread)
-        : canbus_configuration_manager_(std::move(canbus_configuration_manager)),
-          dt_canbus_provider_(std::move(dt_canbus_provider)),
-          config_work_queue_thread_(std::move(config_work_queue_thread)) {
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread
+) :
+    canbus_configuration_manager_(std::move(canbus_configuration_manager)),
+    dt_canbus_provider_(std::move(dt_canbus_provider)),
+    config_work_queue_thread_(std::move(config_work_queue_thread)) {
 
     Configure();
 }
@@ -34,11 +35,11 @@ void CanbusService::Configure() {
     std::unordered_map<uint8_t, std::unique_ptr<Canbus>> canbuses;
     canbuses.reserve(canbus_proxies_.size());
 
-    for(const auto& [bus_channel, canbus_proxy]: canbus_proxies_)
+    for(const auto& [bus_channel, canbus_proxy] : canbus_proxies_)
         canbuses.try_emplace(bus_channel, canbus_proxy->Release());
     canbus_proxies_.clear();
 
-    for(const auto& [_, canbus]: canbuses) {
+    for(const auto& [_, canbus] : canbuses) {
         if(canbus->GetState() != ServiceState::STOPPED)
             canbus->Stop();
     }
@@ -53,10 +54,9 @@ void CanbusService::Configure() {
 
         if(!canbuses.contains(bus_channel)) {
             CanbusConfig canbus_config(
-                canbus_device,
-                channel_configuration.type,
-                channel_configuration.bitrate,
-                channel_configuration.data_bitrate);
+                canbus_device, channel_configuration.type, channel_configuration.bitrate,
+                channel_configuration.data_bitrate
+            );
 
             auto new_canbus = std::make_unique<Canbus>(canbus_config);
 
@@ -92,10 +92,8 @@ void CanbusService::Configure() {
         auto canbus_instance = canbuses.at(bus_channel).get();
 
         CanbusConfig canbus_config(
-            canbus_device,
-            channel_configuration.type,
-            channel_configuration.bitrate,
-            channel_configuration.data_bitrate);
+            canbus_device, channel_configuration.type, channel_configuration.bitrate, channel_configuration.data_bitrate
+        );
 
         if(!canbus_instance->Configure(canbus_config)) {
             LOG_ERR("Failed to configure CAN channel %d.", bus_channel);
@@ -114,9 +112,7 @@ void CanbusService::Configure() {
             continue;
         }
 
-        canbus_proxies_.try_emplace(
-            bus_channel,
-            std::make_shared<CanbusProxy>(std::move(canbus)));
+        canbus_proxies_.try_emplace(bus_channel, std::make_shared<CanbusProxy>(std::move(canbus)));
     }
 
     for(const auto& [_, handler] : configuration_updated_handlers_)
@@ -164,7 +160,8 @@ const CanChannelConfiguration* CanbusService::GetChannelConfiguration(uint8_t bu
     return &canbus_configuration->channel_configurations.at(bus_channel);
 }
 
-std::shared_ptr<CanMessageConfiguration> CanbusService::GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const {
+std::shared_ptr<CanMessageConfiguration>
+CanbusService::GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const {
     const auto* channel_configuration = GetChannelConfiguration(bus_channel);
     if(channel_configuration == nullptr)
         return nullptr;
@@ -173,7 +170,8 @@ std::shared_ptr<CanMessageConfiguration> CanbusService::GetMessageConfiguration(
         channel_configuration->message_configurations,
         [frame_id](const std::shared_ptr<CanMessageConfiguration>& message_configuration) {
             return message_configuration->frame_id == frame_id;
-        });
+        }
+    );
 
     if(message_configuration == channel_configuration->message_configurations.end())
         return nullptr;

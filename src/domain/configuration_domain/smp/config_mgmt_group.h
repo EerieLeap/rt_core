@@ -12,18 +12,18 @@
 #include <zephyr/kernel.h>
 
 #include "subsys/smp/smp_group.h"
-#include "subsys/threading/work_queue_thread.h"
 #include "subsys/threading/work_queue_task.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "domain/configuration_domain/services/configuration_service.h"
 
 namespace eerie_leap::domain::configuration_domain::smp {
 
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::subsys::smp::SmpGroup;
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
-using eerie_leap::domain::configuration_domain::services::ConfigurationService;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 /**
  * @brief SMP `config` group: lists the configuration types and reads or writes their CBOR in chunks.
@@ -40,10 +40,10 @@ class ConfigMgmtGroup : public SmpGroup<ConfigMgmtGroup> {
 public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
-        LIST = 0,  ///< Read: `{types: [{type, max}]}`.
+        LIST = 0,       ///< Read: `{types: [{type, max}]}`.
         STORED_CRC = 1, ///< Read `{type}`: `{type, len, crc}` of the stored configuration.
-        READ = 2,  ///< Read `{type, off}`: `{off, data}`, plus `len` and `crc` at `off = 0`.
-        WRITE = 3, ///< Write `{type, off, data}`, plus `len` and `crc` at `off = 0`, `tok` after: `{off, tok}`.
+        READ = 2,       ///< Read `{type, off}`: `{off, data}`, plus `len` and `crc` at `off = 0`.
+        WRITE = 3,      ///< Write `{type, off, data}`, plus `len` and `crc` at `off = 0`, `tok` after: `{off, tok}`.
     };
 
     /** @brief Group error codes, returned in the SMP v2 `err` map. */
@@ -141,7 +141,8 @@ public:
      */
     ConfigMgmtGroup(
         std::shared_ptr<ConfigurationService> configuration_service,
-        std::shared_ptr<WorkQueueThread> config_work_queue_thread);
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread
+    );
     ~ConfigMgmtGroup();
 
     /** @brief Creates the work queue tasks; needs a running work queue. Call before Register(). */

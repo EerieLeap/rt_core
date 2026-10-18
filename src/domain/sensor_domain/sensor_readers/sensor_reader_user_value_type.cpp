@@ -1,8 +1,8 @@
 #include <cmath>
 #include <stdexcept>
 
-#include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/reading_status.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
 #include "sensor_reader_user_value_type.h"
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
@@ -11,8 +11,9 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderUserValueType::SensorReaderUserValueType(
     std::shared_ptr<ITimeService> time_service,
-    const SensorRuntime& runtime)
-        : SensorReaderBase(std::move(time_service), runtime) {
+    const SensorRuntime& runtime
+) :
+    SensorReaderBase(std::move(time_service), runtime) {
 
     const auto type = GetSensor().configuration.type;
     if(type != SensorType::USER_ANALOG && type != SensorType::USER_INDICATOR)

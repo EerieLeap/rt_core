@@ -16,10 +16,10 @@ namespace {
 constexpr uint8_t LOGGING_STATUS_CODE = std::to_underlying(CanbusComStateType::LOGGING_STATUS);
 
 // The records as other units send them: flags (bit 0 active), then the reason while inactive.
-const Bytes ACTIVE = {0x01, 0x00};
-const Bytes STOPPED = {0x00, 0x00};
-const Bytes WRITE_FAILED = {0x00, 0x01};
-const Bytes NO_SPACE = {0x00, 0x02};
+const Bytes ACTIVE = { 0x01, 0x00 };
+const Bytes STOPPED = { 0x00, 0x00 };
+const Bytes WRITE_FAILED = { 0x00, 0x01 };
+const Bytes NO_SPACE = { 0x00, 0x02 };
 
 constexpr uint32_t ReasonValue(LoggingStatusReason reason) {
     return static_cast<uint32_t>(reason);
@@ -30,7 +30,9 @@ void AssertSetLocalState(FakeTransport& transport, const Bytes& expected, bool i
     zassert_true(change.has_value(), "%s: the record changes", message);
     zassert_equal(change->state_type, CanbusComStateType::LOGGING_STATUS, "%s: as LOGGING_STATUS", message);
     zassert_true(change->data == Data(expected), "%s: to the expected bytes", message);
-    zassert_equal(change->is_accepted, is_accepted, "%s: %s by the transport", message, is_accepted ? "taken" : "refused");
+    zassert_equal(
+        change->is_accepted, is_accepted, "%s: %s by the transport", message, is_accepted ? "taken" : "refused"
+    );
 }
 
 void AssertLocalChange(FakeTransport& transport, const Bytes& expected, const char* message) {
@@ -41,7 +43,12 @@ void AssertRefusedChange(FakeTransport& transport, const Bytes& expected, const 
     AssertSetLocalState(transport, expected, false, message);
 }
 
-void AssertImported(StatusProbe& probe, bool is_active, std::optional<LoggingStatusReason> reason, const char* message) {
+void AssertImported(
+    StatusProbe& probe,
+    bool is_active,
+    std::optional<LoggingStatusReason> reason,
+    const char* message
+) {
     auto event = probe.WaitForEvent();
     zassert_true(event.has_value(), "%s: the importer publishes", message);
     zassert_equal(event->source_id, IMPORTED_EVENT_SOURCE_ID, "%s: as an imported event", message);
@@ -58,7 +65,8 @@ void AssertImported(StatusProbe& probe, bool is_active, std::optional<LoggingSta
 /** @brief A channel with the events of logging_events, which no bus carries until a test registers it. */
 class LateLoggingEventsChannel : public LoggingChannel {
 private:
-    LateLoggingEventsChannel() : LoggingChannel("late_logging_events", 8) { }
+    LateLoggingEventsChannel() :
+        LoggingChannel("late_logging_events", 8) {}
 
 public:
     static LateLoggingEventsChannel& GetInstance() {
@@ -114,7 +122,14 @@ static void NetworkStateBridgeAfter(void* data) {
     fixture->transport.reset();
 }
 
-ZTEST_SUITE(network_state_bridge, NULL, NetworkStateBridgeSetup, NetworkStateBridgeBefore, NetworkStateBridgeAfter, NULL);
+ZTEST_SUITE(
+    network_state_bridge,
+    NULL,
+    NetworkStateBridgeSetup,
+    NetworkStateBridgeBefore,
+    NetworkStateBridgeAfter,
+    NULL
+);
 
 ZTEST(network_state_bridge, test_imported_events_have_a_source_of_their_own) {
     // The log writer publishes with source 0, and every other publisher with the hash of its function.
@@ -149,7 +164,7 @@ ZTEST_F(network_state_bridge, test_exporter_maps_status_events) {
     PublishStatus(true);
     AssertLocalChange(transport, ACTIVE, "The cleanup stop keeps the failure, and the next start clears it");
 
-    LoggingEventsChannel::GetInstance().PublishAsync({.type = LoggingEventType::StatusUpdated});
+    LoggingEventsChannel::GetInstance().PublishAsync({ .type = LoggingEventType::StatusUpdated });
     PublishStatus(false, LoggingStatusReason::NoSpace);
     AssertLocalChange(transport, NO_SPACE, "An event without IsActive changes nothing");
 
@@ -172,8 +187,7 @@ ZTEST_F(network_state_bridge, test_exporter_skips_imported_events) {
     AssertLocalChange(transport, WRITE_FAILED, "The imported start never becomes this unit's record");
 
     PublishStatus(false, LoggingStatusReason::NoSpace, IMPORTED_EVENT_SOURCE_ID);
-    zassert_false(transport.WaitForLocalChange(NO_EVENT_TIMEOUT_MS).has_value(),
-        "Nor does an imported failure");
+    zassert_false(transport.WaitForLocalChange(NO_EVENT_TIMEOUT_MS).has_value(), "Nor does an imported failure");
 }
 
 ZTEST_F(network_state_bridge, test_exporter_withdraws_its_record_on_destruction) {
@@ -192,8 +206,7 @@ ZTEST_F(network_state_bridge, test_exporter_withdraws_its_record_on_destruction)
     zassert_true(withdrawal->data.IsEmpty(), "with empty data");
 
     PublishStatus(false, LoggingStatusReason::WriteFailed);
-    zassert_false(transport.WaitForLocalChange(NO_EVENT_TIMEOUT_MS).has_value(),
-        "and later events no longer reach it");
+    zassert_false(transport.WaitForLocalChange(NO_EVENT_TIMEOUT_MS).has_value(), "and later events no longer reach it");
 }
 
 ZTEST_F(network_state_bridge, test_exporter_offers_a_refused_record_again) {
@@ -215,12 +228,16 @@ ZTEST_F(network_state_bridge, test_exporter_offers_a_refused_record_again) {
 
     transport.RefuseLocalStates(false);
     PublishStatus(false, LoggingStatusReason::Stopped);
-    AssertLocalChange(transport, WRITE_FAILED,
-        "The cleanup stop offers the refused failure again: the record follows the events, not the transport");
+    AssertLocalChange(
+        transport, WRITE_FAILED,
+        "The cleanup stop offers the refused failure again: the record follows the events, not the transport"
+    );
 
     PublishStatus(false, LoggingStatusReason::Stopped);
-    zassert_false(transport.WaitForLocalChange(NO_EVENT_TIMEOUT_MS).has_value(),
-        "Once the transport took the record, an event that keeps it offers nothing");
+    zassert_false(
+        transport.WaitForLocalChange(NO_EVENT_TIMEOUT_MS).has_value(),
+        "Once the transport took the record, an event that keeps it offers nothing"
+    );
 }
 
 ZTEST_F(network_state_bridge, test_importer_catches_up_on_registration) {
@@ -271,8 +288,10 @@ ZTEST_F(network_state_bridge, test_importer_publishes_the_combined_state_once_pe
     transport.SetRemoteState(1, ACTIVE);
     transport.SetRemoteState(3, STOPPED);
     transport.NotifyHandlers();
-    zassert_false(probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(),
-        "Changed records that combine to the same state publish nothing");
+    zassert_false(
+        probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(),
+        "Changed records that combine to the same state publish nothing"
+    );
 
     transport.RemoveRemoteState(1);
     transport.RemoveRemoteState(3);
@@ -378,8 +397,14 @@ static void NetworkStateBridgeCdmpAfter(void* data) {
     cdmp_loopback_test::ResetLoopbackDevice();
 }
 
-ZTEST_SUITE(network_state_bridge_cdmp, NULL,
-    NetworkStateBridgeCdmpSetup, NetworkStateBridgeCdmpBefore, NetworkStateBridgeCdmpAfter, NULL);
+ZTEST_SUITE(
+    network_state_bridge_cdmp,
+    NULL,
+    NetworkStateBridgeCdmpSetup,
+    NetworkStateBridgeCdmpBefore,
+    NetworkStateBridgeCdmpAfter,
+    NULL
+);
 
 ZTEST_F(network_state_bridge_cdmp, test_exporter_shares_the_status_with_other_units) {
     Harness& harness = *fixture->harness;

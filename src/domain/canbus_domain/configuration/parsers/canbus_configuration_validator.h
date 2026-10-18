@@ -1,15 +1,15 @@
 #pragma once
 
-#include "subsys/fs/services/i_fs_service.h"
 #include "domain/canbus_domain/models/canbus_configuration.h"
+#include "subsys/fs/services/i_fs_service.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
 
-using eerie_leap::subsys::fs::services::IFsService;
-using eerie_leap::subsys::canbus::CanbusType;
 using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
+using eerie_leap::subsys::canbus::CanbusType;
+using eerie_leap::subsys::fs::services::IFsService;
 
 class CanbusConfigurationValidator {
 private:
@@ -23,7 +23,8 @@ private:
     static void ValidateMessages(const CanbusConfiguration& configuration, IFsService* sd_fs_service);
     static void ValidateMessageFrameId(const CanChannelConfiguration& channel_configuration);
     static void ValidateMessageSendIntervalMs(const CanChannelConfiguration& channel_configuration);
-    static void ValidateMessageScriptPath(const CanChannelConfiguration& channel_configuration, IFsService* sd_fs_service);
+    static void
+    ValidateMessageScriptPath(const CanChannelConfiguration& channel_configuration, IFsService* sd_fs_service);
     static void ValidateMessageName(const CanChannelConfiguration& channel_configuration);
     static void ValidateMessageSize(const CanChannelConfiguration& channel_configuration, CanbusType type);
 

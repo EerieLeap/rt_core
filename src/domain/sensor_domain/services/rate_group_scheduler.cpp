@@ -13,7 +13,7 @@
 
 // Deadlines are absolute uptime ticks, which the kernel only takes with 64-bit timeouts.
 #ifndef CONFIG_TIMEOUT_64BIT
-#error "The rate group scheduler needs CONFIG_TIMEOUT_64BIT for absolute deadlines."
+    #error "The rate group scheduler needs CONFIG_TIMEOUT_64BIT for absolute deadlines."
 #endif
 
 namespace eerie_leap::domain::sensor_domain::services {
@@ -28,10 +28,11 @@ LOG_MODULE_DECLARE(processing_service_logger);
 RateGroupScheduler::RateGroupScheduler(
     std::shared_ptr<WorkQueueThread> work_queue_thread,
     std::shared_ptr<ReadingPipeline> pipeline,
-    std::shared_ptr<ITimeService> time_service)
-        : work_queue_thread_(std::move(work_queue_thread)),
-        pipeline_(std::move(pipeline)),
-        time_service_(std::move(time_service)) {
+    std::shared_ptr<ITimeService> time_service
+) :
+    work_queue_thread_(std::move(work_queue_thread)),
+    pipeline_(std::move(pipeline)),
+    time_service_(std::move(time_service)) {
 
     k_mutex_init(&groups_mutex_);
 }
@@ -49,8 +50,7 @@ static uint32_t EstimateSamplingUs(const AdcSampleSet& adc_samples) {
 
     for(size_t i = 0; i < adc_samples.GetAdcCount(); i++) {
         const auto adc = adc_samples.GetAdc(i);
-        estimate_us += static_cast<uint64_t>(adc.channels.size())
-            * adc.samples
+        estimate_us += static_cast<uint64_t>(adc.channels.size()) * adc.samples
             * adc.adc->GetCapabilities().us_per_conversion;
     }
 
@@ -65,28 +65,34 @@ void RateGroupScheduler::SetGroups(std::vector<std::unique_ptr<RateGroup>> group
 
     Stop();
 
-    std::ranges::sort(groups, {}, [](const auto& group) { return group->period_ms; });
+    std::ranges::sort(groups, {}, [](const auto& group) {
+        return group->period_ms;
+    });
 
     for(auto& group : groups) {
         // In 64 bits: at 10 000 ticks/s a period above ~59 hours overflows the 32-bit conversion.
-        group->period_ticks = static_cast<k_ticks_t>(
-            k_ms_to_ticks_ceil64(static_cast<uint64_t>(group->period_ms)));
+        group->period_ticks = static_cast<k_ticks_t>(k_ms_to_ticks_ceil64(static_cast<uint64_t>(group->period_ms)));
 
         // Deadlines are whole ticks, so a period that is not one runs slow by up to a tick.
         const uint64_t period_us = k_ticks_to_us_floor64(static_cast<uint64_t>(group->period_ticks));
         if(period_us != static_cast<uint64_t>(group->period_ms) * 1000) {
-            LOG_WRN("Rate group %d ms: runs every %llu us, the period is not a whole number of system ticks.",
-                group->period_ms, static_cast<unsigned long long>(period_us));
+            LOG_WRN(
+                "Rate group %d ms: runs every %llu us, the period is not a whole number of system ticks.",
+                group->period_ms, static_cast<unsigned long long>(period_us)
+            );
         }
 
         const uint32_t estimate_us = EstimateSamplingUs(group->adc_samples);
-        LOG_INF("Rate group %d ms: %zu sensors, %zu ADC channels, ~%u us of sampling per tick",
-            group->period_ms, group->entries.size(), group->adc_samples.GetChannelCount(), estimate_us);
+        LOG_INF(
+            "Rate group %d ms: %zu sensors, %zu ADC channels, ~%u us of sampling per tick", group->period_ms,
+            group->entries.size(), group->adc_samples.GetChannelCount(), estimate_us
+        );
 
         // The other half is for the readers, the other groups and the threads above processing.
         if(estimate_us > static_cast<uint64_t>(group->period_ms) * 1000 / 2)
-            LOG_WRN("Rate group %d ms: ~%u us of sampling is more than half the period.",
-                group->period_ms, estimate_us);
+            LOG_WRN(
+                "Rate group %d ms: ~%u us of sampling is more than half the period.", group->period_ms, estimate_us
+            );
     }
 
     ScopedMutex guard(groups_mutex_);
@@ -120,8 +126,8 @@ void RateGroupScheduler::Start() {
     }
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
-    next_stats_log_ = now + static_cast<int64_t>(
-        k_sec_to_ticks_ceil64(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S));
+    next_stats_log_ = now
+        + static_cast<int64_t>(k_sec_to_ticks_ceil64(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S));
 #endif
 
     // The dispatcher reschedules with the last result when a tick throws. A new task has
@@ -208,8 +214,10 @@ WorkQueueTaskResult RateGroupScheduler::Tick() {
     // interval's period maximum instead.
     if(now >= next_stats_log_) {
         LogStats();
-        next_stats_log_ = now + static_cast<int64_t>(
-            k_sec_to_ticks_ceil64(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S));
+        next_stats_log_ = now
+            + static_cast<int64_t>(
+                k_sec_to_ticks_ceil64(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S)
+            );
     }
 #endif
 
@@ -218,19 +226,16 @@ WorkQueueTaskResult RateGroupScheduler::Tick() {
         return { .reschedule = false };
 
     // A deadline that passed while the groups ran is clamped to the next tick by the kernel.
-    return {
-        .reschedule = true,
-        .delay = K_TIMEOUT_ABS_TICKS(GetEarliestDeadline())
-    };
+    return { .reschedule = true, .delay = K_TIMEOUT_ABS_TICKS(GetEarliestDeadline()) };
 }
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
 static RateGroupCycles GetRateGroupCycles() {
-#ifdef CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
+    #ifdef CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
     return k_cycle_get_64();
-#else
+    #else
     return k_cycle_get_32();
-#endif
+    #endif
 }
 
 static uint32_t CyclesToUs(uint64_t cycles) {
@@ -259,7 +264,7 @@ void RateGroupScheduler::RunGroup(RateGroup& group) {
 
         try {
             reading = entry.reader->Read(tick);
-        } catch (const std::exception& e) {
+        } catch(const std::exception& e) {
             reading.SetError(ReadingError::READER_FAILED);
 
             LOG_DBG("Error reading sensor: %s, Error: %s", runtime.GetSensor().id.c_str(), e.what());
@@ -285,12 +290,12 @@ static int FormatChannel(char* buffer, size_t size, int channel, const AdcSample
     const long millivolts = std::lround(sample.volts * 1000.0F);
     const long magnitude = millivolts < 0 ? -millivolts : millivolts;
 
-    return snprintf(buffer, size, " ch%d %s%ld.%03ld V",
-        channel, millivolts < 0 ? "-" : "", magnitude / 1000, magnitude % 1000);
+    return snprintf(
+        buffer, size, " ch%d %s%ld.%03ld V", channel, millivolts < 0 ? "-" : "", magnitude / 1000, magnitude % 1000
+    );
 }
 
-size_t RateGroupScheduler::FormatChannels(
-    const AdcSampleSet& adc_samples, size_t first, std::span<char> line) {
+size_t RateGroupScheduler::FormatChannels(const AdcSampleSet& adc_samples, size_t first, std::span<char> line) {
 
     if(line.empty())
         return first;
@@ -307,11 +312,8 @@ size_t RateGroupScheduler::FormatChannels(
                 continue;
 
             char item[48];
-            const int written = FormatChannel(
-                item, sizeof(item), adc.global_channels[j], adc.results[adc.channels[j]]);
-            const size_t item_length = written > 0
-                ? std::min(static_cast<size_t>(written), sizeof(item) - 1)
-                : 0;
+            const int written = FormatChannel(item, sizeof(item), adc.global_channels[j], adc.results[adc.channels[j]]);
+            const size_t item_length = written > 0 ? std::min(static_cast<size_t>(written), sizeof(item) - 1) : 0;
 
             // The next channel goes on the next line; a line holds at least one.
             if(length > 0 && length + item_length >= line.size())
@@ -338,11 +340,12 @@ void RateGroupScheduler::LogStats() {
         RateGroupPeriodWindow& window = group.period_window;
 
         const bool has_periods = window.periods > 0;
-        LOG_INF("Rate group %d ms: %u ticks, %u overruns, tick last/max %u/%u us, period avg/min/max %u/%u/%u us",
+        LOG_INF(
+            "Rate group %d ms: %u ticks, %u overruns, tick last/max %u/%u us, period avg/min/max %u/%u/%u us",
             group.period_ms, stats.ticks, stats.overruns, stats.last_us, stats.max_us,
             has_periods ? CyclesToUs(window.sum_cycles / window.periods) : 0,
-            has_periods ? CyclesToUs(window.min_cycles) : 0,
-            has_periods ? CyclesToUs(window.max_cycles) : 0);
+            has_periods ? CyclesToUs(window.min_cycles) : 0, has_periods ? CyclesToUs(window.max_cycles) : 0
+        );
 
         window.StartInterval();
 

@@ -12,13 +12,13 @@ using eerie_leap::subsys::smp::SmpGroupId;
 using eerie_leap::subsys::smp::SmpMapKey;
 
 const mgmt_handler CalibrationMgmtGroup::HANDLERS[] = {
-    {.mh_read = nullptr, .mh_write = Dispatch<&CalibrationMgmtGroup::HandleStart>},
-    {.mh_read = nullptr, .mh_write = Dispatch<&CalibrationMgmtGroup::HandleStop>},
-    {.mh_read = Dispatch<&CalibrationMgmtGroup::HandleRead>, .mh_write = nullptr},
+    { .mh_read = nullptr, .mh_write = Dispatch<&CalibrationMgmtGroup::HandleStart> },
+    { .mh_read = nullptr, .mh_write = Dispatch<&CalibrationMgmtGroup::HandleStop> },
+    { .mh_read = Dispatch<&CalibrationMgmtGroup::HandleRead>, .mh_write = nullptr },
 };
 
-CalibrationMgmtGroup::CalibrationMgmtGroup(std::shared_ptr<CalibrationService> calibration_service, int channel_count)
-    : SmpGroup(SmpGroupId::CALIBRATION, HANDLERS, TranslateError),
+CalibrationMgmtGroup::CalibrationMgmtGroup(std::shared_ptr<CalibrationService> calibration_service, int channel_count) :
+    SmpGroup(SmpGroupId::CALIBRATION, HANDLERS, TranslateError),
     calibration_service_(std::move(calibration_service)),
     channel_count_(channel_count) {}
 
@@ -28,7 +28,7 @@ CalibrationMgmtGroup::~CalibrationMgmtGroup() {
 
 int CalibrationMgmtGroup::HandleStart(smp_streamer* ctxt) {
     uint32_t channel = 0;
-    std::array keys = {SmpMapKey("channel", zcbor_uint32_decode, &channel)};
+    std::array keys = { SmpMapKey("channel", zcbor_uint32_decode, &channel) };
 
     if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found)
         return MGMT_ERR_EINVAL;
@@ -59,17 +59,24 @@ int CalibrationMgmtGroup::HandleRead(smp_streamer* ctxt) {
         return Fail(ctxt, Error::NOT_RUNNING);
 
     const CalibrationService::Result result = latest.value_or(CalibrationService::Result{});
-    const auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        result.timestamp.time_since_epoch()).count();
+    const auto timestamp_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(result.timestamp.time_since_epoch()).count();
 
     zcbor_state_t* zse = ctxt->writer->zs;
-    const bool ok = zcbor_tstr_put_lit(zse, "channel") && zcbor_uint32_put(zse, static_cast<uint32_t>(*channel))
-        && zcbor_tstr_put_lit(zse, "adc_v") && zcbor_float32_put(zse, result.adc_volts)
-        && zcbor_tstr_put_lit(zse, "sensor_v") && zcbor_float32_put(zse, result.sensor_volts)
-        && zcbor_tstr_put_lit(zse, "ts") && zcbor_uint64_put(zse, static_cast<uint64_t>(timestamp_ms))
-        && zcbor_tstr_put_lit(zse, "seq") && zcbor_uint32_put(zse, result.sequence)
-        && zcbor_tstr_put_lit(zse, "adc_err") && zcbor_int32_put(zse, std::to_underlying(result.error))
-        && zcbor_tstr_put_lit(zse, "running") && zcbor_bool_put(zse, is_running);
+    const bool ok = zcbor_tstr_put_lit(zse, "channel")
+        && zcbor_uint32_put(zse, static_cast<uint32_t>(*channel))
+        && zcbor_tstr_put_lit(zse, "adc_v")
+        && zcbor_float32_put(zse, result.adc_volts)
+        && zcbor_tstr_put_lit(zse, "sensor_v")
+        && zcbor_float32_put(zse, result.sensor_volts)
+        && zcbor_tstr_put_lit(zse, "ts")
+        && zcbor_uint64_put(zse, static_cast<uint64_t>(timestamp_ms))
+        && zcbor_tstr_put_lit(zse, "seq")
+        && zcbor_uint32_put(zse, result.sequence)
+        && zcbor_tstr_put_lit(zse, "adc_err")
+        && zcbor_int32_put(zse, std::to_underlying(result.error))
+        && zcbor_tstr_put_lit(zse, "running")
+        && zcbor_bool_put(zse, is_running);
 
     return MGMT_RETURN_CHECK(ok);
 }

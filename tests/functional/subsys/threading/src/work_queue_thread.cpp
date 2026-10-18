@@ -22,22 +22,25 @@ struct TaskProbe {
     atomic_t runs;
     int reschedules;
 
-    explicit TaskProbe(int reschedules = 0) : runs(ATOMIC_INIT(0)), reschedules(reschedules) {
+    explicit TaskProbe(int reschedules = 0) :
+        runs(ATOMIC_INIT(0)),
+        reschedules(reschedules) {
         k_sem_init(&finished, 0, K_SEM_MAX_LIMIT);
     }
 
-    [[nodiscard]] int Runs() const { return static_cast<int>(atomic_get(&runs)); }
-    bool WaitForRun(int timeout_ms) { return k_sem_take(&finished, K_MSEC(timeout_ms)) == 0; }
+    [[nodiscard]] int Runs() const {
+        return static_cast<int>(atomic_get(&runs));
+    }
+    bool WaitForRun(int timeout_ms) {
+        return k_sem_take(&finished, K_MSEC(timeout_ms)) == 0;
+    }
 };
 
 WorkQueueTaskResult ProbeHandler(TaskProbe* probe) {
     atomic_val_t previous_runs = atomic_inc(&probe->runs);
     k_sem_give(&probe->finished);
 
-    return {
-        .reschedule = previous_runs < probe->reschedules,
-        .delay = K_MSEC(5)
-    };
+    return { .reschedule = previous_runs < probe->reschedules, .delay = K_MSEC(5) };
 }
 
 std::unique_ptr<WorkQueueThread> MakeQueueThread(const char* name) {
@@ -74,7 +77,7 @@ void MatchThreadName(const k_thread* thread, void* user_data) {
 }
 
 bool ThreadExists(const char* name) {
-    ThreadLookup lookup {name, false};
+    ThreadLookup lookup{ name, false };
     k_thread_foreach(MatchThreadName, &lookup);
 
     return lookup.found;
@@ -87,10 +90,15 @@ ZTEST_SUITE(work_queue_thread, NULL, NULL, NULL, NULL, NULL);
 ZTEST(work_queue_thread, test_an_unstarted_queue_rejects_every_operation) {
     WorkQueueThread queue_thread("wq_unstarted", STACK_SIZE, PRIORITY);
 
-    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread.GetWorkQueue(); }));
-    zassert_true(ThrowsRuntimeError([&] { queue_thread.Run([] {}); }));
     zassert_true(ThrowsRuntimeError([&] {
-        (void)queue_thread.CreateTask(ProbeHandler, std::make_unique<TaskProbe>()); }));
+        (void)queue_thread.GetWorkQueue();
+    }));
+    zassert_true(ThrowsRuntimeError([&] {
+        queue_thread.Run([] {});
+    }));
+    zassert_true(ThrowsRuntimeError([&] {
+        (void)queue_thread.CreateTask(ProbeHandler, std::make_unique<TaskProbe>());
+    }));
 
     queue_thread.Stop();
 
@@ -126,7 +134,9 @@ ZTEST(work_queue_thread, test_Initialize_reports_a_stack_allocation_failure) {
 
     zassert_false(queue_thread.Initialize());
     zassert_is_null(queue_thread.GetStack());
-    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread.GetWorkQueue(); }));
+    zassert_true(ThrowsRuntimeError([&] {
+        (void)queue_thread.GetWorkQueue();
+    }));
 }
 
 ZTEST(work_queue_thread, test_Stop_can_be_repeated) {
@@ -289,7 +299,9 @@ ZTEST(work_queue_thread, test_Stop_drains_the_work_that_is_still_pending) {
     atomic_t completed = ATOMIC_INIT(0);
 
     for(int i = 0; i < RUN_COUNT; ++i)
-        queue_thread->Run([&] { atomic_inc(&completed); });
+        queue_thread->Run([&] {
+            atomic_inc(&completed);
+        });
 
     queue_thread->Stop();
 
@@ -305,7 +317,9 @@ ZTEST(work_queue_thread, test_the_destructor_drains_and_stops_the_queue_thread) 
         auto queue_thread = MakeQueueThread("wq_destroyed");
 
         for(int i = 0; i < RUN_COUNT; ++i)
-            queue_thread->Run([&] { atomic_inc(&completed); });
+            queue_thread->Run([&] {
+                atomic_inc(&completed);
+            });
     }
 
     zassert_equal(atomic_get(&completed), RUN_COUNT);
@@ -319,7 +333,9 @@ ZTEST(work_queue_thread, test_Stop_releases_the_runner_task_state) {
     k_sem done;
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 
-    queue_thread->Run([tracker, &done] { k_sem_give(&done); });
+    queue_thread->Run([tracker, &done] {
+        k_sem_give(&done);
+    });
 
     zassert_equal(k_sem_take(&done, K_MSEC(SYNC_TIMEOUT_MS)), 0);
 
@@ -333,8 +349,12 @@ ZTEST(work_queue_thread, test_a_stopped_queue_rejects_new_work) {
 
     queue_thread->Stop();
 
-    zassert_true(ThrowsRuntimeError([&] { (void)queue_thread->GetWorkQueue(); }));
-    zassert_true(ThrowsRuntimeError([&] { queue_thread->Run([] {}); }));
+    zassert_true(ThrowsRuntimeError([&] {
+        (void)queue_thread->GetWorkQueue();
+    }));
+    zassert_true(ThrowsRuntimeError([&] {
+        queue_thread->Run([] {});
+    }));
     zassert_false(ThreadExists("wq_stopped"));
 }
 
@@ -375,7 +395,7 @@ ZTEST(work_queue_thread, test_IsCurrentThread_holds_inside_a_created_task) {
         WorkQueueThread* queue_thread;
         bool is_queue_thread;
         k_sem done;
-    } observation {queue_thread.get(), false, {}};
+    } observation{ queue_thread.get(), false, {} };
 
     k_sem_init(&observation.done, 0, K_SEM_MAX_LIMIT);
 
@@ -384,9 +404,10 @@ ZTEST(work_queue_thread, test_IsCurrentThread_holds_inside_a_created_task) {
             state->is_queue_thread = state->queue_thread->IsCurrentThread();
             k_sem_give(&state->done);
 
-            return WorkQueueTaskResult { .reschedule = false };
+            return WorkQueueTaskResult{ .reschedule = false };
         },
-        &observation);
+        &observation
+    );
 
     task.Schedule();
 

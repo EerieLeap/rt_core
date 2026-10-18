@@ -1,11 +1,11 @@
 #pragma once
 
-#include <memory>
 #include <cstdint>
-#include <string>
+#include <exception>
+#include <memory>
 #include <optional>
 #include <span>
-#include <exception>
+#include <string>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -24,12 +24,12 @@ namespace eerie_leap::configuration::services {
 
 namespace cbor = eerie_leap::configuration::cbor;
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::utilities::memory::Mrm;
 
-template <typename T>
+template<typename T>
 class CborConfigurationService {
 private:
     const std::string configuration_dir_ = "config";
@@ -43,17 +43,17 @@ private:
 
     struct SaveTask {
         k_work work;
-        CborConfigurationService<T>* instance{nullptr};
-        T* configuration{nullptr}; // null to write config_bytes as they are
+        CborConfigurationService<T>* instance{ nullptr };
+        T* configuration{ nullptr }; // null to write config_bytes as they are
         std::span<const uint8_t> config_bytes;
-        bool result{false};
+        bool result{ false };
     };
 
     struct LoadTask {
         k_work work;
-        CborConfigurationService<T>* instance{nullptr};
-        bool decode{true};
-        std::optional<LoadedConfig<T>> result{std::nullopt};
+        CborConfigurationService<T>* instance{ nullptr };
+        bool decode{ true };
+        std::optional<LoadedConfig<T>> result{ std::nullopt };
     };
 
     // NOTE: When a work queue is supplied, Save and Load run on it
@@ -71,7 +71,7 @@ private:
 
     void SetStoredInfo(size_t size, uint32_t crc) {
         K_SPINLOCK(&stored_info_lock_) {
-            stored_info_ = {.size = size, .crc = crc};
+            stored_info_ = { .size = size, .crc = crc };
         }
     }
 
@@ -146,10 +146,8 @@ private:
             LOG_INF("%s configuration loaded successfully.", configuration_file_path_.c_str());
         }
 
-        LoadedConfig<T> loaded_config {
-            .config_raw = std::move(buffer),
-            .config = std::move(configuration),
-            .checksum = crc
+        LoadedConfig<T> loaded_config{
+            .config_raw = std::move(buffer), .config = std::move(configuration), .checksum = crc
         };
 
         return loaded_config;
@@ -245,10 +243,11 @@ public:
     CborConfigurationService(
         std::string configuration_name,
         std::shared_ptr<IFsService> fs_service,
-        std::shared_ptr<WorkQueueThread> work_queue_thread = nullptr)
-        : configuration_name_(std::move(configuration_name)),
-          fs_service_(std::move(fs_service)),
-          work_queue_thread_(std::move(work_queue_thread)) {
+        std::shared_ptr<WorkQueueThread> work_queue_thread = nullptr
+    ) :
+        configuration_name_(std::move(configuration_name)),
+        fs_service_(std::move(fs_service)),
+        work_queue_thread_(std::move(work_queue_thread)) {
 
         k_mutex_init(&mutex_);
 

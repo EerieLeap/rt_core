@@ -1,41 +1,41 @@
 #include <cmath>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
+#include "subsys/expression_engine/expression_evaluator.h"
+#include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
+#include "subsys/time/time_service.h"
 #include "utilities/memory/memory_resource_manager.h"
 #include "utilities/string/string_helpers.h"
-#include "subsys/expression_engine/expression_evaluator.h"
-#include "subsys/time/rtc_provider.h"
-#include "subsys/time/boot_elapsed_time_provider.h"
-#include "subsys/time/time_service.h"
 
-#include "subsys/adc/i_adc.h"
 #include "subsys/adc/adc_factory.hpp"
 #include "subsys/adc/adc_simulator.h"
-#include "subsys/gpio/i_gpio.h"
-#include "subsys/gpio/gpio_simulator.h"
+#include "subsys/adc/i_adc.h"
 #include "subsys/fs/services/fs_service.h"
+#include "subsys/gpio/gpio_simulator.h"
+#include "subsys/gpio/i_gpio.h"
 
-#include "subsys/device_tree/dt_fs.h"
 #include "domain/adc_domain/configuration/adc_configuration_manager.h"
 #include "domain/adc_domain/models/adc_range.h"
-#include "domain/sensor_domain/utilities/sensors_order_resolver.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/reading_status.h"
-#include "domain/sensor_domain/sensor_readers/i_sensor_reader.h"
+#include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "domain/sensor_domain/sensor_readers/i_sensor_reader.h"
+#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_physical_analog.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_physical_indicator.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_virtual_analog.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_virtual_indicator.h"
-#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
 #include "domain/sensor_domain/services/adc_sample_set.h"
-#include "domain/sensor_domain/processors/expression_processor.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "domain/sensor_domain/utilities/sensors_order_resolver.h"
+#include "subsys/device_tree/dt_fs.h"
 
-#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 #include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
+#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -66,10 +66,7 @@ using namespace eerie_leap::domain::sensor_domain::services;
 ZTEST_SUITE(sensor_processor, NULL, NULL, NULL, NULL, NULL);
 
 std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1 {
-        {0.0, 0.0},
-        {3.3, 100.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
     auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
@@ -85,13 +82,8 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2 {
-        {0.0, 0.0},
-        {1.0, 29.0},
-        {2.0, 111.0},
-        {2.5, 162.0},
-        {3.3, 200.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
+        { 3.3, 200.0 } };
     auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
     auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
@@ -140,8 +132,7 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_5->configuration.sampling_rate_ms = 1000;
     sensor_5->configuration.expression = "sensor_1 < 400";
 
-    std::vector<std::shared_ptr<Sensor>> sensors = {
-        sensor_1, sensor_2, sensor_3, sensor_4, sensor_5 };
+    std::vector<std::shared_ptr<Sensor>> sensors = { sensor_1, sensor_2, sensor_3, sensor_4, sensor_5 };
 
     SensorsOrderResolver sensors_order_resolver;
     for(auto& sensor : sensors)
@@ -151,13 +142,14 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
 }
 
 AdcConfiguration sensor_processor_GetTestConfiguration() {
-    std::pmr::vector<CalibrationData> adc_calibration_data_samples {
-        {0.0, 0.0},
-        {5.0, 5.0}
-    };
+    std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
-    auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(adc_calibration_data_samples);
-    auto adc_calibrator = std::make_shared<AdcCalibrator>(InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr);
+    auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
+        adc_calibration_data_samples
+    );
+    auto adc_calibrator = std::make_shared<AdcCalibrator>(
+        InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr
+    );
 
     auto adc_channel_configuration = std::make_shared<AdcChannelConfiguration>(adc_calibrator);
 
@@ -168,15 +160,16 @@ AdcConfiguration sensor_processor_GetTestConfiguration() {
 
     AdcConfiguration adc_configuration;
     adc_configuration.samples = 40;
-    adc_configuration.channel_configurations =
-        std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(channel_configurations);
+    adc_configuration.channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(
+        channel_configurations
+    );
 
     return adc_configuration;
 }
 
 struct sensor_processor_HelperInstances {
     std::shared_ptr<ITimeService> time_service;
-    std::shared_ptr<IAdcManager> adc_manager;   // Owns the ADCs the sample set points at.
+    std::shared_ptr<IAdcManager> adc_manager; // Owns the ADCs the sample set points at.
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
     std::shared_ptr<SensorGeneration> generation;
     std::shared_ptr<AdcSampleSet> adc_samples;
@@ -200,16 +193,14 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     auto sensors = sensor_processor_GetTestSensors();
 
     // The builder lays out the frame's slots and binds the expressions, as the processing service does.
-    auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
+                          .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
     generation->adc_configuration = std::make_shared<AdcConfiguration>(sensor_processor_GetTestConfiguration());
 
     // Analog readers reserve their slots in the sample set, as in a rate group.
     auto adc_samples = std::make_shared<AdcSampleSet>();
-    RateGroupBuildContext context {
-        .adc_samples = *adc_samples,
-        .adc_configuration = generation->adc_configuration.get()
-    };
+    RateGroupBuildContext context{ .adc_samples = *adc_samples,
+        .adc_configuration = generation->adc_configuration.get() };
     SensorReaderFactory sensor_reader_factory(time_service, gpio, adc_manager);
 
     auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
@@ -220,18 +211,11 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
         if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
             sensor_reader = sensor_reader_factory.Create(runtime, context);
         } else if(runtime.sensor->configuration.type == SensorType::VIRTUAL_ANALOG) {
-            sensor_reader = std::make_shared<SensorReaderVirtualAnalog>(
-                time_service,
-                runtime);
+            sensor_reader = std::make_shared<SensorReaderVirtualAnalog>(time_service, runtime);
         } else if(runtime.sensor->configuration.type == SensorType::PHYSICAL_INDICATOR) {
-            sensor_reader = std::make_shared<SensorReaderPhysicalIndicator>(
-                time_service,
-                runtime,
-                gpio);
+            sensor_reader = std::make_shared<SensorReaderPhysicalIndicator>(time_service, runtime, gpio);
         } else if(runtime.sensor->configuration.type == SensorType::VIRTUAL_INDICATOR) {
-            sensor_reader = std::make_shared<SensorReaderVirtualIndicator>(
-                time_service,
-                runtime);
+            sensor_reader = std::make_shared<SensorReaderVirtualIndicator>(time_service, runtime);
         } else {
             throw std::runtime_error("Unsupported sensor type");
         }
@@ -241,15 +225,13 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
 
     adc_samples->Seal();
 
-    return sensor_processor_HelperInstances {
-        .time_service = time_service,
+    return sensor_processor_HelperInstances{ .time_service = time_service,
         .adc_manager = adc_manager,
         .sensor_readings_frame = sensor_readings_frame,
         .generation = generation,
         .adc_samples = adc_samples,
         .sensor_readers = sensor_readers,
-        .sensors = sensors
-    };
+        .sensors = sensors };
 }
 
 class ReadingProcessedProcessor : public IReadingProcessor {

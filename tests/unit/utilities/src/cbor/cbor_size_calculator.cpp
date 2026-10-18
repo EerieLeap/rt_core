@@ -45,7 +45,7 @@ ZTEST(cbor_size_calculator, test_SizeOfUint_boundaries) {
 ZTEST(cbor_size_calculator, test_SizeOfUint_matches_zcbor) {
     const uint64_t values[] = { 0, 23, 24, 0xFF, 0x100, 0xFFFF, 0x10000, 0xFFFFFFFFULL, 0x100000000ULL, UINT64_MAX };
 
-    for (uint64_t value : values) {
+    for(uint64_t value : values) {
         size_t encoded = EncodedSize([value](zcbor_state_t* state) {
             return zcbor_uint64_put(state, value);
         });
@@ -75,7 +75,7 @@ ZTEST(cbor_size_calculator, test_SizeOfInt_negative) {
 ZTEST(cbor_size_calculator, test_SizeOfInt_matches_zcbor) {
     const int64_t values[] = { 0, 23, 24, -1, -24, -25, -256, -257, -65536, -65537, INT64_MAX, INT64_MIN };
 
-    for (int64_t value : values) {
+    for(int64_t value : values) {
         size_t encoded = EncodedSize([value](zcbor_state_t* state) {
             return zcbor_int64_put(state, value);
         });
@@ -103,8 +103,8 @@ ZTEST(cbor_size_calculator, test_SizeOfLength_boundaries) {
 
 ZTEST(cbor_size_calculator, test_SizeOfTstr) {
     static constexpr char kShort[] = "abc";
-    static constexpr char kBoundary[] = "12345678901234567890123";  // 23 chars
-    static constexpr char kLong[] = "123456789012345678901234";     // 24 chars
+    static constexpr char kBoundary[] = "12345678901234567890123"; // 23 chars
+    static constexpr char kLong[] = "123456789012345678901234";    // 24 chars
 
     zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kShort)), 4);
     zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kBoundary)), 24);
@@ -124,7 +124,7 @@ ZTEST(cbor_size_calculator, test_SizeOfTstr_matches_zcbor) {
 
     const char* values[] = { "", kShort, kBoundary, kLong };
 
-    for (const char* value : values) {
+    for(const char* value : values) {
         auto zstr = CborHelpers::ToZcborString(value);
         size_t encoded = EncodedSize([&zstr](zcbor_state_t* state) {
             return zcbor_tstr_encode(state, &zstr);
@@ -175,7 +175,7 @@ ZTEST(cbor_size_calculator, test_SizeOfArrayUniform) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfArray_with_size_func) {
-    std::vector<uint64_t> items { 1, 24, 0x10000 };
+    std::vector<uint64_t> items{ 1, 24, 0x10000 };
 
     size_t size = CborSizeCalc::SizeOfArray(items, [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
@@ -210,10 +210,8 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray) {
 ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray_matches_zcbor) {
     static constexpr char kName[] = "sensor_1";
 
-    size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart()
-        + CborSizeCalc::SizeOfUint(42)
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kName))
-        + CborSizeCalc::SizeOfBool(true);
+    size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart() + CborSizeCalc::SizeOfUint(42)
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kName)) + CborSizeCalc::SizeOfBool(true);
 
     size_t encoded = EncodedSize([](zcbor_state_t* state) {
         auto name = CborHelpers::ToZcborString(kName);
@@ -264,7 +262,9 @@ ZTEST(cbor_size_calculator, test_SizeOfOptional_pointer) {
     const uint64_t* present = &value;
     const uint64_t* absent = nullptr;
 
-    auto size_func = [](uint64_t item) { return CborSizeCalc::SizeOfUint(item); };
+    auto size_func = [](uint64_t item) {
+        return CborSizeCalc::SizeOfUint(item);
+    };
 
     zassert_equal(CborSizeCalc::SizeOfOptional(present, size_func), 2);
     zassert_equal(CborSizeCalc::SizeOfOptional(absent, size_func), 0);
@@ -272,7 +272,9 @@ ZTEST(cbor_size_calculator, test_SizeOfOptional_pointer) {
 
 ZTEST(cbor_size_calculator, test_SizeOfOptional_flag) {
     uint64_t value = 24;
-    auto size_func = [](uint64_t item) { return CborSizeCalc::SizeOfUint(item); };
+    auto size_func = [](uint64_t item) {
+        return CborSizeCalc::SizeOfUint(item);
+    };
 
     zassert_equal(CborSizeCalc::SizeOfOptional(true, value, size_func), 2);
     zassert_equal(CborSizeCalc::SizeOfOptional(false, value, size_func), 0);

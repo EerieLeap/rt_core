@@ -18,7 +18,7 @@ CanRoute& CanRouteTable::GetOrAddRoute(uint8_t bus_channel, uint32_t frame_id) {
             return route;
     }
 
-    routes_.push_back(CanRoute{.bus_channel = bus_channel, .frame_id = frame_id});
+    routes_.push_back(CanRoute{ .bus_channel = bus_channel, .frame_id = frame_id });
 
     return routes_.back();
 }
@@ -30,19 +30,23 @@ void CanRouteTable::Build(const SensorGeneration& generation, const SignalResolv
         const auto& configuration = runtime.GetSensor().configuration;
         const auto traits = configuration.GetTraits();
 
-        if(!traits.uses_canbus || runtime.update_method != SensorReadingUpdateMethod::ISR || configuration.canbus_source == nullptr)
+        if(!traits.uses_canbus
+            || runtime.update_method != SensorReadingUpdateMethod::ISR
+            || configuration.canbus_source == nullptr)
             continue;
 
         const auto& source = *configuration.canbus_source;
 
-        CanSignalBinding binding{.runtime = &runtime, .signal = nullptr};
+        CanSignalBinding binding{ .runtime = &runtime, .signal = nullptr };
 
         if(traits.source == SensorSourceKind::CAN_SIGNAL) {
             binding.signal = resolve_signal(source.bus_channel, source.frame_id, source.signal_name_hash);
 
             if(binding.signal == nullptr) {
-                LOG_ERR("Sensor %s: CAN signal %s on bus %u frame 0x%08X is not configured or its message is disabled.",
-                    runtime.GetSensor().id.c_str(), source.signal_name.c_str(), source.bus_channel, source.frame_id);
+                LOG_ERR(
+                    "Sensor %s: CAN signal %s on bus %u frame 0x%08X is not configured or its message is disabled.",
+                    runtime.GetSensor().id.c_str(), source.signal_name.c_str(), source.bus_channel, source.frame_id
+                );
                 continue;
             }
         }
@@ -55,7 +59,8 @@ void CanRouteTable::Dispatch(
     const CanRoute& route,
     const CanFrame& frame,
     ITimeService& time_service,
-    const ProcessSensorCallback& callback) {
+    const ProcessSensorCallback& callback
+) {
 
     if(frame.data.empty())
         return;

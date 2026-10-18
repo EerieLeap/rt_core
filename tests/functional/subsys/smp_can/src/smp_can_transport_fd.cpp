@@ -46,8 +46,9 @@ ZTEST_F(smp_can_transport_fd, test_echo_round_trip_uses_can_fd_frames) {
 
     zassert_true(IsEchoResponse(harness.peers.WaitPacket(FIRST_PEER), "hello", 1));
     zassert_true(harness.peers.GetFrameCount() > 0);
-    zassert_equal(harness.peers.GetCanFdFrameCount(), harness.peers.GetFrameCount(),
-        "A CAN FD channel sends CAN FD frames");
+    zassert_equal(
+        harness.peers.GetCanFdFrameCount(), harness.peers.GetFrameCount(), "A CAN FD channel sends CAN FD frames"
+    );
 }
 
 ZTEST_F(smp_can_transport_fd, test_long_echo_uses_64_byte_frames) {

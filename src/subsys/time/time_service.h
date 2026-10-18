@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "i_time_service.h"
 #include "i_time_provider.h"
+#include "i_time_service.h"
 
 namespace eerie_leap::subsys::time {
 

@@ -14,35 +14,35 @@
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
 
-#include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/canbus_com_domain/services/canbus_com_service.h"
-#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
-#include "domain/sensor_domain/services/sensor_events_publisher.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/logging_domain/event_bus/logging_network_state.h"
+#include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/logging_domain/control/canbus_com_logging_availability_reporter.h"
+#include "domain/logging_domain/control/configuration/logging_control_configuration_manager.h"
 #include "domain/logging_domain/control/configuration_update_logging_stop.h"
 #include "domain/logging_domain/control/i_logging_control.h"
 #include "domain/logging_domain/control/logging_command_handler.h"
 #include "domain/logging_domain/control/logging_trigger_set.h"
 #include "domain/logging_domain/control/remote_logging_control.h"
-#include "domain/logging_domain/control/configuration/logging_control_configuration_manager.h"
+#include "domain/logging_domain/event_bus/logging_network_state.h"
+#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
+#include "domain/sensor_domain/services/sensor_events_publisher.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
 // The role headers are conditional: the log writer's header reads logging domain options.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
-#include "subsys/threading/i_service.h"
-#include "domain/canbus_com_domain/state_bridge/network_state_exporter.h"
-#include "domain/logging_domain/configuration/logging_configuration_manager.h"
-#include "domain/logging_domain/services/log_writer_service.h"
-#include "domain/logging_domain/services/log_writer_supervisor.h"
-#include "domain/logging_domain/control/writer_logging_control.h"
+    #include "domain/canbus_com_domain/state_bridge/network_state_exporter.h"
+    #include "domain/logging_domain/configuration/logging_configuration_manager.h"
+    #include "domain/logging_domain/control/writer_logging_control.h"
+    #include "domain/logging_domain/services/log_writer_service.h"
+    #include "domain/logging_domain/services/log_writer_supervisor.h"
+    #include "subsys/threading/i_service.h"
 #else
-#include "domain/canbus_com_domain/state_bridge/network_state_importer.h"
+    #include "domain/canbus_com_domain/state_bridge/network_state_importer.h"
 #endif
 
 namespace eerie_leap::subsys::assets {
 class AssetsManager;
-}
+} // namespace eerie_leap::subsys::assets
 
 namespace eerie_leap::controllers {
 
@@ -54,11 +54,8 @@ using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
-using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
-using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
-using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingAvailabilityReporter;
 using eerie_leap::domain::logging_domain::control::ConfigurationUpdateLoggingStop;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
@@ -67,14 +64,17 @@ using eerie_leap::domain::logging_domain::control::LoggingTriggerSet;
 using eerie_leap::domain::logging_domain::control::RemoteLoggingControl;
 using eerie_leap::domain::logging_domain::control::configuration::LoggingControlConfigurationManager;
 using eerie_leap::domain::logging_domain::event_bus::LoggingNetworkState;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 using eerie_leap::subsys::threading::IService;
 
 using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateExporter;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
-using eerie_leap::domain::logging_domain::services::LogWriterService;
 using eerie_leap::domain::logging_domain::control::WriterLoggingControl;
+using eerie_leap::domain::logging_domain::services::LogWriterService;
 using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
 #else
 using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateImporter;
@@ -130,7 +130,8 @@ public:
         std::shared_ptr<ITimeService> time_service = nullptr,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame = nullptr,
         std::string tool_id = {},
-        std::shared_ptr<AssetsManager> assets_manager = nullptr);
+        std::shared_ptr<AssetsManager> assets_manager = nullptr
+    );
 
     // Withdraws everything that refers to it, in an order that is safe while the bus threads and
     // the configuration and CDMP work queues run. The writer role stops logging first and waits for
@@ -160,7 +161,9 @@ public:
     // The role's ILoggingControl: WriterLoggingControl (the writer, and the other units through the
     // network) or RemoteLoggingControl. Whoever keeps it releases it before the controller goes, so no
     // request comes in after the teardown.
-    [[nodiscard]] std::shared_ptr<ILoggingControl> GetControl() const { return logging_control_; }
+    [[nodiscard]] std::shared_ptr<ILoggingControl> GetControl() const {
+        return logging_control_;
+    }
     // This unit's CDMP UID, 0 without a COM service (or before the network knows it): what a request
     // passes to act on this unit alone, such as a shell command or an autostart on a writer.
     [[nodiscard]] uint32_t GetUnitUid() const;
@@ -174,7 +177,9 @@ public:
     [[nodiscard]] std::shared_ptr<LoggingConfigurationManager> GetConfigurationManager() const {
         return logging_configuration_manager_;
     }
-    [[nodiscard]] std::shared_ptr<LogWriterService> GetLogWriterService() const { return log_writer_service_; }
+    [[nodiscard]] std::shared_ptr<LogWriterService> GetLogWriterService() const {
+        return log_writer_service_;
+    }
 #endif
 
 private:
@@ -189,7 +194,7 @@ private:
 
     // Given.
     std::shared_ptr<IFsService> fs_service_;
-    std::shared_ptr<WorkQueueThread> config_work_queue_thread_;   // Declared before rebuild_task_.
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread_; // Declared before rebuild_task_.
     std::shared_ptr<ConfigurationService> configuration_service_;
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::shared_ptr<CanbusComService> canbus_com_service_;

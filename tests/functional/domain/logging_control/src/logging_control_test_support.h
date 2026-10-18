@@ -28,8 +28,8 @@
 #include "subsys/threading/work_queue_thread.h"
 #include "utilities/string/string_helpers.h"
 
-#include "subsys/cdmp/models/cdmp_device_info.h"
 #include "cdmp_test_features.h"
+#include "subsys/cdmp/models/cdmp_device_info.h"
 #include "subsys/cdmp/services/i_cdmp_network_info.h"
 
 #include "domain/logging_domain/control/i_logging_command_sender.h"
@@ -54,15 +54,6 @@
 // that an assertion aborted leaves nothing a handler could reach.
 namespace logging_control_test {
 
-using eerie_leap::subsys::event_bus::AnySubscription;
-using eerie_leap::subsys::event_bus::CreateScopedSubscription;
-using eerie_leap::subsys::event_bus::EventBus;
-using eerie_leap::subsys::event_bus::EventChannelId;
-using eerie_leap::subsys::event_bus::EventChannelRegistry;
-using eerie_leap::subsys::event_bus::EventData;
-using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::control::ILoggingRestartMonitor;
@@ -74,6 +65,15 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventsChannel;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventType;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
+using eerie_leap::subsys::event_bus::AnySubscription;
+using eerie_leap::subsys::event_bus::CreateScopedSubscription;
+using eerie_leap::subsys::event_bus::EventBus;
+using eerie_leap::subsys::event_bus::EventChannelId;
+using eerie_leap::subsys::event_bus::EventChannelRegistry;
+using eerie_leap::subsys::event_bus::EventData;
+using eerie_leap::subsys::threading::ScopedMutex;
+using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::utilities::string::StringHelpers;
 
 // Every unit that can log, as a request names it.
 inline constexpr uint32_t kAllUnits = ILoggingControl::kAllUnits;
@@ -99,7 +99,8 @@ public:
     // The first error of the registrations; 0 when the fixture is the one the registry resolves to.
     int registration = 0;
 
-    LoggingControlTestBus() : EventBus("logging_control_bus", 4096) {
+    LoggingControlTestBus() :
+        EventBus("logging_control_bus", 4096) {
         Keep(RegisterChannel(SensorEventsChannel::GetInstance()));
         Keep(RegisterChannel(LoggingEventsChannel::GetInstance()));
 
@@ -158,7 +159,9 @@ inline std::string CurrentThreadName() {
     auto done = std::make_shared<k_sem>();
     k_sem_init(done.get(), 0, 1);
 
-    queue.Run([done] { k_sem_give(done.get()); });
+    queue.Run([done] {
+        k_sem_give(done.get());
+    });
 
     return k_sem_take(done.get(), K_SECONDS(5)) == 0;
 }
@@ -260,12 +263,14 @@ private:
     void Record(Kind kind, uint32_t target_uid = kAllUnits) {
         {
             ScopedMutex guard(context_->lock);
-            context_->requests.push_back({kind, k_current_get(), CurrentThreadName(), target_uid});
+            context_->requests.push_back({ kind, k_current_get(), CurrentThreadName(), target_uid });
         }
         k_sem_give(&context_->requested);
 
         if(context_->job_queue != nullptr)
-            context_->job_queue->Run([context = context_] { k_sem_give(&context->job_ran); });
+            context_->job_queue->Run([context = context_] {
+                k_sem_give(&context->job_ran);
+            });
 
         if(context_->is_holding) {
             k_sem_give(&context_->held);
@@ -275,18 +280,26 @@ private:
     }
 
 public:
-    void RequestStart(uint32_t target_uid) override { Record(Kind::Start, target_uid); }
-    void RequestStop(uint32_t target_uid) override { Record(Kind::Stop, target_uid); }
+    void RequestStart(uint32_t target_uid) override {
+        Record(Kind::Start, target_uid);
+    }
+    void RequestStop(uint32_t target_uid) override {
+        Record(Kind::Stop, target_uid);
+    }
     // As the supervisor takes it: a request, accepted.
     bool HandleLoggingCommand(bool is_start) override {
         Record(is_start ? Kind::Start : Kind::Stop);
 
         return true;
     }
-    [[nodiscard]] bool IsActive() const override { return false; }
+    [[nodiscard]] bool IsActive() const override {
+        return false;
+    }
 
     // Each request blocks its caller until Release().
-    void HoldRequests() { context_->is_holding = true; }
+    void HoldRequests() {
+        context_->is_holding = true;
+    }
     [[nodiscard]] bool WaitUntilHeld(int timeout_ms = k_wait_ms) {
         return k_sem_take(&context_->held, Ms(timeout_ms)) == 0;
     }
@@ -296,7 +309,9 @@ public:
     }
 
     // Each request also queues a job on @p queue that gives the semaphore WaitForJob() takes.
-    void RunJobOn(std::shared_ptr<WorkQueueThread> queue) { context_->job_queue = std::move(queue); }
+    void RunJobOn(std::shared_ptr<WorkQueueThread> queue) {
+        context_->job_queue = std::move(queue);
+    }
     [[nodiscard]] bool WaitForJob(int timeout_ms = k_wait_ms) {
         return k_sem_take(&context_->job_ran, Ms(timeout_ms)) == 0;
     }
@@ -372,7 +387,7 @@ public:
     void SendLoggingCommand(bool is_start, uint8_t device_id) override {
         {
             ScopedMutex guard(context_->lock);
-            context_->sends.push_back({is_start, k_current_get(), device_id});
+            context_->sends.push_back({ is_start, k_current_get(), device_id });
         }
 
         if(context_->is_holding) {
@@ -384,7 +399,9 @@ public:
     }
 
     // Each send blocks its caller, after it is recorded, until Release().
-    void HoldSends() { context_->is_holding = true; }
+    void HoldSends() {
+        context_->is_holding = true;
+    }
     [[nodiscard]] bool WaitUntilHeld(int timeout_ms = k_wait_ms) {
         return k_sem_take(&context_->held, Ms(timeout_ms)) == 0;
     }
@@ -458,7 +475,10 @@ public:
 private:
     struct Context {
         mutable k_mutex lock;
-        CdmpDeviceInfo own {.device_id = 1, .uid = k_own_uid, .features = eerie_leap::tests::DISPLAY_FEATURES, .status = CdmpDeviceStatus::ONLINE};
+        CdmpDeviceInfo own{ .device_id = 1,
+            .uid = k_own_uid,
+            .features = eerie_leap::tests::DISPLAY_FEATURES,
+            .status = CdmpDeviceStatus::ONLINE };
         std::vector<CdmpDeviceInfo> devices;
 
         Context() {
@@ -492,8 +512,8 @@ public:
     }
 
     // Puts a device in the table, or replaces the one with that ID.
-    void Add(
-        uint8_t device_id,
+    void
+    Add(uint8_t device_id,
         uint32_t uid,
         uint16_t features = eerie_leap::tests::LOGGER_FEATURES,
         CdmpDeviceStatus status = CdmpDeviceStatus::ONLINE) {
@@ -501,13 +521,15 @@ public:
         Remove(device_id);
 
         ScopedMutex guard(context_->lock);
-        context_->devices.push_back({.device_id = device_id, .uid = uid, .features = features, .status = status});
+        context_->devices.push_back({ .device_id = device_id, .uid = uid, .features = features, .status = status });
     }
 
     void Remove(uint8_t device_id) {
         ScopedMutex guard(context_->lock);
 
-        std::erase_if(context_->devices, [device_id](const CdmpDeviceInfo& device) { return device.device_id == device_id; });
+        std::erase_if(context_->devices, [device_id](const CdmpDeviceInfo& device) {
+            return device.device_id == device_id;
+        });
     }
 };
 
@@ -545,10 +567,14 @@ public:
         context_->handler = std::move(slot);
     }
 
-    void FailNextSet() { context_->is_failing = true; }
+    void FailNextSet() {
+        context_->is_failing = true;
+    }
 
     // Runs before every non-null SetRestartHandler(), on its caller's thread. Null removes it.
-    void OnSet(std::function<void()> hook) { context_->on_set = std::move(hook); }
+    void OnSet(std::function<void()> hook) {
+        context_->on_set = std::move(hook);
+    }
 
     [[nodiscard]] bool HasHandler() const {
         ScopedMutex guard(context_->lock);
@@ -599,11 +625,11 @@ private:
     AnySubscription subscription_;
 
 public:
-    DispatchBlocker(TChannel& channel, typename TChannel::EventTypeEnum type) : channel_(channel), type_(type) {
+    DispatchBlocker(TChannel& channel, typename TChannel::EventTypeEnum type) :
+        channel_(channel),
+        type_(type) {
         subscription_ = CreateScopedSubscription(
-            channel_,
-            type_,
-            [context = context_](const typename TChannel::EventMessage& event) {
+            channel_, type_, [context = context_](const typename TChannel::EventMessage& event) {
                 if(event.source_id == k_fence_source_id) {
                     k_sem_give(&context->fence);
                     return;
@@ -615,7 +641,8 @@ public:
                 k_sem_give(&context->entered);
                 // Gives up after 5 s, so a case that never releases cannot wedge the bus for good.
                 k_sem_take(&context->release, K_SECONDS(5));
-            });
+            }
+        );
         zassert_not_null(subscription_.get(), "The blocker's subscription was refused.");
     }
 
@@ -626,7 +653,9 @@ public:
     DispatchBlocker(const DispatchBlocker&) = delete;
     DispatchBlocker& operator=(const DispatchBlocker&) = delete;
 
-    void Arm() { context_->is_armed = true; }
+    void Arm() {
+        context_->is_armed = true;
+    }
 
     [[nodiscard]] bool WaitUntilBlocking(int timeout_ms = k_wait_ms) {
         return k_sem_take(&context_->entered, Ms(timeout_ms)) == 0;
@@ -640,7 +669,7 @@ public:
     // The channel delivers in order, so everything published before the marker was dispatched when
     // the blocker sees it.
     [[nodiscard]] bool Fence() {
-        channel_.PublishAsync({.source_id = k_fence_source_id, .type = type_});
+        channel_.PublishAsync({ .source_id = k_fence_source_id, .type = type_ });
 
         return k_sem_take(&context_->fence, Ms(k_wait_ms)) == 0;
     }
@@ -655,10 +684,7 @@ using LoggingBlocker = DispatchBlocker<LoggingEventsChannel>;
 // Synchronous by default, so the handlers have run when it returns; asynchronous goes through the
 // bus thread.
 inline void PublishSensorValue(std::string_view sensor_id, EventData value, bool is_async = false) {
-    SensorEventsChannel::EventMessage event {
-        .source_id = 1,
-        .type = SensorEventType::DataUpdated
-    };
+    SensorEventsChannel::EventMessage event{ .source_id = 1, .type = SensorEventType::DataUpdated };
     event.payload.insert_or_assign(SensorPayloadType::SensorId, EventData(StringHelpers::GetHash(sensor_id)));
     event.payload.insert_or_assign(SensorPayloadType::Value, std::move(value));
 
@@ -669,15 +695,10 @@ inline void PublishSensorValue(std::string_view sensor_id, EventData value, bool
 }
 
 // StatusUpdated as the NetworkStateImporter publishes it: the reason only while inactive.
-inline void PublishStatus(
-    bool is_active,
-    std::optional<LoggingStatusReason> reason = std::nullopt,
-    bool is_async = false) {
+inline void
+PublishStatus(bool is_active, std::optional<LoggingStatusReason> reason = std::nullopt, bool is_async = false) {
 
-    LoggingEventsChannel::EventMessage event {
-        .source_id = 2,
-        .type = LoggingEventType::StatusUpdated
-    };
+    LoggingEventsChannel::EventMessage event{ .source_id = 2, .type = LoggingEventType::StatusUpdated };
     event.payload.insert_or_assign(LoggingPayloadType::IsActive, EventData(is_active));
     if(reason.has_value())
         event.payload.insert_or_assign(LoggingPayloadType::Reason, EventData(static_cast<uint32_t>(*reason)));

@@ -30,10 +30,20 @@ public:
     std::atomic<int> stops = 0;
     std::atomic<int> starts = 0;
 
-    bool Initialize() override { return true; }
-    bool Start() override { starts++; return true; }
-    bool Stop() override { stops++; return true; }
-    [[nodiscard]] ServiceState GetState() const noexcept override { return ServiceState::RUNNING; }
+    bool Initialize() override {
+        return true;
+    }
+    bool Start() override {
+        starts++;
+        return true;
+    }
+    bool Stop() override {
+        stops++;
+        return true;
+    }
+    [[nodiscard]] ServiceState GetState() const noexcept override {
+        return ServiceState::RUNNING;
+    }
 };
 
 } // namespace
@@ -96,11 +106,12 @@ ZTEST(canbus_controller, test_a_task_queued_when_the_configuration_is_stored_run
         std::atomic<int> reports = 0;
     };
     auto seen = std::make_shared<Seen>();
-    configuration_service->RegisterConfigurationStoredHandler(
-        [seen, service, work_queue](ConfigurationService::Type) {
-            seen->reports++;
-            work_queue->Run([seen, service] { seen->stops_when_run = service->stops.load(); });
+    configuration_service->RegisterConfigurationStoredHandler([seen, service, work_queue](ConfigurationService::Type) {
+        seen->reports++;
+        work_queue->Run([seen, service] {
+            seen->stops_when_run = service->stops.load();
         });
+    });
 
     const auto manager = controller.GetConfigurationManager();
     zassert_true(manager->Update(*manager->Get()));

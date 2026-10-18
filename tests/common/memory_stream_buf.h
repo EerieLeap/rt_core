@@ -103,10 +103,16 @@ public:
     MemoryStreamBuf& operator=(MemoryStreamBuf&&) = default;
 
     /** Storage for @p size bytes up front, so writes up to that size do not allocate. */
-    void Reserve(size_t size) { data_.reserve(size); }
+    void Reserve(size_t size) {
+        data_.reserve(size);
+    }
 
-    [[nodiscard]] size_t Capacity() const { return data_.capacity(); }
-    [[nodiscard]] std::string str() const { return data_; }
+    [[nodiscard]] size_t Capacity() const {
+        return data_.capacity();
+    }
+    [[nodiscard]] std::string str() const {
+        return data_;
+    }
 };
 
 } // namespace rt_core_test

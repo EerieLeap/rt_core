@@ -10,7 +10,7 @@
 
 // A held change settles at an absolute uptime tick, which the kernel only takes with 64-bit timeouts.
 #ifndef CONFIG_TIMEOUT_64BIT
-#error "The indicator conditioner needs CONFIG_TIMEOUT_64BIT for absolute deadlines."
+    #error "The indicator conditioner needs CONFIG_TIMEOUT_64BIT for absolute deadlines."
 #endif
 
 namespace eerie_leap::domain::sensor_domain::processors {
@@ -19,8 +19,8 @@ using eerie_leap::domain::sensor_domain::runtime::SensorRuntime;
 
 LOG_MODULE_REGISTER(indicator_conditioner_logger);
 
-IndicatorConditioner::IndicatorConditioner(uint32_t debounce_ms, IndicatorInputMode input_mode, bool is_switch_on)
-    : debounce_ticks_(static_cast<k_ticks_t>(k_ms_to_ticks_ceil64(debounce_ms))),
+IndicatorConditioner::IndicatorConditioner(uint32_t debounce_ms, IndicatorInputMode input_mode, bool is_switch_on) :
+    debounce_ticks_(static_cast<k_ticks_t>(k_ms_to_ticks_ceil64(debounce_ms))),
     input_mode_(input_mode),
     is_switch_on_(is_switch_on) {
 
@@ -92,7 +92,7 @@ bool IndicatorConditioner::Offer(ReadingPipeline& pipeline, const SensorRuntime&
     }
 
     held_ = reading;
-    held_.can_frame = nullptr;   // Only valid during the source's call.
+    held_.can_frame = nullptr; // Only valid during the source's call.
     pipeline_ = &pipeline;
     runtime_ = &runtime;
 
@@ -124,8 +124,9 @@ void IndicatorConditioner::ResumeSettle() {
 
     k_work_q* work_queue = pipeline_ != nullptr ? pipeline_->GetWorkQueue() : nullptr;
     if(work_queue != nullptr) {
-        k_work_reschedule_for_queue(work_queue, &settle_work_.work,
-            remaining_ticks_ > 0 ? K_TIMEOUT_ABS_TICKS(deadline_) : K_NO_WAIT);
+        k_work_reschedule_for_queue(
+            work_queue, &settle_work_.work, remaining_ticks_ > 0 ? K_TIMEOUT_ABS_TICKS(deadline_) : K_NO_WAIT
+        );
     }
 }
 

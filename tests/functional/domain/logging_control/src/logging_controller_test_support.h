@@ -23,7 +23,6 @@
 #include "controllers/logging_controller.h"
 #include "controllers/sensors_controller.h"
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 #include "subsys/device_tree/dt_fs.h"
@@ -33,13 +32,13 @@
 #include "subsys/time/boot_elapsed_time_provider.h"
 #include "subsys/time/rtc_provider.h"
 #include "subsys/time/time_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
-#include "domain/canbus_com_domain/commands/canbus_com_command_code.h"
-#include "domain/canbus_com_domain/states/canbus_com_state_type.h"
 #include "configuration/cbor/cbor_adc_config/cbor_adc_config.h"
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
-#include "subsys/adc/i_adc_manager.h"
 #include "domain/adc_domain/configuration/adc_configuration_manager.h"
+#include "domain/canbus_com_domain/commands/canbus_com_command_code.h"
+#include "domain/canbus_com_domain/states/canbus_com_state_type.h"
 #include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
 #include "domain/sensor_domain/models/indicator_input_mode.h"
@@ -48,10 +47,11 @@
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/sensor_type.h"
+#include "subsys/adc/i_adc_manager.h"
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
-#include "domain/logging_domain/models/logging_configuration.h"
-#include "domain/logging_domain/models/sensor_logging_configuration.h"
+    #include "domain/logging_domain/models/logging_configuration.h"
+    #include "domain/logging_domain/models/sensor_logging_configuration.h"
 #endif
 
 #include "canbus_com_loopback_harness.h"
@@ -73,12 +73,10 @@ namespace logging_controller_test {
 using namespace logging_control_test;
 using namespace canbus_com_loopback_test;
 
+using eerie_leap::configuration::services::CborConfigurationService;
 using eerie_leap::controllers::AssetsManager;
 using eerie_leap::controllers::LoggingController;
 using eerie_leap::controllers::SensorsController;
-using eerie_leap::subsys::adc::AdcChannelHandle;
-using eerie_leap::subsys::adc::IAdc;
-using eerie_leap::subsys::adc::IAdcManager;
 using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
 using eerie_leap::domain::canbus_com_domain::states::CanbusComStateType;
@@ -94,6 +92,9 @@ using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::sensor_domain::models::SensorType;
 using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::adc::AdcChannelHandle;
+using eerie_leap::subsys::adc::IAdc;
+using eerie_leap::subsys::adc::IAdcManager;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::SubscribeEventBinding;
@@ -103,7 +104,6 @@ using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::time::BootElapsedTimeProvider;
 using eerie_leap::subsys::time::RtcProvider;
 using eerie_leap::subsys::time::TimeService;
-using eerie_leap::configuration::services::CborConfigurationService;
 using fake_gpio_test::FakeGpio;
 
 inline constexpr uint8_t LOGGING_CODE = std::to_underlying(CanbusComCommandCode::LOGGING);
@@ -117,8 +117,8 @@ inline constexpr uint8_t kPeerFirstTransaction = 0x80;
 
 // Stored LoggingControl configuration {Sensors, DataUpdated, Value, SensorId "ab"}, as a client
 // sends it over SMP (the golden bytes of the configuration suites).
-inline const std::vector<uint8_t> k_trigger_on_ab = {
-    0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF};
+inline const std::vector<uint8_t> k_trigger_on_ab = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62,
+    0x00, 0xFF, 0xFF, 0xFF };
 
 // Polls @p predicate every 2 ms until it holds or @p timeout_ms passed.
 template<typename TPredicate>
@@ -180,16 +180,21 @@ public:
             zassert_true(fs_service->Format(), "The internal file system could not be formatted");
 
         time_service = std::make_shared<TimeService>(
-            std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+            std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+        );
 
         sensors_manager = std::make_shared<SensorsConfigurationManager>(
-            std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service, TestConfigQueue()),
-            nullptr, 0, 0);
+            std::make_unique<CborConfigurationService<CborSensorsConfig>>(
+                "sensors_config", fs_service, TestConfigQueue()
+            ),
+            nullptr, 0, 0
+        );
 
         std::vector<std::shared_ptr<Sensor>> sensors;
         for(const auto& spec : specs) {
             auto sensor = std::make_shared<Sensor>(
-                std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), spec.id);
+                std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), spec.id
+            );
             sensor->is_enabled = spec.is_enabled;
             sensor->configuration.type = SensorType::VIRTUAL_INDICATOR;
             sensor->configuration.expression = "1 > 0";
@@ -243,7 +248,8 @@ inline LoggingController::ConfigurationSetup StoresTriggersOn(std::initializer_l
 
     return [ids = std::move(ids)](std::shared_ptr<LoggingControlConfigurationManager> manager) {
         LoggingControlConfiguration configuration(
-            std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr());
+            std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr()
+        );
         for(const auto& sensor_id : ids)
             configuration.triggers.push_back(SensorTrigger(sensor_id));
 
@@ -258,10 +264,12 @@ inline std::shared_ptr<LoggingControlConfigurationManager> MakeStandIn(
     ConfigurationService& service,
     ConfigurationService::Type type,
     const char* name,
-    const std::shared_ptr<IFsService>& fs_service) {
+    const std::shared_ptr<IFsService>& fs_service
+) {
 
     auto manager = std::make_shared<LoggingControlConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborLoggingControlConfig>>(name, fs_service, TestConfigQueue()));
+        std::make_unique<CborConfigurationService<CborLoggingControlConfig>>(name, fs_service, TestConfigQueue())
+    );
     service.RegisterCborConfigurationManager(type, manager);
 
     return manager;
@@ -276,27 +284,63 @@ inline void StoreStandIn(const std::shared_ptr<LoggingControlConfigurationManage
 // configuration loads or stores, so a manager on it has no configuration.
 class UnwritableFsService final : public IFsService {
 public:
-    bool Initialize() override { return true; }
-    bool IsAvailable() const override { return true; }
-    bool WriteFile(std::string_view, const void*, size_t, bool) override { return false; }
-    bool ReadFile(std::string_view, void*, size_t, size_t&) override { return false; }
-    int OpenFile(std::string_view, fs_mode_t, fs_file_t*) override { return -ENOTSUP; }
-    bool CreateDirectory(std::string_view) override { return false; }
-    bool Exists(std::string_view) const override { return false; }
-    bool DeleteFile(std::string_view) override { return false; }
-    bool DeleteRecursive(std::string_view) override { return false; }
-    int Rename(std::string_view, std::string_view) override { return -ENOTSUP; }
-    std::vector<std::string> ListFiles(std::string_view) const override { return {}; }
-    int ListDirectory(std::string_view, size_t, size_t, std::vector<DirectoryEntry>& entries, size_t& count) const override {
+    bool Initialize() override {
+        return true;
+    }
+    bool IsAvailable() const override {
+        return true;
+    }
+    bool WriteFile(std::string_view, const void*, size_t, bool) override {
+        return false;
+    }
+    bool ReadFile(std::string_view, void*, size_t, size_t&) override {
+        return false;
+    }
+    int OpenFile(std::string_view, fs_mode_t, fs_file_t*) override {
+        return -ENOTSUP;
+    }
+    bool CreateDirectory(std::string_view) override {
+        return false;
+    }
+    bool Exists(std::string_view) const override {
+        return false;
+    }
+    bool DeleteFile(std::string_view) override {
+        return false;
+    }
+    bool DeleteRecursive(std::string_view) override {
+        return false;
+    }
+    int Rename(std::string_view, std::string_view) override {
+        return -ENOTSUP;
+    }
+    std::vector<std::string> ListFiles(std::string_view) const override {
+        return {};
+    }
+    int ListDirectory(
+        std::string_view,
+        size_t,
+        size_t,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
         entries.clear();
         count = 0;
 
         return -ENODEV;
     }
-    std::optional<size_t> GetFileSize(std::string_view) const override { return std::nullopt; }
-    uint64_t GetTotalSpace() const override { return 0; }
-    uint64_t GetUsedSpace() const override { return 0; }
-    bool Format() override { return false; }
+    std::optional<size_t> GetFileSize(std::string_view) const override {
+        return std::nullopt;
+    }
+    uint64_t GetTotalSpace() const override {
+        return 0;
+    }
+    uint64_t GetUsedSpace() const override {
+        return 0;
+    }
+    bool Format() override {
+        return false;
+    }
 };
 
 // The rig's file system as a log volume that a case can take away: every call goes to the real one,
@@ -307,12 +351,19 @@ private:
     std::atomic<bool> is_available_ = true;
 
 public:
-    explicit SwitchableVolume(std::shared_ptr<IFsService> inner) : inner_(std::move(inner)) {}
+    explicit SwitchableVolume(std::shared_ptr<IFsService> inner) :
+        inner_(std::move(inner)) {}
 
-    void SetAvailable(bool is_available) { is_available_ = is_available; }
+    void SetAvailable(bool is_available) {
+        is_available_ = is_available;
+    }
 
-    bool Initialize() override { return inner_->Initialize(); }
-    bool IsAvailable() const override { return is_available_; }
+    bool Initialize() override {
+        return inner_->Initialize();
+    }
+    bool IsAvailable() const override {
+        return is_available_;
+    }
     bool WriteFile(std::string_view path, const void* data, size_t size, bool append) override {
         return inner_->WriteFile(path, data, size, append);
     }
@@ -322,21 +373,45 @@ public:
     int OpenFile(std::string_view path, fs_mode_t flags, fs_file_t* file) override {
         return inner_->OpenFile(path, flags, file);
     }
-    bool CreateDirectory(std::string_view path) override { return inner_->CreateDirectory(path); }
-    bool Exists(std::string_view path) const override { return inner_->Exists(path); }
-    bool DeleteFile(std::string_view path) override { return inner_->DeleteFile(path); }
-    bool DeleteRecursive(std::string_view path) override { return inner_->DeleteRecursive(path); }
-    int Rename(std::string_view from, std::string_view to) override { return inner_->Rename(from, to); }
-    std::vector<std::string> ListFiles(std::string_view path) const override { return inner_->ListFiles(path); }
+    bool CreateDirectory(std::string_view path) override {
+        return inner_->CreateDirectory(path);
+    }
+    bool Exists(std::string_view path) const override {
+        return inner_->Exists(path);
+    }
+    bool DeleteFile(std::string_view path) override {
+        return inner_->DeleteFile(path);
+    }
+    bool DeleteRecursive(std::string_view path) override {
+        return inner_->DeleteRecursive(path);
+    }
+    int Rename(std::string_view from, std::string_view to) override {
+        return inner_->Rename(from, to);
+    }
+    std::vector<std::string> ListFiles(std::string_view path) const override {
+        return inner_->ListFiles(path);
+    }
     int ListDirectory(
-        std::string_view path, size_t first, size_t max_entries,
-        std::vector<DirectoryEntry>& entries, size_t& count) const override {
+        std::string_view path,
+        size_t first,
+        size_t max_entries,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
         return inner_->ListDirectory(path, first, max_entries, entries, count);
     }
-    std::optional<size_t> GetFileSize(std::string_view path) const override { return inner_->GetFileSize(path); }
-    uint64_t GetTotalSpace() const override { return inner_->GetTotalSpace(); }
-    uint64_t GetUsedSpace() const override { return inner_->GetUsedSpace(); }
-    bool Format() override { return inner_->Format(); }
+    std::optional<size_t> GetFileSize(std::string_view path) const override {
+        return inner_->GetFileSize(path);
+    }
+    uint64_t GetTotalSpace() const override {
+        return inner_->GetTotalSpace();
+    }
+    uint64_t GetUsedSpace() const override {
+        return inner_->GetUsedSpace();
+    }
+    bool Format() override {
+        return inner_->Format();
+    }
 };
 
 // What a controller of a case is given beyond the rig. A null configuration service, or a false
@@ -365,18 +440,14 @@ struct Parts {
 // writer uses.
 inline std::unique_ptr<LoggingController> MakeController(ControllerRig& rig, Parts parts) {
     return std::make_unique<LoggingController>(
-        parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service,
-        std::move(parts.queue),
-        std::move(parts.configuration_service),
-        parts.has_sensors_manager ? rig.sensors_manager : nullptr,
-        std::move(parts.com),
-        parts.has_publisher ? rig.publisher : nullptr,
+        parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service, std::move(parts.queue),
+        std::move(parts.configuration_service), parts.has_sensors_manager ? rig.sensors_manager : nullptr,
+        std::move(parts.com), parts.has_publisher ? rig.publisher : nullptr,
         parts.log_volume != nullptr ? std::move(parts.log_volume)
-            : (parts.has_log_volume ? std::shared_ptr<IFsService>(rig.fs_service) : nullptr),
-        parts.has_time_service ? rig.time_service : nullptr,
-        parts.has_frame ? rig.frame : nullptr,
-        kControllerToolId,
-        std::move(parts.assets_manager));
+                                    : (parts.has_log_volume ? std::shared_ptr<IFsService>(rig.fs_service) : nullptr),
+        parts.has_time_service ? rig.time_service : nullptr, parts.has_frame ? rig.frame : nullptr, kControllerToolId,
+        std::move(parts.assets_manager)
+    );
 }
 
 // ======== What a trigger or a store does, seen from outside ========
@@ -403,8 +474,7 @@ private:
 public:
     explicit SensorProbe(std::string_view sensor_id) {
         subscription_ = SubscribeEventBinding(
-            SensorTrigger(sensor_id).binding,
-            [context = context_](const EventData& value) {
+            SensorTrigger(sensor_id).binding, [context = context_](const EventData& value) {
                 const auto* number = std::get_if<float>(&value);
                 if(number == nullptr)
                     return;
@@ -414,7 +484,8 @@ public:
                     context->values.push_back(*number);
                 }
                 k_sem_give(&context->received);
-            });
+            }
+        );
         zassert_not_null(subscription_.get(), "The probe's subscription was refused.");
     }
 
@@ -460,8 +531,7 @@ using SensorList = std::vector<std::shared_ptr<Sensor>>;
 
 // A VIRTUAL_INDICATOR read every 100 ms, in Level mode: "1" or "0" is a constant switch.
 inline std::shared_ptr<Sensor> Indicator(std::string_view id, const char* expression, bool is_enabled = true) {
-    auto sensor = std::make_shared<Sensor>(
-        std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), id);
+    auto sensor = std::make_shared<Sensor>(std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), id);
     sensor->is_enabled = is_enabled;
     sensor->configuration.type = SensorType::VIRTUAL_INDICATOR;
     sensor->configuration.expression = expression;
@@ -472,8 +542,7 @@ inline std::shared_ptr<Sensor> Indicator(std::string_view id, const char* expres
 
 // A sensor no trigger binds to.
 inline std::shared_ptr<Sensor> Analog(std::string_view id, const char* expression = "2 + 2", bool is_enabled = true) {
-    auto sensor = std::make_shared<Sensor>(
-        std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), id);
+    auto sensor = std::make_shared<Sensor>(std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), id);
     sensor->is_enabled = is_enabled;
     sensor->configuration.type = SensorType::VIRTUAL_ANALOG;
     sensor->configuration.expression = expression;
@@ -485,8 +554,7 @@ inline std::shared_ptr<Sensor> Analog(std::string_view id, const char* expressio
 // An input on a GPIO channel. Processing needs a GPIO for it; with a FakeGpio that refuses
 // registrations it cannot start.
 inline std::shared_ptr<Sensor> Input(std::string_view id, int channel) {
-    auto sensor = std::make_shared<Sensor>(
-        std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), id);
+    auto sensor = std::make_shared<Sensor>(std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = SensorType::PHYSICAL_INDICATOR;
     sensor->configuration.channel = channel;
 
@@ -505,11 +573,21 @@ inline std::shared_ptr<Sensor> Button(std::string_view id = "logging_button", in
 // An ADC manager that only counts channels: the ADC configuration manager reads nothing else.
 class FakeAdcManager final : public IAdcManager {
 public:
-    bool Initialize() override { return true; }
-    [[nodiscard]] int GetAdcCount() const override { return 1; }
-    [[nodiscard]] int GetChannelCount() const override { return 2; }
-    [[nodiscard]] std::span<const std::shared_ptr<IAdc>> GetAdcs() const override { return {}; }
-    AdcChannelHandle Resolve(int) override { throw std::invalid_argument("The fake ADC manager has no channels."); }
+    bool Initialize() override {
+        return true;
+    }
+    [[nodiscard]] int GetAdcCount() const override {
+        return 1;
+    }
+    [[nodiscard]] int GetChannelCount() const override {
+        return 2;
+    }
+    [[nodiscard]] std::span<const std::shared_ptr<IAdc>> GetAdcs() const override {
+        return {};
+    }
+    AdcChannelHandle Resolve(int) override {
+        throw std::invalid_argument("The fake ADC manager has no channels.");
+    }
 };
 
 // What the controller is built on when a case applies sensors configurations: a SensorsController
@@ -545,8 +623,9 @@ public:
         const SensorList& first_sensors,
         bool is_fs_formatted,
         std::shared_ptr<FakeGpio> gpio_to_use = nullptr,
-        SensorsController::ConfigurationSetup hook = nullptr)
-            : gpio(std::move(gpio_to_use)) {
+        SensorsController::ConfigurationSetup hook = nullptr
+    ) :
+        gpio(std::move(gpio_to_use)) {
 
         DtFs::InitInternalFs();
         auto* mount_point = DtFs::GetInternalFsMp();
@@ -557,22 +636,29 @@ public:
             zassert_true(fs_service->Format(), "The internal file system could not be formatted");
 
         time_service = std::make_shared<TimeService>(
-            std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+            std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+        );
 
         adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
             std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service, TestConfigQueue()),
-            std::make_shared<FakeAdcManager>());
+            std::make_shared<FakeAdcManager>()
+        );
         configuration_service->RegisterCborConfigurationManager(
-            ConfigurationService::Type::Adc, adc_configuration_manager);
+            ConfigurationService::Type::Adc, adc_configuration_manager
+        );
 
         sensors_controller = std::make_unique<SensorsController>(
-            fs_service, TestConfigQueue(), configuration_service, time_service, frame, nullptr, gpio,
-            nullptr, adc_configuration_manager);
-        zassert_equal(sensors_controller->Initialize([&first_sensors, &hook](auto manager) {
-            zassert_true(manager->Update(first_sensors), "The sensors were not stored");
-            if(hook)
-                hook(manager);
-        }), 0, "The sensors controller initializes");
+            fs_service, TestConfigQueue(), configuration_service, time_service, frame, nullptr, gpio, nullptr,
+            adc_configuration_manager
+        );
+        zassert_equal(
+            sensors_controller->Initialize([&first_sensors, &hook](auto manager) {
+                zassert_true(manager->Update(first_sensors), "The sensors were not stored");
+                if(hook)
+                    hook(manager);
+            }),
+            0, "The sensors controller initializes"
+        );
         sensors_manager = sensors_controller->GetConfigurationManager();
 
         publisher = std::make_shared<SensorEventsPublisher>(frame);
@@ -640,17 +726,13 @@ public:
 // configuration service unless the case gives its own.
 inline std::unique_ptr<LoggingController> MakeController(ProcessingRig& rig, Parts parts) {
     return std::make_unique<LoggingController>(
-        parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service,
-        std::move(parts.queue),
+        parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service, std::move(parts.queue),
         parts.uses_own_service ? std::move(parts.configuration_service) : rig.configuration_service,
-        parts.has_sensors_manager ? rig.sensors_manager : nullptr,
-        std::move(parts.com),
-        parts.has_publisher ? rig.publisher : nullptr,
-        parts.has_log_volume ? rig.fs_service : nullptr,
-        parts.has_time_service ? rig.time_service : nullptr,
-        parts.has_frame ? rig.frame : nullptr,
-        kControllerToolId,
-        std::move(parts.assets_manager));
+        parts.has_sensors_manager ? rig.sensors_manager : nullptr, std::move(parts.com),
+        parts.has_publisher ? rig.publisher : nullptr, parts.has_log_volume ? rig.fs_service : nullptr,
+        parts.has_time_service ? rig.time_service : nullptr, parts.has_frame ? rig.frame : nullptr, kControllerToolId,
+        std::move(parts.assets_manager)
+    );
 }
 
 // One job on the configuration queue that stores configurations through a manager (inline: the
@@ -677,12 +759,14 @@ public:
     // The job holds the queue until Release(); a Release() before it runs makes it hold nothing.
     HeldStore(
         std::shared_ptr<LoggingControlConfigurationManager> manager,
-        std::vector<std::vector<std::string>> stores) {
+        std::vector<std::vector<std::string>> stores
+    ) {
 
         TestConfigQueue()->Run([context = context_, manager = std::move(manager), stores = std::move(stores)] {
             for(const auto& sensor_ids : stores) {
                 LoggingControlConfiguration configuration(
-                    std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr());
+                    std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr()
+                );
                 for(const auto& sensor_id : sensor_ids)
                     configuration.triggers.push_back(SensorTrigger(sensor_id));
 
@@ -710,8 +794,9 @@ public:
 
     // Valid once WaitUntilStored() returned true.
     [[nodiscard]] bool AllStored() const {
-        return !context_->results.empty()
-            && std::ranges::all_of(context_->results, [](bool is_stored) { return is_stored; });
+        return !context_->results.empty() && std::ranges::all_of(context_->results, [](bool is_stored) {
+            return is_stored;
+        });
     }
 };
 
@@ -734,9 +819,11 @@ public:
     QueuedApply(
         std::shared_ptr<ConfigurationService> configuration_service,
         ConfigurationService::Type type,
-        std::vector<uint8_t> cbor) {
+        std::vector<uint8_t> cbor
+    ) {
 
-        TestConfigQueue()->Run([context = context_, configuration_service = std::move(configuration_service), type, cbor = std::move(cbor)] {
+        TestConfigQueue()->Run([context = context_, configuration_service = std::move(configuration_service), type,
+                                   cbor = std::move(cbor)] {
             context->result = configuration_service->ApplyCborConfiguration(type, cbor);
             k_sem_give(&context->done);
         });
@@ -758,7 +845,8 @@ private:
     uint8_t next_transaction_ = kPeerFirstTransaction;
 
 public:
-    explicit Peer(Harness& harness) : harness_(harness) {}
+    explicit Peer(Harness& harness) :
+        harness_(harness) {}
 
     // The peer's LOGGING_STATUS record, as a logging unit shares it: {active} or {inactive, reason}.
     void ShareStatus(const Bytes& data) {
@@ -775,8 +863,10 @@ public:
     void Restart(std::initializer_list<Record> records, bool is_sync_request_due) {
         logging_restart_test::SendRestart(harness_, PEER_ID, PEER_UID, records);
         next_version_ = 1;
-        zassert_false(logging_restart_test::WaitForRestartTaken(harness_, PEER_ID, is_sync_request_due),
-            "Nothing is sent before the restarted unit can accept it");
+        zassert_false(
+            logging_restart_test::WaitForRestartTaken(harness_, PEER_ID, is_sync_request_due),
+            "Nothing is sent before the restarted unit can accept it"
+        );
     }
 
     // The unit's next LOGGING broadcast (from its remote control), or nothing in time.
@@ -790,9 +880,13 @@ public:
     }
 
     std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = k_wait_ms) {
-        return harness_.bus.Wait(COMMAND, [device_id](const Bytes& bytes) {
-            return logging_restart_test::IsLoggingCommandTo(bytes, device_id);
-        }, timeout_ms);
+        return harness_.bus.Wait(
+            COMMAND,
+            [device_id](const Bytes& bytes) {
+                return logging_restart_test::IsLoggingCommandTo(bytes, device_id);
+            },
+            timeout_ms
+        );
     }
 
     // The unit's next notification of its LOGGING_STATUS record that carries @p data, skipping
@@ -825,7 +919,8 @@ public:
             [transaction](const Bytes& bytes) {
                 return bytes.size() >= 4 && bytes[0] == OWN_ID && bytes[1] == LOGGING_CODE && bytes[2] == transaction;
             },
-            timeout_ms);
+            timeout_ms
+        );
     }
 
     // The unit's answer to its own LOGGING broadcast @p broadcast: the loopback bus hands the unit its
@@ -844,15 +939,23 @@ public:
     std::optional<CdmpResultCode> Broadcast(const Bytes& data) {
         const uint8_t transaction = next_transaction_++;
 
-        harness_.SendAsPeer(COMMAND, CdmpCommandRequestMessage{
-            .target_device_id = CdmpDevice::DEVICE_ID_BROADCAST,
-            .command_code = LOGGING_CODE,
-            .transaction_id = transaction,
-            .data = data}.ToCanFrame());
+        harness_.SendAsPeer(
+            COMMAND,
+            CdmpCommandRequestMessage{ .target_device_id = CdmpDevice::DEVICE_ID_BROADCAST,
+                .command_code = LOGGING_CODE,
+                .transaction_id = transaction,
+                .data = data }
+                .ToCanFrame()
+        );
 
-        if(!harness_.bus.Wait(COMMAND, [transaction](const Bytes& bytes) {
-                return logging_restart_test::IsLoggingBroadcastFrame(bytes) && bytes[2] == transaction;
-            }).has_value()) {
+        if(!harness_.bus
+                .Wait(
+                    COMMAND,
+                    [transaction](const Bytes& bytes) {
+                        return logging_restart_test::IsLoggingBroadcastFrame(bytes) && bytes[2] == transaction;
+                    }
+                )
+                .has_value()) {
             return std::nullopt;
         }
 
@@ -868,17 +971,16 @@ public:
     std::optional<CdmpResultCode> Ask(const Bytes& data) {
         const uint8_t transaction = next_transaction_++;
 
-        harness_.SendAsPeer(COMMAND, CdmpCommandRequestMessage{
-            .target_device_id = OWN_ID,
-            .command_code = LOGGING_CODE,
-            .transaction_id = transaction,
-            .data = data}.ToCanFrame());
+        harness_.SendAsPeer(
+            COMMAND,
+            CdmpCommandRequestMessage{
+                .target_device_id = OWN_ID, .command_code = LOGGING_CODE, .transaction_id = transaction, .data = data }
+                .ToCanFrame()
+        );
 
-        const auto frame = harness_.bus.Wait(
-            COMMAND_RESPONSE,
-            [transaction](const Bytes& bytes) {
-                return bytes.size() >= 4 && bytes[0] == OWN_ID && bytes[1] == LOGGING_CODE && bytes[2] == transaction;
-            });
+        const auto frame = harness_.bus.Wait(COMMAND_RESPONSE, [transaction](const Bytes& bytes) {
+            return bytes.size() >= 4 && bytes[0] == OWN_ID && bytes[1] == LOGGING_CODE && bytes[2] == transaction;
+        });
         if(!frame.has_value())
             return std::nullopt;
 
@@ -912,14 +1014,13 @@ private:
 public:
     StatusLog() {
         subscription_ = CreateScopedSubscription(
-            LoggingEventsChannel::GetInstance(),
-            LoggingEventType::StatusUpdated,
+            LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
                 const auto active = event.payload.find(LoggingPayloadType::IsActive);
                 if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
                     return;
 
-                Entry entry { .is_active = std::get<bool>(active->second) };
+                Entry entry{ .is_active = std::get<bool>(active->second) };
                 const auto reason = event.payload.find(LoggingPayloadType::Reason);
                 if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
                     entry.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
@@ -929,7 +1030,8 @@ public:
                     inbox->entries.push_back(entry);
                 }
                 k_sem_give(&inbox->received);
-            });
+            }
+        );
         zassert_not_null(subscription_.get(), "The status log's subscription was refused.");
     }
 
@@ -952,17 +1054,21 @@ using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
 using eerie_leap::domain::logging_domain::services::LogFileNaming;
 
 // Stores a logging configuration that logs @p sensor_ids, so a file has a group, as rt_daq's would.
-inline void StoreLoggingConfiguration(LoggingController& controller, std::initializer_list<std::string_view> sensor_ids) {
+inline void
+StoreLoggingConfiguration(LoggingController& controller, std::initializer_list<std::string_view> sensor_ids) {
     LoggingConfiguration configuration(std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = 100;
     configuration.max_log_size_mb = 0;
     for(const auto sensor_id : sensor_ids) {
         configuration.sensor_configurations.emplace(
             eerie_leap::utilities::string::StringHelpers::GetHash(sensor_id),
-            SensorLoggingConfiguration { .is_enabled = true });
+            SensorLoggingConfiguration{ .is_enabled = true }
+        );
     }
 
-    zassert_true(controller.GetConfigurationManager()->Update(configuration), "The logging configuration was not stored");
+    zassert_true(
+        controller.GetConfigurationManager()->Update(configuration), "The logging configuration was not stored"
+    );
 }
 
 // The bytes of the log file the writer wrote, the only one of a case; empty when there is none.

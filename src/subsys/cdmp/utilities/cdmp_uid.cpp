@@ -38,8 +38,11 @@ std::optional<uint32_t> CdmpUid::FromHardwareId(std::span<const uint8_t> hardwar
     if(hardware_id.empty())
         return std::nullopt;
 
-    const bool is_blank = std::ranges::all_of(hardware_id, [](uint8_t b) { return b == 0x00; })
-        || std::ranges::all_of(hardware_id, [](uint8_t b) { return b == 0xFF; });
+    const bool is_blank = std::ranges::all_of(hardware_id, [](uint8_t b) {
+        return b == 0x00;
+    }) || std::ranges::all_of(hardware_id, [](uint8_t b) {
+        return b == 0xFF;
+    });
     if(is_blank)
         return std::nullopt;
 

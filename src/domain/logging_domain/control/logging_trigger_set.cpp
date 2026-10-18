@@ -35,7 +35,8 @@ std::optional<bool> ReadState(const EventData& value) {
         return *number == 0 || *number == 1 ? std::optional<bool>(*number == 1) : std::nullopt;
 
     if(const auto* unsigned_number = std::get_if<uint32_t>(&value))
-        return *unsigned_number == 0 || *unsigned_number == 1 ? std::optional<bool>(*unsigned_number == 1) : std::nullopt;
+        return *unsigned_number == 0 || *unsigned_number == 1 ? std::optional<bool>(*unsigned_number == 1)
+                                                              : std::nullopt;
 
     if(const auto* real = std::get_if<float>(&value))
         return *real == 0.0f || *real == 1.0f ? std::optional<bool>(*real == 1.0f) : std::nullopt;
@@ -74,8 +75,10 @@ struct LoggingTriggerSet::Trigger {
             // stays, as the value is no change.
             if(!is_unreadable_logged) {
                 is_unreadable_logged = true;
-                LOG_WRN("Logging trigger %u (channel %u) ignores a value that is not 0, 1 or a bool.",
-                    static_cast<unsigned>(index), static_cast<unsigned>(binding.channel));
+                LOG_WRN(
+                    "Logging trigger %u (channel %u) ignores a value that is not 0, 1 or a bool.",
+                    static_cast<unsigned>(index), static_cast<unsigned>(binding.channel)
+                );
             }
 
             return;
@@ -103,9 +106,10 @@ LoggingTriggerSet::LoggingTriggerSet(
     std::shared_ptr<ILoggingControl> logging_control,
     std::span<const LoggingTrigger> triggers,
     SelectorResolver is_selector_known,
-    FirstValue first_value)
-        : logging_control_(std::move(logging_control)),
-        guard_(std::make_shared<DispatchGuard>(this)) {
+    FirstValue first_value
+) :
+    logging_control_(std::move(logging_control)),
+    guard_(std::make_shared<DispatchGuard>(this)) {
 
     if(logging_control_ == nullptr)
         throw std::invalid_argument("The logging trigger set needs a logging control.");
@@ -118,29 +122,32 @@ LoggingTriggerSet::LoggingTriggerSet(
             const auto& binding = triggers[i].binding;
 
             if(is_selector_known && !is_selector_known(binding)) {
-                LOG_WRN("Logging trigger %u (channel %u) selects nothing on this unit.",
-                    static_cast<unsigned>(i), static_cast<unsigned>(binding.channel));
+                LOG_WRN(
+                    "Logging trigger %u (channel %u) selects nothing on this unit.", static_cast<unsigned>(i),
+                    static_cast<unsigned>(binding.channel)
+                );
             }
 
-            auto trigger = std::make_shared<Trigger>(Trigger {
-                .logging_control = logging_control_.get(),
+            auto trigger = std::make_shared<Trigger>(Trigger{ .logging_control = logging_control_.get(),
                 .index = i,
                 .binding = binding,
                 .target_uid = triggers[i].target_uid,
                 .last_state = std::nullopt,
-                .first_value = first_value
-            });
+                .first_value = first_value });
 
             // The handler holds the guard and the trigger's state, never the set.
-            auto subscription = SubscribeEventBinding(
-                binding,
-                [guard = guard_, trigger](const EventData& value) {
-                    guard->Dispatch([&] { trigger->OnValue(value); });
+            auto subscription = SubscribeEventBinding(binding, [guard = guard_, trigger](const EventData& value) {
+                guard->Dispatch([&] {
+                    trigger->OnValue(value);
                 });
+            });
 
             if(subscription == nullptr) {
-                LOG_WRN("Logging trigger %u does nothing: channel %u is not registered on this unit, or its selector cannot select.",
-                    static_cast<unsigned>(i), static_cast<unsigned>(binding.channel));
+                LOG_WRN(
+                    "Logging trigger %u does nothing: channel %u is not registered on this unit, or its selector "
+                    "cannot select.",
+                    static_cast<unsigned>(i), static_cast<unsigned>(binding.channel)
+                );
                 continue;
             }
 
@@ -192,7 +199,11 @@ void LoggingTriggerSet::OnConfigurationUpdated(const SelectorResolver& is_select
 
     // Under the guard, which waits for a delivery in progress: from here on a trigger either saw the
     // value before the update or reads it as a baseline.
-    enum class Change : uint8_t { None, Withdrawn, Restored };
+    enum class Change : uint8_t {
+        None,
+        Withdrawn,
+        Restored
+    };
     std::vector<Change> changes(triggers_.size(), Change::None);
 
     guard_->Dispatch([&] {
@@ -219,11 +230,15 @@ void LoggingTriggerSet::OnConfigurationUpdated(const SelectorResolver& is_select
         const auto& trigger = *triggers_[i];
 
         if(changes[i] == Change::Withdrawn) {
-            LOG_WRN("Logging trigger %u (channel %u) selects nothing after the sensors update; it waits for its sensor.",
-                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.binding.channel));
+            LOG_WRN(
+                "Logging trigger %u (channel %u) selects nothing after the sensors update; it waits for its sensor.",
+                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.binding.channel)
+            );
         } else if(changes[i] == Change::Restored) {
-            LOG_INF("Logging trigger %u (channel %u) has its sensor again; its first value is a baseline.",
-                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.binding.channel));
+            LOG_INF(
+                "Logging trigger %u (channel %u) has its sensor again; its first value is a baseline.",
+                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.binding.channel)
+            );
         }
     }
 

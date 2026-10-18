@@ -16,42 +16,42 @@
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 
-#include "domain/sensor_domain/event_bus/sensor_payload_type.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
 #include "domain/logging_domain/control/models/logging_trigger.h"
+#include "domain/sensor_domain/event_bus/sensor_payload_type.h"
 
 #include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
 #include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
-#include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
+    #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #endif
 
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
-#include <array>
-#include <string_view>
+    #include <array>
+    #include <string_view>
 
-#include "subsys/assets/asset_kind.h"
-#include "subsys/assets/asset_provider.h"
-#include "subsys/assets/asset_store.h"
-#include "subsys/assets/assets_manager.h"
+    #include "subsys/assets/asset_kind.h"
+    #include "subsys/assets/asset_provider.h"
+    #include "subsys/assets/asset_store.h"
+    #include "subsys/assets/assets_manager.h"
 #endif
 
 #include "logging_controller.h"
 
 namespace eerie_leap::controllers {
 
+using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
+using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
+using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
+using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
+using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
-using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
-using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
-using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
 using eerie_leap::domain::logging_domain::services::LogFileNaming;
 #endif
@@ -75,13 +75,14 @@ LoggingTriggerSet::SelectorResolver MakeSelectorResolver(std::shared_ptr<Sensors
         return nullptr;
 
     return [manager = std::move(sensors_manager)](const EventBinding& binding) {
-        if(binding.channel != EventChannelId::Sensors || !binding.HasSelector()
+        if(binding.channel != EventChannelId::Sensors
+            || !binding.HasSelector()
             || binding.selector_key != std::to_underlying(SensorPayloadType::SensorId))
             return true;
 
         const auto selector = ToSelectorValue(binding.selector_value);
         if(!selector.has_value())
-            return true;   // The set logs a selector that cannot select.
+            return true; // The set logs a selector that cannot select.
 
         const auto sensors = manager->Get();
         if(sensors == nullptr)
@@ -95,7 +96,7 @@ LoggingTriggerSet::SelectorResolver MakeSelectorResolver(std::shared_ptr<Sensors
 
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
 // The extension of a log file, in static storage as AssetProvider::extensions needs.
-constexpr std::array<std::string_view, 1> LOG_EXTENSIONS = {".mf4"};
+constexpr std::array<std::string_view, 1> LOG_EXTENSIONS = { ".mf4" };
 
 // What the writer adds to the prefix: "_YYYYMMDDTHHMMSSZ_NNNN.mf4".
 constexpr size_t LOG_NAME_SUFFIX_LENGTH = sizeof("_YYYYMMDDTHHMMSSZ_NNNN.mf4") - 1;
@@ -110,8 +111,12 @@ constexpr bool IsLogPrefixValid(std::string_view prefix) {
         return false;
 
     for(const char c : prefix) {
-        const bool is_name_character = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-            || c == '.' || c == '_' || c == '-';
+        const bool is_name_character = (c >= 'a' && c <= 'z')
+            || (c >= 'A' && c <= 'Z')
+            || (c >= '0' && c <= '9')
+            || c == '.'
+            || c == '_'
+            || c == '-';
         if(!is_name_character)
             return false;
     }
@@ -120,16 +125,19 @@ constexpr bool IsLogPrefixValid(std::string_view prefix) {
 }
 
 static_assert(LOG_NAME_SUFFIX_LENGTH == 26, "The writer adds 26 characters to the prefix.");
-static_assert(IsLogPrefixValid(CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX),
+static_assert(
+    IsLogPrefixValid(CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX),
     "EERIE_LEAP_LOG_DATA_FILE_PREFIX plus the 26 characters the writer adds must be a valid asset name: "
-    "at most EERIE_LEAP_ASSETS_MAX_NAME_LENGTH bytes of [A-Za-z0-9._-], not starting with a dot.");
+    "at most EERIE_LEAP_ASSETS_MAX_NAME_LENGTH bytes of [A-Za-z0-9._-], not starting with a dot."
+);
 #endif
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 // The log header's device ID. The writer's logger factory keeps the provider as long as the writer
 // lives, which a dependent of SensorsController can stretch past the controller, so it holds the COM
 // service weakly. 0 without a service, or before it claimed an ID.
-LogWriterSupervisor::DeviceIdProvider MakeDeviceIdProvider(const std::shared_ptr<CanbusComService>& canbus_com_service) {
+LogWriterSupervisor::DeviceIdProvider
+MakeDeviceIdProvider(const std::shared_ptr<CanbusComService>& canbus_com_service) {
     if(canbus_com_service == nullptr)
         return nullptr;
 
@@ -137,7 +145,7 @@ LogWriterSupervisor::DeviceIdProvider MakeDeviceIdProvider(const std::shared_ptr
         const auto com = weak_com.lock();
         const auto network_info = com != nullptr ? com->GetNetworkInfo() : nullptr;
 
-        return network_info != nullptr ? network_info->GetDeviceInfo().device_id : uint8_t{0};
+        return network_info != nullptr ? network_info->GetDeviceInfo().device_id : uint8_t{ 0 };
     };
 }
 #endif
@@ -155,19 +163,20 @@ LoggingController::LoggingController(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
     std::string tool_id,
-    std::shared_ptr<AssetsManager> assets_manager)
-        : fs_service_(std::move(fs_service)),
-        config_work_queue_thread_(std::move(config_work_queue_thread)),
-        configuration_service_(std::move(configuration_service)),
-        sensors_configuration_manager_(std::move(sensors_configuration_manager)),
-        canbus_com_service_(std::move(canbus_com_service)),
-        sensor_events_publisher_(std::move(sensor_events_publisher)),
-        sd_fs_service_(std::move(sd_fs_service)),
-        time_service_(std::move(time_service)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)),
-        tool_id_(std::move(tool_id)),
-        assets_manager_(std::move(assets_manager)),
-        guard_(std::make_shared<DispatchGuard>(this)) {
+    std::shared_ptr<AssetsManager> assets_manager
+) :
+    fs_service_(std::move(fs_service)),
+    config_work_queue_thread_(std::move(config_work_queue_thread)),
+    configuration_service_(std::move(configuration_service)),
+    sensors_configuration_manager_(std::move(sensors_configuration_manager)),
+    canbus_com_service_(std::move(canbus_com_service)),
+    sensor_events_publisher_(std::move(sensor_events_publisher)),
+    sd_fs_service_(std::move(sd_fs_service)),
+    time_service_(std::move(time_service)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)),
+    tool_id_(std::move(tool_id)),
+    assets_manager_(std::move(assets_manager)),
+    guard_(std::make_shared<DispatchGuard>(this)) {
 
     k_mutex_init(&trigger_set_lock_);
 }
@@ -266,7 +275,10 @@ bool LoggingController::HasDependencies() const {
         is_registered = is_registered || configuration_service_->IsRegistered(ConfigurationService::Type::Logging);
 #endif
         if(is_registered) {
-            LOG_ERR("The configuration service already holds a logging configuration: build the logging controller once per configuration service.");
+            LOG_ERR(
+                "The configuration service already holds a logging configuration: build the logging controller once "
+                "per configuration service."
+            );
             has_all = false;
         }
     }
@@ -287,7 +299,9 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     // 1. The triggers' configuration, in both roles.
     logging_control_configuration_manager_ = std::make_shared<LoggingControlConfigurationManager>(
         std::make_unique<config_services::CborConfigurationService<CborLoggingControlConfig>>(
-            LOGGING_CONTROL_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_));
+            LOGGING_CONTROL_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
+        )
+    );
 
     // 2. Before the set is built and before the updated handler exists, so its store neither
     //    rebuilds nor replays: the set built below already reads it.
@@ -306,7 +320,9 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
         [](LoggingController* controller) {
             controller->RebuildTriggers();
             return WorkQueueTaskResult{};
-        }, this);
+        },
+        this
+    );
 
     // 5. After the role's pieces, so the first request reaches an initialized control. The replay
     //    finds an empty frame in the documented order (sensors not started yet); it makes a
@@ -322,7 +338,9 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     //    task. It holds the guard, not this: a call the manager already took finishes harmlessly
     //    after Teardown() detached it.
     logging_control_configuration_manager_->RegisterConfigurationUpdatedHandler([guard = guard_, this] {
-        guard->Dispatch([this] { rebuild_task_->Reschedule(K_NO_WAIT); });
+        guard->Dispatch([this] {
+            rebuild_task_->Reschedule(K_NO_WAIT);
+        });
     });
     is_handler_registered_ = true;
 
@@ -332,11 +350,11 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     //    control itself), so there is no sender of its own.
     if(configuration_service_ != nullptr) {
         configuration_update_logging_stop_ = std::make_unique<ConfigurationUpdateLoggingStop>(
-            configuration_service_,
-            config_work_queue_thread_,
-            logging_control_,
-            nullptr,
-            [this](ConfigurationService::Type type) { OnConfigurationUpdated(type); });
+            configuration_service_, config_work_queue_thread_, logging_control_, nullptr,
+            [this](ConfigurationService::Type type) {
+                OnConfigurationUpdated(type);
+            }
+        );
         if(!configuration_update_logging_stop_->Initialize()) {
             LOG_ERR("Failed to initialize the configuration update stop.");
             return false;
@@ -347,10 +365,12 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     if(configuration_service_ != nullptr) {
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
         configuration_service_->RegisterCborConfigurationManager(
-            ConfigurationService::Type::Logging, logging_configuration_manager_);
+            ConfigurationService::Type::Logging, logging_configuration_manager_
+        );
 #endif
         configuration_service_->RegisterCborConfigurationManager(
-            ConfigurationService::Type::LoggingControl, logging_control_configuration_manager_);
+            ConfigurationService::Type::LoggingControl, logging_control_configuration_manager_
+        );
     }
 
     // 9. Nothing after this can fail, so a controller that failed to initialize serves nothing.
@@ -364,26 +384,23 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
 bool LoggingController::BuildRole() {
     logging_configuration_manager_ = std::make_shared<LoggingConfigurationManager>(
         std::make_unique<config_services::CborConfigurationService<CborLoggingConfig>>(
-            LOGGING_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_));
+            LOGGING_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
+        )
+    );
 
     // Initialized before the supervisor, which expects a stopped, initialized writer.
     log_writer_service_ = std::make_shared<LogWriterService>(
-        sd_fs_service_,
-        logging_configuration_manager_,
-        time_service_,
-        sensor_readings_frame_);
+        sd_fs_service_, logging_configuration_manager_, time_service_, sensor_readings_frame_
+    );
     if(!log_writer_service_->Initialize()) {
         LOG_ERR("Failed to initialize the log writer service.");
         return false;
     }
 
     log_writer_supervisor_ = std::make_shared<LogWriterSupervisor>(
-        config_work_queue_thread_,
-        log_writer_service_,
-        logging_configuration_manager_,
-        sensors_configuration_manager_,
-        tool_id_,
-        MakeDeviceIdProvider(canbus_com_service_));
+        config_work_queue_thread_, log_writer_service_, logging_configuration_manager_, sensors_configuration_manager_,
+        tool_id_, MakeDeviceIdProvider(canbus_com_service_)
+    );
     if(!log_writer_supervisor_->Initialize()) {
         LOG_ERR("Failed to initialize the log writer supervisor.");
         return false;
@@ -399,17 +416,17 @@ bool LoggingController::BuildRole() {
     // no status, so its monitor reports every restart itself. The control owns the monitor, and a
     // monitor that cannot register its handlers fails Initialize().
     network_logging_control_ = std::make_shared<RemoteLoggingControl>(
-        config_work_queue_thread_,
-        std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
+        config_work_queue_thread_, std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
         std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_, false),
-        canbus_com_service_->GetNetworkInfo(),
-        RemoteLoggingControl::Mode::Peer);
+        canbus_com_service_->GetNetworkInfo(), RemoteLoggingControl::Mode::Peer
+    );
     if(!network_logging_control_->Initialize()) {
         LOG_ERR("Failed to initialize the network half of the logging control.");
         return false;
     }
     logging_control_ = std::make_shared<WriterLoggingControl>(
-        log_writer_supervisor_, network_logging_control_, GetUnitUid());
+        log_writer_supervisor_, network_logging_control_, GetUnitUid()
+    );
 
     // The handler before the exporter: the exporter shares the first status as soon as it exists,
     // and a command that arrives with no handler is dropped without an answer. Both after the
@@ -419,7 +436,8 @@ bool LoggingController::BuildRole() {
     // The LOGGING feature on CDMP follows the log volume: senders skip a unit that cannot log.
     try {
         logging_availability_reporter_ = std::make_unique<CanbusComLoggingAvailabilityReporter>(
-            config_work_queue_thread_, sd_fs_service_, canbus_com_service_);
+            config_work_queue_thread_, sd_fs_service_, canbus_com_service_
+        );
     } catch(const std::exception& e) {
         LOG_ERR("Failed to report the log volume's availability: %s", e.what());
     }
@@ -445,11 +463,10 @@ bool LoggingController::BuildRole() {
     // handler, which fails Initialize(): the control would miss a restart that the status does not
     // show.
     remote_logging_control_ = std::make_shared<RemoteLoggingControl>(
-        config_work_queue_thread_,
-        std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
-        std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_),
-        canbus_com_service_->GetNetworkInfo(),
-        RemoteLoggingControl::Mode::Remote);
+        config_work_queue_thread_, std::make_shared<CanbusComLoggingCommandSender>(canbus_com_service_),
+        std::make_shared<CanbusComLoggingRestartMonitor>(canbus_com_service_), canbus_com_service_->GetNetworkInfo(),
+        RemoteLoggingControl::Mode::Remote
+    );
     if(!remote_logging_control_->Initialize()) {
         LOG_ERR("Failed to initialize the remote logging control.");
         return false;
@@ -482,13 +499,13 @@ std::unique_ptr<LoggingTriggerSet> LoggingController::BuildTriggerSet(LoggingTri
         : std::span<const LoggingTrigger>();
 
     auto set = std::make_unique<LoggingTriggerSet>(
-        logging_control_,
-        triggers,
-        MakeSelectorResolver(sensors_configuration_manager_),
-        first_value);
+        logging_control_, triggers, MakeSelectorResolver(sensors_configuration_manager_), first_value
+    );
 
-    LOG_INF("Logging triggers: %u of %u subscribed.",
-        static_cast<unsigned>(set->GetSubscribedCount()), static_cast<unsigned>(triggers.size()));
+    LOG_INF(
+        "Logging triggers: %u of %u subscribed.", static_cast<unsigned>(set->GetSubscribedCount()),
+        static_cast<unsigned>(triggers.size())
+    );
 
     return set;
 }
@@ -511,11 +528,14 @@ void LoggingController::RebuildTriggers() {
     logging_trigger_set_.reset();
 
     try {
-        logging_trigger_set_ = BuildTriggerSet(is_configuration_updated_
-            ? LoggingTriggerSet::FirstValue::IsBaseline
-            : LoggingTriggerSet::FirstValue::OneStarts);
+        logging_trigger_set_ = BuildTriggerSet(
+            is_configuration_updated_ ? LoggingTriggerSet::FirstValue::IsBaseline
+                                      : LoggingTriggerSet::FirstValue::OneStarts
+        );
     } catch(const std::exception& e) {
-        LOG_ERR("Failed to rebuild the logging triggers; none act until the configuration is stored again: %s", e.what());
+        LOG_ERR(
+            "Failed to rebuild the logging triggers; none act until the configuration is stored again: %s", e.what()
+        );
         return;
     }
 
@@ -537,7 +557,8 @@ void LoggingController::OnConfigurationUpdated(ConfigurationService::Type type) 
 
     // Only a sensors update can take a sensor away.
     logging_trigger_set_->OnConfigurationUpdated(
-        type == ConfigurationService::Type::Sensors ? MakeSelectorResolver(sensors_configuration_manager_) : nullptr);
+        type == ConfigurationService::Type::Sensors ? MakeSelectorResolver(sensors_configuration_manager_) : nullptr
+    );
 }
 
 void LoggingController::RegisterAssets() {
@@ -559,9 +580,8 @@ void LoggingController::RegisterAssets() {
 
         // The file being written is neither read nor deleted. The writer can outlive the controller, as
         // the dependent service SensorsController keeps holds it, so it is held weakly.
-        provider.is_in_use = [weak_writer = std::weak_ptr<LogWriterService>(log_writer_service_), store = provider.store](
-            AssetAccess operation, std::string_view name) {
-
+        provider.is_in_use = [weak_writer = std::weak_ptr<LogWriterService>(log_writer_service_),
+                                 store = provider.store](AssetAccess operation, std::string_view name) {
             if(operation != AssetAccess::READ && operation != AssetAccess::DELETE)
                 return false;
 
@@ -601,7 +621,10 @@ void LoggingController::StopLogWriter() {
 
     if(config_work_queue_thread_->IsCurrentThread()) {
         // The stop is queued behind this very job, so waiting for it would wait for itself.
-        LOG_ERR("The logging controller is destroyed on the configuration work queue; the log writer is stopped without waiting for it.");
+        LOG_ERR(
+            "The logging controller is destroyed on the configuration work queue; the log writer is stopped without "
+            "waiting for it."
+        );
     } else {
         // A stack semaphore: the wait has no timeout, and the job gives it before this returns.
         k_sem done;
@@ -609,7 +632,9 @@ void LoggingController::StopLogWriter() {
 
         try {
             // Queued behind the supervisor's run that the request just queued.
-            config_work_queue_thread_->Run([&done] { k_sem_give(&done); });
+            config_work_queue_thread_->Run([&done] {
+                k_sem_give(&done);
+            });
             k_sem_take(&done, K_FOREVER);
         } catch(const std::exception& e) {
             LOG_ERR("Failed to wait for logging to stop: %s", e.what());

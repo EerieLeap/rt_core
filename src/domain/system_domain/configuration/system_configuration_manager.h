@@ -25,7 +25,8 @@ private:
 
 public:
     explicit SystemConfigurationManager(
-        std::unique_ptr<config_service::CborConfigurationService<CborSystemConfig>> cbor_configuration_service);
+        std::unique_ptr<config_service::CborConfigurationService<CborSystemConfig>> cbor_configuration_service
+    );
 
     bool UpdateBuildNumber(uint32_t build_number);
 };

@@ -1,8 +1,8 @@
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "domain/logging_domain/configuration/parsers/logging_configuration_cbor_parser.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -16,35 +16,44 @@ LoggingConfiguration logging_configuration_parser_GetTestConfiguration() {
     logging_configuration.logging_interval_ms = 1000;
     logging_configuration.max_log_size_mb = 1;
 
-    logging_configuration.sensor_configurations.emplace(1234, SensorLoggingConfiguration {
-        .is_enabled = true,
-        .log_raw_value = true,
-        .log_only_new_data = true
-    });
-    logging_configuration.sensor_configurations.emplace(5678, SensorLoggingConfiguration {
-        .is_enabled = false,
-        .log_raw_value = false,
-        .log_only_new_data = false
-    });
+    logging_configuration.sensor_configurations.emplace(
+        1234, SensorLoggingConfiguration{ .is_enabled = true, .log_raw_value = true, .log_only_new_data = true }
+    );
+    logging_configuration.sensor_configurations.emplace(
+        5678, SensorLoggingConfiguration{ .is_enabled = false, .log_raw_value = false, .log_only_new_data = false }
+    );
 
     return logging_configuration;
 }
 
 void logging_configuration_parser_CompareLoggingConfigurations(
     LoggingConfiguration& logging_configuration,
-    LoggingConfiguration& deserialized_logging_configuration) {
+    LoggingConfiguration& deserialized_logging_configuration
+) {
 
     zassert_equal(deserialized_logging_configuration.logging_interval_ms, logging_configuration.logging_interval_ms);
     zassert_equal(deserialized_logging_configuration.max_log_size_mb, logging_configuration.max_log_size_mb);
 
-    zassert_equal(deserialized_logging_configuration.sensor_configurations.size(), logging_configuration.sensor_configurations.size());
+    zassert_equal(
+        deserialized_logging_configuration.sensor_configurations.size(),
+        logging_configuration.sensor_configurations.size()
+    );
 
     for(const auto& [sensor_id, sensor_configuration] : logging_configuration.sensor_configurations) {
         zassert_true(deserialized_logging_configuration.sensor_configurations.contains(sensor_id));
 
-        zassert_equal(deserialized_logging_configuration.sensor_configurations[sensor_id].is_enabled, sensor_configuration.is_enabled);
-        zassert_equal(deserialized_logging_configuration.sensor_configurations[sensor_id].log_raw_value, sensor_configuration.log_raw_value);
-        zassert_equal(deserialized_logging_configuration.sensor_configurations[sensor_id].log_only_new_data, sensor_configuration.log_only_new_data);
+        zassert_equal(
+            deserialized_logging_configuration.sensor_configurations[sensor_id].is_enabled,
+            sensor_configuration.is_enabled
+        );
+        zassert_equal(
+            deserialized_logging_configuration.sensor_configurations[sensor_id].log_raw_value,
+            sensor_configuration.log_raw_value
+        );
+        zassert_equal(
+            deserialized_logging_configuration.sensor_configurations[sensor_id].log_only_new_data,
+            sensor_configuration.log_only_new_data
+        );
     }
 }
 
@@ -54,7 +63,11 @@ ZTEST(logging_configuration_parser, test_CborSerializeDeserialize) {
     auto logging_configuration = logging_configuration_parser_GetTestConfiguration();
 
     auto serialized_logging_configuration = logging_configuration_cbor_parser.Serialize(logging_configuration);
-    auto deserialized_logging_configuration = logging_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_logging_configuration.get());
+    auto deserialized_logging_configuration = logging_configuration_cbor_parser.Deserialize(
+        Mrm::GetDefaultPmr(), *serialized_logging_configuration.get()
+    );
 
-    logging_configuration_parser_CompareLoggingConfigurations(logging_configuration, *deserialized_logging_configuration);
+    logging_configuration_parser_CompareLoggingConfigurations(
+        logging_configuration, *deserialized_logging_configuration
+    );
 }

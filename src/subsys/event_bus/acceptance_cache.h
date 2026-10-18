@@ -23,14 +23,17 @@ private:
         bool is_accepted = false;
     };
 
-    std::array<Entry, TCapacity> entries_ { };   // The first count_, sorted by key.
+    std::array<Entry, TCapacity> entries_{}; // The first count_, sorted by key.
     size_t count_ = 0;
     uint32_t subscription_generation_ = 0;
 
     // The index of key's entry, or of where it would go.
     size_t LowerBound(uint32_t key) const {
-        const auto it = std::lower_bound(entries_.begin(), entries_.begin() + count_, key,
-            [](const Entry& entry, uint32_t value) { return entry.key < value; });
+        const auto it = std::lower_bound(
+            entries_.begin(), entries_.begin() + count_, key, [](const Entry& entry, uint32_t value) {
+                return entry.key < value;
+            }
+        );
 
         return static_cast<size_t>(it - entries_.begin());
     }
@@ -70,11 +73,13 @@ public:
         }
 
         std::copy_backward(entries_.begin() + index, entries_.begin() + count_, entries_.begin() + count_ + 1);
-        entries_[index] = Entry { .key = key, .is_accepted = is_accepted };
+        entries_[index] = Entry{ .key = key, .is_accepted = is_accepted };
         count_++;
     }
 
-    [[nodiscard]] size_t GetCount() const { return count_; }
+    [[nodiscard]] size_t GetCount() const {
+        return count_;
+    }
 };
 
 } // namespace eerie_leap::subsys::event_bus

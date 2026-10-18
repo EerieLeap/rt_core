@@ -1,11 +1,11 @@
 #pragma once
 
-#include <memory>
 #include <cstdint>
+#include <memory>
 #include <optional>
 
-#include "utilities/gui/coordinate.h"
 #include "subsys/threading/work_queue_thread.h"
+#include "utilities/gui/coordinate.h"
 
 #include "cbf_task.h"
 
@@ -14,8 +14,8 @@ namespace eerie_leap::subsys::cfb {
 namespace threading = eerie_leap::subsys::threading;
 
 using eerie_leap::utilities::gui::Coordinate;
-using threading::WorkQueueThread;
 using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
 class Cfb {
 private:
@@ -56,12 +56,16 @@ public:
     bool Flush();
     bool Clear(bool clear_display = false);
 
-    [[nodiscard]] uint16_t GetXRes() const { return x_res_; }
-    [[nodiscard]] uint16_t GetYRes() const { return y_res_; }
+    [[nodiscard]] uint16_t GetXRes() const {
+        return x_res_;
+    }
+    [[nodiscard]] uint16_t GetYRes() const {
+        return y_res_;
+    }
 
     void SetAnimationHandler(std::function<void()> handler, uint32_t frame_rate);
     void StartAnimation();
     void StopAnimation();
 };
 
-}  // namespace eerie_leap::subsys::cfb
+} // namespace eerie_leap::subsys::cfb

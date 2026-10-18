@@ -28,14 +28,10 @@ void Ble::UpdateScanResponseData(AdBuffer&& sd) {
     sd_ = std::move(sd);
 }
 
-const bt_le_adv_param* Ble::advertising_params_ = BT_LE_ADV_PARAM(
-    BT_LE_ADV_OPT_CONN,
-    BT_GAP_ADV_FAST_INT_MIN_2,
-    BT_GAP_ADV_FAST_INT_MAX_2,
-    nullptr
-);
+const bt_le_adv_param* Ble::advertising_params_ =
+    BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, nullptr);
 
-bt_conn* Ble::active_conn_{nullptr};
+bt_conn* Ble::active_conn_{ nullptr };
 k_mutex Ble::conn_mutex_;
 k_work_delayable Ble::adv_restart_work_;
 
@@ -92,9 +88,9 @@ void Ble::RestartAdvertisingWorkHandler(struct k_work* work) {
     bt_le_adv_stop();
 
     int err = bt_le_adv_start(
-        advertising_params_,
-        ad_.empty() ? nullptr : ad_.data(), ad_.size(),
-        sd_.empty() ? nullptr : sd_.data(), sd_.size());
+        advertising_params_, ad_.empty() ? nullptr : ad_.data(), ad_.size(), sd_.empty() ? nullptr : sd_.data(),
+        sd_.size()
+    );
     if(err == -EALREADY) {
         LOG_DBG("BLE advertising already active");
         return;
@@ -185,8 +181,10 @@ void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint
     double connection_interval_ms = interval * 1.25;
     uint16_t supervision_timeout_ms = timeout * 10;
 
-    LOG_INF("Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms",
-        connection_interval_ms, latency, supervision_timeout_ms);
+    LOG_INF(
+        "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms", connection_interval_ms,
+        latency, supervision_timeout_ms
+    );
 }
 
 // NOTE: Any logging from this callback will cause a crash,
@@ -197,23 +195,22 @@ void DataLengthUpdated(bt_conn* conn, bt_conn_le_data_len_info* info) {
     uint16_t rx_len = info->rx_max_len;
     uint16_t rx_time = info->rx_max_time;
 
-    LOG_INF("Data length updated. Length %d/%d bytes, time %d/%d us",
-        tx_len, rx_len, tx_time, rx_time);
+    LOG_INF("Data length updated. Length %d/%d bytes, time %d/%d us", tx_len, rx_len, tx_time, rx_time);
 }
 
-void SecurityChanged(struct bt_conn *conn, bt_security_t level, enum bt_security_err err) {
-	char addr[BT_ADDR_LE_STR_LEN];
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+void SecurityChanged(struct bt_conn* conn, bt_security_t level, enum bt_security_err err) {
+    char addr[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-	if(!err) {
-		LOG_INF("Security changed: %s level %u", addr, level);
+    if(!err) {
+        LOG_INF("Security changed: %s level %u", addr, level);
 
         if(level >= BT_SECURITY_L2)
             k_work_reschedule(&Ble::data_length_update_work_, K_NO_WAIT);
-	} else {
-		LOG_INF("Security failed: %s level %u err %d", addr, level, err);
+    } else {
+        LOG_INF("Security failed: %s level %u err %d", addr, level, err);
         bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
-	}
+    }
 
     k_work_reschedule(&Ble::pairing_finished_work_, K_NO_WAIT);
 }

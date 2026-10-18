@@ -15,22 +15,22 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "subsys/bluetooth/i_ble_notifier.h"
+#include "domain/ble_domain/services/live_data_service.h"
+#include "domain/ble_domain/utilities/live_data_encoder.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/ble_domain/utilities/live_data_encoder.h"
-#include "domain/ble_domain/services/live_data_service.h"
+#include "subsys/bluetooth/i_ble_notifier.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 namespace live_data_test {
 
 using namespace eerie_leap::domain::sensor_domain::models;
-using eerie_leap::utilities::memory::Mrm;
-using eerie_leap::subsys::bluetooth::IBleNotifier;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
-using eerie_leap::domain::ble_domain::utilities::LiveDataEncoder;
 using eerie_leap::domain::ble_domain::services::LiveDataService;
+using eerie_leap::domain::ble_domain::utilities::LiveDataEncoder;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::bluetooth::IBleNotifier;
+using eerie_leap::utilities::memory::Mrm;
 
 using Bytes = std::vector<uint8_t>;
 
@@ -46,7 +46,9 @@ public:
     // Called after each accepted notification, e.g. to report it sent.
     std::function<void()> on_notified;
 
-    FakeNotifier() { k_mutex_init(&lock_); }
+    FakeNotifier() {
+        k_mutex_init(&lock_);
+    }
 
     void SetMaxSize(size_t size) {
         k_mutex_lock(&lock_, K_FOREVER);

@@ -3,14 +3,14 @@
 #include <span>
 #include <stdexcept>
 
+#include <mgmt/mcumgr/transport/smp_internal.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net_buf.h>
-#include <mgmt/mcumgr/transport/smp_internal.h>
 
-#include "subsys/canbus/can_id.h"
 #include "subsys/canbus/can_filter.h"
-#include "subsys/threading/scoped_mutex.h"
+#include "subsys/canbus/can_id.h"
 #include "subsys/smp/smp_header.h"
+#include "subsys/threading/scoped_mutex.h"
 
 #include "smp_can_transport.h"
 
@@ -18,10 +18,10 @@ LOG_MODULE_REGISTER(smp_can_transport, LOG_LEVEL_INF);
 
 namespace eerie_leap::subsys::smp::can {
 
-using eerie_leap::subsys::canbus::CanId;
-using eerie_leap::subsys::canbus::CanFilter;
 using eerie_leap::subsys::canbus::CanbusConfig;
 using eerie_leap::subsys::canbus::CanbusType;
+using eerie_leap::subsys::canbus::CanFilter;
+using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::subsys::threading::ScopedMutex;
 
 namespace {
@@ -46,8 +46,8 @@ int64_t UptimeUs() {
 
 std::atomic<SmpCanTransport*> SmpCanTransport::instance_ = nullptr;
 
-SmpCanTransport::SmpCanTransport(std::shared_ptr<WorkQueueThread> work_queue_thread)
-    : work_queue_thread_(std::move(work_queue_thread)) {
+SmpCanTransport::SmpCanTransport(std::shared_ptr<WorkQueueThread> work_queue_thread) :
+    work_queue_thread_(std::move(work_queue_thread)) {
 
     SmpCanTransport* expected = nullptr;
     if(!instance_.compare_exchange_strong(expected, this))
@@ -85,7 +85,11 @@ bool SmpCanTransport::Initialize() {
     }
 
     tx_task_ = work_queue_thread_->CreateTask(
-        [](SmpCanTransport* transport) { return transport->ProcessTx(); }, this);
+        [](SmpCanTransport* transport) {
+            return transport->ProcessTx();
+        },
+        this
+    );
 
     return true;
 }
@@ -122,8 +126,9 @@ bool SmpCanTransport::Bind(uint8_t address) {
     }
 
     const CanFilter filter(layout_.GetTargetFilterId(address), SmpCanIdLayout::TARGET_FILTER_MASK, true);
-    const int handler_id = canbus->RegisterFrameReceivedHandler(
-        filter, [this](const CanFrame& frame) { OnFrame(frame); });
+    const int handler_id = canbus->RegisterFrameReceivedHandler(filter, [this](const CanFrame& frame) {
+        OnFrame(frame);
+    });
 
     if(handler_id < 0) {
         LOG_ERR("Failed to register the SMP over CAN filter: %d", handler_id);
@@ -195,8 +200,11 @@ int SmpCanTransport::Output(net_buf* packet) {
 bool SmpCanTransport::Enqueue(uint8_t target, SmpPacket packet) {
     const uint8_t address = address_.load();
 
-    if(packet == nullptr || packet->len == 0 || address == 0
-        || !SmpCanIdLayout::IsValidAddress(target) || target == address) {
+    if(packet == nullptr
+        || packet->len == 0
+        || address == 0
+        || !SmpCanIdLayout::IsValidAddress(target)
+        || target == address) {
 
         tx_dropped_++;
         return false;
@@ -238,13 +246,13 @@ WorkQueueTaskResult SmpCanTransport::ProcessTx() {
             if(tx_packet_ == nullptr)
                 return {};
 
-            tx_framer_ = SmpCanFramer({tx_packet_->data, tx_packet_->len}, format);
+            tx_framer_ = SmpCanFramer({ tx_packet_->data, tx_packet_->len }, format);
         }
 
         // Waiting for half a burst keeps the wake-ups to a few hundred per second.
         if(!pacer_.CanSend()) {
             const uint32_t frames = std::max(CONFIG_EERIE_LEAP_SMP_CAN_TX_BURST_FRAMES / 2, 1);
-            return {.reschedule = true, .delay = K_USEC(pacer_.GetWaitUs(frames))};
+            return { .reschedule = true, .delay = K_USEC(pacer_.GetWaitUs(frames)) };
         }
 
         std::array<uint8_t, SmpCanFrameFormat::MAX_FRAME_SIZE> frame{};
@@ -253,7 +261,7 @@ WorkQueueTaskResult SmpCanTransport::ProcessTx() {
 
         const int result = canbus->SendFrame(frame_id, std::span(frame.data(), frame_size), K_NO_WAIT);
         if(result == -EAGAIN)
-            return {.reschedule = true, .delay = K_USEC(TX_RETRY_DELAY_US)};
+            return { .reschedule = true, .delay = K_USEC(TX_RETRY_DELAY_US) };
 
         if(result != 0) {
             LOG_WRN("Dropping an SMP packet, CAN send failed: %d", result);
@@ -352,7 +360,7 @@ SmpCanTransport::RxSlot* SmpCanTransport::AcquireRxSlot(uint8_t source, SmpCanFr
         return nullptr;
 
     slot->source = source;
-    slot->reassembler.Attach({slot->packet->data, net_buf_tailroom(slot->packet.get())}, format);
+    slot->reassembler.Attach({ slot->packet->data, net_buf_tailroom(slot->packet.get()) }, format);
 
     return slot;
 }
@@ -373,7 +381,7 @@ void SmpCanTransport::ReleaseExpiredRxSlots(int64_t now_ms) {
 }
 
 void SmpCanTransport::Deliver(uint8_t source, SmpPacket packet) {
-    const auto header = SmpHeader::Parse({packet->data, packet->len});
+    const auto header = SmpHeader::Parse({ packet->data, packet->len });
 
     if(header->IsRequest()) {
         UserData(*packet).peer = source;

@@ -5,7 +5,8 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count): BlockBase("CN") {
+ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count) :
+    BlockBase("CN") {
     type_ = type;
     sync_type_ = sync_type;
     data_type_ = data_type;

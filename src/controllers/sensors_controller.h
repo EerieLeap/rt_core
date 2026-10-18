@@ -28,7 +28,7 @@
 
 namespace eerie_leap::subsys::assets {
 class AssetsManager;
-}
+} // namespace eerie_leap::subsys::assets
 
 namespace eerie_leap::controllers {
 
@@ -42,8 +42,8 @@ using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
-using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
 
 using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
@@ -109,7 +109,8 @@ public:
         std::shared_ptr<IFsService> sd_fs_service = nullptr,
         // With CONFIG_EERIE_LEAP_ASSETS: the registry the sensor scripts are registered with, once
         // Initialize() succeeded, when there is an SD service too; ignored otherwise.
-        std::shared_ptr<AssetsManager> assets_manager = nullptr);
+        std::shared_ptr<AssetsManager> assets_manager = nullptr
+    );
     ~SensorsController();
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
@@ -123,8 +124,12 @@ public:
      */
     void RegisterDependentService(std::shared_ptr<IService> service);
 
-    std::shared_ptr<SensorsConfigurationManager> GetConfigurationManager() const { return sensors_configuration_manager_; }
-    std::shared_ptr<SensorsProcessingService> GetProcessingService() const { return sensors_processing_service_; }
+    std::shared_ptr<SensorsConfigurationManager> GetConfigurationManager() const {
+        return sensors_configuration_manager_;
+    }
+    std::shared_ptr<SensorsProcessingService> GetProcessingService() const {
+        return sensors_processing_service_;
+    }
 
     /** @brief The inputs and sensor count the configuration is validated against; after Initialize(). */
     [[nodiscard]] SensorCapabilities GetCapabilities() const;

@@ -14,17 +14,17 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "subsys/event_bus/event_binding.h"
-#include "subsys/event_bus/event_binding_subscription.h"
-#include "subsys/event_bus/event_channel_registry.h"
-#include "subsys/threading/scoped_mutex.h"
 #include "domain/sensor_domain/event_bus/sensor_event_bus.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/sensor_type.h"
 #include "domain/sensor_domain/services/sensor_events_publisher.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/event_bus/event_binding.h"
+#include "subsys/event_bus/event_binding_subscription.h"
+#include "subsys/event_bus/event_channel_registry.h"
+#include "subsys/threading/scoped_mutex.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 // Shared by the publisher suite and the allocation-free case, which must live in the one unit that
 // includes the counting allocator. Round() and the Recorder never allocate, so a round can run
@@ -37,14 +37,6 @@
 // dispatches each event to all its subscribers before the next.
 namespace sensor_events_test_support {
 
-using eerie_leap::utilities::memory::Mrm;
-using eerie_leap::subsys::event_bus::AnySubscription;
-using eerie_leap::subsys::event_bus::EventBinding;
-using eerie_leap::subsys::event_bus::EventChannelId;
-using eerie_leap::subsys::event_bus::EventChannelRegistry;
-using eerie_leap::subsys::event_bus::EventData;
-using eerie_leap::subsys::event_bus::SubscribeEventBinding;
-using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventBus;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventsChannel;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventType;
@@ -56,6 +48,14 @@ using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::sensor_domain::models::SensorType;
 using eerie_leap::domain::sensor_domain::services::SensorEventsPublisher;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::event_bus::AnySubscription;
+using eerie_leap::subsys::event_bus::EventBinding;
+using eerie_leap::subsys::event_bus::EventChannelId;
+using eerie_leap::subsys::event_bus::EventChannelRegistry;
+using eerie_leap::subsys::event_bus::EventData;
+using eerie_leap::subsys::event_bus::SubscribeEventBinding;
+using eerie_leap::subsys::threading::ScopedMutex;
+using eerie_leap::utilities::memory::Mrm;
 
 // A failure bound only; nothing waits on time to synchronise.
 inline constexpr int k_wait_ms = 1000;
@@ -69,8 +69,8 @@ public:
 private:
     mutable k_mutex mutex_;
     k_sem delivered_;
-    std::array<float, k_capacity> values_ { };
-    size_t count_ = 0;   // Every delivery, also past the capacity.
+    std::array<float, k_capacity> values_{};
+    size_t count_ = 0; // Every delivery, also past the capacity.
 
 public:
     Recorder() {
@@ -94,7 +94,9 @@ public:
         k_sem_give(&delivered_);
     }
 
-    bool WaitForDelivery() { return k_sem_take(&delivered_, K_MSEC(k_wait_ms)) == 0; }
+    bool WaitForDelivery() {
+        return k_sem_take(&delivered_, K_MSEC(k_wait_ms)) == 0;
+    }
 
     size_t Count() const {
         ScopedMutex guard(mutex_);
@@ -149,13 +151,11 @@ inline SensorReading MakeReading(const Sensor& sensor, std::optional<float> valu
 
 // The widget and trigger path: a text selector, resolved through the registry.
 inline AnySubscription Bind(const Sensor& sensor, const std::shared_ptr<Recorder>& recorder) {
-    const EventBinding binding {
-        .channel = EventChannelId::Sensors,
+    const EventBinding binding{ .channel = EventChannelId::Sensors,
         .event_type = std::to_underlying(SensorEventType::DataUpdated),
         .payload_key = std::to_underlying(SensorPayloadType::Value),
         .selector_key = std::to_underlying(SensorPayloadType::SensorId),
-        .selector_value = std::pmr::string(sensor.id)
-    };
+        .selector_value = std::pmr::string(sensor.id) };
 
     return SubscribeEventBinding(binding, [recorder](const EventData& value) {
         if(const auto* number = std::get_if<float>(&value))
@@ -171,7 +171,8 @@ inline bool Round(
     SensorReadingsFrame& frame,
     std::initializer_list<Commit> commits,
     const Sensor& sentinel,
-    Recorder& sentinel_recorder) {
+    Recorder& sentinel_recorder
+) {
 
     if(!publisher.Pause())
         return false;

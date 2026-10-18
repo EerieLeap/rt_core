@@ -11,10 +11,10 @@
 
 namespace eerie_leap::domain::adc_domain::utilities {
 
+using eerie_leap::domain::adc_domain::models::AdcRange;
 using eerie_leap::utilities::voltage_interpolator::CalibrationData;
 using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
 using eerie_leap::utilities::voltage_interpolator::IVoltageInterpolator;
-using eerie_leap::domain::adc_domain::models::AdcRange;
 
 // The calibration table is kept as measured: voltage is the true voltage at the sensor input,
 // value is what the unit read for it, in sensor volts (AdcRange::ToSensorVolts of the ADC reading).
@@ -28,7 +28,8 @@ public:
     AdcCalibrator(
         InterpolationMethod interpolation_method,
         std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_data,
-        AdcRange range = AdcRange::Default());
+        AdcRange range = AdcRange::Default()
+    );
 
     // ADC-pin volts to sensor volts through the range alone.
     [[nodiscard]] float InterpolateToInputRange(float value) const;
@@ -37,7 +38,9 @@ public:
 
     [[nodiscard]] InterpolationMethod GetInterpolationMethod() const;
     [[nodiscard]] std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const;
-    [[nodiscard]] const AdcRange& GetRange() const { return range_; }
+    [[nodiscard]] const AdcRange& GetRange() const {
+        return range_;
+    }
 };
 
 } // namespace eerie_leap::domain::adc_domain::utilities

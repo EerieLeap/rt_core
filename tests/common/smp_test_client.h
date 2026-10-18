@@ -10,16 +10,16 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/kernel.h>
-#include <zephyr/net_buf.h>
-#include <zephyr/ztest.h>
-#include <zephyr/mgmt/mcumgr/transport/smp.h>
 #include <mgmt/mcumgr/transport/smp_internal.h>
 #include <zcbor_decode.h>
 #include <zcbor_encode.h>
+#include <zephyr/kernel.h>
+#include <zephyr/mgmt/mcumgr/transport/smp.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/ztest.h>
 
-#include "subsys/smp/smp_header.h"
 #include "subsys/smp/smp_group_id.h"
+#include "subsys/smp/smp_header.h"
 
 // Drives MCUmgr groups in rt_core test suites, as an SMP client on a test transport.
 namespace smp_test {
@@ -49,14 +49,18 @@ public:
     }
 
     CborMap& Put(std::string_view key, std::span<const uint8_t> value) {
-        zassert_true(zcbor_tstr_encode_ptr(states_, key.data(), key.size())
-            && zcbor_bstr_encode_ptr(states_, reinterpret_cast<const char*>(value.data()), value.size()));
+        zassert_true(
+            zcbor_tstr_encode_ptr(states_, key.data(), key.size())
+            && zcbor_bstr_encode_ptr(states_, reinterpret_cast<const char*>(value.data()), value.size())
+        );
         return *this;
     }
 
     CborMap& PutText(std::string_view key, std::string_view value) {
-        zassert_true(zcbor_tstr_encode_ptr(states_, key.data(), key.size())
-            && zcbor_tstr_encode_ptr(states_, value.data(), value.size()));
+        zassert_true(
+            zcbor_tstr_encode_ptr(states_, key.data(), key.size())
+            && zcbor_tstr_encode_ptr(states_, value.data(), value.size())
+        );
         return *this;
     }
 
@@ -132,10 +136,16 @@ struct Response {
     }
 
     [[nodiscard]] bool Has(const std::string& key) const {
-        return values.contains(key) || wide_values.contains(key) || floats.contains(key) || flags.contains(key)
-            || bytes.contains(key) || texts.contains(key);
+        return values.contains(key)
+            || wide_values.contains(key)
+            || floats.contains(key)
+            || flags.contains(key)
+            || bytes.contains(key)
+            || texts.contains(key);
     }
-    [[nodiscard]] bool IsOk() const { return !error.has_value() && !values.contains("rc"); }
+    [[nodiscard]] bool IsOk() const {
+        return !error.has_value() && !values.contains("rc");
+    }
 };
 
 namespace detail {
@@ -150,8 +160,13 @@ inline uint8_t AdditionalInfo(const zcbor_state_t* state) {
 
 // Decodes a map of unsigned values into entry; its text values into texts, its booleans into flags
 // and its lists of text values into lists, when given.
-inline bool DecodeEntry(zcbor_state_t* zsd, Entry& entry, TextEntry* texts = nullptr, FlagEntry* flags = nullptr,
-    ListEntry* lists = nullptr) {
+inline bool DecodeEntry(
+    zcbor_state_t* zsd,
+    Entry& entry,
+    TextEntry* texts = nullptr,
+    FlagEntry* flags = nullptr,
+    ListEntry* lists = nullptr
+) {
 
     if(!zcbor_map_start_decode(zsd))
         return false;
@@ -380,7 +395,7 @@ public:
         if(!response_header.has_value() || response_header->sequence != header.sequence)
             return std::nullopt;
 
-        Response response{.header = *response_header};
+        Response response{ .header = *response_header };
         if(!detail::DecodeBody(std::span(raw).subspan(SmpHeader::SIZE), response))
             return std::nullopt;
 

@@ -1,17 +1,17 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdint>
 #include <string>
 #include <string_view>
-#include <cstdint>
 #include <unordered_set>
 #include <vector>
 #include <zephyr/devicetree.h>
 #include <zephyr/ztest.h>
 
 #include "subsys/device_tree/dt_fs.h"
-#include "subsys/fs/services/i_fs_service.h"
 #include "subsys/fs/services/fs_service.h"
+#include "subsys/fs/services/i_fs_service.h"
 
 #include "fs_test_support.h"
 
@@ -32,10 +32,7 @@ struct TestData {
 };
 
 void SetupFiles(FsService* fs_service, std::string& name_prefix) {
-    TestData test_data = {
-        .str = "Some test string test_" + name_prefix,
-        .number = 1234
-    };
+    TestData test_data = { .str = "Some test string test_" + name_prefix, .number = 1234 };
 
     std::string dir_path = "test_" + name_prefix + "_dir";
     bool result = fs_service->CreateDirectory(dir_path);
@@ -153,10 +150,7 @@ ZTEST(fs_service, test_OpenFile_rejects_invalid_arguments) {
 ZTEST(fs_service, test_WriteFile) {
     auto* fs_service = GetFsService();
 
-    TestData test_data = {
-        .str = "Some test string test_WriteFile",
-        .number = 1234
-    };
+    TestData test_data = { .str = "Some test string test_WriteFile", .number = 1234 };
 
     std::string file_path = "test_WriteFile.txt";
     bool result = fs_service->WriteFile(file_path, &test_data, sizeof(test_data));
@@ -206,10 +200,7 @@ ZTEST(fs_service, test_WriteFile_fails_when_directory_is_missing) {
 ZTEST(fs_service, test_ReadFile) {
     auto* fs_service = GetFsService();
 
-    TestData test_data = {
-        .str = "Some test string test_ReadFile",
-        .number = 2345
-    };
+    TestData test_data = { .str = "Some test string test_ReadFile", .number = 2345 };
 
     std::string file_path = "test_ReadFile.txt";
     bool result = fs_service->WriteFile(file_path, &test_data, sizeof(test_data));
@@ -268,10 +259,7 @@ ZTEST(fs_service, test_ReadFile_fails_for_missing_file) {
 ZTEST(fs_service, test_Exists) {
     auto* fs_service = GetFsService();
 
-    TestData test_data = {
-        .str = "Some test string test_Exists",
-        .number = 3456
-    };
+    TestData test_data = { .str = "Some test string test_Exists", .number = 3456 };
 
     std::string file_path = "test_Exists.txt";
     bool result = fs_service->WriteFile(file_path, &test_data, sizeof(test_data));
@@ -295,7 +283,7 @@ ZTEST(fs_service, test_CreateDirectory) {
     bool result_exists = fs_service->Exists(dir_path);
     zassert_true(result_exists);
 
-    std::string fake_dir_path= "fake_test_CreateDirectory";
+    std::string fake_dir_path = "fake_test_CreateDirectory";
     bool result_not_exists = fs_service->Exists(fake_dir_path);
     zassert_false(result_not_exists);
 }
@@ -334,7 +322,6 @@ ZTEST(fs_service, test_ListFiles) {
         core_files_set.insert(name);
     zassert_equal(core_files_set.count(dir_path), 1);
     zassert_equal(core_files_set.count("test_ListFiles_file_4.txt"), 1);
-
 
     auto dir_files = fs_service->ListFiles("test_" + name_prefix + "_dir");
     zassert_equal(dir_files.size(), 3);
@@ -468,7 +455,7 @@ ZTEST(fs_service, test_ListDirectory_accepts_a_trailing_slash) {
 ZTEST(fs_service, test_ListDirectory_missing_directory_is_ENOENT) {
     auto* fs_service = GetFsService();
 
-    std::vector<DirectoryEntry> entries{DirectoryEntry{.name = "stale"}};
+    std::vector<DirectoryEntry> entries{ DirectoryEntry{ .name = "stale" } };
     size_t count = 7;
 
     zassert_equal(fs_service->ListDirectory("test_ListDirectory_missing", 0, 10, entries, count), -ENOENT);
@@ -510,7 +497,7 @@ ZTEST(fs_service, test_ListDirectory_rejects_absolute_and_overlong_paths) {
 ZTEST(fs_service, test_ListDirectory_unmounted_is_ENODEV) {
     FsService orphan_service(nullptr);
 
-    std::vector<DirectoryEntry> entries{DirectoryEntry{.name = "stale"}};
+    std::vector<DirectoryEntry> entries{ DirectoryEntry{ .name = "stale" } };
     size_t count = 7;
 
     zassert_equal(orphan_service.ListDirectory("", 0, 10, entries, count), -ENODEV);
@@ -700,13 +687,13 @@ ZTEST(fs_service, test_Rename_rejects_the_same_file_in_any_spelling) {
     zassert_true(WriteText("test_Rename_same/file.txt", "abc"));
 
     for(const char* to : {
-        "test_Rename_same/file.txt",
-        "test_Rename_same/FILE.txt",
-        "TEST_RENAME_SAME/File.TXT",
-        "test_Rename_same//file.txt",
-        "test_Rename_same/./file.txt",
-        "./test_Rename_same/file.txt",
-    }) {
+            "test_Rename_same/file.txt",
+            "test_Rename_same/FILE.txt",
+            "TEST_RENAME_SAME/File.TXT",
+            "test_Rename_same//file.txt",
+            "test_Rename_same/./file.txt",
+            "./test_Rename_same/file.txt",
+        }) {
         zassert_equal(fs_service->Rename("test_Rename_same/file.txt", to), -EINVAL, "Renamed onto %s", to);
         zassert_equal(fs_service->Rename(to, "test_Rename_same/file.txt"), -EINVAL, "Renamed from %s", to);
         zassert_str_equal(ReadText("test_Rename_same/file.txt").c_str(), "abc");
@@ -727,20 +714,20 @@ ZTEST(fs_service, test_Rename_rejects_names_outside_the_plain_alphabet) {
     zassert_true(WriteText(oil, "abc"));
 
     for(const char* spelling : {
-        "test_Rename_alphabet\\oil.lua",
-        "test_Rename_alphabet/oil.lua.",
-        "test_Rename_alphabet/oil.lua..",
-        "test_Rename_alphabet/oil.lua ",
-        "test_Rename_alphabet/oil.lua. .",
-        "test_Rename_alphabet./oil.lua",
-        "test_Rename_alphabet /oil.lua",
-        "test_Rename_alphabet/oil.lua\001x",
-        "test_Rename_alphabet/oil v2.lua",
-        "test_Rename_alphabet/oil~1.lua",
-        "test_Rename_alphabet/oil.lua:x",
-        "test_Rename_alphabet/oil*.lua",
-        "test_Rename_alphabet/oil\303\251.lua",
-    }) {
+            "test_Rename_alphabet\\oil.lua",
+            "test_Rename_alphabet/oil.lua.",
+            "test_Rename_alphabet/oil.lua..",
+            "test_Rename_alphabet/oil.lua ",
+            "test_Rename_alphabet/oil.lua. .",
+            "test_Rename_alphabet./oil.lua",
+            "test_Rename_alphabet /oil.lua",
+            "test_Rename_alphabet/oil.lua\001x",
+            "test_Rename_alphabet/oil v2.lua",
+            "test_Rename_alphabet/oil~1.lua",
+            "test_Rename_alphabet/oil.lua:x",
+            "test_Rename_alphabet/oil*.lua",
+            "test_Rename_alphabet/oil\303\251.lua",
+        }) {
         zassert_equal(fs_service->Rename(oil, spelling), -EINVAL, "Renamed onto \"%s\"", spelling);
         zassert_equal(fs_service->Rename(spelling, oil), -EINVAL, "Renamed from \"%s\"", spelling);
         zassert_str_equal(ReadText(oil).c_str(), "abc");
@@ -861,23 +848,27 @@ constexpr uint64_t RoundUp(uint64_t value, uint64_t unit) {
 ZTEST(fs_service, test_GetTotalSpace_is_the_size_of_the_volume) {
     const uint64_t total_space = GetFsService()->GetTotalSpace();
 
-    zassert_equal(total_space, VOLUME_SIZE, "The service reports %llu bytes of a %llu byte volume",
-        static_cast<unsigned long long>(total_space), static_cast<unsigned long long>(VOLUME_SIZE));
+    zassert_equal(
+        total_space, VOLUME_SIZE, "The service reports %llu bytes of a %llu byte volume",
+        static_cast<unsigned long long>(total_space), static_cast<unsigned long long>(VOLUME_SIZE)
+    );
 }
 
 // The files are larger than littlefs keeps inline in a directory, so each takes blocks of its own.
 ZTEST(fs_service, test_GetUsedSpace_grows_by_at_least_the_bytes_written_in_whole_blocks) {
     auto* fs_service = GetFsService();
 
-    for(const size_t size : {size_t{5000}, size_t{64 * 1024}}) {
+    for(const size_t size : { size_t{ 5000 }, size_t{ 64 * 1024 } }) {
         const uint64_t used_space = fs_service->GetUsedSpace();
 
         zassert_true(WriteText("test_GetUsedSpace_" + std::to_string(size) + ".bin", MakeText(size)));
 
         const uint64_t growth = fs_service->GetUsedSpace() - used_space;
 
-        zassert_true(growth >= RoundUp(size, ALLOCATION_UNIT), "%llu bytes took %llu bytes of space",
-            static_cast<unsigned long long>(size), static_cast<unsigned long long>(growth));
+        zassert_true(
+            growth >= RoundUp(size, ALLOCATION_UNIT), "%llu bytes took %llu bytes of space",
+            static_cast<unsigned long long>(size), static_cast<unsigned long long>(growth)
+        );
     }
 }
 

@@ -29,8 +29,8 @@
 
 using namespace logging_test_support;
 
-using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::controllers::SensorsController;
+using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::subsys::threading::ServiceState;
 
@@ -50,7 +50,8 @@ std::shared_ptr<Sensor> MakeVirtualSensor(std::string_view id, const char* expre
 // logged. test_ASensorsApplyWhileLoggingStartsTheNextFile covers the supervisor's own factory.
 LogWriterService::LoggerFactory MakeStoredSensorsFactory(
     std::shared_ptr<SensorsConfigurationManager> sensors_manager,
-    std::shared_ptr<LoggingConfigurationManager> logging_manager) {
+    std::shared_ptr<LoggingConfigurationManager> logging_manager
+) {
 
     return [sensors_manager, logging_manager] {
         return MakeLoggerFactory(logging_manager, *sensors_manager->Get(), true)();
@@ -70,7 +71,9 @@ public:
     std::atomic<int> stops = 0;
     std::atomic<int> starts = 0;
 
-    bool Initialize() override { return true; }
+    bool Initialize() override {
+        return true;
+    }
 
     bool Stop() override {
         if(auto action = std::exchange(on_stop, nullptr))
@@ -92,7 +95,9 @@ public:
         return true;
     }
 
-    [[nodiscard]] ServiceState GetState() const noexcept override { return state_; }
+    [[nodiscard]] ServiceState GetState() const noexcept override {
+        return state_;
+    }
 };
 
 // Stores @p sensor and waits until processing runs it. The first flush then waits for the restart,
@@ -101,8 +106,15 @@ void ApplySensors(LogWriterRig& rig, SensorsController& controller, std::shared_
     const auto id = sensor->id;
 
     zassert_true(controller.GetConfigurationManager()->Update({ sensor }), "the new sensors were not stored");
-    zassert_true(WaitFor([&] { return rig.frame->TryGetReading(id).has_value(); }, 3000),
-        "the restart must bring processing back on the new sensors");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return rig.frame->TryGetReading(id).has_value();
+            },
+            3000
+        ),
+        "the restart must bring processing back on the new sensors"
+    );
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
@@ -117,17 +129,24 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
     const auto after = MakeVirtualSensor("after_apply", "2 + 2");
 
     // rt_gauge's seven arguments: no configuration service, CAN, GPIO or ADC.
-    SensorsController controller(rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr);
+    SensorsController controller(
+        rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr
+    );
     // Stored before the update handler is registered, so it is no restart of its own.
-    zassert_equal(controller.Initialize([before](auto manager) {
-        zassert_true(manager->Update({ before }), "the first sensors were not stored");
-    }), 0, "the sensors controller did not initialize");
+    zassert_equal(
+        controller.Initialize([before](auto manager) {
+            zassert_true(manager->Update({ before }), "the first sensors were not stored");
+        }),
+        0, "the sensors controller did not initialize"
+    );
 
     const auto sensors_manager = controller.GetConfigurationManager();
 
     StatusRecorder recorder;
     auto device_id = std::make_shared<std::atomic<uint8_t>>(5);
-    auto& supervisor = AttachSupervisor(rig, sensors_manager, true, [device_id] { return device_id->load(); });
+    auto& supervisor = AttachSupervisor(rig, sensors_manager, true, [device_id] {
+        return device_id->load();
+    });
     controller.RegisterDependentService(supervisor.GetDependentService());
     // Both generations: the logger lists only the sensors stored at its start.
     EnableSensorLogging(rig, std::vector{ before, after });
@@ -141,11 +160,17 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
     *device_id = 6;
 
     zassert_true(sensors_manager->Update({ after }), "the new sensors were not stored");
-    zassert_true(WaitFor([&] {
-        return rig.frame->TryGetReading("after_apply").has_value()
-            && rig.log_writer_service->IsRunning()
-            && CountLogFiles(*rig.fs_service) == 2;
-    }, 3000), "the restart must bring processing and the writer back on the new sensors");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return rig.frame->TryGetReading("after_apply").has_value()
+                    && rig.log_writer_service->IsRunning()
+                    && CountLogFiles(*rig.fs_service) == 2;
+            },
+            3000
+        ),
+        "the restart must bring processing and the writer back on the new sensors"
+    );
     k_msleep(300);
 
     const auto after_info = sensors_manager->GetCborConfigurationInfo();
@@ -171,14 +196,26 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
     zassert_true(ContainsText(files[0].content, "before_apply"), "the first file must describe the first sensors");
     zassert_false(ContainsText(files[0].content, "after_apply"), "the first file must not describe the new sensors");
     zassert_true(ContainsText(files[1].content, "after_apply"), "the second file must describe the new sensors");
-    zassert_false(ContainsText(files[1].content, "before_apply"), "the second file must not describe the first sensors");
+    zassert_false(
+        ContainsText(files[1].content, "before_apply"), "the second file must not describe the first sensors"
+    );
 
-    zassert_true(ContainsText(files[0].content, Property("sensors_configuration_hash", std::to_string(before_info.crc))),
-        "the first file must carry the first sensors configuration's CRC");
-    zassert_true(ContainsText(files[0].content, Property("device_id", "5")), "the first file must carry the device ID of its start");
-    zassert_true(ContainsText(files[1].content, Property("sensors_configuration_hash", std::to_string(after_info.crc))),
-        "the second file must carry the new sensors configuration's CRC");
-    zassert_true(ContainsText(files[1].content, Property("device_id", "6")), "the second file must carry the device ID of its start");
+    zassert_true(
+        ContainsText(files[0].content, Property("sensors_configuration_hash", std::to_string(before_info.crc))),
+        "the first file must carry the first sensors configuration's CRC"
+    );
+    zassert_true(
+        ContainsText(files[0].content, Property("device_id", "5")),
+        "the first file must carry the device ID of its start"
+    );
+    zassert_true(
+        ContainsText(files[1].content, Property("sensors_configuration_hash", std::to_string(after_info.crc))),
+        "the second file must carry the new sensors configuration's CRC"
+    );
+    zassert_true(
+        ContainsText(files[1].content, Property("device_id", "6")),
+        "the second file must carry the device ID of its start"
+    );
 }
 
 // A stop requested while processing restarts reaches the queue behind the restart, so the dependent
@@ -190,10 +227,15 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
     const auto second = MakeVirtualSensor("second", "2 + 2");
     const auto third = MakeVirtualSensor("third", "3 + 3");
 
-    SensorsController controller(rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr);
-    zassert_equal(controller.Initialize([first](auto manager) {
-        zassert_true(manager->Update({ first }), "the first sensors were not stored");
-    }), 0, "the sensors controller did not initialize");
+    SensorsController controller(
+        rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr
+    );
+    zassert_equal(
+        controller.Initialize([first](auto manager) {
+            zassert_true(manager->Update({ first }), "the first sensors were not stored");
+        }),
+        0, "the sensors controller did not initialize"
+    );
 
     const auto sensors_manager = controller.GetConfigurationManager();
 
@@ -202,7 +244,9 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
     EnableSensorLogging(rig, std::vector{ first, second, third });
 
     auto fake = std::make_shared<FakeDependent>();
-    fake->on_start = [&supervisor] { supervisor.RequestStop(ILoggingControl::kAllUnits); };
+    fake->on_start = [&supervisor] {
+        supervisor.RequestStop(ILoggingControl::kAllUnits);
+    };
     controller.RegisterDependentService(fake);
     controller.RegisterDependentService(supervisor.GetDependentService());
 
@@ -230,7 +274,9 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
     zassert_true(rig.log_writer_service->IsStopped(), "a restart must not start a writer that was stopped");
     zassert_equal(CountLogFiles(*rig.fs_service), 1, "no file may be opened by the restart");
     events = recorder.GetEvents();
-    zassert_equal(events.size(), 2, "the restart must publish nothing for a stopped writer (%zu events)", events.size());
+    zassert_equal(
+        events.size(), 2, "the restart must publish nothing for a stopped writer (%zu events)", events.size()
+    );
 
     zassert_true(controller.GetProcessingService()->Stop(), "processing did not stop");
 }
@@ -240,16 +286,23 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
 ZTEST(sensors_apply_while_logging, test_ASessionThatFailsDuringASensorsRestartIsNotRestarted) {
     auto rig = MakeLogWriterRig();
 
-    SensorsController controller(rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr);
-    zassert_equal(controller.Initialize([](auto manager) {
-        zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }), "the first sensors were not stored");
-    }), 0, "the sensors controller did not initialize");
+    SensorsController controller(
+        rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr
+    );
+    zassert_equal(
+        controller.Initialize([](auto manager) {
+            zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }), "the first sensors were not stored");
+        }),
+        0, "the sensors controller did not initialize"
+    );
 
     const auto sensors_manager = controller.GetConfigurationManager();
 
     StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig, sensors_manager);
-    const auto probes = ProbeLoggerFactory::Make(MakeStoredSensorsFactory(sensors_manager, rig.logging_configuration_manager));
+    const auto probes = ProbeLoggerFactory::Make(
+        MakeStoredSensorsFactory(sensors_manager, rig.logging_configuration_manager)
+    );
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
 
     // Fails the session from inside the restart, before the writer's dependent is stopped.
@@ -257,7 +310,12 @@ ZTEST(sensors_apply_while_logging, test_ASessionThatFailsDuringASensorsRestartIs
     auto fake = std::make_shared<FakeDependent>();
     fake->on_stop = [probes, writer = rig.log_writer_service, saw_failure] {
         probes->Current()->refuse_next_reading = true;
-        *saw_failure = WaitFor([&] { return writer->HasFailed(); }, 2000);
+        *saw_failure = WaitFor(
+            [&] {
+                return writer->HasFailed();
+            },
+            2000
+        );
     };
     controller.RegisterDependentService(fake);
     controller.RegisterDependentService(supervisor.GetDependentService());

@@ -88,16 +88,16 @@ struct LoggingNetworkState {
         if(std::ranges::any_of(states, &State::IsActive))
             return State(true);
 
-        auto failed = std::ranges::find_if(states, [](const State& state) { return IsFailure(state.GetReason()); });
+        auto failed = std::ranges::find_if(states, [](const State& state) {
+            return IsFailure(state.GetReason());
+        });
 
         return State(false, failed != states.end() ? failed->GetReason() : LoggingStatusReason::Stopped);
     }
 
     /** @brief The event as the log writer publishes it: the reason only while inactive. */
     static Channel::EventMessage ToEvent(const State& state) {
-        Channel::EventMessage event {
-            .type = EVENT_TYPE
-        };
+        Channel::EventMessage event{ .type = EVENT_TYPE };
 
         event.payload.insert_or_assign(LoggingPayloadType::IsActive, state.IsActive());
         if(!state.IsActive())

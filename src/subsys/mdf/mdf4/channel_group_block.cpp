@@ -9,10 +9,12 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-ChannelGroupBlock::ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id)
-    : BlockBase("CG"), record_id_(record_id), record_id_size_bytes_(record_id_size_bytes) {
+ChannelGroupBlock::ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id) :
+    BlockBase("CG"),
+    record_id_(record_id),
+    record_id_size_bytes_(record_id_size_bytes) {
 
-    if(std::set<uint8_t>{0, 1, 2, 4, 8}.count(record_id_size_bytes_) == 0)
+    if(std::set<uint8_t>{ 0, 1, 2, 4, 8 }.count(record_id_size_bytes_) == 0)
         throw std::runtime_error("Invalid record ID size bytes");
 
     if(record_id_size_bytes_ < 8 && record_id_ >= (1ULL << (record_id_size_bytes_ * 8)))
@@ -187,6 +189,5 @@ std::unique_ptr<uint8_t[]> ChannelGroupBlock::Serialize() const {
 
     return buffer;
 }
-
 
 } // namespace eerie_leap::subsys::mdf::mdf4

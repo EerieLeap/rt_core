@@ -12,12 +12,13 @@ Thread::Thread(
     int stack_size,
     int priority,
     bool is_cooperative,
-    std::pmr::memory_resource* resource)
-        : ThreadBase(std::move(name), stack_size, priority, is_cooperative, resource),
-        instance_(instance),
-        is_initialized_(false),
-        is_created_(false),
-        is_running_(ATOMIC_INIT(0)) {}
+    std::pmr::memory_resource* resource
+) :
+    ThreadBase(std::move(name), stack_size, priority, is_cooperative, resource),
+    instance_(instance),
+    is_initialized_(false),
+    is_created_(false),
+    is_running_(ATOMIC_INIT(0)) {}
 
 Thread::~Thread() {
     Join();
@@ -41,9 +42,7 @@ bool Thread::Start() {
         k_thread_join(&thread_, K_FOREVER);
 
     k_thread_create(
-        &thread_,
-        stack_area_,
-        k_stack_size_,
+        &thread_, stack_area_, k_stack_size_,
         [](void* instance, void* is_running, void* name) {
             try {
                 static_cast<IThread*>(instance)->ThreadEntry();
@@ -54,8 +53,8 @@ bool Thread::Start() {
             }
             atomic_clear(static_cast<atomic_t*>(is_running));
         },
-        instance_, &is_running_, const_cast<char*>(name_.c_str()),
-        k_priority_, 0, K_NO_WAIT);
+        instance_, &is_running_, const_cast<char*>(name_.c_str()), k_priority_, 0, K_NO_WAIT
+    );
 
     is_created_ = true;
 

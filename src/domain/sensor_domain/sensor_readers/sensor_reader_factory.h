@@ -3,8 +3,8 @@
 #include <memory>
 
 #include "subsys/adc/i_adc_manager.h"
-#include "subsys/time/i_time_service.h"
 #include "subsys/gpio/i_gpio.h"
+#include "subsys/time/i_time_service.h"
 
 #include "domain/adc_domain/models/adc_configuration.h"
 #include "domain/sensor_domain/runtime/sensor_runtime.h"
@@ -13,12 +13,12 @@
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
 
-using eerie_leap::subsys::adc::IAdcManager;
-using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::subsys::gpio::IGpio;
 using eerie_leap::domain::adc_domain::models::AdcConfiguration;
 using eerie_leap::domain::sensor_domain::runtime::SensorRuntime;
 using eerie_leap::domain::sensor_domain::services::AdcSampleSet;
+using eerie_leap::subsys::adc::IAdcManager;
+using eerie_leap::subsys::gpio::IGpio;
+using eerie_leap::subsys::time::ITimeService;
 
 // What the readers of one rate group are built against: the group's sample set, where analog
 // readers reserve their slots, and the generation's ADC configuration (null without one).
@@ -41,7 +41,8 @@ public:
         std::shared_ptr<ITimeService> time_service,
         std::shared_ptr<IGpio> gpio,
         // PHYSICAL_ANALOG sensors get no reader without it.
-        std::shared_ptr<IAdcManager> adc_manager);
+        std::shared_ptr<IAdcManager> adc_manager
+    );
 
     virtual ~SensorReaderFactory() = default;
 

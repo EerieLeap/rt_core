@@ -12,9 +12,9 @@
 
 using eerie_leap::configuration::cbor::CborSerializer;
 using eerie_leap::configuration::services::CborConfigurationService;
+using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::fs::services::FsService;
-using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 
 namespace {
 
@@ -24,7 +24,8 @@ std::shared_ptr<CanbusConfigurationManager> CreateManager() {
     fs_service->Format();
 
     return std::make_shared<CanbusConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service), nullptr);
+        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service), nullptr
+    );
 }
 
 } // namespace
@@ -35,7 +36,9 @@ ZTEST(canbus_configuration_manager, test_CanbusConfigurationManager_ApplyCborCon
     auto manager = CreateManager();
 
     int notifications = 0;
-    manager->RegisterConfigurationUpdatedHandler([&notifications] { notifications++; });
+    manager->RegisterConfigurationUpdatedHandler([&notifications] {
+        notifications++;
+    });
 
     CborSerializer<CborCanbusConfig> serializer;
     const auto exported = manager->GetCborConfiguration();

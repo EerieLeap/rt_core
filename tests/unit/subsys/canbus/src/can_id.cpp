@@ -2,8 +2,8 @@
 
 #include <zephyr/ztest.h>
 
-#include "subsys/canbus/can_id.h"
 #include "subsys/canbus/can_filter.h"
+#include "subsys/canbus/can_id.h"
 
 using eerie_leap::subsys::canbus::CanFilter;
 using eerie_leap::subsys::canbus::CanId;
@@ -78,8 +78,10 @@ ZTEST(can_filter, test_overlap_detection) {
     zassert_false(target_7.Overlaps(target_8));
     zassert_true(target_7.Overlaps(wide));
     zassert_true(wide.Overlaps(target_7), "Overlap must be symmetric");
-    zassert_false(target_7.Overlaps(CanFilter::Masked(CanId::Standard(0x700), 0x700)),
-        "Filters of different formats never overlap");
+    zassert_false(
+        target_7.Overlaps(CanFilter::Masked(CanId::Standard(0x700), 0x700)),
+        "Filters of different formats never overlap"
+    );
     zassert_false(CanFilter(CanId::Standard(0x100)).Overlaps(CanId::Standard(0x101)));
     zassert_true(CanFilter(CanId::Standard(0x100)).Overlaps(CanId::Standard(0x100)));
 }

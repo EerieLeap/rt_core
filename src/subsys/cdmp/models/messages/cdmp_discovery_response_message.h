@@ -2,10 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 #include <span>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/utilities/constants.h"
@@ -34,28 +34,19 @@ struct CdmpDiscoveryResponseMessage {
 
         CdmpDiscoveryResponseMessage message = {};
         message.device_id = frame_data[1];
-        message.uid =
-            (static_cast<uint32_t>(frame_data[5]) << 24)
-            | (static_cast<uint32_t>(frame_data[4]) << 16)
-            | (static_cast<uint32_t>(frame_data[3]) << 8)
-            | static_cast<uint32_t>(frame_data[2]);
+        message.uid = (static_cast<uint32_t>(frame_data[5]) << 24) | (static_cast<uint32_t>(frame_data[4]) << 16)
+            | (static_cast<uint32_t>(frame_data[3]) << 8) | static_cast<uint32_t>(frame_data[2]);
         message.features = static_cast<uint16_t>(
-            (static_cast<uint16_t>(frame_data[7]) << 8)
-            | static_cast<uint16_t>(frame_data[6]));
+            (static_cast<uint16_t>(frame_data[7]) << 8) | static_cast<uint16_t>(frame_data[6])
+        );
 
         return message;
     }
 
     std::vector<uint8_t> ToCanFrame() const {
-        std::vector<uint8_t> frame_data = {
-            std::to_underlying(message_type),
-            device_id,
-            static_cast<uint8_t>(uid),
-            static_cast<uint8_t>(uid >> 8),
-            static_cast<uint8_t>(uid >> 16),
-            static_cast<uint8_t>(uid >> 24),
-            static_cast<uint8_t>(features),
-            static_cast<uint8_t>(features >> 8)};
+        std::vector<uint8_t> frame_data = { std::to_underlying(message_type), device_id, static_cast<uint8_t>(uid),
+            static_cast<uint8_t>(uid >> 8), static_cast<uint8_t>(uid >> 16), static_cast<uint8_t>(uid >> 24),
+            static_cast<uint8_t>(features), static_cast<uint8_t>(features >> 8) };
 
         return frame_data;
     }

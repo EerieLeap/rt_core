@@ -10,14 +10,14 @@ ThreadBase::ThreadBase(
     int stack_size,
     int priority,
     bool is_cooperative,
-    std::pmr::memory_resource* mr)
-    : mr_(mr),
-      k_stack_size_(stack_size),
-      // Priority 0 is preemptive, so a cooperative thread has to settle for -1.
-      k_priority_(is_cooperative
-        ? -std::max(std::abs(priority), 1) : std::abs(priority)),
-      stack_area_(nullptr),
-      name_(std::move(name)) {}
+    std::pmr::memory_resource* mr
+) :
+    mr_(mr),
+    k_stack_size_(stack_size),
+    // Priority 0 is preemptive, so a cooperative thread has to settle for -1.
+    k_priority_(is_cooperative ? -std::max(std::abs(priority), 1) : std::abs(priority)),
+    stack_area_(nullptr),
+    name_(std::move(name)) {}
 
 ThreadBase::~ThreadBase() {
     if(stack_area_ == nullptr)
@@ -37,7 +37,8 @@ bool ThreadBase::InitializeStack() {
         stack_area_ = k_thread_stack_alloc(k_stack_size_, 0);
     else
         stack_area_ = static_cast<k_thread_stack_t*>(
-            mr_->allocate(K_KERNEL_STACK_LEN(k_stack_size_), Z_KERNEL_STACK_OBJ_ALIGN));
+            mr_->allocate(K_KERNEL_STACK_LEN(k_stack_size_), Z_KERNEL_STACK_OBJ_ALIGN)
+        );
 
     return stack_area_ != nullptr;
 }

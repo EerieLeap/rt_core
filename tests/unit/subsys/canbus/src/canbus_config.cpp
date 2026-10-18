@@ -4,10 +4,10 @@
 
 #include "subsys/canbus/canbus.h"
 
+using eerie_leap::subsys::canbus::CAN_FRAME_MAX_DATA_LENGTH;
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusConfig;
 using eerie_leap::subsys::canbus::CanbusType;
-using eerie_leap::subsys::canbus::CAN_FRAME_MAX_DATA_LENGTH;
 
 ZTEST_SUITE(canbus_config, NULL, NULL, NULL, NULL, NULL);
 

@@ -9,8 +9,13 @@ private:
     k_mutex* mutex_;
 
 public:
-    explicit ScopedMutex(k_mutex& mutex) : mutex_(&mutex) { k_mutex_lock(mutex_, K_FOREVER); }
-    ~ScopedMutex() { k_mutex_unlock(mutex_); }
+    explicit ScopedMutex(k_mutex& mutex) :
+        mutex_(&mutex) {
+        k_mutex_lock(mutex_, K_FOREVER);
+    }
+    ~ScopedMutex() {
+        k_mutex_unlock(mutex_);
+    }
 
     ScopedMutex(const ScopedMutex&) = delete;
     ScopedMutex& operator=(const ScopedMutex&) = delete;

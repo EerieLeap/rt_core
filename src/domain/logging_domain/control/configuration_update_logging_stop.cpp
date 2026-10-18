@@ -16,16 +16,19 @@ ConfigurationUpdateLoggingStop::ConfigurationUpdateLoggingStop(
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
     std::shared_ptr<ILoggingControl> logging_control,
     std::shared_ptr<ILoggingCommandSender> stop_sender,
-    UpdateHandler on_update)
-        : configuration_service_(std::move(configuration_service)),
-        config_work_queue_thread_(std::move(config_work_queue_thread)),
-        logging_control_(std::move(logging_control)),
-        stop_sender_(std::move(stop_sender)),
-        on_update_(std::move(on_update)),
-        guard_(std::make_shared<DispatchGuard>(this)) {
+    UpdateHandler on_update
+) :
+    configuration_service_(std::move(configuration_service)),
+    config_work_queue_thread_(std::move(config_work_queue_thread)),
+    logging_control_(std::move(logging_control)),
+    stop_sender_(std::move(stop_sender)),
+    on_update_(std::move(on_update)),
+    guard_(std::make_shared<DispatchGuard>(this)) {
 
     if(configuration_service_ == nullptr || config_work_queue_thread_ == nullptr)
-        throw std::invalid_argument("The configuration update stop needs the configuration service and the configuration work queue.");
+        throw std::invalid_argument(
+            "The configuration update stop needs the configuration service and the configuration work queue."
+        );
 }
 
 ConfigurationUpdateLoggingStop::~ConfigurationUpdateLoggingStop() {
@@ -48,7 +51,11 @@ bool ConfigurationUpdateLoggingStop::Initialize() {
     if(stop_sender_ != nullptr) {
         try {
             broadcast_task_ = config_work_queue_thread_->CreateTask(
-                [](ConfigurationUpdateLoggingStop* update_stop) { return update_stop->Broadcast(); }, this);
+                [](ConfigurationUpdateLoggingStop* update_stop) {
+                    return update_stop->Broadcast();
+                },
+                this
+            );
         } catch(const std::exception& e) {
             // The queue is not running.
             LOG_ERR("Failed to create the configuration update stop's task: %s", e.what());
@@ -74,7 +81,9 @@ bool ConfigurationUpdateLoggingStop::Start() {
 
     try {
         configuration_service_->RegisterConfigurationStoredHandler([guard = guard_, this](Type type) {
-            guard->Dispatch([&] { OnStored(type); });
+            guard->Dispatch([&] {
+                OnStored(type);
+            });
         });
     } catch(const std::exception& e) {
         LOG_ERR("Failed to register the configuration update stop: %s", e.what());
@@ -92,8 +101,10 @@ bool ConfigurationUpdateLoggingStop::IsStarted() const {
 
 // On the storing thread, before the store's own handler queues its work, so the stop is first in line.
 void ConfigurationUpdateLoggingStop::OnStored(Type type) {
-    LOG_WRN("Configuration type %u stored: logging stops on every unit until it is started again.",
-        static_cast<unsigned>(type));
+    LOG_WRN(
+        "Configuration type %u stored: logging stops on every unit until it is started again.",
+        static_cast<unsigned>(type)
+    );
 
     if(on_update_) {
         try {

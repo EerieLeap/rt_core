@@ -41,7 +41,7 @@ ZTEST(memory_resource_manager, test_GetExtPmr_allocates) {
 ZTEST(memory_resource_manager, test_GetDefaultPmr_backs_pmr_containers) {
     std::pmr::vector<int> values(Mrm::GetDefaultPmr());
 
-    for (int i = 0; i < 128; ++i)
+    for(int i = 0; i < 128; ++i)
         values.push_back(i);
 
     zassert_equal(values.size(), 128);

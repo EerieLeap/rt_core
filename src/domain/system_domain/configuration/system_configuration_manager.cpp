@@ -13,16 +13,19 @@ using namespace eerie_leap::configuration::services;
 LOG_MODULE_REGISTER(system_config_mngr_logger);
 
 SystemConfigurationManager::SystemConfigurationManager(
-    std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service)
-        : CborConfigurationManagerBase("System", std::move(cbor_configuration_service)) {
+    std::unique_ptr<CborConfigurationService<CborSystemConfig>> cbor_configuration_service
+) :
+    CborConfigurationManagerBase("System", std::move(cbor_configuration_service)) {
 
     if(!LoadOrCreateDefault())
         return;
 
     auto configuration = Get();
 
-    LOG_INF("HW Version: %s, SW Version: %s",
-        configuration->GetFormattedHwVersion().c_str(), configuration->GetFormattedSwVersion().c_str());
+    LOG_INF(
+        "HW Version: %s, SW Version: %s", configuration->GetFormattedHwVersion().c_str(),
+        configuration->GetFormattedSwVersion().c_str()
+    );
     LOG_INF("Device ID: %llu", configuration->device_id);
 }
 

@@ -29,9 +29,12 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
 
     fs_service->Format();
 
-    auto cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
+    auto cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service
+    );
     auto system_configuration_manager = std::make_shared<SystemConfigurationManager>(
-        std::move(cbor_system_configuration_service));
+        std::move(cbor_system_configuration_service)
+    );
 
     SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
 
@@ -50,9 +53,12 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
 
     fs_service->Format();
 
-    auto cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
+    auto cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service
+    );
     auto system_configuration_manager = std::make_shared<SystemConfigurationManager>(
-        std::move(cbor_system_configuration_service));
+        std::move(cbor_system_configuration_service)
+    );
 
     SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     system_configuration.device_id = 14;
@@ -60,10 +66,13 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
     bool result = system_configuration_manager->Update(system_configuration);
     zassert_true(result);
 
-    cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service);
+    cbor_system_configuration_service = std::make_unique<CborConfigurationService<CborSystemConfig>>(
+        "system_config", fs_service
+    );
     system_configuration_manager = nullptr;
     system_configuration_manager = std::make_shared<SystemConfigurationManager>(
-        std::move(cbor_system_configuration_service));
+        std::move(cbor_system_configuration_service)
+    );
 
     auto saved_system_configuration = system_configuration_manager->Get();
 
@@ -83,7 +92,8 @@ std::shared_ptr<FsService> FormattedFs() {
 
 std::shared_ptr<SystemConfigurationManager> CreateManager(const std::shared_ptr<FsService>& fs_service) {
     return std::make_shared<SystemConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service));
+        std::make_unique<CborConfigurationService<CborSystemConfig>>("system_config", fs_service)
+    );
 }
 
 uint32_t Crc(std::span<const uint8_t> data) {
@@ -105,13 +115,13 @@ std::vector<uint8_t> OtherArrayEncoding(std::span<const uint8_t> cbor) {
 
     if(cbor.front() == INDEFINITE_ARRAY) {
         zassert_equal(cbor.back(), BREAK);
-        std::vector<uint8_t> other{TWO_ELEMENT_ARRAY};
+        std::vector<uint8_t> other{ TWO_ELEMENT_ARRAY };
         other.insert(other.end(), cbor.begin() + 1, cbor.end() - 1);
         return other;
     }
 
     zassert_equal(cbor.front(), TWO_ELEMENT_ARRAY);
-    std::vector<uint8_t> other{INDEFINITE_ARRAY};
+    std::vector<uint8_t> other{ INDEFINITE_ARRAY };
     other.insert(other.end(), cbor.begin() + 1, cbor.end());
     other.push_back(BREAK);
     return other;

@@ -7,7 +7,7 @@
 #include "subsys/cdmp/utilities/cdmp_uid.h"
 
 #ifndef CONFIG_HWINFO_HAS_DRIVER
-#include "hwinfo_device_id.h"
+    #include "hwinfo_device_id.h"
 #endif
 
 using eerie_leap::subsys::cdmp::utilities::CdmpUid;
@@ -16,7 +16,7 @@ ZTEST_SUITE(cdmp_uid, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(cdmp_uid, test_empty_and_blank_ids_are_rejected) {
     constexpr std::array<uint8_t, 6> zeros{};
-    constexpr std::array<uint8_t, 6> ones = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    constexpr std::array<uint8_t, 6> ones = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
     zassert_false(CdmpUid::FromHardwareId({}).has_value());
     zassert_false(CdmpUid::FromHardwareId(zeros).has_value(), "An unprogrammed all-zero id has no identity");
@@ -24,8 +24,8 @@ ZTEST(cdmp_uid, test_empty_and_blank_ids_are_rejected) {
 }
 
 ZTEST(cdmp_uid, test_hardware_id_folds_deterministically) {
-    constexpr std::array<uint8_t, 6> mac_a = {0x24, 0x6F, 0x28, 0x01, 0x02, 0x03};
-    constexpr std::array<uint8_t, 6> mac_b = {0x24, 0x6F, 0x28, 0x01, 0x02, 0x04};
+    constexpr std::array<uint8_t, 6> mac_a = { 0x24, 0x6F, 0x28, 0x01, 0x02, 0x03 };
+    constexpr std::array<uint8_t, 6> mac_b = { 0x24, 0x6F, 0x28, 0x01, 0x02, 0x04 };
 
     auto uid_a = CdmpUid::FromHardwareId(mac_a);
     auto uid_a_again = CdmpUid::FromHardwareId(mac_a);
@@ -50,7 +50,7 @@ ZTEST(cdmp_uid, test_generated_uid_is_stable_when_hardware_id_exists) {
     // A board without a hwinfo driver gets a fixed id from fakes/hwinfo_device_id.cpp.
     zassert_true(length > 0, "The board has no hardware id: no hwinfo driver and no fake device id");
 
-    const auto expected = CdmpUid::FromHardwareId({hardware_id.data(), static_cast<size_t>(length)});
+    const auto expected = CdmpUid::FromHardwareId({ hardware_id.data(), static_cast<size_t>(length) });
     zassert_true(expected.has_value(), "The hardware id is blank");
 
     const uint32_t uid = CdmpUid::Generate();

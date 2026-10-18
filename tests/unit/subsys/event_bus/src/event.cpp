@@ -27,11 +27,7 @@ constexpr uint32_t k_source_two = 0xA002;
 ZTEST_SUITE(event_bus_event, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_event, test_an_event_keeps_its_type_and_source) {
-    TestEvent event {
-        .source_id = k_source_one,
-        .type = TestEventType::Beta,
-        .payload = {}
-    };
+    TestEvent event{ .source_id = k_source_one, .type = TestEventType::Beta, .payload = {} };
 
     zassert_equal(event.type, TestEventType::Beta);
     zassert_true(event.payload.empty());
@@ -39,11 +35,7 @@ ZTEST(event_bus_event, test_an_event_keeps_its_type_and_source) {
 }
 
 ZTEST(event_bus_event, test_a_payload_holds_one_entry_per_payload_type) {
-    TestEvent event {
-        .source_id = k_source_one,
-        .type = TestEventType::Alpha,
-        .payload = {}
-    };
+    TestEvent event{ .source_id = k_source_one, .type = TestEventType::Alpha, .payload = {} };
 
     event.payload[TestPayloadType::Value] = 42;
     event.payload[TestPayloadType::Label] = std::string("degrees");
@@ -83,10 +75,8 @@ ZTEST(event_bus_event, test_an_event_handler_receives_the_event_by_reference) {
         observed = &event;
     };
 
-    TestEvent event {
-        .source_id = k_source_two,
-        .type = TestEventType::Gamma,
-        .payload = {{TestPayloadType::Value, 11}}
+    TestEvent event{
+        .source_id = k_source_two, .type = TestEventType::Gamma, .payload = { { TestPayloadType::Value, 11 } }
     };
 
     handler(event);

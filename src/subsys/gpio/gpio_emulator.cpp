@@ -1,7 +1,7 @@
 #include <stdexcept>
 
-#include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio/gpio_emul.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/random/random.h>
 
 #include "gpio_emulator.h"
@@ -26,10 +26,7 @@ bool GpioEmulator::ReadChannel(int channel) {
     uint32_t raw = sys_rand32_get();
     bool input = (raw & 1) == 0;
 
-    int err = gpio_emul_input_set(
-        gpio_specs_[channel].port,
-        gpio_specs_[channel].pin,
-        input ? 0 : 1);
+    int err = gpio_emul_input_set(gpio_specs_[channel].port, gpio_specs_[channel].pin, input ? 0 : 1);
 
     if(err < 0) {
         LOG_ERR("Could not set emulator value (%d)", err);
@@ -40,4 +37,4 @@ bool GpioEmulator::ReadChannel(int channel) {
     return Gpio::ReadChannel(channel);
 }
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

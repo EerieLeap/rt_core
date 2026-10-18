@@ -29,8 +29,10 @@ int Gpio::Initialize() {
 
         int res = gpio_pin_configure_dt(&gpio_specs_[i], GPIO_INPUT);
         if(res != 0) {
-            LOG_ERR("Failed to configure Gpio channel %d, port %s, pin %d (%d)",
-                static_cast<int>(i), gpio_specs_[i].port->name, gpio_specs_[i].pin, res);
+            LOG_ERR(
+                "Failed to configure Gpio channel %d, port %s, pin %d (%d)", static_cast<int>(i),
+                gpio_specs_[i].port->name, gpio_specs_[i].pin, res
+            );
 
             return res;
         }
@@ -42,8 +44,10 @@ int Gpio::Initialize() {
 
         channel_callbacks_.push_back(std::move(channel_callback));
 
-        LOG_INF("Gpio channel %d configured: port %s, pin %d",
-            static_cast<int>(i), gpio_specs_[i].port->name, gpio_specs_[i].pin);
+        LOG_INF(
+            "Gpio channel %d configured: port %s, pin %d", static_cast<int>(i), gpio_specs_[i].port->name,
+            gpio_specs_[i].pin
+        );
     }
 
     LOG_INF("Gpio initialized successfully.");
@@ -89,10 +93,7 @@ int Gpio::RegisterChannelChangedHandler(int channel, GpioEdge edge, GpioChannelH
         }
 
         handler_id = next_handler_id_++;
-        channel_callback.handlers.push_back({
-            .id = handler_id,
-            .edge = edge,
-            .handler = std::move(handler)});
+        channel_callback.handlers.push_back({ .id = handler_id, .edge = edge, .handler = std::move(handler) });
     }
 
     int res = ApplyInterruptFlags(channel);
@@ -118,8 +119,10 @@ bool Gpio::RemoveChannelChangedHandler(int channel, int handler_id) {
         ScopedMutex guard(lock_);
 
         auto handler = std::ranges::find_if(
-            channel_callback.handlers,
-            [handler_id](const ChannelHandler& channel_handler) { return channel_handler.id == handler_id; });
+            channel_callback.handlers, [handler_id](const ChannelHandler& channel_handler) {
+                return channel_handler.id == handler_id;
+            }
+        );
 
         if(handler == channel_callback.handlers.end())
             return false;
@@ -185,8 +188,8 @@ void Gpio::ChannelChangedCallback(const device* dev, gpio_callback* callback, ui
     // costs one run, with the newest level. No edge is dropped: a sensor conditions its own
     // input (debounce_ms).
     atomic_set(
-        &channel_callback->pending_state,
-        gpio_pin_get_dt(&owner->gpio_specs_[channel_callback->channel]) > 0 ? 1 : 0);
+        &channel_callback->pending_state, gpio_pin_get_dt(&owner->gpio_specs_[channel_callback->channel]) > 0 ? 1 : 0
+    );
 
     k_work_submit(&channel_callback->work);
 }
@@ -220,4 +223,4 @@ void Gpio::DispatchChannelChanged(ChannelCallback& channel_callback) {
     }
 }
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

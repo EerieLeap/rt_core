@@ -16,7 +16,8 @@ class LoggingEventsChannel : public EventChannel<LoggingEventType, LoggingPayloa
 private:
     static constexpr size_t k_max_queued_events = 8;
 
-    LoggingEventsChannel() : EventChannel("logging_events", k_max_queued_events) { }
+    LoggingEventsChannel() :
+        EventChannel("logging_events", k_max_queued_events) {}
 
 public:
     static LoggingEventsChannel& GetInstance() {

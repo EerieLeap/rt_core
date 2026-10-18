@@ -13,15 +13,17 @@ namespace eerie_leap::subsys::bluetooth::utilities {
 class BtDataBuilder {
 private:
     std::vector<bt_data> descriptors_;
-    std::vector<std::unique_ptr<uint8_t[]>>  payloads_;
+    std::vector<std::unique_ptr<uint8_t[]>> payloads_;
 
 public:
     BtDataBuilder& Add(uint8_t type, const void* data, uint8_t data_len) {
-        descriptors_.push_back({
-            .type = type,
-            .data_len = data_len,
-            .data = static_cast<const uint8_t*>(data),
-        });
+        descriptors_.push_back(
+            {
+                .type = type,
+                .data_len = data_len,
+                .data = static_cast<const uint8_t*>(data),
+            }
+        );
 
         return *this;
     }

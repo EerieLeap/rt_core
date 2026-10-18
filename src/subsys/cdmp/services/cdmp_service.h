@@ -1,40 +1,40 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <span>
 #include <unordered_map>
-#include <functional>
 #include <vector>
 #include <zephyr/kernel.h>
 
-#include "subsys/canbus/canbus_proxy.hpp"
 #include <subsys/threading/thread.h>
+#include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
 
-#include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
-#include "subsys/cdmp/utilities/cdmp_status_machine.h"
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/models/cdmp_device_info.h"
 #include "subsys/cdmp/models/cdmp_message.h"
+#include "subsys/cdmp/utilities/cdmp_can_id_manager.h"
+#include "subsys/cdmp/utilities/cdmp_status_machine.h"
 
-#include "i_cdmp_canbus_service.h"
-#include "i_cdmp_network_info.h"
 #include "cdmp_command_service.h"
 #include "cdmp_network_service.h"
 #include "cdmp_state_service.h"
+#include "i_cdmp_canbus_service.h"
+#include "i_cdmp_network_info.h"
 
 namespace eerie_leap::subsys::cdmp::services {
 
 using eerie_leap::subsys::canbus::CanbusProxy;
-using eerie_leap::subsys::threading::IThread;
-using eerie_leap::subsys::threading::Thread;
-using eerie_leap::subsys::threading::ServiceBase;
-using eerie_leap::subsys::threading::ServiceState;
-using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::cdmp::utilities::CdmpCanIdManager;
 using eerie_leap::subsys::cdmp::utilities::CdmpStatusMachine;
-using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+using eerie_leap::subsys::threading::IThread;
+using eerie_leap::subsys::threading::ServiceBase;
+using eerie_leap::subsys::threading::ServiceState;
+using eerie_leap::subsys::threading::Thread;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 /** @brief One CDMP node: discovery, heartbeat, commands and shared state on a shared work queue. */
 class CdmpService : public IThread, public ServiceBase<>, public ICdmpNetworkInfo {
@@ -77,21 +77,29 @@ public:
      * @brief Binds the services to a bus; only while stopped.
      * @throws std::invalid_argument if @p base_can_id fails CdmpCanIdManager::IsValidBaseCanId().
      */
-    void Configure(
-        std::shared_ptr<CanbusProxy> canbus,
-        uint32_t base_can_id = CdmpCanIdManager::DEFAULT_BASE_CAN_ID);
+    void Configure(std::shared_ptr<CanbusProxy> canbus, uint32_t base_can_id = CdmpCanIdManager::DEFAULT_BASE_CAN_ID);
 
     // Configuration
     void SetAutoDiscovery(bool enabled);
 
-    std::shared_ptr<CdmpDevice> GetDevice() const { return device_; }
-    std::shared_ptr<CdmpCommandService> GetCommandService() const { return command_service_; }
+    std::shared_ptr<CdmpDevice> GetDevice() const {
+        return device_;
+    }
+    std::shared_ptr<CdmpCommandService> GetCommandService() const {
+        return command_service_;
+    }
     /** @brief Discovery and the table of other devices: their device events and heartbeats. */
-    std::shared_ptr<CdmpNetworkService> GetNetworkService() const { return network_service_; }
+    std::shared_ptr<CdmpNetworkService> GetNetworkService() const {
+        return network_service_;
+    }
     /** @brief This unit's shared state records and its copies of the others'; kept across Stop() and Start(). */
-    std::shared_ptr<CdmpStateService> GetStateService() const { return state_service_; }
+    std::shared_ptr<CdmpStateService> GetStateService() const {
+        return state_service_;
+    }
     /** @brief The CDMP work queue, shared with the SMP-CAN transport. */
-    std::shared_ptr<WorkQueueThread> GetWorkQueueThread() const { return work_queue_thread_; }
+    std::shared_ptr<WorkQueueThread> GetWorkQueueThread() const {
+        return work_queue_thread_;
+    }
 
     /** @brief Other devices on the network; see CdmpNetworkService::GetNetworkDevices(). */
     size_t GetNetworkDevices(std::span<CdmpDeviceInfo> devices) const override;

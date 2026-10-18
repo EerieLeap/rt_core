@@ -5,15 +5,15 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
+#include "cdmp_test_features.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/threading/work_queue_thread.h"
 #include "subsys/cdmp/models/messages/cdmp_discovery_request_message.h"
 #include "subsys/cdmp/models/messages/cdmp_discovery_response_message.h"
 #include "subsys/cdmp/models/messages/cdmp_heartbeat_message.h"
@@ -21,10 +21,10 @@
 #include "subsys/cdmp/models/messages/cdmp_id_claim_response_message.h"
 #include "subsys/cdmp/services/cdmp_network_service.h"
 #include "subsys/cdmp/services/cdmp_service.h"
-#include "cdmp_test_features.h"
+#include "subsys/threading/work_queue_thread.h"
 
-using eerie_leap::tests::LOGGER_FEATURES;
 using eerie_leap::tests::DISPLAY_FEATURES;
+using eerie_leap::tests::LOGGER_FEATURES;
 
 using namespace eerie_leap::subsys::canbus;
 using namespace eerie_leap::subsys::cdmp::models;
@@ -55,26 +55,23 @@ void ResetLoopbackDevice(void* /*fixture*/) {
 }
 
 Frame DiscoveryResponseFrame(uint8_t device_id, uint32_t uid, uint16_t features) {
-    return CdmpDiscoveryResponseMessage{.device_id = device_id, .uid = uid, .features = features}.ToCanFrame();
+    return CdmpDiscoveryResponseMessage{ .device_id = device_id, .uid = uid, .features = features }.ToCanFrame();
 }
 
-Frame ClaimFrame(
-    uint8_t device_id,
-    uint32_t uid,
-    uint8_t protocol_version = CdmpDevice::GetCurrentProtocolVersion()) {
+Frame ClaimFrame(uint8_t device_id, uint32_t uid, uint8_t protocol_version = CdmpDevice::GetCurrentProtocolVersion()) {
 
     return CdmpIdClaimRequestMessage{
-        .claiming_device_id = device_id,
-        .uid = uid,
-        .protocol_version = protocol_version}.ToCanFrame();
+        .claiming_device_id = device_id, .uid = uid, .protocol_version = protocol_version
+    }
+        .ToCanFrame();
 }
 
 Frame ClaimResponseFrame(uint8_t responding_device_id, uint8_t claiming_device_id, CdmpIdClaimResult result) {
-    return CdmpIdClaimResponseMessage{
-        .responding_device_id = responding_device_id,
+    return CdmpIdClaimResponseMessage{ .responding_device_id = responding_device_id,
         .claiming_device_id = claiming_device_id,
         .claiming_device_uid = OWN_UID,
-        .result = result}.ToCanFrame();
+        .result = result }
+        .ToCanFrame();
 }
 
 // Management frames seen on the loopback bus, in order.
@@ -142,7 +139,8 @@ struct NetworkFixture {
     std::shared_ptr<WorkQueueThread> work_queue = std::make_shared<WorkQueueThread>(
         "cdmp_test_wq",
         CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_STACK_SIZE,
-        CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY);
+        CONFIG_EERIE_LEAP_CDMP_WORK_QUEUE_PRIORITY
+    );
     std::shared_ptr<CdmpCanIdManager> can_id_manager = std::make_shared<CdmpCanIdManager>();
 
     // Before the service, which reports into them for as long as it exists.
@@ -151,7 +149,7 @@ struct NetworkFixture {
 
     // Unless a test starts it, the service has no CAN bus and processes frames inline on the test
     // thread, so this unit never answers a claim.
-    CdmpNetworkService service{can_id_manager, device, work_queue};
+    CdmpNetworkService service{ can_id_manager, device, work_queue };
 
     std::shared_ptr<CanbusProxy> canbus;
     int bus_handler_id = -1;
@@ -159,10 +157,10 @@ struct NetworkFixture {
 
     NetworkFixture() {
         service.RegisterDeviceEventHandler([this](CdmpDeviceEvent event, const CdmpDeviceInfo& info) {
-            events.push_back({.event = event, .device = info});
+            events.push_back({ .event = event, .device = info });
         });
         service.RegisterHeartbeatHandler([this](const CdmpHeartbeatMessage& heartbeat) {
-            heartbeats.push_back({.heartbeat = heartbeat, .device_events_before = events.size()});
+            heartbeats.push_back({ .heartbeat = heartbeat, .device_events_before = events.size() });
         });
     }
 
@@ -184,7 +182,8 @@ struct NetworkFixture {
     // Records every management frame on a loopback controller, and lets the service send on it.
     void AttachLoopbackBus() {
         auto running_canbus = std::make_unique<Canbus>(
-            CanbusConfig(LoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK));
+            CanbusConfig(LoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK)
+        );
         zassert_true(running_canbus->Initialize(), "Canbus::Initialize() failed");
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
@@ -192,11 +191,11 @@ struct NetworkFixture {
         // The same filter the service registers, so it is shared rather than an overlap.
         const CanId management_id = can_id_manager->GetManagementCanId();
         bus_handler_id = (*canbus)->RegisterFrameReceivedHandler(
-            can_id_manager->GetReceiveFilter(management_id),
-            [this, management_id](const CanFrame& frame) {
+            can_id_manager->GetReceiveFilter(management_id), [this, management_id](const CanFrame& frame) {
                 if(frame.id == management_id.id)
                     bus_frames.Add(frame);
-            });
+            }
+        );
         zassert_true(bus_handler_id > 0, "Frame handler rejected: %d", bus_handler_id);
 
         service.Configure(canbus);
@@ -220,7 +219,9 @@ struct NetworkFixture {
 
     // As the receive handler of a running service hands a frame over.
     void Receive(Frame frame) {
-        work_queue->Run([this, frame = std::move(frame)]() { service.ProcessFrame(frame); });
+        work_queue->Run([this, frame = std::move(frame)]() {
+            service.ProcessFrame(frame);
+        });
     }
 
     void SendAsPeer(const Frame& frame) {
@@ -232,7 +233,9 @@ struct NetworkFixture {
     void DrainQueue() {
         k_sem done;
         k_sem_init(&done, 0, 1);
-        work_queue->Run([&done]() { k_sem_give(&done); });
+        work_queue->Run([&done]() {
+            k_sem_give(&done);
+        });
         zassert_equal(k_sem_take(&done, K_MSEC(FRAME_TIMEOUT_MS)), 0, "The work queue is stuck");
     }
 
@@ -261,22 +264,18 @@ struct NetworkFixture {
         service.ProcessFrame(DiscoveryResponseFrame(device_id, uid, features));
     }
 
-    void Claim(
-        uint8_t device_id,
-        uint32_t uid,
-        uint8_t protocol_version = CdmpDevice::GetCurrentProtocolVersion()) {
+    void Claim(uint8_t device_id, uint32_t uid, uint8_t protocol_version = CdmpDevice::GetCurrentProtocolVersion()) {
 
         service.ProcessFrame(ClaimFrame(device_id, uid, protocol_version));
     }
 
     // Through the frame codec, as the heartbeat service hands it over.
     void Heartbeat(uint8_t device_id, uint16_t features = 0) {
-        const CdmpHeartbeatMessage message{
-            .device_id = device_id,
+        const CdmpHeartbeatMessage message{ .device_id = device_id,
             .health_status = CdmpHealthStatus::OK,
             .sequence_number = 0,
             .features = features,
-            .state_digest = 0};
+            .state_digest = 0 };
         service.UpdateDeviceFromHeartbeat(CdmpHeartbeatMessage::FromCanFrame(message.ToCanFrame()));
     }
 };
@@ -345,8 +344,9 @@ ZTEST(cdmp_network, test_uid_conflict_is_not_added) {
 
     std::array<CdmpDeviceInfo, 4> devices{};
     zassert_equal(fixture.service.GetNetworkDevices(devices), 0);
-    zassert_equal(fixture.device->GetStatus(), CdmpDeviceStatus::ERROR,
-        "A peer with this device's UID puts the device into ERROR");
+    zassert_equal(
+        fixture.device->GetStatus(), CdmpDeviceStatus::ERROR, "A peer with this device's UID puts the device into ERROR"
+    );
 }
 
 ZTEST(cdmp_network, test_discovered_device_reports_joined) {
@@ -571,12 +571,11 @@ ZTEST(cdmp_network, test_heartbeat_handler_receives_the_full_message) {
     NetworkFixture fixture;
     fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
 
-    const CdmpHeartbeatMessage sent{
-        .device_id = 4,
+    const CdmpHeartbeatMessage sent{ .device_id = 4,
         .health_status = CdmpHealthStatus::WARNING,
         .sequence_number = 7,
         .features = 0x0304,
-        .state_digest = 0xA5};
+        .state_digest = 0xA5 };
     fixture.service.UpdateDeviceFromHeartbeat(sent);
 
     zassert_equal(fixture.heartbeats.size(), 1);
@@ -593,10 +592,13 @@ ZTEST(cdmp_network, test_unregistered_handlers_are_not_called) {
     int device_events = 0;
     int heartbeats = 0;
 
-    const int event_handler_id = fixture.service.RegisterDeviceEventHandler(
-        [&](CdmpDeviceEvent, const CdmpDeviceInfo&) { device_events++; });
-    const int heartbeat_handler_id = fixture.service.RegisterHeartbeatHandler(
-        [&](const CdmpHeartbeatMessage&) { heartbeats++; });
+    const int event_handler_id = fixture.service.RegisterDeviceEventHandler([&](CdmpDeviceEvent,
+                                                                                const CdmpDeviceInfo&) {
+        device_events++;
+    });
+    const int heartbeat_handler_id = fixture.service.RegisterHeartbeatHandler([&](const CdmpHeartbeatMessage&) {
+        heartbeats++;
+    });
 
     zassert_not_equal(event_handler_id, heartbeat_handler_id);
 
@@ -634,8 +636,10 @@ ZTEST(cdmp_network, test_claim_and_heartbeat_for_own_id_are_ignored_while_online
 
     fixture.Heartbeat(2);
 
-    zassert_false(fixture.bus_frames.Wait(NO_FRAME_TIMEOUT_MS).has_value(),
-        "This unit's own ID is no unknown device to rediscover");
+    zassert_false(
+        fixture.bus_frames.Wait(NO_FRAME_TIMEOUT_MS).has_value(),
+        "This unit's own ID is no unknown device to rediscover"
+    );
     zassert_equal(fixture.service.GetDeviceCount(), 0);
     zassert_true(fixture.events.empty());
     zassert_true(fixture.heartbeats.empty());
@@ -698,8 +702,9 @@ ZTEST(cdmp_network, test_heartbeat_from_removed_device_requests_rediscovery) {
 
     fixture.Heartbeat(4);
 
-    zassert_false(fixture.bus_frames.Wait(NO_FRAME_TIMEOUT_MS).has_value(),
-        "At most one request per heartbeat interval");
+    zassert_false(
+        fixture.bus_frames.Wait(NO_FRAME_TIMEOUT_MS).has_value(), "At most one request per heartbeat interval"
+    );
 
     // Its answer to the request.
     fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
@@ -781,8 +786,10 @@ ZTEST(cdmp_network, test_incompatible_version_answer_ends_the_claim) {
     fixture.DrainQueue();
     // The mismatch stops the service from its work queue, which must not wait on itself.
     zassert_equal(fixture.service.GetState(), ServiceState::STOPPED);
-    zassert_false(fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM, NO_FRAME_TIMEOUT_MS).has_value(),
-        "No claim follows the mismatch");
+    zassert_false(
+        fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM, NO_FRAME_TIMEOUT_MS).has_value(),
+        "No claim follows the mismatch"
+    );
 }
 
 ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
@@ -802,7 +809,9 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     // Hold the queue, so the next frame waits behind it until after the stop.
     k_sem release;
     k_sem_init(&release, 0, 1);
-    fixture.work_queue->Run([&release]() { k_sem_take(&release, K_FOREVER); });
+    fixture.work_queue->Run([&release]() {
+        k_sem_take(&release, K_FOREVER);
+    });
 
     fixture.SendAsPeer(DiscoveryResponseFrame(6, 0x66666666, LOGGER_FEATURES));
     // Both handlers see a frame in one dispatch, so the service's has queued it by now.
@@ -856,12 +865,12 @@ ZTEST(cdmp_network, test_heartbeat_reserved_bytes_are_ignored) {
     NetworkFixture fixture;
     fixture.Discover(4, 0x44444444, LOGGER_FEATURES);
 
-    auto frame = CdmpHeartbeatMessage{
-        .device_id = 4,
+    auto frame = CdmpHeartbeatMessage{ .device_id = 4,
         .health_status = CdmpHealthStatus::OK,
         .sequence_number = 0,
         .features = LOGGER_FEATURES,
-        .state_digest = 0}.ToCanFrame();
+        .state_digest = 0 }
+                     .ToCanFrame();
     frame[5] = 0xFF;
     frame[6] = 0xFF;
     fixture.service.UpdateDeviceFromHeartbeat(CdmpHeartbeatMessage::FromCanFrame(frame));
@@ -882,10 +891,10 @@ ZTEST(cdmp_network, test_short_discovery_response_adds_no_device) {
 }
 
 ZTEST(cdmp_network, test_id_claim_sends_byte_6_as_zero_and_ignores_it) {
-    const auto frame = CdmpIdClaimRequestMessage{
-        .claiming_device_id = 3,
+    const auto frame = CdmpIdClaimRequestMessage{ .claiming_device_id = 3,
         .uid = 0x33333333,
-        .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame();
+        .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+                           .ToCanFrame();
 
     zassert_equal(frame.size(), 8);
     zassert_equal(frame[6], 0, "Byte 6 is reserved");
@@ -918,12 +927,11 @@ ZTEST(cdmp_discovery_response_message, test_features_are_in_bytes_6_and_7) {
 ZTEST_SUITE(cdmp_heartbeat_message, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(cdmp_heartbeat_message, test_round_trips_with_state_digest) {
-    const CdmpHeartbeatMessage sent{
-        .device_id = 9,
+    const CdmpHeartbeatMessage sent{ .device_id = 9,
         .health_status = CdmpHealthStatus::WARNING,
         .sequence_number = 200,
         .features = 0x2010,
-        .state_digest = 0xC3};
+        .state_digest = 0xC3 };
 
     const auto frame = sent.ToCanFrame();
 
@@ -944,7 +952,7 @@ ZTEST(cdmp_heartbeat_message, test_round_trips_with_state_digest) {
 }
 
 ZTEST(cdmp_heartbeat_message, test_short_frame_is_rejected) {
-    const std::array<uint8_t, 7> frame{9, 0x00, 1, 0x01, 0x00, 0x00, 0x00};
+    const std::array<uint8_t, 7> frame{ 9, 0x00, 1, 0x01, 0x00, 0x00, 0x00 };
     bool rejected = false;
 
     try {
@@ -965,12 +973,12 @@ ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
     CdmpDeviceStatus seen_new = CdmpDeviceStatus::ONLINE;
     int calls = 0;
 
-    int handler_id = service.RegisterStatusChangedHandler(
-        [&](CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
-            seen_old = old_status;
-            seen_new = new_status;
-            calls++;
-        });
+    int handler_id = service.RegisterStatusChangedHandler([&](CdmpDeviceStatus old_status,
+                                                              CdmpDeviceStatus new_status) {
+        seen_old = old_status;
+        seen_new = new_status;
+        calls++;
+    });
 
     service.GetDevice()->EnterError();
 

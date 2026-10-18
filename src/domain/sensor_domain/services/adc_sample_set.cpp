@@ -47,11 +47,7 @@ const AdcSample* AdcSampleSet::Reserve(int channel, AdcChannelHandle handle, uin
 void AdcSampleSet::Seal() {
     for(auto& entry : adcs_) {
         entry.packed_results.resize(entry.channels.size());
-        entry.request = {
-            .channels = entry.channels,
-            .results = entry.packed_results,
-            .samples = entry.samples
-        };
+        entry.request = { .channels = entry.channels, .results = entry.packed_results, .samples = entry.samples };
     }
 
     is_sealed_ = true;
@@ -72,13 +68,11 @@ void AdcSampleSet::Acquire() noexcept {
 AdcSampleSet::AdcView AdcSampleSet::GetAdc(size_t index) const {
     const AdcEntry& entry = adcs_[index];
 
-    return {
-        .adc = entry.adc,
+    return { .adc = entry.adc,
         .channels = entry.channels,
         .global_channels = entry.global_channels,
         .results = entry.results,
-        .samples = entry.samples
-    };
+        .samples = entry.samples };
 }
 
 size_t AdcSampleSet::GetChannelCount() const {

@@ -25,7 +25,7 @@ constexpr size_t MAX_ONE_BYTE_RECORD_ID = 255;
 constexpr char MAX_EXPANDED_EXPONENT = '4';
 
 // Functions every MDF reader evaluates the same way; ln, exp, max and the like are left out.
-constexpr std::array<std::string_view, 6> FORMULA_FUNCTIONS{"sin", "cos", "tan", "sqrt", "abs", "log"};
+constexpr std::array<std::string_view, 6> FORMULA_FUNCTIONS{ "sin", "cos", "tan", "sqrt", "abs", "log" };
 
 struct FormulaToken {
     enum class Kind : uint8_t {
@@ -129,39 +129,39 @@ std::optional<std::vector<FormulaToken>> TokenizeFormula(std::string_view expres
             kind = FormulaToken::Kind::Number;
         } else {
             switch(c) {
-            case '+':
-            case '-':
-                kind = FormulaToken::Kind::Operator;
-                break;
-            case '*':
-            case '/':
-                // Both are binary only; "**" is power in some readers and an error in others.
-                if(tokens.empty()
-                    || tokens.back().kind == FormulaToken::Kind::Operator
-                    || tokens.back().kind == FormulaToken::Kind::Power
-                    || tokens.back().kind == FormulaToken::Kind::Open) {
+                case '+':
+                case '-':
+                    kind = FormulaToken::Kind::Operator;
+                    break;
+                case '*':
+                case '/':
+                    // Both are binary only; "**" is power in some readers and an error in others.
+                    if(tokens.empty()
+                        || tokens.back().kind == FormulaToken::Kind::Operator
+                        || tokens.back().kind == FormulaToken::Kind::Power
+                        || tokens.back().kind == FormulaToken::Kind::Open) {
 
+                        return std::nullopt;
+                    }
+                    kind = FormulaToken::Kind::Operator;
+                    break;
+                case '^':
+                    kind = FormulaToken::Kind::Power;
+                    break;
+                case '(':
+                    kind = FormulaToken::Kind::Open;
+                    break;
+                case ')':
+                    kind = FormulaToken::Kind::Close;
+                    break;
+                default:
                     return std::nullopt;
-                }
-                kind = FormulaToken::Kind::Operator;
-                break;
-            case '^':
-                kind = FormulaToken::Kind::Power;
-                break;
-            case '(':
-                kind = FormulaToken::Kind::Open;
-                break;
-            case ')':
-                kind = FormulaToken::Kind::Close;
-                break;
-            default:
-                return std::nullopt;
             }
 
             pos++;
         }
 
-        tokens.push_back(FormulaToken{kind, expression.substr(begin, pos - begin), begin});
+        tokens.push_back(FormulaToken{ kind, expression.substr(begin, pos - begin), begin });
     }
 
     return tokens;
@@ -203,8 +203,9 @@ std::optional<std::string> Mdf4LoggerSensorReading::ToMdfFormula(std::string_vie
     if(!tokens.has_value())
         return std::nullopt;
 
-    const bool uses_input = std::ranges::any_of(tokens.value(),
-        [](const FormulaToken& token) { return token.kind == FormulaToken::Kind::Input; });
+    const bool uses_input = std::ranges::any_of(tokens.value(), [](const FormulaToken& token) {
+        return token.kind == FormulaToken::Kind::Input;
+    });
     if(!uses_input)
         return std::nullopt;
 
@@ -266,8 +267,9 @@ std::optional<std::string> Mdf4LoggerSensorReading::ToMdfFormula(std::string_vie
 Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     const LoggingConfiguration& configuration,
     std::span<const std::shared_ptr<Sensor>> sensors,
-    const LoggerMetadata& metadata)
-        : stream_(nullptr) {
+    const LoggerMetadata& metadata
+) :
+    stream_(nullptr) {
 
     // A disabled sensor never has a reading, so it gets no channel whatever its logging configuration says.
     auto find_enabled = [&configuration](const Sensor& sensor) -> const SensorLoggingConfiguration* {
@@ -275,24 +277,25 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
             return nullptr;
 
         auto sensor_configuration = configuration.sensor_configurations.find(sensor.id_hash);
-        if(sensor_configuration == configuration.sensor_configurations.end() || !sensor_configuration->second.is_enabled)
+        if(sensor_configuration == configuration.sensor_configurations.end()
+            || !sensor_configuration->second.is_enabled)
             return nullptr;
 
         return &sensor_configuration->second;
     };
 
-    const size_t enabled_sensor_count = std::ranges::count_if(sensors,
-        [&find_enabled](const auto& sensor) { return find_enabled(*sensor) != nullptr; });
+    const size_t enabled_sensor_count = std::ranges::count_if(sensors, [&find_enabled](const auto& sensor) {
+        return find_enabled(*sensor) != nullptr;
+    });
 
     mdf4_file_ = std::make_unique<Mdf4File>(Mdf4FileOptions{
-        .record_id_size_bytes = GetRecordIdSizeBytes(enabled_sensor_count)
-    });
+        .record_id_size_bytes = GetRecordIdSizeBytes(enabled_sensor_count) });
 
     SetFileMetadata(configuration, metadata);
 
     auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
-        mdf4::SourceInformationBlock::SourceType::IoDevice,
-        mdf4::SourceInformationBlock::BusType::None);
+        mdf4::SourceInformationBlock::SourceType::IoDevice, mdf4::SourceInformationBlock::BusType::None
+    );
     source_information->SetName(mdf4_file_->GetOrCreateTextBlock("Eerie Leap Sensor"));
 
     for(const auto& sensor : sensors) {
@@ -307,18 +310,18 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     }
 }
 
-void Mdf4LoggerSensorReading::SetFileMetadata(const LoggingConfiguration& configuration, const LoggerMetadata& metadata) {
+void Mdf4LoggerSensorReading::SetFileMetadata(
+    const LoggingConfiguration& configuration,
+    const LoggerMetadata& metadata
+) {
     mdf4_file_->SetFileHistory(metadata.tool_id, TOOL_VENDOR, metadata.tool_version);
 
-    const std::array<MdfProperty, 7> properties{{
-        {"device_name", metadata.device_name},
-        {"product_id", std::to_string(metadata.product_id)},
-        {"device_id", std::to_string(static_cast<uint32_t>(metadata.device_id))},
-        {"hw_version", std::to_string(metadata.hw_version)},
-        {"sw_version", std::to_string(metadata.sw_version)},
-        {"sensors_configuration_hash", std::to_string(metadata.sensors_configuration_hash)},
-        {"logging_interval_ms", std::to_string(configuration.logging_interval_ms)}
-    }};
+    const std::array<MdfProperty, 7> properties{ { { "device_name", metadata.device_name },
+        { "product_id", std::to_string(metadata.product_id) },
+        { "device_id", std::to_string(static_cast<uint32_t>(metadata.device_id)) },
+        { "hw_version", std::to_string(metadata.hw_version) }, { "sw_version", std::to_string(metadata.sw_version) },
+        { "sensors_configuration_hash", std::to_string(metadata.sensors_configuration_hash) },
+        { "logging_interval_ms", std::to_string(configuration.logging_interval_ms) } } };
 
     mdf4_file_->SetHeaderComment(HEADER_COMMENT, properties);
 }
@@ -326,7 +329,8 @@ void Mdf4LoggerSensorReading::SetFileMetadata(const LoggingConfiguration& config
 void Mdf4LoggerSensorReading::AddValueTarget(
     const Sensor& sensor,
     const SensorLoggingConfiguration& sensor_configuration,
-    const std::shared_ptr<mdf4::SourceInformationBlock>& source_information) {
+    const std::shared_ptr<mdf4::SourceInformationBlock>& source_information
+) {
 
     const std::string sensor_id(sensor.id);
 
@@ -334,7 +338,8 @@ void Mdf4LoggerSensorReading::AddValueTarget(
     channel_group->AddSourceInformation(source_information);
 
     auto value_channel = mdf4_file_->CreateDataChannel(
-        channel_group, MdfDataType::Float32, sensor_id, std::string(sensor.metadata.unit), true);
+        channel_group, MdfDataType::Float32, sensor_id, std::string(sensor.metadata.unit), true
+    );
 
     const auto comment = GetSensorComment(sensor);
     if(!comment.empty())
@@ -345,14 +350,14 @@ void Mdf4LoggerSensorReading::AddValueTarget(
         && (sensor.configuration.type == SensorType::PHYSICAL_ANALOG
             || sensor.configuration.type == SensorType::PHYSICAL_INDICATOR);
 
-    LogTarget target{
-        .kind = has_raw_value_channel ? LogTarget::Kind::ValueWithRaw : LogTarget::Kind::Value,
+    LogTarget target{ .kind = has_raw_value_channel ? LogTarget::Kind::ValueWithRaw : LogTarget::Kind::Value,
         .log_only_new_data = sensor_configuration.log_only_new_data,
-        .value_invalid_mask = 1U << value_channel->GetInvalidationBitPosition()
-    };
+        .value_invalid_mask = 1U << value_channel->GetInvalidationBitPosition() };
 
     if(has_raw_value_channel) {
-        auto raw_channel = mdf4_file_->CreateDataChannel(channel_group, MdfDataType::Float32, sensor_id + ".raw", "", true);
+        auto raw_channel = mdf4_file_->CreateDataChannel(
+            channel_group, MdfDataType::Float32, sensor_id + ".raw", "", true
+        );
         target.raw_value_invalid_mask = 1U << raw_channel->GetInvalidationBitPosition();
 
         // A formula naming other sensors or engine-only functions would be evaluated wrongly or
@@ -365,7 +370,7 @@ void Mdf4LoggerSensorReading::AddValueTarget(
     }
 
     targets_.emplace(sensor.id_hash, target);
-    target_channel_groups_.push_back(TargetChannelGroup{sensor.id_hash, channel_group});
+    target_channel_groups_.push_back(TargetChannelGroup{ sensor.id_hash, channel_group });
 }
 
 void Mdf4LoggerSensorReading::AddCanFrameTarget(const Sensor& sensor) {
@@ -386,19 +391,21 @@ void Mdf4LoggerSensorReading::AddCanFrameTarget(const Sensor& sensor) {
 
     // Every queued frame is a bus event of its own, so log_only_new_data does not apply: two frames
     // can share a timestamp when they arrive within the time service's resolution.
-    targets_.emplace(sensor.id_hash, LogTarget{
-        .kind = LogTarget::Kind::CanFrame,
-        .log_only_new_data = false,
-        .bus_channel = bus_channel
-    });
-    target_channel_groups_.push_back(TargetChannelGroup{sensor.id_hash, channel_group});
+    targets_.emplace(
+        sensor.id_hash,
+        LogTarget{ .kind = LogTarget::Kind::CanFrame, .log_only_new_data = false, .bus_channel = bus_channel }
+    );
+    target_channel_groups_.push_back(TargetChannelGroup{ sensor.id_hash, channel_group });
 }
 
 const char* Mdf4LoggerSensorReading::GetFileExtension() const {
     return Mdf4File::LOG_DATA_FILE_EXTENSION;
 }
 
-bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) {
+bool Mdf4LoggerSensorReading::StartLogging(
+    std::streambuf& stream,
+    const std::chrono::system_clock::time_point& start_time
+) {
     // Set once the header is out: until then the writers the targets point at may not exist.
     stream_ = nullptr;
     start_time_ = start_time;
@@ -450,7 +457,11 @@ bool Mdf4LoggerSensorReading::StopLogging() {
     return result;
 }
 
-void Mdf4LoggerSensorReading::LogValueReading(const LogTarget& target, double time_delta_s, const SensorReading& reading) {
+void Mdf4LoggerSensorReading::LogValueReading(
+    const LogTarget& target,
+    double time_delta_s,
+    const SensorReading& reading
+) {
     // An error reading may still carry the value of an earlier step; it is not the sensor's value.
     // Its raw value, when it has one, is the input that was measured, so it stays valid.
     const bool is_value_valid = reading.value.has_value() && !reading.HasError();
@@ -461,24 +472,33 @@ void Mdf4LoggerSensorReading::LogValueReading(const LogTarget& target, double ti
         if(!reading.raw_value.has_value())
             invalid_mask |= target.raw_value_invalid_mask;
 
-        const std::array<MdfValue, 3> values{time_delta_s, value, reading.raw_value.value_or(0.0F)};
+        const std::array<MdfValue, 3> values{ time_delta_s, value, reading.raw_value.value_or(0.0F) };
         current_file_size_bytes_ += target.writer->Write(*stream_, values, invalid_mask);
     } else {
-        const std::array<MdfValue, 2> values{time_delta_s, value};
+        const std::array<MdfValue, 2> values{ time_delta_s, value };
         current_file_size_bytes_ += target.writer->Write(*stream_, values, invalid_mask);
     }
 }
 
-bool Mdf4LoggerSensorReading::LogCanFrameReading(const LogTarget& target, double time_delta_s, const SensorReading& reading) {
+bool Mdf4LoggerSensorReading::LogCanFrameReading(
+    const LogTarget& target,
+    double time_delta_s,
+    const SensorReading& reading
+) {
     if(reading.can_frame == nullptr)
         return false;
 
-    current_file_size_bytes_ += target.can_writer->Write(*stream_, *reading.can_frame, time_delta_s, target.bus_channel);
+    current_file_size_bytes_ += target.can_writer->Write(
+        *stream_, *reading.can_frame, time_delta_s, target.bus_channel
+    );
 
     return true;
 }
 
-bool Mdf4LoggerSensorReading::LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) {
+bool Mdf4LoggerSensorReading::LogReading(
+    const std::chrono::system_clock::time_point& time,
+    const SensorReading& reading
+) {
     if(stream_ == nullptr)
         return false;
 

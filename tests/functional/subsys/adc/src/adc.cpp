@@ -2,12 +2,12 @@
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <zephyr/drivers/adc/adc_emul.h>
 
-#include "subsys/device_tree/dt_adc.h"
 #include "subsys/adc/adc_emulator.h"
+#include "subsys/device_tree/dt_adc.h"
 
 #include "emulator_support.h"
 
@@ -17,8 +17,8 @@ using namespace emulator_support;
 
 namespace {
 
-constexpr AdcCapabilities kNoCapabilities { .burst = false, .multi_channel = false, .us_per_conversion = 0 };
-constexpr AdcCapabilities kBurstOnly { .burst = true, .multi_channel = false, .us_per_conversion = 0 };
+constexpr AdcCapabilities kNoCapabilities{ .burst = false, .multi_channel = false, .us_per_conversion = 0 };
+constexpr AdcCapabilities kBurstOnly{ .burst = true, .multi_channel = false, .us_per_conversion = 0 };
 
 // The three ways Adc::Sample() reaches the driver; nullopt keeps what the probe found (burst + multi-channel).
 struct SamplingPath {
@@ -26,11 +26,9 @@ struct SamplingPath {
     std::optional<AdcCapabilities> capabilities;
 };
 
-constexpr SamplingPath kSamplingPaths[] = {
-    { .name = "multi-channel scan", .capabilities = std::nullopt },
+constexpr SamplingPath kSamplingPaths[] = { { .name = "multi-channel scan", .capabilities = std::nullopt },
     { .name = "single-channel bursts", .capabilities = kBurstOnly },
-    { .name = "per-sample loop", .capabilities = kNoCapabilities }
-};
+    { .name = "per-sample loop", .capabilities = kNoCapabilities } };
 
 std::shared_ptr<AdcEmulator> MakeEmulatorOn(const SamplingPath& path) {
     auto adc = MakeEmulator(0);
@@ -91,8 +89,10 @@ ZTEST(adc, test_probe_times_its_first_conversion) {
     zassert_ok(adc_emul_value_func_set(Dev(0), 0, SlowConstant, nullptr));
 
     zassert_true(adc->Initialize());
-    zassert_true(adc->GetCapabilities().us_per_conversion >= kSlowConversionUs,
-        "measured %u us", adc->GetCapabilities().us_per_conversion);
+    zassert_true(
+        adc->GetCapabilities().us_per_conversion >= kSlowConversionUs, "measured %u us",
+        adc->GetCapabilities().us_per_conversion
+    );
 }
 
 ZTEST(adc, test_probe_times_only_the_successful_attempt) {
@@ -104,8 +104,10 @@ ZTEST(adc, test_probe_times_only_the_successful_attempt) {
 
     zassert_true(adc->Initialize(), "a timeout of the first attempt is retried");
     zassert_equal(adc->GetStats().timeouts, 1);
-    zassert_true(adc->GetCapabilities().us_per_conversion < 10 * kSlowConversionUs,
-        "the timed-out attempt is not part of the %u us", adc->GetCapabilities().us_per_conversion);
+    zassert_true(
+        adc->GetCapabilities().us_per_conversion < 10 * kSlowConversionUs,
+        "the timed-out attempt is not part of the %u us", adc->GetCapabilities().us_per_conversion
+    );
 }
 
 ZTEST(adc, test_Initialize_rejects_duplicate_channel_ids) {
@@ -140,14 +142,13 @@ ZTEST(adc, test_Initialize_takes_the_reference_from_the_driver) {
     zassert_true(adc.Initialize());
     DriveConstant(adc, 1, 0, 2500);
 
-    const uint8_t channels[1] = {0};
+    const uint8_t channels[1] = { 0 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 10 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 10 };
     adc.Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
-    zassert_within(results[0].volts, 2.5F, 2.0F * 5.0F / 4096.0F,
-        "read %f V", static_cast<double>(results[0].volts));
+    zassert_within(results[0].volts, 2.5F, 2.0F * 5.0F / 4096.0F, "read %f V", static_cast<double>(results[0].volts));
 }
 
 ZTEST(adc, test_Initialize_rejects_resolution_zero) {
@@ -171,9 +172,9 @@ ZTEST(adc, test_Sample_reads_every_requested_channel) {
     for(int channel = 0; channel < kFirstAdcChannels; channel++)
         DriveConstant(*adc, 0, channel, 500 * (channel + 1));
 
-    const uint8_t channels[kFirstAdcChannels] = {0, 1, 2, 3};
+    const uint8_t channels[kFirstAdcChannels] = { 0, 1, 2, 3 };
     AdcSample results[kFirstAdcChannels];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 100 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 100 };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -182,8 +183,10 @@ ZTEST(adc, test_Sample_reads_every_requested_channel) {
     for(int channel = 0; channel < kFirstAdcChannels; channel++) {
         zassert_equal(results[channel].error, AdcError::NONE, "channel %d", channel);
         zassert_equal(results[channel].errno_value, 0);
-        zassert_within(results[channel].volts, 0.5F * (channel + 1), kEmulTolerance,
-            "channel %d read %f V", channel, static_cast<double>(results[channel].volts));
+        zassert_within(
+            results[channel].volts, 0.5F * (channel + 1), kEmulTolerance, "channel %d read %f V", channel,
+            static_cast<double>(results[channel].volts)
+        );
     }
 
     zassert_equal(after.requests - before.requests, 1);
@@ -196,9 +199,9 @@ ZTEST(adc, test_Sample_reads_a_subset_in_request_order) {
     DriveConstant(*adc, 0, 1, 1000);
     DriveConstant(*adc, 0, 3, 3000);
 
-    const uint8_t channels[2] = {1, 3};
+    const uint8_t channels[2] = { 1, 3 };
     AdcSample results[2];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 10 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 10 };
     adc->Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
@@ -211,9 +214,9 @@ ZTEST(adc, test_Sample_reaches_the_second_adc) {
     auto adc = MakeEmulator(1);
     DriveConstant(*adc, 1, 1, 2200);
 
-    const uint8_t channels[1] = {1};
+    const uint8_t channels[1] = { 1 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 1 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 1 };
     adc->Sample(request);
 
     zassert_equal(adc->GetChannelCount(), kSecondAdcChannels);
@@ -224,9 +227,9 @@ ZTEST(adc, test_Sample_reaches_the_second_adc) {
 ZTEST(adc, test_Sample_varies_with_the_random_stimulus) {
     auto adc = MakeEmulator(0);
 
-    const uint8_t channels[1] = {2};
+    const uint8_t channels[1] = { 2 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 10 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 10 };
 
     std::unordered_set<float> readings;
     for(int i = 0; i < 100; i++) {
@@ -250,13 +253,13 @@ ZTEST(adc, test_Sample_reports_a_driver_error_per_channel) {
         DriveConstant(*adc, 0, 0, 1000);
         DriveConstant(*adc, 0, 2, 2000);
 
-        CountedFailure always { .failures_left = INT32_MAX, .err = -EIO, .mv = 0 };
+        CountedFailure always{ .failures_left = INT32_MAX, .err = -EIO, .mv = 0 };
         adc->SetExternallyDriven(1);
         zassert_ok(adc_emul_value_func_set(Dev(0), 1, FailThenSucceed, &always));
 
-        const uint8_t channels[3] = {0, 1, 2};
+        const uint8_t channels[3] = { 0, 1, 2 };
         AdcSample results[3];
-        AdcSampleRequest request { .channels = channels, .results = results, .samples = kSamples };
+        AdcSampleRequest request{ .channels = channels, .results = results, .samples = kSamples };
 
         auto before = adc->GetStats();
         adc->Sample(request);
@@ -272,8 +275,10 @@ ZTEST(adc, test_Sample_reports_a_driver_error_per_channel) {
         zassert_equal(after.errors - before.errors, 1, "%s", path.name);
         zassert_equal(after.last_errno, -EIO, "%s", path.name);
         zassert_equal(after.timeouts, before.timeouts, "%s: -EIO is not a timeout", path.name);
-        zassert_equal(after.conversions - before.conversions, 2 * kSamples,
-            "%s: only the valid channels' conversions are counted", path.name);
+        zassert_equal(
+            after.conversions - before.conversions, 2 * kSamples,
+            "%s: only the valid channels' conversions are counted", path.name
+        );
     }
 }
 
@@ -288,13 +293,13 @@ ZTEST(adc, test_Sample_resumes_a_failed_scan_per_channel) {
     DriveConstant(*adc, 0, 2, 2000);
 
     // Channel 1 converts the whole first chunk, then fails.
-    CountedSuccess first_chunk { .successes_left = kChunk, .err = -EIO, .mv = 1500 };
+    CountedSuccess first_chunk{ .successes_left = kChunk, .err = -EIO, .mv = 1500 };
     adc->SetExternallyDriven(1);
     zassert_ok(adc_emul_value_func_set(Dev(0), 1, SucceedThenFail, &first_chunk));
 
-    const uint8_t channels[3] = {0, 1, 2};
+    const uint8_t channels[3] = { 0, 1, 2 };
     AdcSample results[3];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = kSamples };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = kSamples };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -307,10 +312,14 @@ ZTEST(adc, test_Sample_resumes_a_failed_scan_per_channel) {
     zassert_equal(results[2].error, AdcError::NONE);
     zassert_within(results[2].volts, 2.0F, kEmulTolerance, "read %f V", static_cast<double>(results[2].volts));
 
-    zassert_equal(after.driver_calls - before.driver_calls, 5,
-        "two scan chunks, then one burst per channel for the outstanding samplings");
-    zassert_equal(after.conversions - before.conversions, 3 * kChunk + 2 * (kSamples - kChunk),
-        "the completed chunk is kept, not sampled again");
+    zassert_equal(
+        after.driver_calls - before.driver_calls, 5,
+        "two scan chunks, then one burst per channel for the outstanding samplings"
+    );
+    zassert_equal(
+        after.conversions - before.conversions, 3 * kChunk + 2 * (kSamples - kChunk),
+        "the completed chunk is kept, not sampled again"
+    );
     zassert_equal(after.errors - before.errors, 1);
 }
 
@@ -318,13 +327,13 @@ ZTEST(adc, test_Sample_times_out_every_channel_of_a_scan) {
     auto adc = MakeEmulator(0);
     zassert_true(adc->GetCapabilities().burst && adc->GetCapabilities().multi_channel);
 
-    CountedFailure always { .failures_left = INT32_MAX, .err = -ETIMEDOUT, .mv = 0 };
+    CountedFailure always{ .failures_left = INT32_MAX, .err = -ETIMEDOUT, .mv = 0 };
     adc->SetExternallyDriven(0);
     zassert_ok(adc_emul_value_func_set(Dev(0), 0, FailThenSucceed, &always));
 
-    const uint8_t channels[3] = {0, 1, 2};
+    const uint8_t channels[3] = { 0, 1, 2 };
     AdcSample results[3];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 40 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 40 };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -348,13 +357,13 @@ ZTEST(adc, test_Sample_retries_timeouts_then_fails) {
         // The four good conversions take one burst, or one call each on the loop.
         const uint32_t good_calls = adc->GetCapabilities().burst ? 1 : 4;
 
-        CountedFailure twice { .failures_left = 2, .err = -ETIMEDOUT, .mv = 1650 };
+        CountedFailure twice{ .failures_left = 2, .err = -ETIMEDOUT, .mv = 1650 };
         adc->SetExternallyDriven(0);
         zassert_ok(adc_emul_value_func_set(Dev(0), 0, FailThenSucceed, &twice));
 
-        const uint8_t channels[1] = {0};
+        const uint8_t channels[1] = { 0 };
         AdcSample results[1];
-        AdcSampleRequest request { .channels = channels, .results = results, .samples = 4 };
+        AdcSampleRequest request{ .channels = channels, .results = results, .samples = 4 };
 
         auto before = adc->GetStats();
         adc->Sample(request);
@@ -367,7 +376,7 @@ ZTEST(adc, test_Sample_retries_timeouts_then_fails) {
         zassert_equal(after.driver_calls - before.driver_calls, 2 + good_calls, "%s", path.name);
         zassert_equal(after.errors - before.errors, 0, "%s", path.name);
 
-        CountedFailure thrice { .failures_left = 3, .err = -ETIMEDOUT, .mv = 1650 };
+        CountedFailure thrice{ .failures_left = 3, .err = -ETIMEDOUT, .mv = 1650 };
         zassert_ok(adc_emul_value_func_set(Dev(0), 0, FailThenSucceed, &thrice));
 
         before = adc->GetStats();
@@ -392,13 +401,13 @@ ZTEST(adc, test_Sample_discards_a_partial_burst) {
     adc->OverrideCapabilities(kBurstOnly);
 
     // The tenth conversion of the burst fails after nine have reached the buffer.
-    CountedSuccess nine { .successes_left = 9, .err = -EIO, .mv = 1000 };
+    CountedSuccess nine{ .successes_left = 9, .err = -EIO, .mv = 1000 };
     adc->SetExternallyDriven(2);
     zassert_ok(adc_emul_value_func_set(Dev(0), 2, SucceedThenFail, &nine));
 
-    const uint8_t channels[1] = {2};
+    const uint8_t channels[1] = { 2 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = kSamples };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = kSamples };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -418,15 +427,17 @@ ZTEST(adc, test_Sample_keeps_fractional_lsb) {
     adc->SetExternallyDriven(2);
     zassert_ok(adc_emul_raw_value_func_set(Dev(0), 2, AlternatingRaw, &calls));
 
-    const uint8_t channels[1] = {2};
+    const uint8_t channels[1] = { 2 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 100 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 100 };
     adc->Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
     zassert_equal(calls, 100);
-    zassert_within(results[0].volts, 100.5F * kLsbVolts, 0.1F * kLsbVolts,
-        "mean of 100/101 LSB read as %f V", static_cast<double>(results[0].volts));
+    zassert_within(
+        results[0].volts, 100.5F * kLsbVolts, 0.1F * kLsbVolts, "mean of 100/101 LSB read as %f V",
+        static_cast<double>(results[0].volts)
+    );
 }
 
 ZTEST(adc, test_Sample_uses_one_driver_call_per_chunk) {
@@ -444,9 +455,9 @@ ZTEST(adc, test_Sample_uses_one_driver_call_per_chunk) {
     constexpr uint32_t kChunks = (kSamples + CONFIG_EERIE_LEAP_ADC_BURST_CHUNK - 1) / CONFIG_EERIE_LEAP_ADC_BURST_CHUNK;
     static_assert(kChunks == 2, "the test counts chunks of 64");
 
-    const uint8_t channels[2] = {0, 1};
+    const uint8_t channels[2] = { 0, 1 };
     AdcSample results[2];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = kSamples };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = kSamples };
 
     auto expect_sampled = [&](uint32_t driver_calls, const char* path) {
         calls_0 = 0;
@@ -479,9 +490,9 @@ ZTEST(adc, test_Sample_clamps_samples_to_at_least_one) {
     auto adc = MakeEmulator(0);
     DriveConstant(*adc, 0, 0, 1000);
 
-    const uint8_t channels[1] = {0};
+    const uint8_t channels[1] = { 0 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 0 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 0 };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -496,9 +507,9 @@ ZTEST(adc, test_Sample_clamps_samples_to_the_configured_maximum) {
     auto adc = MakeEmulator(0);
     DriveConstant(*adc, 0, 0, 1000);
 
-    const uint8_t channels[1] = {0};
+    const uint8_t channels[1] = { 0 };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = UINT16_MAX };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = UINT16_MAX };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -513,7 +524,7 @@ ZTEST(adc, test_Sample_accepts_an_empty_request) {
     auto adc = MakeEmulator(0);
 
     auto before = adc->GetStats();
-    adc->Sample(AdcSampleRequest {});
+    adc->Sample(AdcSampleRequest{});
     auto after = adc->GetStats();
 
     zassert_equal(after.requests - before.requests, 1);
@@ -524,9 +535,9 @@ ZTEST(adc, test_Sample_accepts_an_empty_request) {
 ZTEST(adc, test_Sample_marks_out_of_range_and_unordered_channels) {
     auto adc = MakeEmulator(0);
 
-    const uint8_t channels[4] = {1, kFirstAdcChannels, 100, 1};
+    const uint8_t channels[4] = { 1, kFirstAdcChannels, 100, 1 };
     AdcSample results[4];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 4 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 4 };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -548,9 +559,9 @@ ZTEST(adc, test_Sample_marks_out_of_range_and_unordered_channels) {
 ZTEST(adc, test_Sample_before_Initialize_fails_every_channel) {
     auto adc = MakeEmulator(0, false);
 
-    const uint8_t channels[2] = {0, 1};
+    const uint8_t channels[2] = { 0, 1 };
     AdcSample results[2];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 1 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 1 };
     adc->Sample(request);
 
     for(int i = 0; i < 2; i++) {
@@ -564,14 +575,14 @@ ZTEST(adc, test_Sample_before_Initialize_fails_every_channel) {
 ZTEST(adc, test_Sample_after_a_failed_probe_fails_every_channel) {
     auto adc = MakeEmulator(0, false);
 
-    CountedFailure always { .failures_left = INT32_MAX, .err = -EIO, .mv = 0 };
+    CountedFailure always{ .failures_left = INT32_MAX, .err = -EIO, .mv = 0 };
     adc->SetExternallyDriven(0);
     zassert_ok(adc_emul_value_func_set(Dev(0), 0, FailThenSucceed, &always));
     zassert_false(adc->Initialize(), "the probe conversion fails");
 
-    const uint8_t channels[2] = {0, 1};
+    const uint8_t channels[2] = { 0, 1 };
     AdcSample results[2];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 1 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 1 };
 
     auto before = adc->GetStats();
     adc->Sample(request);
@@ -588,9 +599,9 @@ ZTEST(adc, test_Sample_after_a_failed_probe_fails_every_channel) {
 ZTEST(adc, test_Sample_handles_fewer_results_than_channels) {
     auto adc = MakeEmulator(0);
 
-    const uint8_t channels[3] = {0, 1, 2};
+    const uint8_t channels[3] = { 0, 1, 2 };
     AdcSample results[2];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 2 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 2 };
 
     auto before = adc->GetStats();
     adc->Sample(request);

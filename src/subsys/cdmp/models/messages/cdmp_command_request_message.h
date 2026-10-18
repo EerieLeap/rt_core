@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/utilities/enums.h"
@@ -28,11 +28,9 @@ struct CdmpCommandRequestMessage {
     }
 
     std::vector<uint8_t> ToCanFrame() const {
-        std::vector<uint8_t> frame_data = {
-            // source_device_id,
-            target_device_id,
-            command_code,
-            transaction_id};
+        std::vector<uint8_t> frame_data = { // source_device_id,
+            target_device_id, command_code, transaction_id
+        };
         frame_data.insert(frame_data.end(), data.begin(), data.end());
 
         return frame_data;

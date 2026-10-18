@@ -3,17 +3,17 @@
 #include <memory>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
+#include "cdmp_test_features.h"
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/services/cdmp_canbus_service_base.h"
-#include "cdmp_test_features.h"
 
 using eerie_leap::tests::DISPLAY_FEATURES;
 
@@ -31,8 +31,12 @@ const device* ReceiveFilterLoopbackDevice() {
 // Exposes the receive registration the CDMP services share.
 class ProbeService final : public CdmpCanbusServiceBase {
 private:
-    bool DoStart() override { return true; }
-    bool DoStop() override { return true; }
+    bool DoStart() override {
+        return true;
+    }
+    bool DoStop() override {
+        return true;
+    }
 
 public:
     using CdmpCanbusServiceBase::CdmpCanbusServiceBase;
@@ -42,23 +46,31 @@ public:
 struct FrameCounter {
     k_sem received;
 
-    FrameCounter() { k_sem_init(&received, 0, K_SEM_MAX_LIMIT); }
-
-    CanFrameHandler Handler() {
-        return [this](const CanFrame&) { k_sem_give(&received); };
+    FrameCounter() {
+        k_sem_init(&received, 0, K_SEM_MAX_LIMIT);
     }
 
-    bool Received(int timeout_ms = 200) { return k_sem_take(&received, K_MSEC(timeout_ms)) == 0; }
+    CanFrameHandler Handler() {
+        return [this](const CanFrame&) {
+            k_sem_give(&received);
+        };
+    }
+
+    bool Received(int timeout_ms = 200) {
+        return k_sem_take(&received, K_MSEC(timeout_ms)) == 0;
+    }
 };
 
 // Fills the controller's free filter slots with a filter no test frame matches, then frees them.
 size_t CountFreeControllerFilters() {
-    const can_filter unused{.id = 0x0F0, .mask = CAN_STD_ID_MASK, .flags = 0};
+    const can_filter unused{ .id = 0x0F0, .mask = CAN_STD_ID_MASK, .flags = 0 };
     std::vector<int> filter_ids;
 
     int filter_id = 0;
     while((filter_id = can_add_rx_filter(
-        ReceiveFilterLoopbackDevice(), [](const device*, can_frame*, void*) {}, nullptr, &unused)) >= 0) {
+               ReceiveFilterLoopbackDevice(), [](const device*, can_frame*, void*) {}, nullptr, &unused
+           ))
+        >= 0) {
 
         filter_ids.push_back(filter_id);
     }
@@ -73,12 +85,13 @@ struct ReceiveFilterFixture {
     std::shared_ptr<CdmpCanIdManager> ids = std::make_shared<CdmpCanIdManager>();
     std::shared_ptr<CdmpDevice> device = std::make_shared<CdmpDevice>(0x12345678, DISPLAY_FEATURES);
     std::shared_ptr<CanbusProxy> canbus;
-    ProbeService probe{ids, device};
+    ProbeService probe{ ids, device };
     std::vector<int> handler_ids;
 
     ReceiveFilterFixture() {
         auto running_canbus = std::make_unique<Canbus>(
-            CanbusConfig(ReceiveFilterLoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK));
+            CanbusConfig(ReceiveFilterLoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK)
+        );
         zassert_true(running_canbus->Initialize(), "Canbus::Initialize() failed");
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
@@ -99,7 +112,7 @@ struct ReceiveFilterFixture {
     }
 
     void Send(uint32_t id) {
-        const std::array<uint8_t, 1> data{0x01};
+        const std::array<uint8_t, 1> data{ 0x01 };
         zassert_ok((*canbus)->SendFrame(CanId::Standard(id), data, K_MSEC(100)));
     }
 };
@@ -118,8 +131,12 @@ ZTEST(cdmp_receive_filter, test_receive_ids_share_one_controller_filter) {
     FrameCounter management;
     FrameCounter heartbeat;
 
-    zassert_true(fixture.Keep(fixture.probe.RegisterReceiveHandler(fixture.ids->GetManagementCanId(), management.Handler())) > 0);
-    zassert_true(fixture.Keep(fixture.probe.RegisterReceiveHandler(fixture.ids->GetHeartbeatCanId(), heartbeat.Handler())) > 0);
+    zassert_true(
+        fixture.Keep(fixture.probe.RegisterReceiveHandler(fixture.ids->GetManagementCanId(), management.Handler())) > 0
+    );
+    zassert_true(
+        fixture.Keep(fixture.probe.RegisterReceiveHandler(fixture.ids->GetHeartbeatCanId(), heartbeat.Handler())) > 0
+    );
 
     zassert_equal(free_before - CountFreeControllerFilters(), 1, "Both IDs share the CDMP block filter");
 
@@ -139,10 +156,14 @@ ZTEST(cdmp_receive_filter, test_overlapping_route_makes_cdmp_use_exact_filters) 
 
     // A route inside Base+0..Base+7 that registered first, as a misconfigured CAN message would.
     const uint32_t route_id = fixture.ids->GetBaseCanId() + 6;
-    zassert_true(fixture.Keep((*fixture.canbus)->RegisterFrameReceivedHandler(CanId::Standard(route_id), route.Handler())) > 0);
+    zassert_true(
+        fixture.Keep((*fixture.canbus)->RegisterFrameReceivedHandler(CanId::Standard(route_id), route.Handler())) > 0
+    );
 
-    zassert_true(fixture.Keep(fixture.probe.RegisterReceiveHandler(fixture.ids->GetManagementCanId(), management.Handler())) > 0,
-        "CDMP falls back to its exact filter");
+    zassert_true(
+        fixture.Keep(fixture.probe.RegisterReceiveHandler(fixture.ids->GetManagementCanId(), management.Handler())) > 0,
+        "CDMP falls back to its exact filter"
+    );
 
     fixture.Send(fixture.ids->GetManagementCanId().id);
     zassert_true(management.Received());

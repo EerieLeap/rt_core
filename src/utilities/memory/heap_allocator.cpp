@@ -3,7 +3,7 @@
 #include "heap_allocator.h"
 
 #ifdef CONFIG_SHARED_MULTI_HEAP
-#include <zephyr/multi_heap/shared_multi_heap.h>
+    #include <zephyr/multi_heap/shared_multi_heap.h>
 #endif
 
 namespace eerie_leap::utilities::memory {
@@ -52,9 +52,7 @@ void* ExtHeapAllocate(size_t align, size_t bytes) noexcept {
     if(bytes == 0)
         bytes = 1;
 
-    return align > alignof(std::max_align_t)
-        ? k_aligned_alloc(align, bytes)
-        : k_malloc(bytes);
+    return align > alignof(std::max_align_t) ? k_aligned_alloc(align, bytes) : k_malloc(bytes);
 }
 
 void ExtHeapFree(void* pointer) noexcept {

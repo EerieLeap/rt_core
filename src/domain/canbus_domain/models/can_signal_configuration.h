@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory_resource>
 #include <cstdint>
+#include <memory_resource>
 #include <string>
 
 #include "utilities/string/string_helpers.h"
@@ -27,17 +27,18 @@ struct CanSignalConfiguration {
 
     uint32_t name_hash = 0;
 
-    CanSignalConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : name(alloc), unit(alloc) {}
+    CanSignalConfiguration(std::allocator_arg_t, allocator_type alloc) :
+        name(alloc),
+        unit(alloc) {}
 
     CanSignalConfiguration(const CanSignalConfiguration&) = delete;
-	CanSignalConfiguration& operator=(const CanSignalConfiguration&) noexcept = default;
-	CanSignalConfiguration& operator=(CanSignalConfiguration&&) noexcept = default;
-	CanSignalConfiguration(CanSignalConfiguration&&) noexcept = default;
-	~CanSignalConfiguration() = default;
+    CanSignalConfiguration& operator=(const CanSignalConfiguration&) noexcept = default;
+    CanSignalConfiguration& operator=(CanSignalConfiguration&&) noexcept = default;
+    CanSignalConfiguration(CanSignalConfiguration&&) noexcept = default;
+    ~CanSignalConfiguration() = default;
 
-    CanSignalConfiguration(CanSignalConfiguration&& other, allocator_type alloc)
-        : start_bit(other.start_bit),
+    CanSignalConfiguration(CanSignalConfiguration&& other, allocator_type alloc) :
+        start_bit(other.start_bit),
         size_bits(other.size_bits),
         factor(other.factor),
         offset(other.offset),

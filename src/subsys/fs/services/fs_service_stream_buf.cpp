@@ -12,8 +12,9 @@ namespace eerie_leap::subsys::fs::services {
 
 using namespace eerie_leap::utilities::string;
 
-FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode)
-    : fs_service_(fs_service), file_opened_(false) {
+FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode) :
+    fs_service_(fs_service),
+    file_opened_(false) {
 
     if(!fs_service_)
         throw std::invalid_argument("fs_service cannot be null");
@@ -235,10 +236,8 @@ int FsServiceStreamBuf::sync() {
     return fs_sync(&file_) == 0 ? 0 : -1;
 }
 
-std::streambuf::pos_type FsServiceStreamBuf::seekoff(
-    std::streambuf::off_type off,
-    std::ios_base::seekdir way,
-    std::ios_base::openmode which) {
+std::streambuf::pos_type
+FsServiceStreamBuf::seekoff(std::streambuf::off_type off, std::ios_base::seekdir way, std::ios_base::openmode which) {
 
     if(!file_opened_)
         return std::streambuf::pos_type(std::streambuf::off_type(-1));

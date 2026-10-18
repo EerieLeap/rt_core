@@ -4,42 +4,47 @@
 // CanbusController. Only with CONFIG_EERIE_LEAP_ASSETS: functional.controllers.assets.
 #ifdef CONFIG_EERIE_LEAP_ASSETS
 
-#include <cstddef>
-#include <cstdint>
-#include <initializer_list>
-#include <atomic>
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
+    #include <atomic>
+    #include <cstddef>
+    #include <cstdint>
+    #include <initializer_list>
+    #include <memory>
+    #include <optional>
+    #include <string>
+    #include <string_view>
+    #include <utility>
+    #include <vector>
 
-#include <zephyr/ztest.h>
+    #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "subsys/assets/asset_kind.h"
-#include "subsys/assets/assets_manager.h"
-#include "subsys/device_tree/dt_fs.h"
-#include "subsys/fs/services/fs_service.h"
-#include "subsys/threading/work_queue_thread.h"
-#include "subsys/time/boot_elapsed_time_provider.h"
-#include "subsys/time/rtc_provider.h"
-#include "subsys/time/time_service.h"
+    #include "subsys/assets/asset_kind.h"
+    #include "subsys/assets/assets_manager.h"
+    #include "subsys/device_tree/dt_fs.h"
+    #include "subsys/fs/services/fs_service.h"
+    #include "subsys/threading/work_queue_thread.h"
+    #include "subsys/time/boot_elapsed_time_provider.h"
+    #include "subsys/time/rtc_provider.h"
+    #include "subsys/time/time_service.h"
+    #include "utilities/memory/memory_resource_manager.h"
 
-#include "controllers/canbus_controller.h"
-#include "controllers/sensors_controller.h"
-#include "domain/canbus_domain/models/canbus_configuration.h"
-#include "domain/canbus_domain/models/can_channel_configuration.h"
-#include "domain/canbus_domain/models/can_message_configuration.h"
-#include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+    #include "controllers/canbus_controller.h"
+    #include "controllers/sensors_controller.h"
+    #include "domain/canbus_domain/models/can_channel_configuration.h"
+    #include "domain/canbus_domain/models/can_message_configuration.h"
+    #include "domain/canbus_domain/models/canbus_configuration.h"
+    #include "domain/sensor_domain/models/sensor.h"
+    #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
 namespace script_assets_test {
 
 using eerie_leap::controllers::CanbusController;
 using eerie_leap::controllers::SensorsController;
-using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
+using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorType;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::assets::AssetAccess;
 using eerie_leap::subsys::assets::AssetKind;
 using eerie_leap::subsys::assets::AssetsManager;
@@ -52,12 +57,7 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::BootElapsedTimeProvider;
 using eerie_leap::subsys::time::RtcProvider;
 using eerie_leap::subsys::time::TimeService;
-using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
-using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
-using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
-using eerie_leap::domain::sensor_domain::models::Sensor;
-using eerie_leap::domain::sensor_domain::models::SensorType;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::utilities::memory::Mrm;
 
 // A script a configuration refers to, and what the controllers register. The suite's one volume serves
 // as the SD card and as the internal file system.
@@ -73,8 +73,8 @@ inline constexpr const char* kDisabledCanScript = "scripts/can/d.lua";
 // In the sensor scripts' directory, though a CAN message refers to it.
 inline constexpr const char* kCanScriptInSensorDirectory = "scripts/sensors/s.lua";
 
-inline constexpr uint8_t kAllScriptAccess =
-    ToMask(AssetAccess::READ) | ToMask(AssetAccess::WRITE) | ToMask(AssetAccess::DELETE);
+inline constexpr uint8_t kAllScriptAccess = ToMask(AssetAccess::READ) | ToMask(AssetAccess::WRITE)
+    | ToMask(AssetAccess::DELETE);
 
 // The suite's volume as the SD card: every call goes to the real one, except IsAvailable(), which
 // reports the switch. The controllers take it as their SD service, so a store built on the internal
@@ -85,12 +85,19 @@ private:
     std::atomic<bool> is_available_ = true;
 
 public:
-    explicit SwitchableVolume(std::shared_ptr<IFsService> inner) : inner_(std::move(inner)) {}
+    explicit SwitchableVolume(std::shared_ptr<IFsService> inner) :
+        inner_(std::move(inner)) {}
 
-    void SetAvailable(bool is_available) { is_available_ = is_available; }
+    void SetAvailable(bool is_available) {
+        is_available_ = is_available;
+    }
 
-    bool Initialize() override { return inner_->Initialize(); }
-    bool IsAvailable() const override { return is_available_; }
+    bool Initialize() override {
+        return inner_->Initialize();
+    }
+    bool IsAvailable() const override {
+        return is_available_;
+    }
     bool WriteFile(std::string_view path, const void* data, size_t size, bool append) override {
         return inner_->WriteFile(path, data, size, append);
     }
@@ -100,21 +107,45 @@ public:
     int OpenFile(std::string_view path, fs_mode_t flags, fs_file_t* file) override {
         return inner_->OpenFile(path, flags, file);
     }
-    bool CreateDirectory(std::string_view path) override { return inner_->CreateDirectory(path); }
-    bool Exists(std::string_view path) const override { return inner_->Exists(path); }
-    bool DeleteFile(std::string_view path) override { return inner_->DeleteFile(path); }
-    bool DeleteRecursive(std::string_view path) override { return inner_->DeleteRecursive(path); }
-    int Rename(std::string_view from, std::string_view to) override { return inner_->Rename(from, to); }
-    std::vector<std::string> ListFiles(std::string_view path) const override { return inner_->ListFiles(path); }
+    bool CreateDirectory(std::string_view path) override {
+        return inner_->CreateDirectory(path);
+    }
+    bool Exists(std::string_view path) const override {
+        return inner_->Exists(path);
+    }
+    bool DeleteFile(std::string_view path) override {
+        return inner_->DeleteFile(path);
+    }
+    bool DeleteRecursive(std::string_view path) override {
+        return inner_->DeleteRecursive(path);
+    }
+    int Rename(std::string_view from, std::string_view to) override {
+        return inner_->Rename(from, to);
+    }
+    std::vector<std::string> ListFiles(std::string_view path) const override {
+        return inner_->ListFiles(path);
+    }
     int ListDirectory(
-        std::string_view path, size_t first, size_t max_entries,
-        std::vector<DirectoryEntry>& entries, size_t& count) const override {
+        std::string_view path,
+        size_t first,
+        size_t max_entries,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
         return inner_->ListDirectory(path, first, max_entries, entries, count);
     }
-    std::optional<size_t> GetFileSize(std::string_view path) const override { return inner_->GetFileSize(path); }
-    uint64_t GetTotalSpace() const override { return inner_->GetTotalSpace(); }
-    uint64_t GetUsedSpace() const override { return inner_->GetUsedSpace(); }
-    bool Format() override { return inner_->Format(); }
+    std::optional<size_t> GetFileSize(std::string_view path) const override {
+        return inner_->GetFileSize(path);
+    }
+    uint64_t GetTotalSpace() const override {
+        return inner_->GetTotalSpace();
+    }
+    uint64_t GetUsedSpace() const override {
+        return inner_->GetUsedSpace();
+    }
+    bool Format() override {
+        return inner_->Format();
+    }
 };
 
 struct Rig {
@@ -141,7 +172,8 @@ inline Rig MakeRig(const char* work_queue_name) {
     zassert_true(rig.work_queue->Initialize());
 
     rig.time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     rig.frame = std::make_shared<SensorReadingsFrame>();
     rig.assets = std::make_shared<AssetsManager>();
 
@@ -171,11 +203,15 @@ inline std::shared_ptr<Sensor> MakeSensor(std::string_view id, std::string_view 
 
 // The SD volume and the registry are optional, as the controller takes them.
 inline std::unique_ptr<SensorsController> MakeSensorsController(
-    const Rig& rig, std::shared_ptr<IFsService> sd_fs_service, std::shared_ptr<AssetsManager> assets) {
+    const Rig& rig,
+    std::shared_ptr<IFsService> sd_fs_service,
+    std::shared_ptr<AssetsManager> assets
+) {
 
     return std::make_unique<SensorsController>(
         rig.fs_service, rig.work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr, nullptr, nullptr,
-        std::move(sd_fs_service), std::move(assets));
+        std::move(sd_fs_service), std::move(assets)
+    );
 }
 
 // Initializes with @p sensors already stored, so that the controller's update handler does not fire.
@@ -195,7 +231,8 @@ struct CanMessageSpec {
 // Stores a configuration with the given messages on classical CAN channels, one channel per bus.
 inline void StoreCanConfiguration(
     eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager& manager,
-    std::initializer_list<CanMessageSpec> specs) {
+    std::initializer_list<CanMessageSpec> specs
+) {
 
     CanbusConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
 
@@ -224,16 +261,19 @@ inline void StoreCanConfiguration(
     zassert_true(manager.Update(configuration), "The CAN configuration was not stored");
 }
 
-inline std::unique_ptr<CanbusController> MakeCanbusController(
-    const Rig& rig, std::shared_ptr<IFsService> sd_fs_service, std::shared_ptr<AssetsManager> assets) {
+inline std::unique_ptr<CanbusController>
+MakeCanbusController(const Rig& rig, std::shared_ptr<IFsService> sd_fs_service, std::shared_ptr<AssetsManager> assets) {
 
     return std::make_unique<CanbusController>(
-        rig.fs_service, rig.work_queue, nullptr, std::move(sd_fs_service), std::move(assets));
+        rig.fs_service, rig.work_queue, nullptr, std::move(sd_fs_service), std::move(assets)
+    );
 }
 
 // Initializes with @p specs already stored, so that the controller's update handler does not fire.
 inline int InitializeWithMessages(CanbusController& controller, std::initializer_list<CanMessageSpec> specs) {
-    return controller.Initialize([specs](auto manager) { StoreCanConfiguration(*manager, specs); });
+    return controller.Initialize([specs](auto manager) {
+        StoreCanConfiguration(*manager, specs);
+    });
 }
 
 } // namespace script_assets_test

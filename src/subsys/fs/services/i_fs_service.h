@@ -80,7 +80,8 @@ public:
         size_t first,
         size_t max_entries,
         std::vector<DirectoryEntry>& entries,
-        size_t& count) const = 0;
+        size_t& count
+    ) const = 0;
 
     /**
      * @brief The size in bytes of the file at @p relative_path.
@@ -99,9 +100,13 @@ public:
         return WriteFile(relative_path, data_p, data_size, false);
     }
 
-    bool DeleteRecursive() { return DeleteRecursive(std::string_view{}); }
+    bool DeleteRecursive() {
+        return DeleteRecursive(std::string_view{});
+    }
 
-    std::vector<std::string> ListFiles() const { return ListFiles(std::string_view{}); }
+    std::vector<std::string> ListFiles() const {
+        return ListFiles(std::string_view{});
+    }
 };
 
 } // namespace eerie_leap::subsys::fs::services

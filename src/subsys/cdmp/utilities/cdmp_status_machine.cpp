@@ -8,8 +8,8 @@ LOG_MODULE_REGISTER(cdmp_status_machine, LOG_LEVEL_INF);
 
 namespace eerie_leap::subsys::cdmp::utilities {
 
-CdmpStatusMachine::CdmpStatusMachine(CdmpDeviceStatus initial_status)
-    : status_(initial_status) {}
+CdmpStatusMachine::CdmpStatusMachine(CdmpDeviceStatus initial_status) :
+    status_(initial_status) {}
 
 void CdmpStatusMachine::SetStatus(CdmpDeviceStatus new_status, bool force) {
     if(new_status == status_)
@@ -18,15 +18,15 @@ void CdmpStatusMachine::SetStatus(CdmpDeviceStatus new_status, bool force) {
     CdmpDeviceStatus old_status = status_;
 
     if(!force && !CanTransitionTo(new_status)) {
-        LOG_WRN("Invalid status transition from %d to %d",
-            std::to_underlying(old_status), std::to_underlying(new_status));
+        LOG_WRN(
+            "Invalid status transition from %d to %d", std::to_underlying(old_status), std::to_underlying(new_status)
+        );
         return;
     }
 
     status_ = new_status;
 
-    LOG_INF("Status transition: %d -> %d",
-        std::to_underlying(old_status), std::to_underlying(new_status));
+    LOG_INF("Status transition: %d -> %d", std::to_underlying(old_status), std::to_underlying(new_status));
     NotifyStatusChange(old_status, new_status);
 }
 
@@ -35,16 +35,16 @@ CdmpDeviceStatus CdmpStatusMachine::GetCurrentStatus() const {
 }
 
 int CdmpStatusMachine::RegisterStatusChangeHandler(StatusChangeCallback callback) {
-        int max_id = 0;
-        for(const auto& [id, _] : status_change_callbacks_) {
-            if(id > max_id)
-                max_id = id;
-        }
-        int new_id = max_id + 1;
-
-        status_change_callbacks_[new_id] = callback;
-        return new_id;
+    int max_id = 0;
+    for(const auto& [id, _] : status_change_callbacks_) {
+        if(id > max_id)
+            max_id = id;
     }
+    int new_id = max_id + 1;
+
+    status_change_callbacks_[new_id] = callback;
+    return new_id;
+}
 
 void CdmpStatusMachine::UnregisterStatusChangeHandler(int callback_id) {
     status_change_callbacks_.erase(callback_id);
@@ -59,8 +59,7 @@ bool CdmpStatusMachine::CanTransitionTo(CdmpDeviceStatus new_status) const {
 bool CdmpStatusMachine::IsOperational() const {
     auto current_status = GetCurrentStatus();
 
-    return current_status == CdmpDeviceStatus::ONLINE
-        || current_status == CdmpDeviceStatus::CLAIMING;
+    return current_status == CdmpDeviceStatus::ONLINE || current_status == CdmpDeviceStatus::CLAIMING;
 }
 
 void CdmpStatusMachine::NotifyStatusChange(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
@@ -71,13 +70,10 @@ void CdmpStatusMachine::NotifyStatusChange(CdmpDeviceStatus old_status, CdmpDevi
 bool CdmpStatusMachine::IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatus to) const {
     switch(from) {
         case CdmpDeviceStatus::OFFLINE:
-            return to == CdmpDeviceStatus::INIT
-            || to == CdmpDeviceStatus::ERROR;
+            return to == CdmpDeviceStatus::INIT || to == CdmpDeviceStatus::ERROR;
 
         case CdmpDeviceStatus::INIT:
-            return to == CdmpDeviceStatus::CLAIMING
-                || to == CdmpDeviceStatus::OFFLINE
-                || to == CdmpDeviceStatus::ERROR;
+            return to == CdmpDeviceStatus::CLAIMING || to == CdmpDeviceStatus::OFFLINE || to == CdmpDeviceStatus::ERROR;
 
         case CdmpDeviceStatus::CLAIMING:
             return to == CdmpDeviceStatus::INIT
@@ -94,8 +90,7 @@ bool CdmpStatusMachine::IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatu
             return to == CdmpDeviceStatus::OFFLINE;
 
         case CdmpDeviceStatus::ERROR:
-            return to == CdmpDeviceStatus::INIT
-                || to == CdmpDeviceStatus::OFFLINE;
+            return to == CdmpDeviceStatus::INIT || to == CdmpDeviceStatus::OFFLINE;
 
         default:
             return false;

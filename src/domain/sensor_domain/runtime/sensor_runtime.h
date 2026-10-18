@@ -2,32 +2,32 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <eerie_memory.hpp>
 #include <memory>
 #include <ranges>
 #include <vector>
-#include <eerie_memory.hpp>
 
-#include "utilities/voltage_interpolator/i_voltage_interpolator.h"
+#include "domain/adc_domain/models/adc_configuration.h"
+#include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/models/sensor_reading_update_method.h"
+#include "domain/sensor_domain/models/sensor_slot.h"
+#include "domain/sensor_domain/processors/indicator_conditioner.h"
+#include "domain/sensor_domain/runtime/sensor_script.h"
 #include "subsys/expression_engine/expression_evaluator.h"
 #include "subsys/lua_script/lua_script.h"
-#include "domain/adc_domain/models/adc_configuration.h"
-#include "domain/sensor_domain/runtime/sensor_script.h"
-#include "domain/sensor_domain/processors/indicator_conditioner.h"
-#include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/models/sensor_slot.h"
-#include "domain/sensor_domain/models/sensor_reading_update_method.h"
+#include "utilities/voltage_interpolator/i_voltage_interpolator.h"
 
 namespace eerie_leap::domain::sensor_domain::runtime {
 
-using eerie_leap::utilities::voltage_interpolator::IVoltageInterpolator;
-using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
-using eerie_leap::subsys::lua_script::LuaScript;
 using eerie_leap::domain::adc_domain::models::AdcConfiguration;
 using eerie_leap::domain::sensor_domain::models::Sensor;
-using eerie_leap::domain::sensor_domain::models::SensorSlot;
 using eerie_leap::domain::sensor_domain::models::SensorReadingUpdateMethod;
+using eerie_leap::domain::sensor_domain::models::SensorSlot;
 using eerie_leap::domain::sensor_domain::processors::IndicatorConditioner;
 using eerie_leap::domain::sensor_domain::processors::IndicatorSwitchState;
+using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
+using eerie_leap::subsys::lua_script::LuaScript;
+using eerie_leap::utilities::voltage_interpolator::IVoltageInterpolator;
 
 // Everything executable that a sensor needs, built from its configuration for one generation.
 // Owned by SensorGeneration; readers and tasks refer to it for as long as the generation runs.
@@ -57,16 +57,18 @@ struct SensorRuntime {
     // the readers' work items do.
     std::unique_ptr<IndicatorConditioner> conditioner = nullptr;
 
-    [[nodiscard]] const Sensor& GetSensor() const { return *sensor; }
+    [[nodiscard]] const Sensor& GetSensor() const {
+        return *sensor;
+    }
 };
 
 // One sensors configuration turned into a running pipeline: runtimes in processing order over
 // the frame's slots. Replaced as a whole when the configuration changes.
 struct SensorGeneration {
     uint32_t id = 0;
-    std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors;   // Keeps the configuration alive.
+    std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors; // Keeps the configuration alive.
     std::vector<SensorRuntime> runtimes;
-    std::shared_ptr<LuaScript> script_host;   // One Lua state for every scripted sensor; null without scripts.
+    std::shared_ptr<LuaScript> script_host; // One Lua state for every scripted sensor; null without scripts.
 
     // The ADC configuration the analog readers were built with, null on a unit without one. Keeps
     // their calibrators alive; a new ADC configuration takes effect with the next generation.
@@ -126,12 +128,13 @@ struct SensorGeneration {
                 continue;
 
             const auto& configuration = runtime.sensor->configuration;
-            switch_states.push_back({
-                .sensor_id_hash = runtime.sensor->id_hash,
-                .type = configuration.type,
-                .debounce_ms = configuration.debounce_ms,
-                .input_mode = configuration.input_mode,
-                .is_on = runtime.conditioner->IsSwitchOn()});
+            switch_states.push_back(
+                { .sensor_id_hash = runtime.sensor->id_hash,
+                    .type = configuration.type,
+                    .debounce_ms = configuration.debounce_ms,
+                    .input_mode = configuration.input_mode,
+                    .is_on = runtime.conditioner->IsSwitchOn() }
+            );
         }
 
         return switch_states;

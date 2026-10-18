@@ -1,6 +1,8 @@
 #include <errno.h>
 
 #include <zephyr/sys/printk.h>
+
+// Not self-contained: it uses ARG_UNUSED without including zephyr/sys/util.h, so it comes after printk.h.
 #include <zephyr/debug/coredump.h>
 
 #include "coredump_reporter.h"
@@ -74,8 +76,11 @@ void CoredumpReporter::PrintStoredDump() {
         printk("#CD:ERROR CANNOT DUMP#\n");
 
     printk("#CD:END#\n\n");
-    printk("[coredump] %d byte stored dump reported above (kept - call "
-        "CoredumpReporter::Erase() once retrieved).\n", size);
+    printk(
+        "[coredump] %d byte stored dump reported above (kept - call "
+        "CoredumpReporter::Erase() once retrieved).\n",
+        size
+    );
 }
 
 void CoredumpReporter::Erase() {

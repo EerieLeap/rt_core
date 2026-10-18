@@ -3,13 +3,13 @@
 #include <memory>
 #include <vector>
 
-#include "subsys/bluetooth/access_point/access_point_service.h"
-#include "subsys/smp/i_smp_forwarder.h"
-#include "subsys/smp/ble/smp_ble_router.h"
-#include "domain/sensor_domain/services/sensors_processing_service.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/ble_domain/services/live_data_service.h"
 #include "domain/ble_domain/smp/live_mgmt_group.h"
+#include "domain/sensor_domain/services/sensors_processing_service.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/bluetooth/access_point/access_point_service.h"
+#include "subsys/smp/ble/smp_ble_router.h"
+#include "subsys/smp/i_smp_forwarder.h"
 
 namespace eerie_leap::domain::ble_domain::services {
 
@@ -48,7 +48,8 @@ private:
     BleService(
         std::shared_ptr<SensorsProcessingService> sensors_processing_service,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-        std::shared_ptr<ISmpForwarder> smp_forwarder);
+        std::shared_ptr<ISmpForwarder> smp_forwarder
+    );
 
 public:
     BleService& operator=(const BleService&) = delete;
@@ -60,7 +61,8 @@ public:
     static BleService& Create(
         std::shared_ptr<SensorsProcessingService> sensors_processing_service,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-        std::shared_ptr<ISmpForwarder> smp_forwarder);
+        std::shared_ptr<ISmpForwarder> smp_forwarder
+    );
     static BleService& GetInstance();
 
     bool Initialize();

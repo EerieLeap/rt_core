@@ -32,15 +32,18 @@ private:
     bool is_active_ = false;
     LoggingStatusReason reason_ = LoggingStatusReason::Stopped;
 
-    static_assert(static_cast<uint32_t>(LoggingStatusReason::Unavailable) <= UINT8_MAX,
-        "A logging status reason takes one byte of the record");
+    static_assert(
+        static_cast<uint32_t>(LoggingStatusReason::Unavailable) <= UINT8_MAX,
+        "A logging status reason takes one byte of the record"
+    );
 
 public:
     /** @brief Inactive, for the reason Stopped. */
     CanbusComLoggingState() = default;
 
-    explicit CanbusComLoggingState(bool is_active, LoggingStatusReason reason = LoggingStatusReason::Stopped)
-        : is_active_(is_active), reason_(is_active ? LoggingStatusReason::Stopped : reason) {}
+    explicit CanbusComLoggingState(bool is_active, LoggingStatusReason reason = LoggingStatusReason::Stopped) :
+        is_active_(is_active),
+        reason_(is_active ? LoggingStatusReason::Stopped : reason) {}
 
     explicit CanbusComLoggingState(std::span<const uint8_t> data) {
         if(data.empty())
@@ -65,10 +68,8 @@ public:
     }
 
     [[nodiscard]] CanbusComStateData GetData() const override {
-        const std::array<uint8_t, 2> data = {
-            static_cast<uint8_t>(is_active_ ? FLAG_ACTIVE : 0x00),
-            static_cast<uint8_t>(reason_)
-        };
+        const std::array<uint8_t, 2> data = { static_cast<uint8_t>(is_active_ ? FLAG_ACTIVE : 0x00),
+            static_cast<uint8_t>(reason_) };
 
         return CanbusComStateData(data);
     }

@@ -18,8 +18,7 @@
 namespace eerie_leap::subsys::bluetooth::access_point {
 
 // Base UUID: e7a1b2c3-d4e5-6f78-9a0b-c1d2e3f40000
-#define BT_UUID_ACCESS_POINT_ENCODE(id) \
-    BT_UUID_128_ENCODE(0xe7a1b2c3, 0xd4e5, 0x6f78, 0x9a0b, 0xc1d2e3f40000 + (id))
+#define BT_UUID_ACCESS_POINT_ENCODE(id) BT_UUID_128_ENCODE(0xe7a1b2c3, 0xd4e5, 0x6f78, 0x9a0b, 0xc1d2e3f40000 + (id))
 
 #define BT_UUID_ACCESS_POINT_SERVICE_VAL BT_UUID_ACCESS_POINT_ENCODE(0)
 
@@ -77,9 +76,14 @@ private:
     int disconnected_handler_id_ = -1;
 
     static ssize_t SmpWriteCallback(
-        bt_conn* conn, const bt_gatt_attr* attr, const void* buf, uint16_t len, uint16_t offset, uint8_t flags);
-    static ssize_t InfoReadCallback(
-        bt_conn* conn, const bt_gatt_attr* attr, void* buf, uint16_t len, uint16_t offset);
+        bt_conn* conn,
+        const bt_gatt_attr* attr,
+        const void* buf,
+        uint16_t len,
+        uint16_t offset,
+        uint8_t flags
+    );
+    static ssize_t InfoReadCallback(bt_conn* conn, const bt_gatt_attr* attr, void* buf, uint16_t len, uint16_t offset);
     static void SmpSentCallback(bt_conn* conn, void* user_data);
     static void LiveSentCallback(bt_conn* conn, void* user_data);
     static void FastWorkHandler(k_work* work);
@@ -102,8 +106,12 @@ public:
      */
     void Initialize(Callbacks callbacks, std::span<const uint8_t> info);
 
-    [[nodiscard]] std::shared_ptr<IBleNotifier> GetSmpNotifier() const { return smp_notifier_; }
-    [[nodiscard]] std::shared_ptr<IBleNotifier> GetLiveNotifier() const { return live_notifier_; }
+    [[nodiscard]] std::shared_ptr<IBleNotifier> GetSmpNotifier() const {
+        return smp_notifier_;
+    }
+    [[nodiscard]] std::shared_ptr<IBleNotifier> GetLiveNotifier() const {
+        return live_notifier_;
+    }
 };
 
 } // namespace eerie_leap::subsys::bluetooth::access_point

@@ -15,9 +15,7 @@ using eerie_leap::subsys::event_bus::IsValidEventChannelId;
 namespace {
 
 void InvalidLoggingControlConfiguration(std::string_view message) {
-    throw std::invalid_argument(
-        "Invalid logging control configuration. "
-        + std::string(message));
+    throw std::invalid_argument("Invalid logging control configuration. " + std::string(message));
 }
 
 } // namespace
@@ -25,7 +23,8 @@ void InvalidLoggingControlConfiguration(std::string_view message) {
 void LoggingControlConfigurationValidator::Validate(const LoggingControlConfiguration& configuration) {
     if(configuration.triggers.size() > LoggingControlConfiguration::kMaxTriggers) {
         InvalidLoggingControlConfiguration(
-            "At most " + std::to_string(LoggingControlConfiguration::kMaxTriggers) + " triggers.");
+            "At most " + std::to_string(LoggingControlConfiguration::kMaxTriggers) + " triggers."
+        );
     }
 
     for(size_t i = 0; i < configuration.triggers.size(); i++) {
@@ -38,7 +37,8 @@ void LoggingControlConfigurationValidator::Validate(const LoggingControlConfigur
         // not known here.
         if(binding.HasSelector() && !IsSelectorValue(binding.selector_value)) {
             InvalidLoggingControlConfiguration(
-                "Trigger " + std::to_string(i) + " selector value must be text, an integer or a bool.");
+                "Trigger " + std::to_string(i) + " selector value must be text, an integer or a bool."
+            );
         }
     }
 }

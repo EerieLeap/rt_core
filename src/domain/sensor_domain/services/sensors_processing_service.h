@@ -5,40 +5,40 @@
 
 #include <zephyr/kernel.h>
 
+#include "domain/adc_domain/configuration/adc_configuration_manager.h"
+#include "domain/canbus_domain/services/canbus_service.h"
+#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
+#include "domain/sensor_domain/isr_sensor_readers/isr_sensor_reader_factory.h"
+#include "domain/sensor_domain/processors/i_reading_processor.h"
+#include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "domain/sensor_domain/runtime/sensor_runtime.h"
+#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
-#include "domain/adc_domain/configuration/adc_configuration_manager.h"
-#include "domain/canbus_domain/services/canbus_service.h"
-#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
-#include "domain/sensor_domain/runtime/sensor_runtime.h"
-#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
-#include "domain/sensor_domain/isr_sensor_readers/isr_sensor_reader_factory.h"
-#include "domain/sensor_domain/processors/i_reading_processor.h"
-#include "domain/sensor_domain/processors/reading_pipeline.hpp"
 
 namespace eerie_leap::domain::sensor_domain::services {
 
+using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
+using eerie_leap::domain::canbus_domain::services::CanbusService;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
+using eerie_leap::domain::sensor_domain::processors::IndicatorSwitchState;
+using eerie_leap::domain::sensor_domain::processors::IReadingProcessor;
+using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
+using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
+using eerie_leap::domain::sensor_domain::runtime::SensorPipelineBuilder;
+using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::subsys::threading::ServiceBase;
 using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::adc_domain::configuration::AdcConfigurationManager;
-using eerie_leap::domain::canbus_domain::services::CanbusService;
-using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
-using eerie_leap::domain::sensor_domain::runtime::SensorGeneration;
-using eerie_leap::domain::sensor_domain::runtime::SensorPipelineBuilder;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
-using eerie_leap::domain::sensor_domain::sensor_readers::SensorReaderFactory;
-using eerie_leap::domain::sensor_domain::isr_sensor_readers::IsrSensorReaderFactory;
-using eerie_leap::domain::sensor_domain::processors::IReadingProcessor;
-using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
-using eerie_leap::domain::sensor_domain::processors::IndicatorSwitchState;
 
 class ProcessingIsrService;
 class ProcessingSchedulerService;
@@ -94,15 +94,20 @@ public:
         // Snapshotted into every generation; PHYSICAL_ANALOG sensors get no reader without it.
         std::shared_ptr<AdcConfigurationManager> adc_configuration_manager = nullptr,
         std::shared_ptr<CanbusService> canbus_service = nullptr,
-        std::shared_ptr<IFsService> sd_fs_service = nullptr);
+        std::shared_ptr<IFsService> sd_fs_service = nullptr
+    );
 
-    [[nodiscard]] bool IsPausable() const noexcept override { return true; }
+    [[nodiscard]] bool IsPausable() const noexcept override {
+        return true;
+    }
 
     // Only while the service is stopped; returns false otherwise.
     bool RegisterReadingProcessor(std::shared_ptr<IReadingProcessor> processor);
 
     /** @return The generation currently running, or null while stopped. */
-    [[nodiscard]] std::shared_ptr<const SensorGeneration> GetGeneration() const { return generation_; }
+    [[nodiscard]] std::shared_ptr<const SensorGeneration> GetGeneration() const {
+        return generation_;
+    }
 };
 
 } // namespace eerie_leap::domain::sensor_domain::services

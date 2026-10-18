@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <span>
+#include <vector>
 
 #include "canbus_com_command_code.h"
 

@@ -13,7 +13,7 @@ using eerie_leap::subsys::canbus::CanId;
 
 namespace {
 
-constexpr std::array<uint8_t, 1> PAYLOAD = {0x01};
+constexpr std::array<uint8_t, 1> PAYLOAD = { 0x01 };
 constexpr CanId FILL_ID = CanId::Standard(0x7F2);
 
 // Parks the loopback TX thread in a TX-complete callback, which runs outside the
@@ -27,7 +27,7 @@ void BlockingTxCallback(const device*, int, void* user_data) {
 bool BlockTxThread() {
     k_sem_reset(&tx_release);
 
-    can_frame frame = {.id = 0x7F0, .dlc = 0, .flags = 0};
+    can_frame frame = { .id = 0x7F0, .dlc = 0, .flags = 0 };
     if(can_send(LoopbackDevice(), &frame, K_NO_WAIT, BlockingTxCallback, &tx_release) != 0)
         return false;
 
@@ -90,8 +90,10 @@ ZTEST(canbus_send, test_blocked_send_does_not_hold_the_bus_lock) {
     zassert_equal(FillTxQueue(*canbus), -EAGAIN);
 
     atomic_set(&sender_result, SENDER_PENDING);
-    k_thread_create(&sender_thread, sender_stack, K_THREAD_STACK_SIZEOF(sender_stack),
-        SendWithLongTimeout, canbus.get(), nullptr, nullptr, K_PRIO_PREEMPT(5), 0, K_NO_WAIT);
+    k_thread_create(
+        &sender_thread, sender_stack, K_THREAD_STACK_SIZEOF(sender_stack), SendWithLongTimeout, canbus.get(), nullptr,
+        nullptr, K_PRIO_PREEMPT(5), 0, K_NO_WAIT
+    );
 
     // Let the sender enter can_send() and wait for a TX slot.
     k_sleep(K_MSEC(20));
@@ -122,7 +124,9 @@ ZTEST(canbus_send, test_explicit_timeout_send_succeeds) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x7F4), [&](const CanFrame& f) { collector.Collect(f); }) > 0);
+    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x7F4), [&](const CanFrame& f) {
+        collector.Collect(f);
+    }) > 0);
 
     zassert_ok(canbus->SendFrame(CanId::Standard(0x7F4), PAYLOAD, K_NO_WAIT));
     zassert_true(collector.Wait());

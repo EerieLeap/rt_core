@@ -21,7 +21,7 @@ CanFilter TargetFilter(uint8_t target) {
     return CanFilter::Masked(CanId::Extended(0x1FF00000 | (static_cast<uint32_t>(target) << 8)), TARGET_MASK);
 }
 
-constexpr std::array<uint8_t, 1> PAYLOAD = {0x01};
+constexpr std::array<uint8_t, 1> PAYLOAD = { 0x01 };
 
 } // namespace
 
@@ -30,10 +30,12 @@ ZTEST(canbus_filters, test_standard_and_extended_ids_with_same_number_are_distin
     FrameCollector standard;
     FrameCollector extended;
 
-    zassert_true(canbus->RegisterFrameReceivedHandler(
-        CanId::Standard(0x123), [&](const CanFrame& f) { standard.Collect(f); }) > 0);
-    zassert_true(canbus->RegisterFrameReceivedHandler(
-        CanId::Extended(0x123), [&](const CanFrame& f) { extended.Collect(f); }) > 0);
+    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Standard(0x123), [&](const CanFrame& f) {
+        standard.Collect(f);
+    }) > 0);
+    zassert_true(canbus->RegisterFrameReceivedHandler(CanId::Extended(0x123), [&](const CanFrame& f) {
+        extended.Collect(f);
+    }) > 0);
 
     zassert_ok(canbus->SendFrame(CanId::Standard(0x123), PAYLOAD));
     zassert_true(standard.Wait(), "Standard frame was not delivered");
@@ -50,7 +52,9 @@ ZTEST(canbus_filters, test_mask_filter_accepts_matching_ids_only) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    int id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) { collector.Collect(f); });
+    int id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
+        collector.Collect(f);
+    });
     zassert_true(id > 0);
 
     zassert_ok(canbus->SendFrame(CanId::Extended(0x1FF00705), PAYLOAD));
@@ -77,13 +81,14 @@ ZTEST(canbus_filters, test_overlapping_filters_are_rejected) {
 
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(CanId::Extended(0x1FF00701), [](const CanFrame&) {}),
-        Canbus::ERR_FILTER_OVERLAP,
-        "An exact id inside a registered mask must be rejected");
+        Canbus::ERR_FILTER_OVERLAP, "An exact id inside a registered mask must be rejected"
+    );
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(
-            CanFilter::Masked(CanId::Extended(0x1FF00000), 0x1FF00000), [](const CanFrame&) {}),
-        Canbus::ERR_FILTER_OVERLAP,
-        "A wider mask covering a registered mask must be rejected");
+            CanFilter::Masked(CanId::Extended(0x1FF00000), 0x1FF00000), [](const CanFrame&) {}
+        ),
+        Canbus::ERR_FILTER_OVERLAP, "A wider mask covering a registered mask must be rejected"
+    );
 
     int standard_id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x701), [](const CanFrame&) {});
     zassert_true(standard_id > 0, "Standard ids never overlap extended filters");
@@ -103,8 +108,8 @@ ZTEST(canbus_filters, test_mask_covering_a_registered_id_is_rejected) {
     zassert_true(exact_id > 0);
 
     zassert_equal(
-        canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {}),
-        Canbus::ERR_FILTER_OVERLAP);
+        canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {}), Canbus::ERR_FILTER_OVERLAP
+    );
 
     zassert_true(canbus->RemoveFrameReceivedHandler(exact_id));
     int mask_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
@@ -121,8 +126,12 @@ ZTEST(canbus_filters, test_identical_mask_filters_share_a_registration) {
     // Bits outside the mask are irrelevant, so this is the same filter.
     const CanFilter same_filter = CanFilter::Masked(CanId::Extended(0x1FF007AB), TARGET_MASK);
 
-    int first_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) { first.Collect(f); });
-    int second_id = canbus->RegisterFrameReceivedHandler(same_filter, [&](const CanFrame& f) { second.Collect(f); });
+    int first_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
+        first.Collect(f);
+    });
+    int second_id = canbus->RegisterFrameReceivedHandler(same_filter, [&](const CanFrame& f) {
+        second.Collect(f);
+    });
     zassert_true(first_id > 0);
     zassert_true(second_id > 0);
 
@@ -139,7 +148,9 @@ ZTEST(canbus_filters, test_identical_mask_filters_share_a_registration) {
     zassert_true(canbus->RemoveFrameReceivedHandler(second_id));
 
     FrameCollector third;
-    int third_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) { third.Collect(f); });
+    int third_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
+        third.Collect(f);
+    });
     zassert_true(third_id > 0, "The filter must be registrable again after the last handler is gone");
 
     zassert_ok(canbus->SendFrame(CanId::Extended(0x1FF00703), PAYLOAD));
@@ -153,7 +164,8 @@ ZTEST(canbus_filters, test_mask_filter_limit_is_enforced) {
 
     std::array<int, Canbus::MAX_MASK_FILTERS> ids{};
     for(size_t i = 0; i < ids.size(); i++) {
-        ids[i] = canbus->RegisterFrameReceivedHandler(TargetFilter(static_cast<uint8_t>(i + 1)), [](const CanFrame&) {});
+        ids[i] = canbus->RegisterFrameReceivedHandler(TargetFilter(static_cast<uint8_t>(i + 1)), [](const CanFrame&) {
+        });
         zassert_true(ids[i] > 0, "Mask filter %zu should have been accepted", i);
     }
 
@@ -174,14 +186,16 @@ ZTEST(canbus_filters, test_invalid_ids_and_filters_are_rejected) {
 
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(CanId::Standard(0x800), [](const CanFrame&) {}),
-        Canbus::ERR_INVALID_ARGUMENT);
+        Canbus::ERR_INVALID_ARGUMENT
+    );
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(CanId::Extended(0x20000000), [](const CanFrame&) {}),
-        Canbus::ERR_INVALID_ARGUMENT);
+        Canbus::ERR_INVALID_ARGUMENT
+    );
     zassert_equal(
         canbus->RegisterFrameReceivedHandler(CanFilter::Masked(CanId::Standard(0x100), 0xFFF), [](const CanFrame&) {}),
-        Canbus::ERR_INVALID_ARGUMENT,
-        "A mask wider than the id format must be rejected");
+        Canbus::ERR_INVALID_ARGUMENT, "A mask wider than the id format must be rejected"
+    );
 
     zassert_equal(canbus->SendFrame(CanId::Standard(0x800), PAYLOAD), -EINVAL);
     zassert_equal(canbus->SendFrame(CanId::Extended(0x20000000), PAYLOAD), -EINVAL);

@@ -50,16 +50,15 @@ std::shared_ptr<WorkQueueThread> WorkQueueLoadBalancer::GetLeastLoadedQueue() {
     for(size_t i = 0; i < work_queue_threads_.size(); i++) {
         // Decay old load over time
         uint64_t time_delta = now - thread_metrics_[i].last_update_ms;
-        if(time_delta > 1000) {  // Decay after 1 second
-            atomic_set(&thread_metrics_[i].total_load_ms,
-                atomic_get(&thread_metrics_[i].total_load_ms) / 2);
+        if(time_delta > 1000) { // Decay after 1 second
+            atomic_set(&thread_metrics_[i].total_load_ms, atomic_get(&thread_metrics_[i].total_load_ms) / 2);
             thread_metrics_[i].last_update_ms = now;
         }
 
         // Score = pending items * avg_time_per_item
         int pending = atomic_get(&thread_metrics_[i].pending_items);
         int total_load = atomic_get(&thread_metrics_[i].total_load_ms);
-        int score = pending * 10 + total_load;  // Weight pending items more
+        int score = pending * 10 + total_load; // Weight pending items more
 
         if(score < min_score) {
             min_score = score;

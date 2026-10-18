@@ -28,16 +28,16 @@ ZTEST(interpolation_method, test_GetInterpolationMethod_from_name) {
 }
 
 ZTEST(interpolation_method, test_name_round_trip) {
-    for (auto method : { InterpolationMethod::NONE, InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE })
+    for(auto method : { InterpolationMethod::NONE, InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE })
         zassert_equal(GetInterpolationMethod(GetInterpolationMethodName(method)), method);
 }
 
 ZTEST(interpolation_method, test_GetInterpolationMethod_rejects_unknown_name) {
-    for (const char* name : { "QUADRATIC", "", "LINEAR " }) {
+    for(const char* name : { "QUADRATIC", "", "LINEAR " }) {
         bool threw = false;
         try {
             GetInterpolationMethod(name);
-        } catch (const std::runtime_error&) {
+        } catch(const std::runtime_error&) {
             threw = true;
         }
 
@@ -49,7 +49,7 @@ ZTEST(interpolation_method, test_GetInterpolationMethod_is_case_sensitive) {
     bool threw = false;
     try {
         GetInterpolationMethod("linear");
-    } catch (const std::runtime_error&) {
+    } catch(const std::runtime_error&) {
         threw = true;
     }
 

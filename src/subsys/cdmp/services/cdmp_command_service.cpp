@@ -16,11 +16,12 @@ using eerie_leap::subsys::threading::ScopedMutex;
 CdmpCommandService::CdmpCommandService(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,
-    std::shared_ptr<WorkQueueThread> work_queue_thread)
-        : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device))
-        , canbus_handler_id_(-1)
-        , canbus_response_handler_id_(-1)
-        , work_queue_thread_(std::move(work_queue_thread)) {
+    std::shared_ptr<WorkQueueThread> work_queue_thread
+) :
+    CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
+    canbus_handler_id_(-1),
+    canbus_response_handler_id_(-1),
+    work_queue_thread_(std::move(work_queue_thread)) {
 
     k_mutex_init(&command_handlers_mutex_);
 
@@ -54,32 +55,38 @@ bool CdmpCommandService::DoStop() {
 }
 
 void CdmpCommandService::RegisterCanHandlers() {
-    if (!canbus_ || !canbus_->IsValid()) {
+    if(!canbus_ || !canbus_->IsValid()) {
         LOG_ERR("Cannot register CAN handlers: CAN bus is not valid");
         return;
     }
 
     canbus_handler_id_ = RegisterReceiveHandler(
-        can_id_manager_->GetCommandRequestCanId(),
-        [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() { ProcessRequestFrame(frame.data); }); });
+        can_id_manager_->GetCommandRequestCanId(), [this](const CanFrame& frame) {
+            work_queue_thread_->Run([this, frame]() {
+                ProcessRequestFrame(frame.data);
+            });
+        }
+    );
 
     canbus_response_handler_id_ = RegisterReceiveHandler(
-        can_id_manager_->GetCommandResponseCanId(),
-        [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() { ProcessResponseFrame(frame.data); }); });
+        can_id_manager_->GetCommandResponseCanId(), [this](const CanFrame& frame) {
+            work_queue_thread_->Run([this, frame]() {
+                ProcessResponseFrame(frame.data);
+            });
+        }
+    );
 }
 
 void CdmpCommandService::UnregisterCanHandlers() {
-    if (!canbus_ || !canbus_->IsValid())
+    if(!canbus_ || !canbus_->IsValid())
         return;
 
-    if (canbus_handler_id_ >= 0) {
+    if(canbus_handler_id_ >= 0) {
         (*canbus_)->RemoveFrameReceivedHandler(canbus_handler_id_);
         canbus_handler_id_ = -1;
     }
 
-    if (canbus_response_handler_id_ >= 0) {
+    if(canbus_response_handler_id_ >= 0) {
         (*canbus_)->RemoveFrameReceivedHandler(canbus_response_handler_id_);
         canbus_response_handler_id_ = -1;
     }
@@ -121,33 +128,28 @@ void CdmpCommandService::ProcessRequestFrame(std::span<const uint8_t> frame_data
         auto result = NotifyCommandHandler(command);
 
         if(result.has_value()) {
-            LOG_DBG("Processed command %d for transaction %d",
-                command.command_code, command.transaction_id);
+            LOG_DBG("Processed command %d for transaction %d", command.command_code, command.transaction_id);
 
-            CdmpCommandResponseMessage response {
-                .source_device_id = device_->GetDeviceId(),
+            CdmpCommandResponseMessage response{ .source_device_id = device_->GetDeviceId(),
                 .command_code = command.command_code,
                 .transaction_id = command.transaction_id,
                 .result_code = result.value().result_code,
-                .data = result.value().data
-            };
+                .data = result.value().data };
 
             SendCommandResponse(command.target_device_id, response);
         } else if(command.target_device_id == device_->GetDeviceId()) {
             LOG_WRN("No handler registered for command %d", command.command_code);
 
             // Send error response
-            CdmpCommandResponseMessage response {
-                .source_device_id = device_->GetDeviceId(),
+            CdmpCommandResponseMessage response{ .source_device_id = device_->GetDeviceId(),
                 .command_code = command.command_code,
                 .transaction_id = command.transaction_id,
                 .result_code = CdmpResultCode::UNSUPPORTED_COMMAND,
-                .data = {}
-            };
+                .data = {} };
 
             SendCommandResponse(command.target_device_id, response);
         }
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing command frame: %s", e.what());
     }
 }
@@ -156,12 +158,8 @@ void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMess
     if(command.command_code == std::to_underlying(CdmpServiceCommandCode::STATUS_REQUEST)) {
         // Status request is allowed even when device is not online
         CdmpCommandResponseStatusMessage message(
-            device_->GetDeviceId(),
-            command.transaction_id,
-            CdmpResultCode::SUCCESS,
-            device_->GetStatus(),
-            device_->GetProtocolVersion(),
-            device_->GetHealthStatus()
+            device_->GetDeviceId(), command.transaction_id, CdmpResultCode::SUCCESS, device_->GetStatus(),
+            device_->GetProtocolVersion(), device_->GetHealthStatus()
         );
 
         NotifyCommandHandler(command);
@@ -178,13 +176,11 @@ void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMess
         if(!result.has_value() || command.target_device_id != device_->GetDeviceId())
             return;
 
-        CdmpCommandResponseMessage response {
-            .source_device_id = device_->GetDeviceId(),
+        CdmpCommandResponseMessage response{ .source_device_id = device_->GetDeviceId(),
             .command_code = command.command_code,
             .transaction_id = command.transaction_id,
             .result_code = result.value().result_code,
-            .data = std::move(result.value().data)
-        };
+            .data = std::move(result.value().data) };
 
         SendCommandResponse(command.target_device_id, response);
     }
@@ -193,11 +189,13 @@ void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMess
 void CdmpCommandService::ProcessResponseFrame(std::span<const uint8_t> frame_data) {
     try {
         CdmpCommandResponseMessage response = CdmpCommandResponseMessage::FromCanFrame(frame_data);
-        LOG_DBG("Received command response for transaction %d, code %d",
-            response.transaction_id, std::to_underlying(response.result_code));
+        LOG_DBG(
+            "Received command response for transaction %d, code %d", response.transaction_id,
+            std::to_underlying(response.result_code)
+        );
 
         transaction_service_->CompleteTransaction(response);
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing command response frame: %s", e.what());
     }
 }
@@ -216,7 +214,7 @@ void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const Cdm
         (*canbus_)->SendFrame(can_id, frame);
 
         LOG_DBG("Sent command response for transaction %d", response.transaction_id);
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error sending command response: %s", e.what());
     }
 }
@@ -259,7 +257,10 @@ void CdmpCommandService::RegisterUserCommandHandler(uint8_t command_code, Comman
     RegisterCommandHandler(command_code, handler);
 }
 
-void CdmpCommandService::RegisterServiceCommandHandler(CdmpServiceCommandCode command_code, ServiceCommandHandler handler) {
+void CdmpCommandService::RegisterServiceCommandHandler(
+    CdmpServiceCommandCode command_code,
+    ServiceCommandHandler handler
+) {
     if(!IsValidServiceCommandCode(std::to_underlying(command_code))
         || command_code == CdmpServiceCommandCode::STATUS_REQUEST) {
 
@@ -294,7 +295,8 @@ uint8_t CdmpCommandService::SendCommand(
     uint8_t target_device_id,
     uint8_t command_code,
     std::span<const uint8_t> data,
-    CdmpTransactionCallback callback) {
+    CdmpTransactionCallback callback
+) {
 
     if(!canbus_ || !canbus_->IsValid())
         return 0;
@@ -304,37 +306,33 @@ uint8_t CdmpCommandService::SendCommand(
             throw std::runtime_error("Command code 0 is not allowed");
 
         uint8_t transaction_id = transaction_service_->StartTransaction(
-            target_device_id,
-            command_code,
-            CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS,
-            callback);
+            target_device_id, command_code, CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS, callback
+        );
 
-        CdmpCommandRequestMessage command{
-            .target_device_id = target_device_id,
+        CdmpCommandRequestMessage command{ .target_device_id = target_device_id,
             .command_code = command_code,
             .transaction_id = transaction_id,
-            .data = std::vector<uint8_t>(data.begin(), data.end())
-        };
+            .data = std::vector<uint8_t>(data.begin(), data.end()) };
 
         auto frame_data = command.ToCanFrame();
         CanId frame_id = can_id_manager_->GetCommandRequestCanId();
         (*canbus_)->SendFrame(frame_id, frame_data);
 
-        LOG_DBG("Sent command %d to device %d, transaction %d",
-            command_code, target_device_id, transaction_id);
+        LOG_DBG("Sent command %d to device %d, transaction %d", command_code, target_device_id, transaction_id);
 
         return transaction_id;
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error sending command: %s", e.what());
         return 0;
     }
 }
 
 uint8_t CdmpCommandService::SendCommand(
-        uint8_t target_device_id,
-        CdmpServiceCommandCode command_code,
-        std::span<const uint8_t> data,
-        CdmpTransactionCallback callback) {
+    uint8_t target_device_id,
+    CdmpServiceCommandCode command_code,
+    std::span<const uint8_t> data,
+    CdmpTransactionCallback callback
+) {
 
     return SendCommand(target_device_id, std::to_underlying(command_code), data, callback);
 }
@@ -348,8 +346,7 @@ bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
 }
 
 bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) const {
-    return command_code >= CdmpConstants::USER_COMMAND_CODE_MIN
-        && command_code <= CdmpConstants::USER_COMMAND_CODE_MAX;
+    return command_code >= CdmpConstants::USER_COMMAND_CODE_MIN && command_code <= CdmpConstants::USER_COMMAND_CODE_MAX;
 }
 
 } // namespace eerie_leap::subsys::cdmp::services

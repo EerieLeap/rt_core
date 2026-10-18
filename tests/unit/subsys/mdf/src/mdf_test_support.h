@@ -42,7 +42,7 @@ T Read(std::span<const uint8_t> data, size_t offset) {
 }
 
 inline std::span<const uint8_t> AsBytes(const std::string& data) {
-    return {reinterpret_cast<const uint8_t*>(data.data()), data.size()};
+    return { reinterpret_cast<const uint8_t*>(data.data()), data.size() };
 }
 
 // A span into a temporary string would dangle before the first assertion runs.
@@ -50,14 +50,14 @@ inline std::span<const uint8_t> AsBytes(std::string&&) = delete;
 
 inline std::string AsText(std::span<const uint8_t> data, size_t offset, size_t size) {
     zassert_true(offset + size <= data.size(), "read past the end of the buffer");
-    return {reinterpret_cast<const char*>(data.data() + offset), size};
+    return { reinterpret_cast<const char*>(data.data() + offset), size };
 }
 
 inline std::vector<uint8_t> Serialize(const ISerializableBlock& block) {
     const auto size = block.GetSerializedSize();
     const auto buffer = block.Serialize();
 
-    return {buffer.get(), buffer.get() + size};
+    return { buffer.get(), buffer.get() + size };
 }
 
 // Link fields hold absolute addresses, so a block that has links must be resolved before serializing.
@@ -97,8 +97,9 @@ private:
     std::vector<std::shared_ptr<ISerializableBlock>> children_;
 
 public:
-    explicit TestBlock(const std::string& id, uint64_t payload_size = 0)
-        : BlockBase(id), payload_size_(payload_size) {}
+    explicit TestBlock(const std::string& id, uint64_t payload_size = 0) :
+        BlockBase(id),
+        payload_size_(payload_size) {}
 
     void AddChild(std::shared_ptr<ISerializableBlock> child) {
         children_.push_back(std::move(child));
@@ -158,9 +159,12 @@ protected:
     }
 
 public:
-    explicit LimitedStreamBuf(size_t limit) : limit_(limit) {}
+    explicit LimitedStreamBuf(size_t limit) :
+        limit_(limit) {}
 
-    size_t Size() const { return data_.size(); }
+    size_t Size() const {
+        return data_.size();
+    }
 };
 
 // cg_cycle_count follows the 6 links and cg_record_id of a ##CG block.
@@ -195,10 +199,10 @@ protected:
     int sync() override {
         const auto content = str();
 
-        snapshots_.push_back(Snapshot{
-            content.substr(0, 8),
-            ReadField(content, data_block_address_ + BLOCK_LENGTH_OFFSET),
-            ReadField(content, channel_group_address_ + CG_CYCLE_COUNT_OFFSET)});
+        snapshots_.push_back(
+            Snapshot{ content.substr(0, 8), ReadField(content, data_block_address_ + BLOCK_LENGTH_OFFSET),
+                ReadField(content, channel_group_address_ + CG_CYCLE_COUNT_OFFSET) }
+        );
 
         return fail_sync_ ? -1 : 0;
     }
@@ -206,11 +210,19 @@ protected:
 public:
     SyncProbeStreamBuf() = default;
 
-    void SetDataBlockAddress(size_t address) { data_block_address_ = address; }
-    void SetChannelGroupAddress(size_t address) { channel_group_address_ = address; }
-    void FailSync() { fail_sync_ = true; }
+    void SetDataBlockAddress(size_t address) {
+        data_block_address_ = address;
+    }
+    void SetChannelGroupAddress(size_t address) {
+        channel_group_address_ = address;
+    }
+    void FailSync() {
+        fail_sync_ = true;
+    }
 
-    const std::vector<Snapshot>& Snapshots() const { return snapshots_; }
+    const std::vector<Snapshot>& Snapshots() const {
+        return snapshots_;
+    }
 };
 
 // Counts the calls that hand bytes to the stream: a record has to arrive in one sputn().
@@ -230,7 +242,9 @@ protected:
     }
 
 public:
-    size_t WriteCount() const { return write_count_; }
+    size_t WriteCount() const {
+        return write_count_;
+    }
 };
 
 // Accepts every write but does not implement seeking.
@@ -245,7 +259,9 @@ protected:
     }
 
 public:
-    size_t Size() const { return size_; }
+    size_t Size() const {
+        return size_;
+    }
 };
 
 } // namespace mdf_test

@@ -6,7 +6,8 @@ namespace eerie_leap::domain::canbus_domain::utilities {
 
 std::vector<uint8_t> CanMessageCodec::Encode(
     const CanMessageConfiguration& message_configuration,
-    const SignalValueReader& signal_value_reader) {
+    const SignalValueReader& signal_value_reader
+) {
 
     std::vector<uint8_t> data(message_configuration.message_size, 0);
 

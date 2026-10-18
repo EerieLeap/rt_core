@@ -9,8 +9,9 @@ using namespace eerie_leap::configuration::services;
 using eerie_leap::subsys::threading::ScopedMutex;
 
 LoggingConfigurationManager::LoggingConfigurationManager(
-    std::unique_ptr<CborConfigurationService<CborLoggingConfig>> cbor_configuration_service)
-        : CborConfigurationManagerBase("Logging", std::move(cbor_configuration_service)) {
+    std::unique_ptr<CborConfigurationService<CborLoggingConfig>> cbor_configuration_service
+) :
+    CborConfigurationManagerBase("Logging", std::move(cbor_configuration_service)) {
 
     // Before the default is created: that store notifies too.
     k_mutex_init(&handler_mutex_);

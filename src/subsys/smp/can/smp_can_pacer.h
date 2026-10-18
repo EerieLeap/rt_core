@@ -32,7 +32,9 @@ public:
     void Update(int64_t now_us);
 
     /** @brief True when one frame may be sent now. */
-    [[nodiscard]] bool CanSend() const { return rate_ > 0 && credit_ >= frame_cost_; }
+    [[nodiscard]] bool CanSend() const {
+        return rate_ > 0 && credit_ >= frame_cost_;
+    }
     /** @brief Charges one frame; call only after CanSend(). */
     void OnSent();
 

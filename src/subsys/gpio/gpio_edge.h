@@ -10,4 +10,4 @@ enum class GpioEdge : uint8_t {
     BOTH
 };
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

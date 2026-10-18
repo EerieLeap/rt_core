@@ -4,8 +4,8 @@
 
 #include <zephyr/sys/atomic.h>
 
-#include "thread_base.h"
 #include "i_thread.h"
+#include "thread_base.h"
 
 namespace eerie_leap::subsys::threading {
 
@@ -24,7 +24,8 @@ public:
         int stack_size,
         int priority,
         bool is_cooperative = false,
-        std::pmr::memory_resource* resource = nullptr);
+        std::pmr::memory_resource* resource = nullptr
+    );
     ~Thread() override;
 
     Thread(const Thread&) = delete;

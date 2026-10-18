@@ -27,7 +27,7 @@ private:
     SmpCanFrameFormat format_;
     int64_t timeout_ms_;
     size_t length_ = 0;
-    size_t packet_size_ = 0;  // 0 until the SMP header is complete
+    size_t packet_size_ = 0; // 0 until the SMP header is complete
     int64_t last_frame_ms_ = 0;
     uint8_t next_sequence_ = 0;
     bool is_active_ = false;
@@ -44,11 +44,17 @@ public:
     /** @brief Discards the packet in progress. */
     void Reset();
 
-    [[nodiscard]] SmpCanFrameFormat GetFormat() const { return format_; }
+    [[nodiscard]] SmpCanFrameFormat GetFormat() const {
+        return format_;
+    }
     /** @brief True while a packet is in progress. */
-    [[nodiscard]] bool IsActive() const { return is_active_; }
+    [[nodiscard]] bool IsActive() const {
+        return is_active_;
+    }
     /** @brief Bytes received so far; the packet size after COMPLETE. */
-    [[nodiscard]] size_t GetLength() const { return length_; }
+    [[nodiscard]] size_t GetLength() const {
+        return length_;
+    }
     /** @brief True when a packet in progress has timed out at @p now_ms. */
     [[nodiscard]] bool IsExpired(int64_t now_ms) const;
 

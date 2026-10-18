@@ -27,7 +27,9 @@ int64_t MsToTicks(int64_t ms) {
 // so that every tick offers the logger a reading and the probe sees every tick.
 std::shared_ptr<ProbeLogger> AttachProbe(LogWriterRig& rig, const Sensor& value_sensor) {
     auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
-    rig.log_writer_service->SetLoggerFactory([probe] { return probe; });
+    rig.log_writer_service->SetLoggerFactory([probe] {
+        return probe;
+    });
 
     PublishValue(rig, value_sensor, 1, rig.time_service->GetCurrentTime());
 
@@ -58,19 +60,26 @@ ZTEST(log_writer_timing, test_TwentyMillisecondTicksKeepTheirPhase) {
 
     const auto& times = probe->tick_times;
     zassert_true(times.size() >= ticks, "%zu ticks in %zu intervals", times.size(), ticks);
-    zassert_true(std::abs(times[0] - (start_ticks + interval_ticks)) <= 1,
-        "the first tick is one interval after Start(), not %lld ticks", static_cast<long long>(times[0] - start_ticks));
+    zassert_true(
+        std::abs(times[0] - (start_ticks + interval_ticks)) <= 1,
+        "the first tick is one interval after Start(), not %lld ticks", static_cast<long long>(times[0] - start_ticks)
+    );
 
     // No drift: every tick on the phase the first one set, within one kernel tick.
     for(size_t i = 1; i < ticks; i++) {
         const int64_t deviation = times[i] - times[0] - static_cast<int64_t>(i) * interval_ticks;
-        zassert_true(std::abs(deviation) <= 1, "tick %zu is %lld kernel ticks off the phase", i, static_cast<long long>(deviation));
+        zassert_true(
+            std::abs(deviation) <= 1, "tick %zu is %lld kernel ticks off the phase", i,
+            static_cast<long long>(deviation)
+        );
     }
 
     const int64_t total_ticks = times[ticks - 1] - times[0];
     const int64_t expected_ticks = static_cast<int64_t>(ticks - 1) * interval_ticks;
-    zassert_true(std::abs(total_ticks - expected_ticks) <= 1, "mean period %lld/%zu kernel ticks, %lld expected per tick",
-        static_cast<long long>(total_ticks), ticks - 1, static_cast<long long>(interval_ticks));
+    zassert_true(
+        std::abs(total_ticks - expected_ticks) <= 1, "mean period %lld/%zu kernel ticks, %lld expected per tick",
+        static_cast<long long>(total_ticks), ticks - 1, static_cast<long long>(interval_ticks)
+    );
 
     const auto stats = rig.log_writer_service->GetStats();
     zassert_equal(stats.overruns, 0, "a tick that takes no time overruns nothing (got %u)", stats.overruns);
@@ -100,12 +109,18 @@ ZTEST(log_writer_timing, test_AFullDrainBringsTheNextTickForward) {
 
     const auto& times = probe->tick_times;
     zassert_equal(times.size(), 3, "ticks at 200, 250 and 450 ms (got %zu)", times.size());
-    zassert_true(std::abs(times[0] - start_ticks - MsToTicks(interval_ms)) <= 1, "the first tick is one interval after Start()");
-    zassert_true(std::abs(times[1] - times[0] - MsToTicks(interval_ms / 4)) <= 1,
+    zassert_true(
+        std::abs(times[0] - start_ticks - MsToTicks(interval_ms)) <= 1, "the first tick is one interval after Start()"
+    );
+    zassert_true(
+        std::abs(times[1] - times[0] - MsToTicks(interval_ms / 4)) <= 1,
         "the tick after a full drain comes a quarter interval later, not %lld kernel ticks",
-        static_cast<long long>(times[1] - times[0]));
-    zassert_true(std::abs(times[2] - times[1] - MsToTicks(interval_ms)) <= 1,
-        "the next one an interval later, not %lld kernel ticks", static_cast<long long>(times[2] - times[1]));
+        static_cast<long long>(times[1] - times[0])
+    );
+    zassert_true(
+        std::abs(times[2] - times[1] - MsToTicks(interval_ms)) <= 1,
+        "the next one an interval later, not %lld kernel ticks", static_cast<long long>(times[2] - times[1])
+    );
 }
 
 #endif // CONFIG_BOARD_NATIVE_SIM

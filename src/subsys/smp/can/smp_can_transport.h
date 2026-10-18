@@ -10,24 +10,24 @@
 #include <zephyr/mgmt/mcumgr/transport/smp.h>
 
 #include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/threading/work_queue_thread.h"
-#include "subsys/threading/work_queue_task.h"
-#include "subsys/smp/smp_packet.h"
 #include "subsys/smp/i_smp_response_sink.h"
+#include "subsys/smp/smp_packet.h"
+#include "subsys/threading/work_queue_task.h"
+#include "subsys/threading/work_queue_thread.h"
 
-#include "smp_can_id_layout.h"
 #include "smp_can_framer.h"
-#include "smp_can_reassembler.h"
+#include "smp_can_id_layout.h"
 #include "smp_can_pacer.h"
+#include "smp_can_reassembler.h"
 
 namespace eerie_leap::subsys::smp::can {
 
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::canbus::CanFrame;
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 /**
  * @brief MCUmgr transport over CAN, as specified in the CDMP README, section 5.
@@ -42,7 +42,7 @@ private:
     struct RxSlot {
         uint8_t source = 0; // 0 while free
         SmpPacket packet;
-        SmpCanReassembler reassembler{CONFIG_EERIE_LEAP_SMP_CAN_RX_TIMEOUT_MS};
+        SmpCanReassembler reassembler{ CONFIG_EERIE_LEAP_SMP_CAN_RX_TIMEOUT_MS };
     };
 
     static std::atomic<SmpCanTransport*> instance_;
@@ -132,7 +132,9 @@ public:
     /** @brief Stops receiving and drops packets in progress, queued requests and queued sends. */
     void Unbind();
     /** @brief The bound address, 0 while unbound. */
-    [[nodiscard]] uint8_t GetAddress() const { return address_; }
+    [[nodiscard]] uint8_t GetAddress() const {
+        return address_;
+    }
 
     /** @brief Sets where responses to forwarded requests go; nullptr drops them. */
     void SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink);
@@ -141,9 +143,13 @@ public:
     bool Forward(uint8_t target, SmpPacket packet);
 
     /** @brief Received packets dropped: gaps, timeouts, malformed frames, no free slot or buffer. */
-    [[nodiscard]] uint32_t GetRxDroppedCount() const { return rx_dropped_; }
+    [[nodiscard]] uint32_t GetRxDroppedCount() const {
+        return rx_dropped_;
+    }
     /** @brief Packets that could not be queued or were dropped before being fully sent. */
-    [[nodiscard]] uint32_t GetTxDroppedCount() const { return tx_dropped_; }
+    [[nodiscard]] uint32_t GetTxDroppedCount() const {
+        return tx_dropped_;
+    }
 };
 
 } // namespace eerie_leap::subsys::smp::can

@@ -4,8 +4,8 @@
 #include <stdexcept>
 #include <zephyr/ztest.h>
 
-#include "utilities/voltage_interpolator/interpolation_method.h"
 #include "utilities/voltage_interpolator/i_voltage_interpolator.h"
+#include "utilities/voltage_interpolator/interpolation_method.h"
 #include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 
 using namespace eerie_leap::utilities::voltage_interpolator;
@@ -21,10 +21,7 @@ std::shared_ptr<std::pmr::vector<CalibrationData>> MakeTable(std::initializer_li
 ZTEST_SUITE(linear_voltage_interpolator, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(linear_voltage_interpolator, test_GetInterpolationMethod) {
-    std::pmr::vector<CalibrationData> calibration_data_1 {
-        {0.0, 0.0},
-        {10, 100.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 10, 100.0 } };
     auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
     LinearVoltageInterpolator voltage_interpolator(calibration_data_1_ptr);
 
@@ -32,10 +29,7 @@ ZTEST(linear_voltage_interpolator, test_GetInterpolationMethod) {
 }
 
 ZTEST(linear_voltage_interpolator, test_GetCalibrationTable) {
-    std::pmr::vector<CalibrationData> calibration_data_1 {
-        {0.0, 0.0},
-        {10, 100.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 10, 100.0 } };
     auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
     LinearVoltageInterpolator voltage_interpolator(calibration_data_1_ptr);
 
@@ -43,10 +37,7 @@ ZTEST(linear_voltage_interpolator, test_GetCalibrationTable) {
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate) {
-    std::pmr::vector<CalibrationData> calibration_data_1 {
-        {0.0, 0.0},
-        {10, 100.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 10, 100.0 } };
     auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
     LinearVoltageInterpolator voltage_interpolator_1(calibration_data_1_ptr);
 
@@ -54,13 +45,8 @@ ZTEST(linear_voltage_interpolator, test_Interpolate) {
     zassert_between_inclusive(voltage_interpolator_1.Interpolate(4.26, true), 42.59F, 42.61F);
     zassert_equal(voltage_interpolator_1.Interpolate(12, true), 100.0F);
 
-    std::pmr::vector<CalibrationData> calibration_data_2 {
-        {0.0, 1.0},
-        {1.0, 29.0},
-        {2.0, 111.0},
-        {2.5, 162.0},
-        {3.3, 200.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 1.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
+        { 3.3, 200.0 } };
     auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
     LinearVoltageInterpolator voltage_interpolator_2(calibration_data_2_ptr);
 
@@ -74,9 +60,9 @@ ZTEST(linear_voltage_interpolator, test_Interpolate) {
 ZTEST(linear_voltage_interpolator, test_constructor_rejects_null_table) {
     bool threw = false;
     try {
-        LinearVoltageInterpolator interpolator{nullptr};
+        LinearVoltageInterpolator interpolator{ nullptr };
         (void)interpolator;
-    } catch (const std::invalid_argument&) {
+    } catch(const std::invalid_argument&) {
         threw = true;
     }
 
@@ -84,12 +70,12 @@ ZTEST(linear_voltage_interpolator, test_constructor_rejects_null_table) {
 }
 
 ZTEST(linear_voltage_interpolator, test_constructor_rejects_table_with_fewer_than_two_points) {
-    for (auto table : { MakeTable({}), MakeTable({{0.0F, 0.0F}}) }) {
+    for(auto table : { MakeTable({}), MakeTable({ { 0.0F, 0.0F } }) }) {
         bool threw = false;
         try {
             LinearVoltageInterpolator interpolator(table);
             (void)interpolator;
-        } catch (const std::invalid_argument&) {
+        } catch(const std::invalid_argument&) {
             threw = true;
         }
 
@@ -98,7 +84,7 @@ ZTEST(linear_voltage_interpolator, test_constructor_rejects_table_with_fewer_tha
 }
 
 ZTEST(linear_voltage_interpolator, test_GetCalibrationTable_shares_ownership) {
-    auto table = MakeTable({{0.0F, 0.0F}, {10.0F, 100.0F}});
+    auto table = MakeTable({ { 0.0F, 0.0F }, { 10.0F, 100.0F } });
     const long before = table.use_count();
 
     LinearVoltageInterpolator interpolator(table);
@@ -113,7 +99,7 @@ ZTEST(linear_voltage_interpolator, test_GetCalibrationTable_shares_ownership) {
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_within_range) {
-    auto table = MakeTable({{0.0F, 0.0F}, {10.0F, 100.0F}});
+    auto table = MakeTable({ { 0.0F, 0.0F }, { 10.0F, 100.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(2.5F), 24.99F, 25.01F);
@@ -122,7 +108,7 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_within_range) {
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_uses_correct_segment) {
-    auto table = MakeTable({{0.0F, 1.0F}, {1.0F, 29.0F}, {2.0F, 111.0F}, {2.5F, 162.0F}, {3.3F, 200.0F}});
+    auto table = MakeTable({ { 0.0F, 1.0F }, { 1.0F, 29.0F }, { 2.0F, 111.0F }, { 2.5F, 162.0F }, { 3.3F, 200.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(1.5F), 69.99F, 70.01F);
@@ -131,19 +117,21 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_uses_correct_segme
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_returns_exact_calibration_values) {
-    auto table = MakeTable({{0.0F, 1.0F}, {1.0F, 29.0F}, {2.0F, 111.0F}, {2.5F, 162.0F}, {3.3F, 200.0F}});
+    auto table = MakeTable({ { 0.0F, 1.0F }, { 1.0F, 29.0F }, { 2.0F, 111.0F }, { 2.5F, 162.0F }, { 3.3F, 200.0F } });
     LinearVoltageInterpolator interpolator(table);
 
-    for (const auto& point : *table) {
+    for(const auto& point : *table) {
         float value = interpolator.Interpolate(point.voltage, true);
 
-        zassert_between_inclusive(value, point.value - 0.01F, point.value + 0.01F,
-            "node at %f returned %f", (double)point.voltage, (double)value);
+        zassert_between_inclusive(
+            value, point.value - 0.01F, point.value + 0.01F, "node at %f returned %f", (double)point.voltage,
+            (double)value
+        );
     }
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_clamps_at_exact_bounds) {
-    auto table = MakeTable({{1.0F, 10.0F}, {4.0F, 40.0F}});
+    auto table = MakeTable({ { 1.0F, 10.0F }, { 4.0F, 40.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_equal(interpolator.Interpolate(1.0F, true), 10.0F);
@@ -153,7 +141,7 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_clamps_at_exact_bounds) {
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_with_descending_values) {
-    auto table = MakeTable({{0.0F, 100.0F}, {10.0F, 0.0F}});
+    auto table = MakeTable({ { 0.0F, 100.0F }, { 10.0F, 0.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(2.5F), 74.99F, 75.01F);
@@ -162,7 +150,7 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_with_descending_values) {
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_with_negative_voltages_and_values) {
-    auto table = MakeTable({{-5.0F, -50.0F}, {5.0F, 50.0F}});
+    auto table = MakeTable({ { -5.0F, -50.0F }, { 5.0F, 50.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(0.0F), -0.01F, 0.01F);
@@ -171,11 +159,11 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_with_negative_voltages_and_v
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_is_monotonic_across_range) {
-    auto table = MakeTable({{0.0F, 1.0F}, {1.0F, 29.0F}, {2.0F, 111.0F}, {2.5F, 162.0F}, {3.3F, 200.0F}});
+    auto table = MakeTable({ { 0.0F, 1.0F }, { 1.0F, 29.0F }, { 2.0F, 111.0F }, { 2.5F, 162.0F }, { 3.3F, 200.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     float previous = interpolator.Interpolate(0.0F, true);
-    for (int step = 1; step <= 330; ++step) {
+    for(int step = 1; step <= 330; ++step) {
         float value = interpolator.Interpolate(static_cast<float>(step) / 100.0F, true);
 
         zassert_true(value >= previous, "value dropped at step %d", step);
@@ -186,7 +174,7 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_is_monotonic_across_range) {
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_extrapolates_beyond_range) {
-    auto table = MakeTable({{0.0F, 0.0F}, {10.0F, 100.0F}});
+    auto table = MakeTable({ { 0.0F, 0.0F }, { 10.0F, 100.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(-2.0F), -20.01F, -19.99F);
@@ -194,7 +182,7 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_extrapolates_beyon
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_extrapolates_along_nearest_segment) {
-    auto table = MakeTable({{0.0F, 1.0F}, {1.0F, 29.0F}, {2.0F, 111.0F}, {2.5F, 162.0F}, {3.3F, 200.0F}});
+    auto table = MakeTable({ { 0.0F, 1.0F }, { 1.0F, 29.0F }, { 2.0F, 111.0F }, { 2.5F, 162.0F }, { 3.3F, 200.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(-0.5F), -13.01F, -12.99F);
@@ -202,7 +190,7 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_extrapolates_along
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_is_continuous_at_table_bounds) {
-    auto table = MakeTable({{0.0F, 1.0F}, {1.0F, 29.0F}, {2.0F, 111.0F}, {2.5F, 162.0F}, {3.3F, 200.0F}});
+    auto table = MakeTable({ { 0.0F, 1.0F }, { 1.0F, 29.0F }, { 2.0F, 111.0F }, { 2.5F, 162.0F }, { 3.3F, 200.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_between_inclusive(interpolator.Interpolate(0.0F), 0.99F, 1.01F);
@@ -212,10 +200,10 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_is_continuous_at_t
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_over_full_sweep_stays_finite) {
-    auto table = MakeTable({{0.0F, 1.0F}, {1.0F, 29.0F}, {2.0F, 111.0F}, {2.5F, 162.0F}, {3.3F, 200.0F}});
+    auto table = MakeTable({ { 0.0F, 1.0F }, { 1.0F, 29.0F }, { 2.0F, 111.0F }, { 2.5F, 162.0F }, { 3.3F, 200.0F } });
     LinearVoltageInterpolator interpolator(table);
 
-    for (int step = -500; step <= 800; ++step) {
+    for(int step = -500; step <= 800; ++step) {
         float value = interpolator.Interpolate(static_cast<float>(step) / 100.0F);
 
         zassert_true(std::isfinite(value), "non-finite result at step %d", step);
@@ -223,14 +211,14 @@ ZTEST(linear_voltage_interpolator, test_Interpolate_unclamped_over_full_sweep_st
 }
 
 ZTEST(linear_voltage_interpolator, test_Interpolate_handles_duplicate_voltage_points) {
-    auto table = MakeTable({{1.0F, 10.0F}, {1.0F, 20.0F}, {2.0F, 30.0F}});
+    auto table = MakeTable({ { 1.0F, 10.0F }, { 1.0F, 20.0F }, { 2.0F, 30.0F } });
     LinearVoltageInterpolator interpolator(table);
 
     zassert_equal(interpolator.Interpolate(1.0F), 10.0F);
 }
 
 ZTEST(linear_voltage_interpolator, test_usable_through_interface) {
-    auto table = MakeTable({{0.0F, 0.0F}, {10.0F, 100.0F}});
+    auto table = MakeTable({ { 0.0F, 0.0F }, { 10.0F, 100.0F } });
     std::unique_ptr<IVoltageInterpolator> interpolator = std::make_unique<LinearVoltageInterpolator>(table);
 
     zassert_equal(interpolator->GetInterpolationMethod(), InterpolationMethod::LINEAR);

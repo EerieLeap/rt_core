@@ -5,19 +5,19 @@
 #include <optional>
 #include <span>
 
-#include "utilities/reflection/caller_name.h"
 #include "subsys/event_bus/event_channel.h"
+#include "utilities/reflection/caller_name.h"
 
 #include "domain/canbus_com_domain/states/canbus_com_state_type.h"
 #include "domain/canbus_com_domain/states/i_canbus_com_state.h"
 
 namespace eerie_leap::domain::canbus_com_domain::state_bridge {
 
-using eerie_leap::utilities::reflection::CallerName;
-using eerie_leap::utilities::reflection::GetCallerName;
-using eerie_leap::subsys::event_bus::EventChannel;
 using eerie_leap::domain::canbus_com_domain::states::CanbusComState;
 using eerie_leap::domain::canbus_com_domain::states::CanbusComStateType;
+using eerie_leap::subsys::event_bus::EventChannel;
+using eerie_leap::utilities::reflection::CallerName;
+using eerie_leap::utilities::reflection::GetCallerName;
 
 namespace detail {
 
@@ -62,15 +62,15 @@ concept NetworkStateDescriptor =
     && requires(
         const typename T::Channel::EventMessage& event,
         const typename T::State& state,
-        std::span<const typename T::State> states) {
-
-        { T::Channel::GetInstance() } -> std::same_as<typename T::Channel&>;
-        { T::EVENT_TYPE } -> std::convertible_to<typename T::Channel::EventTypeEnum>;
-        { T::STATE_TYPE } -> std::convertible_to<CanbusComStateType>;
-        { T::Initial() } -> std::same_as<typename T::State>;
-        { T::FromEvent(event, state) } -> std::same_as<std::optional<typename T::State>>;
-        { T::Combine(states) } -> std::same_as<typename T::State>;
-        { T::ToEvent(state) } -> std::same_as<typename T::Channel::EventMessage>;
-    };
+        std::span<const typename T::State> states
+    ) {
+           { T::Channel::GetInstance() } -> std::same_as<typename T::Channel&>;
+           { T::EVENT_TYPE } -> std::convertible_to<typename T::Channel::EventTypeEnum>;
+           { T::STATE_TYPE } -> std::convertible_to<CanbusComStateType>;
+           { T::Initial() } -> std::same_as<typename T::State>;
+           { T::FromEvent(event, state) } -> std::same_as<std::optional<typename T::State>>;
+           { T::Combine(states) } -> std::same_as<typename T::State>;
+           { T::ToEvent(state) } -> std::same_as<typename T::Channel::EventMessage>;
+       };
 
 } // namespace eerie_leap::domain::canbus_com_domain::state_bridge

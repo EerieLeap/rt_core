@@ -15,16 +15,16 @@ using eerie_leap::subsys::threading::ScopedMutex;
 
 CdmpTransactionService::CdmpTransactionService(
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<CdmpDevice> device)
-        : work_queue_thread_(std::move(work_queue_thread))
-        , device_(std::move(device)) {
+    std::shared_ptr<CdmpDevice> device
+) :
+    work_queue_thread_(std::move(work_queue_thread)),
+    device_(std::move(device)) {
 
     k_mutex_init(&transactions_lock_);
 }
 
 void CdmpTransactionService::Initialize() {
-    timeout_task_ = work_queue_thread_->CreateTask(
-        ProcessTransactionTimeouts, this);
+    timeout_task_ = work_queue_thread_->CreateTask(ProcessTransactionTimeouts, this);
 }
 
 CdmpTransactionService::~CdmpTransactionService() {
@@ -83,20 +83,19 @@ uint8_t CdmpTransactionService::StartTransaction(
     uint8_t target_device_id,
     uint8_t expected_command,
     int timeout,
-    CdmpTransactionCallback callback) {
+    CdmpTransactionCallback callback
+) {
 
     ScopedMutex guard(transactions_lock_);
 
     uint8_t transaction_id = GetNextTransactionId();
 
-    PendingTransaction transaction{
-        .transaction_id = transaction_id,
+    PendingTransaction transaction{ .transaction_id = transaction_id,
         .start_time = static_cast<uint64_t>(k_uptime_get()),
         .timeout = static_cast<uint64_t>(timeout),
         .callback = std::move(callback),
         .expected_command = expected_command,
-        .target_device_id = target_device_id
-    };
+        .target_device_id = target_device_id };
 
     pending_transactions_[transaction_id] = std::move(transaction);
 
@@ -107,7 +106,8 @@ uint8_t CdmpTransactionService::StartTransaction(
 
 bool CdmpTransactionService::IsResponseTo(
     const PendingTransaction& transaction,
-    const CdmpCommandResponseMessage& response) {
+    const CdmpCommandResponseMessage& response
+) {
 
     return response.command_code == transaction.expected_command
         && (transaction.target_device_id == CdmpDevice::DEVICE_ID_BROADCAST
@@ -141,7 +141,8 @@ void CdmpTransactionService::CleanupExpiredTransactions() {
             ScopedMutex guard(transactions_lock_);
 
             auto it = std::ranges::find_if(pending_transactions_, [current_time](const auto& entry) {
-                return current_time - entry.second.start_time >= entry.second.timeout; });
+                return current_time - entry.second.start_time >= entry.second.timeout;
+            });
             if(it == pending_transactions_.end())
                 return;
 
@@ -157,7 +158,8 @@ void CdmpTransactionService::CleanupExpiredTransactions() {
 void CdmpTransactionService::InvokeCallback(
     PendingTransaction& transaction,
     CdmpResultCode result_code,
-    std::span<const uint8_t> data) {
+    std::span<const uint8_t> data
+) {
 
     if(transaction.callback)
         transaction.callback(transaction.transaction_id, result_code, data);

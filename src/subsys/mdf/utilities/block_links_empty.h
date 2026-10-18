@@ -7,7 +7,8 @@
 
 namespace eerie_leap::subsys::mdf::utilities {
 
-enum class LinkTypeEmpty { };
+enum class LinkTypeEmpty {
+};
 
 class BlockLinksEmpty : public BlockLinks<LinkTypeEmpty, 0> {
 public:

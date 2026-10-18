@@ -4,16 +4,16 @@
 #include <span>
 #include <vector>
 
-#include "subsys/fs/services/i_fs_service.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/fs/services/i_fs_service.h"
 
 #include "sensor_runtime.h"
 
 namespace eerie_leap::domain::sensor_domain::runtime {
 
-using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::fs::services::IFsService;
 
 // Turns a validated sensors configuration into a SensorGeneration: configures the frame's slots,
 // builds the interpolators, expressions and scripts, and binds expression variables to the
@@ -33,7 +33,8 @@ private:
 public:
     SensorPipelineBuilder(
         std::shared_ptr<IFsService> sd_fs_service,
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
+        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame
+    );
 
     /**
      * @brief Builds the generation for @p sensors, which must be validated and in processing order.
@@ -43,7 +44,8 @@ public:
      */
     std::shared_ptr<SensorGeneration> Build(
         std::shared_ptr<const std::vector<std::shared_ptr<Sensor>>> sensors,
-        std::span<const IndicatorSwitchState> switch_states = {}) const;
+        std::span<const IndicatorSwitchState> switch_states = {}
+    ) const;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::runtime

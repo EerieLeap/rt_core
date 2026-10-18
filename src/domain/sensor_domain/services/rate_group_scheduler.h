@@ -10,19 +10,19 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
+#include "domain/sensor_domain/processors/reading_pipeline.hpp"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
-#include "domain/sensor_domain/processors/reading_pipeline.hpp"
 
 #include "rate_group.h"
 
 namespace eerie_leap::domain::sensor_domain::services {
 
+using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::sensor_domain::processors::ReadingPipeline;
 
 // Runs rate groups on one delayable work item against absolute deadlines. A tick runs every group
 // whose deadline has come, fastest first, then sleeps until the earliest next deadline. A group
@@ -58,7 +58,8 @@ public:
     RateGroupScheduler(
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<ReadingPipeline> pipeline,
-        std::shared_ptr<ITimeService> time_service);
+        std::shared_ptr<ITimeService> time_service
+    );
     ~RateGroupScheduler();
 
     // The work item points at the scheduler.

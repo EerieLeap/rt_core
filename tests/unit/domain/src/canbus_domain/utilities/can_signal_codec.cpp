@@ -3,8 +3,8 @@
 #include <array>
 #include <cstdint>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "domain/canbus_domain/utilities/can_signal_codec.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::domain::canbus_domain::models;
@@ -18,7 +18,8 @@ static CanSignalConfiguration can_signal_codec_CreateSignal(
     CanSignalByteOrder byte_order,
     bool is_signed,
     float factor = 1.0F,
-    float offset = 0.0F) {
+    float offset = 0.0F
+) {
 
     CanSignalConfiguration signal(std::allocator_arg, Mrm::GetDefaultPmr());
     signal.start_bit = start_bit;
@@ -34,7 +35,7 @@ static CanSignalConfiguration can_signal_codec_CreateSignal(
 
 ZTEST(can_signal_codec, test_DecodeLittleEndianUnsigned) {
     auto signal = can_signal_codec_CreateSignal(8, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
-    std::array<uint8_t, 8> data = {0x00, 0x34, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00};
+    std::array<uint8_t, 8> data = { 0x00, 0x34, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
 
@@ -44,7 +45,7 @@ ZTEST(can_signal_codec, test_DecodeLittleEndianUnsigned) {
 
 ZTEST(can_signal_codec, test_DecodeBigEndianUnsigned) {
     auto signal = can_signal_codec_CreateSignal(7, 16, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA, false);
-    std::array<uint8_t, 8> data = {0x12, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    std::array<uint8_t, 8> data = { 0x12, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
 
@@ -54,7 +55,7 @@ ZTEST(can_signal_codec, test_DecodeBigEndianUnsigned) {
 
 ZTEST(can_signal_codec, test_DecodeSignedIsSignExtended) {
     auto signal = can_signal_codec_CreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, true);
-    std::array<uint8_t, 8> data = {0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    std::array<uint8_t, 8> data = { 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
 
@@ -64,7 +65,7 @@ ZTEST(can_signal_codec, test_DecodeSignedIsSignExtended) {
 
 ZTEST(can_signal_codec, test_DecodeAppliesFactorAndOffset) {
     auto signal = can_signal_codec_CreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false, 0.5F, -40.0F);
-    std::array<uint8_t, 8> data = {100, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    std::array<uint8_t, 8> data = { 100, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
 
@@ -74,7 +75,7 @@ ZTEST(can_signal_codec, test_DecodeAppliesFactorAndOffset) {
 
 ZTEST(can_signal_codec, test_EncodeLittleEndianWritesOnlySignalBits) {
     auto signal = can_signal_codec_CreateSignal(8, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
-    std::array<uint8_t, 8> data = {0xAA, 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 0x00};
+    std::array<uint8_t, 8> data = { 0xAA, 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 0x00 };
 
     zassert_true(CanSignalCodec::Encode(signal, 0x1234, data));
 
@@ -86,7 +87,7 @@ ZTEST(can_signal_codec, test_EncodeLittleEndianWritesOnlySignalBits) {
 
 ZTEST(can_signal_codec, test_EncodeBigEndianWritesOnlySignalBits) {
     auto signal = can_signal_codec_CreateSignal(7, 16, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA, false);
-    std::array<uint8_t, 8> data = {0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00};
+    std::array<uint8_t, 8> data = { 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     zassert_true(CanSignalCodec::Encode(signal, 0x1234, data));
 
@@ -96,19 +97,12 @@ ZTEST(can_signal_codec, test_EncodeBigEndianWritesOnlySignalBits) {
 }
 
 ZTEST(can_signal_codec, test_EncodeDecodeRoundTrip) {
-    const std::array byte_orders = {
-        CanSignalByteOrder::LITTLE_ENDIAN_INTEL,
-        CanSignalByteOrder::BIG_ENDIAN_MOTOROLA
-    };
+    const std::array byte_orders = { CanSignalByteOrder::LITTLE_ENDIAN_INTEL, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA };
 
     for(auto byte_order : byte_orders) {
         auto signal = can_signal_codec_CreateSignal(
-            byte_order == CanSignalByteOrder::BIG_ENDIAN_MOTOROLA ? 15 : 8,
-            12,
-            byte_order,
-            true,
-            0.25F,
-            -100.0F);
+            byte_order == CanSignalByteOrder::BIG_ENDIAN_MOTOROLA ? 15 : 8, 12, byte_order, true, 0.25F, -100.0F
+        );
 
         std::array<uint8_t, 8> data = {};
 

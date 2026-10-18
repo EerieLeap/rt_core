@@ -30,7 +30,8 @@ public:
         int stack_size,
         int priority,
         bool is_cooperative = false,
-        std::pmr::memory_resource* mr = nullptr);
+        std::pmr::memory_resource* mr = nullptr
+    );
     ~WorkQueueThread() override;
 
     bool Initialize();

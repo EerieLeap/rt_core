@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory_resource>
 #include <cstdint>
+#include <memory_resource>
 #include <unordered_map>
 
 #include "sensor_logging_configuration.h"
@@ -17,19 +17,19 @@ struct LoggingConfiguration {
 
     std::pmr::unordered_map<uint32_t, SensorLoggingConfiguration> sensor_configurations;
 
-    LoggingConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : sensor_configurations(alloc) {}
+    LoggingConfiguration(std::allocator_arg_t, allocator_type alloc) :
+        sensor_configurations(alloc) {}
 
     LoggingConfiguration(const LoggingConfiguration&) = delete;
-	LoggingConfiguration& operator=(const LoggingConfiguration&) noexcept = default;
-	LoggingConfiguration& operator=(LoggingConfiguration&&) noexcept = default;
-	LoggingConfiguration(LoggingConfiguration&&) noexcept = default;
-	~LoggingConfiguration() = default;
+    LoggingConfiguration& operator=(const LoggingConfiguration&) noexcept = default;
+    LoggingConfiguration& operator=(LoggingConfiguration&&) noexcept = default;
+    LoggingConfiguration(LoggingConfiguration&&) noexcept = default;
+    ~LoggingConfiguration() = default;
 
-    LoggingConfiguration(LoggingConfiguration&& other, allocator_type alloc)
-        : logging_interval_ms(other.logging_interval_ms),
-          max_log_size_mb(other.max_log_size_mb),
-          sensor_configurations(std::move(other.sensor_configurations), alloc) {}
+    LoggingConfiguration(LoggingConfiguration&& other, allocator_type alloc) :
+        logging_interval_ms(other.logging_interval_ms),
+        max_log_size_mb(other.max_log_size_mb),
+        sensor_configurations(std::move(other.sensor_configurations), alloc) {}
 };
 
 } // namespace eerie_leap::domain::logging_domain::models

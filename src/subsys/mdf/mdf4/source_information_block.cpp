@@ -2,8 +2,8 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-SourceInformationBlock::SourceInformationBlock(SourceType source_type, BusType bus_type)
-    : BlockBase("SI") {
+SourceInformationBlock::SourceInformationBlock(SourceType source_type, BusType bus_type) :
+    BlockBase("SI") {
 
     source_type_ = source_type;
     bus_type_ = bus_type;

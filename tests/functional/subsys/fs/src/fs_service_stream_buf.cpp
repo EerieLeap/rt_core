@@ -290,17 +290,14 @@ ZTEST(fs_service_stream_buf, test_seek_from_current_accounts_for_the_read_buffer
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Read);
 
-    zassert_equal(
-        static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::cur, std::ios_base::in)), 0);
+    zassert_equal(static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::cur, std::ios_base::in)), 0);
 
     // Reading a single character makes underflow() pull in a whole buffer.
     for(int i = 0; i < 10; ++i)
         stream_buf.sbumpc();
 
-    zassert_equal(
-        static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::cur, std::ios_base::in)), 10);
-    zassert_equal(
-        static_cast<std::streamoff>(stream_buf.pubseekoff(5, std::ios_base::cur, std::ios_base::in)), 15);
+    zassert_equal(static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::cur, std::ios_base::in)), 10);
+    zassert_equal(static_cast<std::streamoff>(stream_buf.pubseekoff(5, std::ios_base::cur, std::ios_base::in)), 15);
     zassert_equal(stream_buf.sbumpc(), content[15]);
 }
 
@@ -311,12 +308,13 @@ ZTEST(fs_service_stream_buf, test_operations_fail_after_close) {
     zassert_true(stream_buf.close(), "closing an untouched stream must succeed");
 
     zassert_equal(stream_buf.sputn("abc", 3), 0, "a closed stream must refuse sputn");
-    zassert_equal(stream_buf.sputc('x'), std::streambuf::traits_type::eof(),
-        "a closed stream must refuse sputc, not store it in a put area nobody flushes");
+    zassert_equal(
+        stream_buf.sputc('x'), std::streambuf::traits_type::eof(),
+        "a closed stream must refuse sputc, not store it in a put area nobody flushes"
+    );
     zassert_equal(stream_buf.GetBytesWritten(), 0, "refused bytes must not be counted");
     zassert_equal(stream_buf.pubsync(), -1, "a closed stream cannot sync");
-    zassert_equal(
-        static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::beg, std::ios_base::out)), -1);
+    zassert_equal(static_cast<std::streamoff>(stream_buf.pubseekoff(0, std::ios_base::beg, std::ios_base::out)), -1);
 }
 
 // The tests below exercise the put area, so they assume the default (non-zero) buffer size.
@@ -380,9 +378,12 @@ ZTEST(fs_service_stream_buf, test_write_larger_than_the_buffer_is_written_direct
     zassert_equal(stream_buf.GetWriteCallCount(), 0, "the head fits the buffer");
 
     zassert_equal(
-        static_cast<size_t>(stream_buf.sputn(body.data(), static_cast<std::streamsize>(body.size()))), body.size());
-    zassert_equal(stream_buf.GetWriteCallCount(), 2,
-        "a write of at least the buffer size flushes the pending head, then goes to the file directly");
+        static_cast<size_t>(stream_buf.sputn(body.data(), static_cast<std::streamsize>(body.size()))), body.size()
+    );
+    zassert_equal(
+        stream_buf.GetWriteCallCount(), 2,
+        "a write of at least the buffer size flushes the pending head, then goes to the file directly"
+    );
     zassert_equal(stream_buf.GetBytesWritten(), head.size() + body.size(), "both writes count as written");
 
     zassert_true(stream_buf.close(), "close must report the flush and the close");
@@ -402,8 +403,10 @@ ZTEST(fs_service_stream_buf, test_seek_flushes_before_moving) {
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
 
-    zassert_equal(stream_buf.sputn(content.data(), static_cast<std::streamsize>(content.size())), 1000,
-        "a write that fits the buffer is accepted whole");
+    zassert_equal(
+        stream_buf.sputn(content.data(), static_cast<std::streamsize>(content.size())), 1000,
+        "a write that fits the buffer is accepted whole"
+    );
     zassert_equal(stream_buf.GetWriteCallCount(), 0, "a write that fits the buffer must not reach the file system");
 
     zassert_equal(static_cast<std::streamoff>(stream_buf.pubseekpos(0, std::ios_base::out)), 0);
@@ -477,8 +480,9 @@ ZTEST(fs_service_stream_buf, test_short_write_on_a_full_volume_is_reported) {
     zassert_true(reported, "a write on a full volume must be reported by a failed sync or a short write");
 
     zassert_equal(stream_buf.sputn("x", 1), 0, "once a write failed every later write must be refused");
-    zassert_equal(stream_buf.sputc('x'), std::streambuf::traits_type::eof(),
-        "once a write failed sputc must be refused as well");
+    zassert_equal(
+        stream_buf.sputc('x'), std::streambuf::traits_type::eof(), "once a write failed sputc must be refused as well"
+    );
     zassert_equal(stream_buf.pubsync(), -1, "a sync of a latched stream must not report success");
 
     zassert_true(stream_buf.close(), "the file still closes once the failed bytes were dropped");

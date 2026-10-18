@@ -4,21 +4,24 @@
 #include <vector>
 
 #include <zephyr/kernel.h>
-#include <zephyr/ztest.h>
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
+#include <zephyr/ztest.h>
 
+#include "domain/adc_domain/models/adc_range.h"
+#include "domain/adc_domain/services/calibration_service.h"
+#include "domain/adc_domain/smp/calibration_mgmt_group.h"
 #include "subsys/adc/adc_manager.h"
 #include "subsys/adc/adc_simulator.h"
 #include "subsys/threading/i_service.h"
 #include "subsys/time/i_time_service.h"
-#include "domain/adc_domain/models/adc_range.h"
-#include "domain/adc_domain/services/calibration_service.h"
-#include "domain/adc_domain/smp/calibration_mgmt_group.h"
 
 #include "smp_groups_test_support.h"
 
 using namespace smp_groups_test;
 
+using eerie_leap::domain::adc_domain::models::AdcRange;
+using eerie_leap::domain::adc_domain::services::CalibrationService;
+using eerie_leap::domain::adc_domain::smp::CalibrationMgmtGroup;
 using eerie_leap::subsys::adc::AdcCapabilities;
 using eerie_leap::subsys::adc::AdcError;
 using eerie_leap::subsys::adc::AdcManager;
@@ -29,9 +32,6 @@ using eerie_leap::subsys::adc::IAdc;
 using eerie_leap::subsys::threading::IService;
 using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::adc_domain::models::AdcRange;
-using eerie_leap::domain::adc_domain::services::CalibrationService;
-using eerie_leap::domain::adc_domain::smp::CalibrationMgmtGroup;
 
 using Command = CalibrationMgmtGroup::Command;
 using Error = CalibrationMgmtGroup::Error;
@@ -47,8 +47,10 @@ uint8_t Id(Command command) {
 
 void AssertError(const Response& response, Error error) {
     zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::CALIBRATION));
-    zassert_equal(response.error.value_or(0), std::to_underlying(error),
-        "Expected error %u, got %u", std::to_underlying(error), response.error.value_or(0));
+    zassert_equal(
+        response.error.value_or(0), std::to_underlying(error), "Expected error %u, got %u", std::to_underlying(error),
+        response.error.value_or(0)
+    );
 }
 
 // A clock that stands still, so a result's timestamp is known exactly.
@@ -73,9 +75,17 @@ public:
     int pauses = 0;
     int resumes = 0;
 
-    bool Initialize() override { return true; }
-    bool Start() override { state_ = ServiceState::RUNNING; return true; }
-    bool Stop() override { state_ = ServiceState::STOPPED; return true; }
+    bool Initialize() override {
+        return true;
+    }
+    bool Start() override {
+        state_ = ServiceState::RUNNING;
+        return true;
+    }
+    bool Stop() override {
+        state_ = ServiceState::STOPPED;
+        return true;
+    }
 
     bool Pause() override {
         pauses++;
@@ -92,8 +102,12 @@ public:
         return true;
     }
 
-    [[nodiscard]] bool IsPausable() const noexcept override { return true; }
-    [[nodiscard]] ServiceState GetState() const noexcept override { return state_; }
+    [[nodiscard]] bool IsPausable() const noexcept override {
+        return true;
+    }
+    [[nodiscard]] ServiceState GetState() const noexcept override {
+        return state_;
+    }
 };
 
 // One channel whose conversions wait until the gate opens, so a job can be caught before its
@@ -105,11 +119,17 @@ private:
 public:
     static constexpr float VOLTS = 1.25F;
 
-    GatedAdc() { k_sem_init(&gate_, 0, 1); }
+    GatedAdc() {
+        k_sem_init(&gate_, 0, 1);
+    }
 
-    void Open() { k_sem_give(&gate_); }
+    void Open() {
+        k_sem_give(&gate_);
+    }
 
-    bool Initialize() override { return true; }
+    bool Initialize() override {
+        return true;
+    }
 
     void Sample(const AdcSampleRequest& request) noexcept override {
         k_sem_take(&gate_, K_FOREVER);
@@ -119,9 +139,15 @@ public:
             result = { .volts = VOLTS };
     }
 
-    [[nodiscard]] int GetChannelCount() const override { return 1; }
-    [[nodiscard]] AdcCapabilities GetCapabilities() const override { return {}; }
-    [[nodiscard]] AdcStats GetStats() const override { return {}; }
+    [[nodiscard]] int GetChannelCount() const override {
+        return 1;
+    }
+    [[nodiscard]] AdcCapabilities GetCapabilities() const override {
+        return {};
+    }
+    [[nodiscard]] AdcStats GetStats() const override {
+        return {};
+    }
 };
 
 // The group over a calibration service on the ADC simulator (eight channels) unless given another
@@ -135,11 +161,12 @@ public:
     SmpTestClient client;
 
     explicit Harness(std::shared_ptr<IAdc> adc = std::make_shared<AdcSimulator>()) {
-        adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>> { std::move(adc) });
+        adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ std::move(adc) });
         zassert_true(adc_manager->Initialize());
 
         calibration_service = std::make_shared<CalibrationService>(
-            std::make_shared<FixedTimeService>(), adc_manager, paused_service);
+            std::make_shared<FixedTimeService>(), adc_manager, paused_service
+        );
         zassert_true(calibration_service->Initialize());
 
         group = std::make_unique<CalibrationMgmtGroup>(calibration_service, adc_manager->GetChannelCount());
@@ -246,8 +273,10 @@ ZTEST(smp_calibration_group, test_a_new_job_starts_after_stop) {
     const auto started = harness.Read();
     zassert_true(started.IsOk());
     zassert_equal(started.Value("channel"), 5);
-    zassert_true(started.Value("seq") == 0 || started.Value("seq") > first_job_last,
-        "seq %u is the first job's (last %u)", started.Value("seq"), first_job_last);
+    zassert_true(
+        started.Value("seq") == 0 || started.Value("seq") > first_job_last, "seq %u is the first job's (last %u)",
+        started.Value("seq"), first_job_last
+    );
     if(started.Value("seq") == 0)
         zassert_equal(started.Float("adc_v"), 0.0F);
 

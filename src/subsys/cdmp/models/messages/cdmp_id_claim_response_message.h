@@ -1,18 +1,18 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <span>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/utilities/enums.h"
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
 using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
+using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
 
 // Base message structures (Base + 0)
 struct CdmpIdClaimResponseMessage {
@@ -35,12 +35,8 @@ struct CdmpIdClaimResponseMessage {
     }
 
     std::vector<uint8_t> ToCanFrame() const {
-        std::vector<uint8_t> frame_data = {
-            std::to_underlying(message_type),
-            responding_device_id,
-            claiming_device_id,
-            std::to_underlying(result)
-        };
+        std::vector<uint8_t> frame_data = { std::to_underlying(message_type), responding_device_id, claiming_device_id,
+            std::to_underlying(result) };
 
         return frame_data;
     }

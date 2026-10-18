@@ -11,16 +11,16 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
-#include "subsys/fs/services/i_fs_service.h"
+#include "domain/logging_domain/configuration/logging_configuration_manager.h"
+#include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "domain/logging_domain/loggers/i_logger.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/fs/services/fs_service_stream_buf.h"
+#include "subsys/fs/services/i_fs_service.h"
 #include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_task_result.h"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/logging_domain/configuration/logging_configuration_manager.h"
-#include "domain/logging_domain/event_bus/logging_status_reason.h"
-#include "domain/logging_domain/loggers/i_logger.h"
 
 #include "log_file_naming.h"
 #include "log_writer_task.hpp"
@@ -29,18 +29,18 @@ namespace eerie_leap::domain::logging_domain::services {
 
 namespace threading = eerie_leap::subsys::threading;
 
-using eerie_leap::subsys::fs::services::IFsService;
-using eerie_leap::subsys::fs::services::FsServiceStreamBuf;
-using threading::ServiceBase;
-using threading::ServiceState;
-using threading::WorkQueueThread;
-using threading::WorkQueueTask;
-using threading::WorkQueueTaskResult;
-using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::fs::services::FsServiceStreamBuf;
+using eerie_leap::subsys::fs::services::IFsService;
+using eerie_leap::subsys::time::ITimeService;
+using threading::ServiceBase;
+using threading::ServiceState;
+using threading::WorkQueueTask;
+using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
 // Writes the readings frame to a log file every logging_interval_ms on its own thread. Start() and
 // Stop() publish StatusUpdated on logging_events, and so does a session that fails: the writer
@@ -64,7 +64,7 @@ private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
     LoggerFactory logger_factory_;
     std::shared_ptr<ILogger<SensorReading>> logger_;
-    StaticString<LogFileNaming::PATH_MAX_LENGTH> file_path_;   // of the file last opened; the writer thread's
+    StaticString<LogFileNaming::PATH_MAX_LENGTH> file_path_; // of the file last opened; the writer thread's
 
     // The file the writer has open, for IsOpenFile() on other threads. Held for a copy or a compare
     // of the path, never across file I/O.
@@ -102,7 +102,8 @@ public:
         std::shared_ptr<IFsService> fs_service,
         std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
         std::shared_ptr<ITimeService> time_service,
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame);
+        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame
+    );
     ~LogWriterService() override = default;
 
     /** Only while stopped, and before anything can start the service: Start() reads it unguarded. */
@@ -115,7 +116,9 @@ public:
      * Whether the session ended on a write, rotation or free-space failure. The service is still
      * RUNNING then, without a tick, until Stop() closes the file; the next Start() clears it.
      */
-    [[nodiscard]] bool HasFailed() const { return has_failed_.load(); }
+    [[nodiscard]] bool HasFailed() const {
+        return has_failed_.load();
+    }
 
     /**
      * Whether @p path, relative to the volume, is the file the writer has open now, compared ASCII

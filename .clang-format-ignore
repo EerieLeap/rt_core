@@ -1,0 +1,6 @@
+# zcbor output, regenerated from src/configuration/cbor/cbor_schemas/
+src/configuration/cbor/cbor_*_config/**
+# Vendored
+libs/nameof/**
+# Golden MDF bytes, compared byte for byte
+tests/unit/subsys/mdf/src/fixtures/golden_file.h

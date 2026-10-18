@@ -1,15 +1,15 @@
 #include <algorithm>
+#include <eerie_memory.hpp>
 #include <string>
 #include <unordered_set>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
-#include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
-#include "subsys/expression_engine/expression_evaluator.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/utilities/sensors_order_resolver.h"
+#include "subsys/expression_engine/expression_evaluator.h"
+#include "utilities/memory/memory_resource_manager.h"
+#include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
+#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -46,7 +46,9 @@ bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_
         if(!sensors[i]->configuration.HasExpression())
             continue;
 
-        auto expression_evaluator = ExpressionEvaluator::Create(sensors[i]->configuration.expression, Mrm::GetDefaultPmr());
+        auto expression_evaluator = ExpressionEvaluator::Create(
+            sensors[i]->configuration.expression, Mrm::GetDefaultPmr()
+        );
         zassert_true(expression_evaluator.has_value());
 
         for(const std::string_view variable : expression_evaluator->GetVariableNames()) {
@@ -60,10 +62,7 @@ bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_
 }
 
 std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1 {
-        {0.0, 0.0},
-        {3.3, 100.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
     auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
@@ -79,13 +78,8 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2 {
-        {0.0, 0.0},
-        {1.0, 29.0},
-        {2.0, 111.0},
-        {2.5, 162.0},
-        {3.3, 200.0}
-    };
+    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
+        { 3.3, 200.0 } };
     auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
     auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
@@ -145,8 +139,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     sensor_6->configuration.sampling_rate_ms = 2000;
     sensor_6->configuration.expression = "sensor_5 + 4.34";
 
-    std::vector<std::shared_ptr<Sensor>> sensors = {
-        sensor_1, sensor_2, sensor_3, sensor_4, sensor_5, sensor_6 };
+    std::vector<std::shared_ptr<Sensor>> sensors = { sensor_1, sensor_2, sensor_3, sensor_4, sensor_5, sensor_6 };
 
     return sensors;
 }
@@ -274,7 +267,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_returns_each_sensor_once) 
     auto sensors = sensors_order_resolver_GetTestSensors();
 
     auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
-    for (auto index : { 0, 1, 2, 3 })
+    for(auto index : { 0, 1, 2, 3 })
         sensors_order_resolver->AddSensor(sensors[index]);
 
     auto ordered_sensors = sensors_order_resolver->GetProcessingOrder();
@@ -283,7 +276,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_returns_each_sensor_once) 
     zassert_true(sensors_order_resolver_DependenciesComeFirst(ordered_sensors));
 
     std::unordered_set<std::string> seen;
-    for (const auto& sensor : ordered_sensors)
+    for(const auto& sensor : ordered_sensors)
         seen.insert(std::string(sensor->id));
 
     zassert_equal(seen.size(), 4);
@@ -293,13 +286,13 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_is_repeatable) {
     auto sensors = sensors_order_resolver_GetTestSensors();
 
     auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
-    for (auto index : { 0, 1, 2, 3 })
+    for(auto index : { 0, 1, 2, 3 })
         sensors_order_resolver->AddSensor(sensors[index]);
 
     auto first = sensors_order_resolver->GetProcessingOrder();
     auto second = sensors_order_resolver->GetProcessingOrder();
 
     zassert_equal(first.size(), second.size());
-    for (size_t i = 0; i < first.size(); ++i)
+    for(size_t i = 0; i < first.size(); ++i)
         zassert_str_equal(first[i]->id.c_str(), second[i]->id.c_str());
 }

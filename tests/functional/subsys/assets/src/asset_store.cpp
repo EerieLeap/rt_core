@@ -69,7 +69,9 @@ struct FsRecorder {
         on = true;
     }
 
-    void Stop() { on = false; }
+    void Stop() {
+        on = false;
+    }
 
     void Reset() {
         on = false;
@@ -92,21 +94,21 @@ using asset_store_test::Recorder;
 namespace {
 
 constexpr std::string_view kAssetsDir = "test_assets";
-constexpr std::array<std::string_view, 1> kBinExtensions = {".bin"};
+constexpr std::array<std::string_view, 1> kBinExtensions = { ".bin" };
 constexpr size_t kMaxNameLength = CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH;
 
 // Appends that cross the 4096 byte buffer of a writer in every way: well short of it, one byte
 // short, exactly, one byte over, and across more than one.
-constexpr std::array<size_t, 6> kOddPieces = {1, 4095, 4096, 4097, 3, 1000};
+constexpr std::array<size_t, 6> kOddPieces = { 1, 4095, 4096, 4097, 3, 1000 };
 
 // Sizes of the requests a reader is read with.
-constexpr std::array<size_t, 9> kReadPieces = {1, 13, 1000, 4095, 4096, 4097, 9999, 10000, 20000};
+constexpr std::array<size_t, 9> kReadPieces = { 1, 13, 1000, 4095, 4096, 4097, 9999, 10000, 20000 };
 
 // Sizes around the buffers of the reader and the writer.
-constexpr std::array<size_t, 7> kEdgeSizes = {0, 1, 4095, 4096, 4097, 8192, 8193};
+constexpr std::array<size_t, 7> kEdgeSizes = { 0, 1, 4095, 4096, 4097, 8192, 8193 };
 
 // Sizes of the files whose reads and writes the block tests follow.
-constexpr std::array<size_t, 8> kBlockSizes = {0, 1, 4095, 4096, 4097, 8192, 8193, 10000};
+constexpr std::array<size_t, 8> kBlockSizes = { 0, 1, 4095, 4096, 4097, 8192, 8193, 10000 };
 
 // The file system underneath sees reads and writes of whole sectors at sector boundaries only because
 // the blocks are this size; the block tests below hold the reader and the writer to it.
@@ -194,8 +196,10 @@ std::vector<uint8_t> ReadAll(AssetReader& reader, size_t request_size) {
 
 // For blobs that may be empty, whose data() is no pointer to hand to memcmp().
 void AssertSameContent(std::span<const uint8_t> actual, std::span<const uint8_t> expected) {
-    zassert_equal(actual.size(), expected.size(), "%d bytes instead of %d",
-        static_cast<int>(actual.size()), static_cast<int>(expected.size()));
+    zassert_equal(
+        actual.size(), expected.size(), "%d bytes instead of %d", static_cast<int>(actual.size()),
+        static_cast<int>(expected.size())
+    );
     zassert_true(std::equal(actual.begin(), actual.end(), expected.begin()), "The content differs");
 }
 
@@ -204,19 +208,26 @@ void AssertSameContent(std::span<const uint8_t> actual, std::span<const uint8_t>
 void AssertBlockCalls(const std::vector<asset_store_test::FsCall>& calls, size_t size, size_t block_size) {
     const size_t blocks = (size + block_size - 1) / block_size;
 
-    zassert_equal(calls.size(), blocks,
-        "%d calls for %d bytes", static_cast<int>(calls.size()), static_cast<int>(size));
+    zassert_equal(
+        calls.size(), blocks, "%d calls for %d bytes", static_cast<int>(calls.size()), static_cast<int>(size)
+    );
 
     for(size_t i = 0; i < calls.size(); ++i) {
         const size_t start = i * block_size;
         const size_t length = std::min(block_size, size - start);
 
-        zassert_equal(static_cast<size_t>(calls[i].position), start, "Call %d of %d bytes started at %d",
-            static_cast<int>(i), static_cast<int>(size), static_cast<int>(calls[i].position));
-        zassert_equal(calls[i].size, length, "Call %d of %d bytes asked for %d",
-            static_cast<int>(i), static_cast<int>(size), static_cast<int>(calls[i].size));
-        zassert_equal(calls[i].result, static_cast<ssize_t>(length), "Call %d of %d bytes moved %d",
-            static_cast<int>(i), static_cast<int>(size), static_cast<int>(calls[i].result));
+        zassert_equal(
+            static_cast<size_t>(calls[i].position), start, "Call %d of %d bytes started at %d", static_cast<int>(i),
+            static_cast<int>(size), static_cast<int>(calls[i].position)
+        );
+        zassert_equal(
+            calls[i].size, length, "Call %d of %d bytes asked for %d", static_cast<int>(i), static_cast<int>(size),
+            static_cast<int>(calls[i].size)
+        );
+        zassert_equal(
+            calls[i].result, static_cast<ssize_t>(length), "Call %d of %d bytes moved %d", static_cast<int>(i),
+            static_cast<int>(size), static_cast<int>(calls[i].result)
+        );
     }
 }
 
@@ -273,10 +284,15 @@ public:
     // CreateDirectory() fails for this path.
     std::string failing_directory;
 
-    explicit ScriptedFsService(std::shared_ptr<IFsService> inner) : inner_(std::move(inner)) {}
+    explicit ScriptedFsService(std::shared_ptr<IFsService> inner) :
+        inner_(std::move(inner)) {}
 
-    bool Initialize() override { return inner_->Initialize(); }
-    bool IsAvailable() const override { return !unavailable && inner_->IsAvailable(); }
+    bool Initialize() override {
+        return inner_->Initialize();
+    }
+    bool IsAvailable() const override {
+        return !unavailable && inner_->IsAvailable();
+    }
     bool WriteFile(std::string_view path, const void* data, size_t size, bool append) override {
         return inner_->WriteFile(path, data, size, append);
     }
@@ -292,12 +308,25 @@ public:
 
         return inner_->CreateDirectory(path);
     }
-    bool Exists(std::string_view path) const override { return inner_->Exists(path); }
-    bool DeleteFile(std::string_view path) override { return inner_->DeleteFile(path); }
-    bool DeleteRecursive(std::string_view path) override { return inner_->DeleteRecursive(path); }
-    std::vector<std::string> ListFiles(std::string_view path) const override { return inner_->ListFiles(path); }
-    int ListDirectory(std::string_view path, size_t first, size_t max_entries,
-        std::vector<DirectoryEntry>& entries, size_t& count) const override {
+    bool Exists(std::string_view path) const override {
+        return inner_->Exists(path);
+    }
+    bool DeleteFile(std::string_view path) override {
+        return inner_->DeleteFile(path);
+    }
+    bool DeleteRecursive(std::string_view path) override {
+        return inner_->DeleteRecursive(path);
+    }
+    std::vector<std::string> ListFiles(std::string_view path) const override {
+        return inner_->ListFiles(path);
+    }
+    int ListDirectory(
+        std::string_view path,
+        size_t first,
+        size_t max_entries,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
         return inner_->ListDirectory(path, first, max_entries, entries, count);
     }
     std::optional<size_t> GetFileSize(std::string_view path) const override {
@@ -310,9 +339,15 @@ public:
 
         return size;
     }
-    uint64_t GetTotalSpace() const override { return inner_->GetTotalSpace(); }
-    uint64_t GetUsedSpace() const override { return inner_->GetUsedSpace(); }
-    bool Format() override { return inner_->Format(); }
+    uint64_t GetTotalSpace() const override {
+        return inner_->GetTotalSpace();
+    }
+    uint64_t GetUsedSpace() const override {
+        return inner_->GetUsedSpace();
+    }
+    bool Format() override {
+        return inner_->Format();
+    }
     int Rename(std::string_view from, std::string_view to) override {
         return rename_result != 0 ? rename_result : inner_->Rename(from, to);
     }
@@ -337,7 +372,7 @@ ssize_t __wrap_fs_read(struct fs_file_t* zfp, void* ptr, size_t size) {
     const off_t position = fs_tell(zfp);
     const ssize_t rc = __real_fs_read(zfp, ptr, size);
 
-    recorder.reads.push_back({position, size, rc});
+    recorder.reads.push_back({ position, size, rc });
 
     return rc;
 }
@@ -351,7 +386,7 @@ ssize_t __wrap_fs_write(struct fs_file_t* zfp, const void* ptr, size_t size) {
     const off_t position = fs_tell(zfp);
     const ssize_t rc = __real_fs_write(zfp, ptr, size);
 
-    recorder.writes.push_back({position, size, rc});
+    recorder.writes.push_back({ position, size, rc });
 
     return rc;
 }
@@ -478,7 +513,7 @@ ZTEST(asset_store, test_load_of_a_size_no_buffer_can_hold_returns_empty) {
     zassert_true(store.Load("folder").empty());
 
     // More than the heap holds: std::bad_alloc.
-    scripted->forced_file_size = size_t{1} << 30;
+    scripted->forced_file_size = size_t{ 1 } << 30;
     zassert_true(store.Load("image.bin").empty());
     zassert_true(store.Load("folder").empty());
 
@@ -616,8 +651,10 @@ ZTEST(asset_store, test_get_free_space_falls_by_what_is_written) {
     const uint64_t free_after = store.GetFreeSpace();
 
     // The volume hands out whole allocation units, so it loses a little more than was written.
-    zassert_true(free_before >= free_after + kSize, "%d bytes free before, %d after writing %d",
-        static_cast<int>(free_before), static_cast<int>(free_after), static_cast<int>(kSize));
+    zassert_true(
+        free_before >= free_after + kSize, "%d bytes free before, %d after writing %d", static_cast<int>(free_before),
+        static_cast<int>(free_after), static_cast<int>(kSize)
+    );
 
     zassert_true(store.Delete("image.bin"));
     zassert_true(store.GetFreeSpace() > free_after);
@@ -637,7 +674,7 @@ ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
     zassert_false(store.RemoveStaged());
 
     std::vector<AssetEntry> entries;
-    entries.push_back({.name = "stale.bin", .size = 1, .index = 1});
+    entries.push_back({ .name = "stale.bin", .size = 1, .index = 1 });
     size_t scanned = 7;
     size_t count = 9;
 
@@ -744,8 +781,9 @@ ZTEST(asset_store, test_is_valid_name_refuses_separators_and_other_characters) {
 
     for(const char c : std::string_view("\t\n:*?\"<>|;,=+[]%~!@#$^&'(){}")) {
         const std::string name = std::string("a") + c + "b.bin";
-        zassert_false(AssetStore::IsValidName(name, kBinExtensions),
-            "Accepted a name with 0x%02x", static_cast<int>(c));
+        zassert_false(
+            AssetStore::IsValidName(name, kBinExtensions), "Accepted a name with 0x%02x", static_cast<int>(c)
+        );
     }
 }
 
@@ -757,18 +795,19 @@ ZTEST(asset_store, test_is_valid_name_requires_one_of_the_extensions) {
     zassert_false(AssetStore::IsValidName("imagebin", kBinExtensions), "The extension has its dot");
     zassert_false(AssetStore::IsValidName("bin", kBinExtensions));
 
-    constexpr std::array<std::string_view, 2> several = {".bin", ".json"};
+    constexpr std::array<std::string_view, 2> several = { ".bin", ".json" };
 
     zassert_true(AssetStore::IsValidName("a.bin", several));
     zassert_true(AssetStore::IsValidName("a.json", several));
     zassert_false(AssetStore::IsValidName("a.lua", several));
 
-    zassert_false(AssetStore::IsValidName("a.bin", std::span<const std::string_view>{}),
-        "No extension accepts nothing");
+    zassert_false(
+        AssetStore::IsValidName("a.bin", std::span<const std::string_view>{}), "No extension accepts nothing"
+    );
 }
 
 ZTEST(asset_store, test_is_valid_name_compares_the_extension_without_case) {
-    constexpr std::array<std::string_view, 2> several = {".bin", ".JSON"};
+    constexpr std::array<std::string_view, 2> several = { ".bin", ".JSON" };
 
     zassert_true(AssetStore::IsValidName("image.BIN", kBinExtensions));
     zassert_true(AssetStore::IsValidName("IMAGE.Bin", kBinExtensions));
@@ -844,12 +883,15 @@ ZTEST(asset_store, test_list_pages_by_first_and_max_entries) {
 
         zassert_ok(page.rc);
         zassert_equal(page.count, all.count);
-        zassert_true(page.scanned > 0 && page.scanned <= 2,
-            "A page scanned %d entries", static_cast<int>(page.scanned));
+        zassert_true(
+            page.scanned > 0 && page.scanned <= 2, "A page scanned %d entries", static_cast<int>(page.scanned)
+        );
 
         for(const auto& entry : page.entries) {
-            zassert_true(entry.index >= first && entry.index < first + page.scanned,
-                "Entry %d is not in the page from %d", static_cast<int>(entry.index), static_cast<int>(first));
+            zassert_true(
+                entry.index >= first && entry.index < first + page.scanned, "Entry %d is not in the page from %d",
+                static_cast<int>(entry.index), static_cast<int>(first)
+            );
             paged.push_back(entry);
         }
 
@@ -894,7 +936,7 @@ ZTEST(asset_store, test_list_clears_what_the_caller_passed_in) {
     zassert_true(WriteBlob("test_assets/a.bin", 1));
 
     std::vector<AssetEntry> entries;
-    entries.push_back({.name = "stale.bin", .size = 1, .index = 5});
+    entries.push_back({ .name = "stale.bin", .size = 1, .index = 5 });
     size_t scanned = 9;
     size_t count = 9;
 
@@ -913,7 +955,7 @@ ZTEST(asset_store, test_list_of_a_missing_directory_lists_nothing) {
     zassert_true(GetFsService()->DeleteFile(kAssetsDir));
 
     std::vector<AssetEntry> entries;
-    entries.push_back({.name = "stale.bin", .size = 1, .index = 5});
+    entries.push_back({ .name = "stale.bin", .size = 1, .index = 5 });
     size_t scanned = 7;
     size_t count = 9;
 
@@ -972,7 +1014,7 @@ ZTEST(asset_store, test_list_of_an_unavailable_volume_is_ENODEV) {
     scripted->unavailable = true;
 
     std::vector<AssetEntry> entries;
-    entries.push_back({.name = "stale.bin", .size = 1, .index = 5});
+    entries.push_back({ .name = "stale.bin", .size = 1, .index = 5 });
     size_t scanned = 7;
     size_t count = 9;
 
@@ -1041,16 +1083,25 @@ ZTEST(asset_store, test_read_crossing_the_buffer_boundaries_returns_the_content)
     };
 
     // Across one boundary, exactly one block, across two, the whole file, and back to the start.
-    constexpr std::array<Request, 8> requests = {{
-        {4090, 20}, {4096, 4096}, {4000, 5000}, {8190, 10}, {0, 12000}, {11990, 10}, {4095, 2}, {100, 3},
-    }};
+    constexpr std::array<Request, 8> requests = { {
+        { 4090, 20 },
+        { 4096, 4096 },
+        { 4000, 5000 },
+        { 8190, 10 },
+        { 0, 12000 },
+        { 11990, 10 },
+        { 4095, 2 },
+        { 100, 3 },
+    } };
 
     for(const auto& request : requests) {
         std::vector<uint8_t> out(request.length);
         const ssize_t bytes_read = reader.Read(request.offset, out);
 
-        zassert_equal(bytes_read, static_cast<ssize_t>(request.length), "Read of %d at %d returned %d",
-            static_cast<int>(request.length), static_cast<int>(request.offset), static_cast<int>(bytes_read));
+        zassert_equal(
+            bytes_read, static_cast<ssize_t>(request.length), "Read of %d at %d returned %d",
+            static_cast<int>(request.length), static_cast<int>(request.offset), static_cast<int>(bytes_read)
+        );
         zassert_mem_equal(out.data(), blob.data() + request.offset, request.length);
     }
 }
@@ -1102,7 +1153,7 @@ ZTEST(asset_store, test_read_at_scattered_offsets_returns_the_content) {
     zassert_ok(store.OpenRead("image.bin", reader));
 
     // Forwards, backwards and into the block read last: each is served from the right place.
-    constexpr std::array<size_t, 9> offsets = {9000, 10, 5000, 5100, 4095, 4096, 8191, 0, 9990};
+    constexpr std::array<size_t, 9> offsets = { 9000, 10, 5000, 5100, 4095, 4096, 8191, 0, 9990 };
 
     for(const size_t offset : offsets) {
         std::vector<uint8_t> out(10);
@@ -1727,8 +1778,9 @@ ZTEST(asset_store, test_reader_reads_the_file_in_aligned_blocks) {
 
         AssertSameContent(content, blob);
         AssertBlockCalls(recorder.reads, size, AssetReader::BUFFER_SIZE);
-        zassert_equal(recorder.seeks, 0, "A block that follows the last one needs no seek (%d bytes)",
-            static_cast<int>(size));
+        zassert_equal(
+            recorder.seeks, 0, "A block that follows the last one needs no seek (%d bytes)", static_cast<int>(size)
+        );
         zassert_true(recorder.writes.empty());
     }
 }
@@ -1802,8 +1854,10 @@ ZTEST(asset_store, test_writer_writes_the_file_in_aligned_blocks) {
         zassert_ok(commit_rc, "Committing %d bytes", static_cast<int>(size));
 
         // The whole blocks went out as the buffer filled; only the rest waited for the commit.
-        zassert_equal(written_by_appends, size / AssetWriter::BUFFER_SIZE,
-            "Writes before the commit for %d bytes", static_cast<int>(size));
+        zassert_equal(
+            written_by_appends, size / AssetWriter::BUFFER_SIZE, "Writes before the commit for %d bytes",
+            static_cast<int>(size)
+        );
         AssertBlockCalls(recorder.writes, size, AssetWriter::BUFFER_SIZE);
         zassert_equal(recorder.seeks, 0, "The staged file is only appended to (%d bytes)", static_cast<int>(size));
         zassert_true(recorder.reads.empty());

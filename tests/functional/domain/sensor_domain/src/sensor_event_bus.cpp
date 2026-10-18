@@ -24,7 +24,9 @@ struct SensorProbe {
     float value = 0.0F;
     std::string handler_thread_name;
 
-    SensorProbe() { k_sem_init(&delivered, 0, K_SEM_MAX_LIMIT); }
+    SensorProbe() {
+        k_sem_init(&delivered, 0, K_SEM_MAX_LIMIT);
+    }
 
     void Record(const SensorEventsChannel::EventMessage& event) {
         const char* name = k_thread_name_get(k_current_get());
@@ -41,7 +43,9 @@ struct SensorProbe {
         k_sem_give(&delivered);
     }
 
-    bool WaitForDelivery() { return k_sem_take(&delivered, K_MSEC(DISPATCH_TIMEOUT_MS)) == 0; }
+    bool WaitForDelivery() {
+        return k_sem_take(&delivered, K_MSEC(DISPATCH_TIMEOUT_MS)) == 0;
+    }
 };
 
 } // namespace
@@ -60,19 +64,18 @@ ZTEST(sensor_event_bus, test_the_sensor_channel_runs_on_its_own_thread) {
     SensorProbe probe;
 
     AnySubscription subscription = CreateScopedSubscription(
-        SensorEventsChannel::GetInstance(),
-        SensorEventType::DataUpdated,
-        [&probe](const SensorEventsChannel::EventMessage& event) { probe.Record(event); });
+        SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated,
+        [&probe](const SensorEventsChannel::EventMessage& event) {
+            probe.Record(event);
+        }
+    );
     zassert_not_null(subscription.get());
 
-    SensorEventsChannel::GetInstance().PublishAsync({
-        .source_id = 0x7E57,
-        .type = SensorEventType::DataUpdated,
-        .payload = {
-            { SensorPayloadType::SensorId, 4242U },
-            { SensorPayloadType::Value, 12.5F }
-        }
-    });
+    SensorEventsChannel::GetInstance().PublishAsync(
+        { .source_id = 0x7E57,
+            .type = SensorEventType::DataUpdated,
+            .payload = { { SensorPayloadType::SensorId, 4242U }, { SensorPayloadType::Value, 12.5F } } }
+    );
 
     zassert_true(probe.WaitForDelivery(), "the event was never dispatched");
     zassert_equal(probe.sensor_id, 4242U);

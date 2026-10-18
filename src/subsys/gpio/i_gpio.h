@@ -29,4 +29,4 @@ public:
     virtual bool RemoveChannelChangedHandler(int channel, int handler_id) = 0;
 };
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

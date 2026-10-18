@@ -23,8 +23,10 @@ enum class AssetKind : uint8_t {
 inline constexpr size_t ASSET_KIND_COUNT = 5;
 
 // A kind appended without raising the count would be refused by the registry as out of range.
-static_assert(ASSET_KIND_COUNT == static_cast<size_t>(std::to_underlying(AssetKind::LOGS)) + 1,
-    "ASSET_KIND_COUNT must follow the last AssetKind");
+static_assert(
+    ASSET_KIND_COUNT == static_cast<size_t>(std::to_underlying(AssetKind::LOGS)) + 1,
+    "ASSET_KIND_COUNT must follow the last AssetKind"
+);
 
 /** @brief Operations on a kind's assets; as bits, the `access` mask of the SMP assets group. */
 enum class AssetAccess : uint8_t {
@@ -33,7 +35,11 @@ enum class AssetAccess : uint8_t {
     DELETE = 1 << 2,
 };
 
-constexpr uint8_t ToMask(AssetAccess access) { return std::to_underlying(access); }
-constexpr bool HasAccess(uint8_t mask, AssetAccess access) { return (mask & ToMask(access)) != 0; }
+constexpr uint8_t ToMask(AssetAccess access) {
+    return std::to_underlying(access);
+}
+constexpr bool HasAccess(uint8_t mask, AssetAccess access) {
+    return (mask & ToMask(access)) != 0;
+}
 
 } // namespace eerie_leap::subsys::assets

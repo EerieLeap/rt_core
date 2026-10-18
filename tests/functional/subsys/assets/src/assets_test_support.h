@@ -52,27 +52,63 @@ inline std::vector<uint8_t> MakeBlob(size_t size, uint8_t seed = 0) {
 // Every operation must degrade to a failure instead of touching an unmounted volume.
 class UnavailableFsService : public IFsService {
 public:
-    bool Initialize() override { return false; }
-    bool IsAvailable() const override { return false; }
-    bool WriteFile(std::string_view, const void*, size_t, bool) override { return false; }
-    bool ReadFile(std::string_view, void*, size_t, size_t& out_len) override { out_len = 0; return false; }
-    int OpenFile(std::string_view, fs_mode_t, fs_file_t*) override { return -ENODEV; }
-    bool CreateDirectory(std::string_view) override { return false; }
-    bool Exists(std::string_view) const override { return false; }
-    bool DeleteFile(std::string_view) override { return false; }
-    bool DeleteRecursive(std::string_view) override { return false; }
-    std::vector<std::string> ListFiles(std::string_view) const override { return {}; }
+    bool Initialize() override {
+        return false;
+    }
+    bool IsAvailable() const override {
+        return false;
+    }
+    bool WriteFile(std::string_view, const void*, size_t, bool) override {
+        return false;
+    }
+    bool ReadFile(std::string_view, void*, size_t, size_t& out_len) override {
+        out_len = 0;
+        return false;
+    }
+    int OpenFile(std::string_view, fs_mode_t, fs_file_t*) override {
+        return -ENODEV;
+    }
+    bool CreateDirectory(std::string_view) override {
+        return false;
+    }
+    bool Exists(std::string_view) const override {
+        return false;
+    }
+    bool DeleteFile(std::string_view) override {
+        return false;
+    }
+    bool DeleteRecursive(std::string_view) override {
+        return false;
+    }
+    std::vector<std::string> ListFiles(std::string_view) const override {
+        return {};
+    }
     int ListDirectory(
-        std::string_view, size_t, size_t, std::vector<DirectoryEntry>& entries, size_t& count) const override {
+        std::string_view,
+        size_t,
+        size_t,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
         entries.clear();
         count = 0;
         return -ENODEV;
     }
-    std::optional<size_t> GetFileSize(std::string_view) const override { return std::nullopt; }
-    uint64_t GetTotalSpace() const override { return 0; }
-    uint64_t GetUsedSpace() const override { return 0; }
-    bool Format() override { return false; }
-    int Rename(std::string_view, std::string_view) override { return -ENODEV; }
+    std::optional<size_t> GetFileSize(std::string_view) const override {
+        return std::nullopt;
+    }
+    uint64_t GetTotalSpace() const override {
+        return 0;
+    }
+    uint64_t GetUsedSpace() const override {
+        return 0;
+    }
+    bool Format() override {
+        return false;
+    }
+    int Rename(std::string_view, std::string_view) override {
+        return -ENODEV;
+    }
 };
 
 /** A store on a volume that is not there, for tests that never reach the file system. */

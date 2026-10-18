@@ -24,13 +24,13 @@ private:
     std::shared_ptr<SystemConfigurationManager> system_configuration_manager_;
 
 public:
-    SystemController(
-        std::shared_ptr<IFsService> fs_service,
-        std::shared_ptr<WorkQueueThread> config_work_queue_thread);
+    SystemController(std::shared_ptr<IFsService> fs_service, std::shared_ptr<WorkQueueThread> config_work_queue_thread);
 
     int Initialize();
 
-    std::shared_ptr<SystemConfigurationManager> GetConfigurationManager() const { return system_configuration_manager_; }
+    std::shared_ptr<SystemConfigurationManager> GetConfigurationManager() const {
+        return system_configuration_manager_;
+    }
 };
 
 } // namespace eerie_leap::controllers

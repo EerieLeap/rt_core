@@ -1,16 +1,16 @@
 #pragma once
 
 #include <memory>
-#include <zephyr/ztest.h>
 #include <zephyr/drivers/adc/adc_emul.h>
+#include <zephyr/ztest.h>
 
-#include "subsys/device_tree/dt_adc.h"
 #include "subsys/adc/adc_emulator.h"
+#include "subsys/device_tree/dt_adc.h"
 
 namespace emulator_support {
 
-using eerie_leap::subsys::device_tree::DtAdc;
 using eerie_leap::subsys::adc::AdcEmulator;
+using eerie_leap::subsys::device_tree::DtAdc;
 
 // The overlay declares three emulated ADCs: four channels, two channels, then one whose channel
 // states no resolution and therefore never initializes.

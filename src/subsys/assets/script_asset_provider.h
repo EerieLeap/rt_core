@@ -14,7 +14,7 @@ namespace eerie_leap::subsys::assets {
 class AssetsManager;
 
 /// The extension of a Lua script, in static storage as AssetProvider::extensions needs.
-inline constexpr std::array<std::string_view, 1> LUA_SCRIPT_EXTENSIONS = {".lua"};
+inline constexpr std::array<std::string_view, 1> LUA_SCRIPT_EXTENSIONS = { ".lua" };
 
 /**
  * @brief What a unit serves of a kind of Lua scripts: listing, download, upload and delete of
@@ -33,6 +33,7 @@ AssetProvider MakeScriptProvider(
     std::string_view name,
     std::shared_ptr<AssetStore> store,
     uint32_t max_size,
-    const std::shared_ptr<AssetsManager>& manager);
+    const std::shared_ptr<AssetsManager>& manager
+);
 
 } // namespace eerie_leap::subsys::assets

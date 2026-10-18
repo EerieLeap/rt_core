@@ -11,9 +11,7 @@ namespace eerie_leap::domain::sensor_domain::sensor_readers {
 // script last wrote, as a PROCESSED reading; any other reading stays UNINITIALIZED.
 class SensorReaderUserValueType : public SensorReaderBase {
 public:
-    SensorReaderUserValueType(
-        std::shared_ptr<ITimeService> time_service,
-        const SensorRuntime& runtime);
+    SensorReaderUserValueType(std::shared_ptr<ITimeService> time_service, const SensorRuntime& runtime);
 
     ~SensorReaderUserValueType() override = default;
 

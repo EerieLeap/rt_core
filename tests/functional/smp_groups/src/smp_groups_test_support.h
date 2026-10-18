@@ -20,22 +20,22 @@
 
 #include "smp_test_client.h"
 
-#include "subsys/smp/smp_header.h"
-#include "subsys/smp/smp_group_id.h"
+#include "domain/configuration_domain/utilities/i_cbor_configuration_manager.h"
 #include "subsys/cdmp/services/i_cdmp_network_info.h"
 #include "subsys/fs/services/i_fs_service.h"
-#include "domain/configuration_domain/utilities/i_cbor_configuration_manager.h"
+#include "subsys/smp/smp_group_id.h"
+#include "subsys/smp/smp_header.h"
 
 namespace smp_groups_test {
 
-using eerie_leap::subsys::smp::SmpGroupId;
-using eerie_leap::subsys::smp::SmpHeader;
-using eerie_leap::subsys::smp::SmpOperation;
+using eerie_leap::domain::configuration_domain::utilities::ICborConfigurationManager;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::subsys::fs::services::DirectoryEntry;
 using eerie_leap::subsys::fs::services::IFsService;
-using eerie_leap::domain::configuration_domain::utilities::ICborConfigurationManager;
+using eerie_leap::subsys::smp::SmpGroupId;
+using eerie_leap::subsys::smp::SmpHeader;
+using eerie_leap::subsys::smp::SmpOperation;
 
 using namespace smp_test;
 
@@ -82,7 +82,7 @@ public:
     }
 
     eerie_leap::configuration::services::StoredCborInfo GetCborConfigurationInfo() override {
-        return {.size = stored.size(), .crc = crc32_ieee(stored.data(), stored.size())};
+        return { .size = stored.size(), .crc = crc32_ieee(stored.data(), stored.size()) };
     }
 };
 
@@ -91,7 +91,9 @@ public:
     CdmpDeviceInfo self{};
     std::vector<CdmpDeviceInfo> devices;
 
-    [[nodiscard]] CdmpDeviceInfo GetDeviceInfo() const override { return self; }
+    [[nodiscard]] CdmpDeviceInfo GetDeviceInfo() const override {
+        return self;
+    }
 
     size_t GetNetworkDevices(std::span<CdmpDeviceInfo> out) const override {
         const size_t count = std::min(out.size(), devices.size());
@@ -99,7 +101,9 @@ public:
         return count;
     }
 
-    [[nodiscard]] size_t GetNetworkDeviceCount() const override { return devices.size(); }
+    [[nodiscard]] size_t GetNetworkDeviceCount() const override {
+        return devices.size();
+    }
 };
 
 // An SD card whose directories are lists in memory, read as FsService::ListDirectory() reads them;
@@ -114,24 +118,60 @@ public:
     bool throws_bad_alloc = false;
     mutable int list_calls = 0;
 
-    bool Initialize() override { return true; }
-    bool IsAvailable() const override { return available; }
-    bool WriteFile(std::string_view, const void*, size_t, bool) override { return false; }
-    bool ReadFile(std::string_view, void*, size_t, size_t& out_len) override { out_len = 0; return false; }
-    int OpenFile(std::string_view, fs_mode_t, fs_file_t*) override { return -ENOTSUP; }
-    bool CreateDirectory(std::string_view) override { return false; }
-    bool Exists(std::string_view) const override { return false; }
-    bool DeleteFile(std::string_view) override { return false; }
-    bool DeleteRecursive(std::string_view) override { return false; }
-    int Rename(std::string_view, std::string_view) override { return -ENOTSUP; }
-    std::vector<std::string> ListFiles(std::string_view) const override { return {}; }
-    std::optional<size_t> GetFileSize(std::string_view) const override { return std::nullopt; }
-    uint64_t GetTotalSpace() const override { return 0; }
-    uint64_t GetUsedSpace() const override { return 0; }
-    bool Format() override { return false; }
+    bool Initialize() override {
+        return true;
+    }
+    bool IsAvailable() const override {
+        return available;
+    }
+    bool WriteFile(std::string_view, const void*, size_t, bool) override {
+        return false;
+    }
+    bool ReadFile(std::string_view, void*, size_t, size_t& out_len) override {
+        out_len = 0;
+        return false;
+    }
+    int OpenFile(std::string_view, fs_mode_t, fs_file_t*) override {
+        return -ENOTSUP;
+    }
+    bool CreateDirectory(std::string_view) override {
+        return false;
+    }
+    bool Exists(std::string_view) const override {
+        return false;
+    }
+    bool DeleteFile(std::string_view) override {
+        return false;
+    }
+    bool DeleteRecursive(std::string_view) override {
+        return false;
+    }
+    int Rename(std::string_view, std::string_view) override {
+        return -ENOTSUP;
+    }
+    std::vector<std::string> ListFiles(std::string_view) const override {
+        return {};
+    }
+    std::optional<size_t> GetFileSize(std::string_view) const override {
+        return std::nullopt;
+    }
+    uint64_t GetTotalSpace() const override {
+        return 0;
+    }
+    uint64_t GetUsedSpace() const override {
+        return 0;
+    }
+    bool Format() override {
+        return false;
+    }
 
-    int ListDirectory(std::string_view relative_path, size_t first, size_t max_entries,
-        std::vector<DirectoryEntry>& entries, size_t& count) const override {
+    int ListDirectory(
+        std::string_view relative_path,
+        size_t first,
+        size_t max_entries,
+        std::vector<DirectoryEntry>& entries,
+        size_t& count
+    ) const override {
 
         list_calls++;
         entries.clear();

@@ -4,15 +4,15 @@
 #include <memory>
 #include <optional>
 
-#include "subsys/smp/smp_group.h"
-#include "subsys/cdmp/services/i_cdmp_network_info.h"
 #include "domain/system_domain/models/sensor_capabilities.h"
+#include "subsys/cdmp/services/i_cdmp_network_info.h"
+#include "subsys/smp/smp_group.h"
 
 namespace eerie_leap::domain::system_domain::smp {
 
-using eerie_leap::subsys::smp::SmpGroup;
-using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
+using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
+using eerie_leap::subsys::smp::SmpGroup;
 
 /** @brief SMP `device` group: what this unit is and which CDMP identity it has. */
 class DeviceMgmtGroup : public SmpGroup<DeviceMgmtGroup> {
@@ -45,7 +45,8 @@ public:
     DeviceMgmtGroup(
         uint32_t build_number,
         std::shared_ptr<const ICdmpNetworkInfo> network_info,
-        std::optional<SensorCapabilities> sensor_capabilities = std::nullopt);
+        std::optional<SensorCapabilities> sensor_capabilities = std::nullopt
+    );
     ~DeviceMgmtGroup();
 };
 

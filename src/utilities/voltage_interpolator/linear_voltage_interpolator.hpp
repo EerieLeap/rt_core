@@ -1,11 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <vector>
-#include <algorithm>
 
-#include "i_voltage_interpolator.h"
 #include "calibration_data.h"
+#include "i_voltage_interpolator.h"
 #include "interpolation_method.h"
 
 namespace eerie_leap::utilities::voltage_interpolator {
@@ -16,8 +16,8 @@ private:
     std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table_;
 
 public:
-    explicit LinearVoltageInterpolator(std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table)
-        : calibration_table_(std::move(calibration_table)) {
+    explicit LinearVoltageInterpolator(std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table) :
+        calibration_table_(std::move(calibration_table)) {
 
         if(!calibration_table_ || calibration_table_->size() < 2)
             throw std::invalid_argument("Calibration data is missing or invalid.");
@@ -34,11 +34,9 @@ public:
         }
 
         // Binary search for the correct interval
-        auto upper = std::lower_bound(
-            table.begin(), table.end(), voltage,
-            [](const CalibrationData& data, float v) {
-                return data.voltage < v;
-            });
+        auto upper = std::lower_bound(table.begin(), table.end(), voltage, [](const CalibrationData& data, float v) {
+            return data.voltage < v;
+        });
 
         // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
         if(upper == table.begin())

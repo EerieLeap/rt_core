@@ -1,8 +1,8 @@
 #include <stdexcept>
 
-#include "domain/sensor_domain/models/sensor_reading.h"
-#include "domain/sensor_domain/models/reading_status.h"
 #include "domain/sensor_domain/models/reading_error.h"
+#include "domain/sensor_domain/models/reading_status.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
 #include "sensor_reader_physical_analog.h"
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
@@ -15,10 +15,11 @@ SensorReaderPhysicalAnalog::SensorReaderPhysicalAnalog(
     std::shared_ptr<ITimeService> time_service,
     const SensorRuntime& runtime,
     const AdcSample* sample,
-    std::shared_ptr<const AdcCalibrator> calibrator)
-        : SensorReaderBase(std::move(time_service), runtime),
-        sample_(sample),
-        calibrator_(std::move(calibrator)) {
+    std::shared_ptr<const AdcCalibrator> calibrator
+) :
+    SensorReaderBase(std::move(time_service), runtime),
+    sample_(sample),
+    calibrator_(std::move(calibrator)) {
 
     if(GetSensor().configuration.type != SensorType::PHYSICAL_ANALOG)
         throw std::runtime_error("Unsupported sensor type");

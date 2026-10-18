@@ -9,10 +9,10 @@ using namespace eerie_leap::configuration::services;
 
 CanbusConfigurationManager::CanbusConfigurationManager(
     std::unique_ptr<CborConfigurationService<CborCanbusConfig>> cbor_configuration_service,
-    std::shared_ptr<IFsService> sd_fs_service)
-        : CborConfigurationManagerBase("CAN Bus", std::move(cbor_configuration_service)),
-        cbor_parser_(std::move(sd_fs_service)
-) {
+    std::shared_ptr<IFsService> sd_fs_service
+) :
+    CborConfigurationManagerBase("CAN Bus", std::move(cbor_configuration_service)),
+    cbor_parser_(std::move(sd_fs_service)) {
     LoadOrCreateDefault();
 }
 
