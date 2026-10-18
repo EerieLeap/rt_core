@@ -3,8 +3,8 @@
 #include <string_view>
 #include <utility>
 
-#include <zephyr/logging/log.h>
 #include <eerie_memory.hpp>
+#include <zephyr/logging/log.h>
 
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -16,11 +16,11 @@
 #include "domain/canbus_domain/models/canbus_configuration.h"
 
 #ifdef CONFIG_EERIE_LEAP_ASSETS
-#include "subsys/assets/asset_kind.h"
-#include "subsys/assets/asset_store.h"
-#include "subsys/assets/assets_manager.h"
-#include "subsys/assets/script_asset_provider.h"
-#include "utilities/string/path_helpers.h"
+    #include "subsys/assets/asset_kind.h"
+    #include "subsys/assets/asset_store.h"
+    #include "subsys/assets/assets_manager.h"
+    #include "subsys/assets/script_asset_provider.h"
+    #include "utilities/string/path_helpers.h"
 #endif
 
 #include "canbus_controller.h"
@@ -47,8 +47,8 @@ constexpr const char* CAN_SCRIPTS_DIRECTORY = "scripts/can";
 // Whether the CAN configuration of @p manager has a message, enabled or not, on any channel that uses
 // the script at @p path. Holds the manager weakly, since the registry may outlive the controller. Runs
 // on the configuration work queue.
-eerie_leap::subsys::assets::AssetsManager::Referrer MakeCanScriptReferrer(
-    const std::shared_ptr<CanbusConfigurationManager>& manager) {
+eerie_leap::subsys::assets::AssetsManager::Referrer
+MakeCanScriptReferrer(const std::shared_ptr<CanbusConfigurationManager>& manager) {
 
     return [weak_manager = std::weak_ptr<CanbusConfigurationManager>(manager)](std::string_view path) -> bool {
         const auto canbus_manager = weak_manager.lock();
@@ -63,7 +63,9 @@ eerie_leap::subsys::assets::AssetsManager::Referrer MakeCanScriptReferrer(
             for(const auto& [channel_id, channel] : configuration->channel_configurations) {
                 for(const auto& message : channel.message_configurations) {
                     if(message != nullptr
-                        && eerie_leap::utilities::string::PathHelpers::IsSameEntryIgnoringCase(path, message->script_path))
+                        && eerie_leap::utilities::string::PathHelpers::IsSameEntryIgnoringCase(
+                            path, message->script_path
+                        ))
                         return true;
                 }
             }
@@ -86,12 +88,13 @@ CanbusController::CanbusController(
     std::shared_ptr<WorkQueueThread> config_work_queue_thread,
     std::shared_ptr<ConfigurationService> configuration_service,
     std::shared_ptr<IFsService> sd_fs_service,
-    std::shared_ptr<AssetsManager> assets_manager)
-    : fs_service_(std::move(fs_service)),
-      config_work_queue_thread_(std::move(config_work_queue_thread)),
-      configuration_service_(std::move(configuration_service)),
-      sd_fs_service_(std::move(sd_fs_service)),
-      assets_manager_(std::move(assets_manager)) {}
+    std::shared_ptr<AssetsManager> assets_manager
+) :
+    fs_service_(std::move(fs_service)),
+    config_work_queue_thread_(std::move(config_work_queue_thread)),
+    configuration_service_(std::move(configuration_service)),
+    sd_fs_service_(std::move(sd_fs_service)),
+    assets_manager_(std::move(assets_manager)) {}
 
 CanbusController::~CanbusController() {
     // First, so that no request reaches the scripts, or the configuration, of a controller on its way out.
@@ -103,20 +106,24 @@ CanbusController::~CanbusController() {
 
 int CanbusController::Initialize(const ConfigurationSetup& setup_test_configuration) {
     auto cbor_canbus_config_service = std::make_unique<config_services::CborConfigurationService<CborCanbusConfig>>(
-        CANBUS_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_);
+        CANBUS_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
+    );
     canbus_configuration_manager_ = std::make_shared<CanbusConfigurationManager>(
-        std::move(cbor_canbus_config_service), sd_fs_service_);
+        std::move(cbor_canbus_config_service), sd_fs_service_
+    );
 
     if(configuration_service_ != nullptr)
         configuration_service_->RegisterCborConfigurationManager(
-            ConfigurationService::Type::Canbus, canbus_configuration_manager_);
+            ConfigurationService::Type::Canbus, canbus_configuration_manager_
+        );
 
     // TODO: For test purposes only
     if(setup_test_configuration)
         setup_test_configuration(canbus_configuration_manager_);
 
     canbus_service_ = std::make_shared<CanbusService>(
-        DtCanbus::Get, canbus_configuration_manager_, config_work_queue_thread_);
+        DtCanbus::Get, canbus_configuration_manager_, config_work_queue_thread_
+    );
 
     canbus_com_service_ = std::make_shared<CanbusComService>(canbus_service_);
     if(!canbus_com_service_->Initialize()) {
@@ -131,7 +138,9 @@ int CanbusController::Initialize(const ConfigurationSetup& setup_test_configurat
         [](CanbusController* controller) {
             controller->Reconfigure();
             return WorkQueueTaskResult{};
-        }, this);
+        },
+        this
+    );
 
     // Registered last so the test configuration above does not trigger a reconfiguration.
     canbus_configuration_manager_->RegisterConfigurationUpdatedHandler([this] {
@@ -160,11 +169,9 @@ void CanbusController::RegisterAssets() {
         assets_manager_->AddReferrer(this, MakeCanScriptReferrer(canbus_configuration_manager_));
 
         is_assets_registered_ = assets_manager_->Register(MakeScriptProvider(
-            AssetKind::CAN_SCRIPTS,
-            "can_scripts",
-            std::move(store),
-            CONFIG_EERIE_LEAP_CAN_SCRIPT_MAX_SIZE,
-            assets_manager_));
+            AssetKind::CAN_SCRIPTS, "can_scripts", std::move(store), CONFIG_EERIE_LEAP_CAN_SCRIPT_MAX_SIZE,
+            assets_manager_
+        ));
 
         if(!is_assets_registered_)
             assets_manager_->RemoveReferrers(this);

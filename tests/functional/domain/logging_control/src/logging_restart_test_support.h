@@ -50,11 +50,14 @@ inline void SendRestart(
     uint8_t device_id,
     uint32_t uid,
     std::initializer_list<Record> records,
-    uint16_t features = LOGGER_FEATURES) {
-    harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
-        .claiming_device_id = device_id,
-        .uid = uid,
-        .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
+    uint16_t features = LOGGER_FEATURES
+) {
+    harness.SendAsPeer(
+        MANAGEMENT,
+        CdmpIdClaimRequestMessage{
+            .claiming_device_id = device_id, .uid = uid, .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+            .ToCanFrame()
+    );
     harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records), features));
 }
 
@@ -74,8 +77,9 @@ inline void SendRestart(
         const auto frame = harness.bus.Wait(COMMAND, [device_id](const Bytes& bytes) {
             return IsLoggingCommandFrame(bytes) || IsSyncRequestTo(device_id)(bytes);
         });
-        zassert_true(frame.has_value(),
-            "The unit asks the restarted unit to replay its records, as its digest differs");
+        zassert_true(
+            frame.has_value(), "The unit asks the restarted unit to replay its records, as its digest differs"
+        );
         if(IsLoggingCommandFrame(frame->data))
             return true;
     }
@@ -109,7 +113,8 @@ private:
 public:
     // The handler registers after the monitor's and the state service's, so it holds the queue only
     // after they ran for the heartbeat that closes the hold.
-    explicit CdmpQueueHold(Harness& harness) : harness_(harness) {
+    explicit CdmpQueueHold(Harness& harness) :
+        harness_(harness) {
         handler_id_ = harness_.com->RegisterHeartbeatHandler([context = context_](const CdmpHeartbeatMessage&) {
             if(!context->is_armed.exchange(false))
                 return;

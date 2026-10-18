@@ -27,17 +27,24 @@ ZTEST(start_with_bad_channel, test_Start_skips_a_sensor_on_a_channel_without_cal
     // The ADC configuration only knows two: what a configuration stored before the device tree
     // grew looks like before padding, forced here by a manager that sees a two-channel unit.
     auto adc_configuration_manager = MakeAdcConfigurationManager(
-        fs_service, MakeAdcManager(std::make_shared<FakeAdc>(2)));
-    zassert_true(adc_configuration_manager->Update(*MakeAdcConfiguration(2, 8, MakeCalibrator({ {0.0F, 0.0F}, {5.0F, 5.0F} }))));
+        fs_service, MakeAdcManager(std::make_shared<FakeAdc>(2))
+    );
+    zassert_true(adc_configuration_manager->Update(
+        *MakeAdcConfiguration(2, 8, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } }))
+    ));
     zassert_equal(adc_configuration_manager->Get()->channel_configurations->size(), 2);
 
-    auto rig = MakeProcessingRig(fs_service, adc_manager, adc_configuration_manager, {
-        MakeAnalogSensor("good", 0, 20),
-        MakeAnalogSensor("bad", 3, 20),
-        MakeVirtualSensor("derived", "good + 1", 20),
-        // Alone in its rate group, which is dropped with it.
-        MakeAnalogSensor("lonely_bad", 2, 50),
-    }, adc_manager->GetChannelCount());
+    auto rig = MakeProcessingRig(
+        fs_service, adc_manager, adc_configuration_manager,
+        {
+            MakeAnalogSensor("good", 0, 20),
+            MakeAnalogSensor("bad", 3, 20),
+            MakeVirtualSensor("derived", "good + 1", 20),
+            // Alone in its rate group, which is dropped with it.
+            MakeAnalogSensor("lonely_bad", 2, 50),
+        },
+        adc_manager->GetChannelCount()
+    );
 
     zassert_true(rig.processing_service->Start(), "One bad sensor does not stop the others");
     zassert_true(rig.processing_service->IsRunning());
@@ -52,8 +59,9 @@ ZTEST(start_with_bad_channel, test_Start_skips_a_sensor_on_a_channel_without_cal
     const auto derived = rig.frame->TryGetReading("derived");
     zassert_true(derived.has_value());
     zassert_equal(derived->status, ReadingStatus::PROCESSED);
-    zassert_within(derived->value.value(), good->value.value() + 1.0F, 1e-3F,
-        "The group kept running past the sensor it left out");
+    zassert_within(
+        derived->value.value(), good->value.value() + 1.0F, 1e-3F, "The group kept running past the sensor it left out"
+    );
 
     zassert_false(rig.frame->TryGetReading("bad").has_value(), "The sensor has no reader");
     zassert_false(rig.frame->TryGetReading("lonely_bad").has_value());

@@ -51,7 +51,8 @@ inline constexpr uint32_t k_binding_test_source = 0xB1D0;
 
 class BindingTestChannel : public EventChannel<BindingEventType, BindingPayloadType> {
 public:
-    explicit BindingTestChannel(std::string name) : EventChannel(std::move(name)) { }
+    explicit BindingTestChannel(std::string name) :
+        EventChannel(std::move(name)) {}
 };
 
 // Records what SubscribeEventBinding() hands the channel, so a test can evaluate the filter itself,
@@ -62,10 +63,11 @@ public:
     bool last_had_filter = false;
     ErasedEventFilter last_filter;
 
-    explicit RecordingChannel(std::string name) : BindingTestChannel(std::move(name)) { }
+    explicit RecordingChannel(std::string name) :
+        BindingTestChannel(std::move(name)) {}
 
-    AnySubscription SubscribeErased(
-        uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) override {
+    AnySubscription
+    SubscribeErased(uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) override {
 
         last_had_filter = static_cast<bool>(filter);
         last_filter = filter;
@@ -79,14 +81,15 @@ public:
 
 class BindingTestEventBus : public EventBus {
 public:
-    BindingTestEventBus() : EventBus("binding_test_bus", k_binding_bus_stack_size) { }
+    BindingTestEventBus() :
+        EventBus("binding_test_bus", k_binding_bus_stack_size) {}
 };
 
 // Declaration order matters: the bus is destroyed first, so ~EventBus detaches channels that are
 // still alive.
 struct BindingTestChannels {
-    RecordingChannel primary { "binding_primary" };
-    BindingTestChannel secondary { "binding_secondary" };
+    RecordingChannel primary{ "binding_primary" };
+    BindingTestChannel secondary{ "binding_secondary" };
     BindingTestEventBus bus;
 
     // The first failed registration; a second fixture would see -EEXIST here.
@@ -131,7 +134,8 @@ private:
     std::span<const std::pair<uint32_t, EventData>> entries_;
 
 public:
-    explicit FakeView(std::span<const std::pair<uint32_t, EventData>> entries) : entries_(entries) { }
+    explicit FakeView(std::span<const std::pair<uint32_t, EventData>> entries) :
+        entries_(entries) {}
 
     const EventData* Find(uint32_t key) const override {
         for(const auto& [entry_key, value] : entries_) {
@@ -144,16 +148,9 @@ public:
 };
 
 // Dispatches on the calling thread, so a test needs no waits.
-inline void PublishSync(
-    BindingTestChannel& channel,
-    BindingEventType type,
-    BindingTestChannel::PayloadMap payload) {
+inline void PublishSync(BindingTestChannel& channel, BindingEventType type, BindingTestChannel::PayloadMap payload) {
 
-    channel.Publish({
-        .source_id = k_binding_test_source,
-        .type = type,
-        .payload = std::move(payload)
-    });
+    channel.Publish({ .source_id = k_binding_test_source, .type = type, .payload = std::move(payload) });
 }
 
 } // namespace event_binding_tests

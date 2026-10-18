@@ -13,26 +13,26 @@
 
 #include <zephyr/kernel.h>
 
-#include "utilities/string/string_helpers.h"
-#include "subsys/threading/scoped_mutex.h"
-#include "subsys/canbus/can_frame.h"
 #include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/models/sensor_slot.h"
 #include "domain/sensor_domain/models/sensor_limits.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
+#include "domain/sensor_domain/models/sensor_slot.h"
+#include "subsys/canbus/can_frame.h"
+#include "subsys/threading/scoped_mutex.h"
+#include "utilities/string/string_helpers.h"
 
 namespace eerie_leap::domain::sensor_domain::utilities {
 
-using eerie_leap::utilities::string::StringHelpers;
-using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::subsys::canbus::CanFrame;
+using eerie_leap::domain::sensor_domain::models::ReadingError;
+using eerie_leap::domain::sensor_domain::models::ReadingSource;
+using eerie_leap::domain::sensor_domain::models::ReadingStatus;
 using eerie_leap::domain::sensor_domain::models::Sensor;
-using eerie_leap::domain::sensor_domain::models::SensorSlot;
 using eerie_leap::domain::sensor_domain::models::SensorLimits;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
-using eerie_leap::domain::sensor_domain::models::ReadingStatus;
-using eerie_leap::domain::sensor_domain::models::ReadingSource;
-using eerie_leap::domain::sensor_domain::models::ReadingError;
+using eerie_leap::domain::sensor_domain::models::SensorSlot;
+using eerie_leap::subsys::canbus::CanFrame;
+using eerie_leap::subsys::threading::ScopedMutex;
+using eerie_leap::utilities::string::StringHelpers;
 
 // The latest reading of every configured sensor, shared between the processing pipeline and its
 // consumers.
@@ -63,9 +63,18 @@ private:
         static Record Pack(const SensorReading& reading) {
             Record record;
 
-            if(reading.value.has_value()) { record.value = *reading.value; record.flags |= kHasValue; }
-            if(reading.raw_value.has_value()) { record.raw_value = *reading.raw_value; record.flags |= kHasRawValue; }
-            if(reading.voltage.has_value()) { record.voltage = *reading.voltage; record.flags |= kHasVoltage; }
+            if(reading.value.has_value()) {
+                record.value = *reading.value;
+                record.flags |= kHasValue;
+            }
+            if(reading.raw_value.has_value()) {
+                record.raw_value = *reading.raw_value;
+                record.flags |= kHasRawValue;
+            }
+            if(reading.voltage.has_value()) {
+                record.voltage = *reading.voltage;
+                record.flags |= kHasVoltage;
+            }
             if(reading.timestamp.has_value()) {
                 record.timestamp = reading.timestamp->time_since_epoch().count();
                 record.flags |= kHasTimestamp;
@@ -81,12 +90,16 @@ private:
         SensorReading Unpack(const Sensor* sensor) const {
             SensorReading reading(sensor);
 
-            if(flags & kHasValue) reading.value = value;
-            if(flags & kHasRawValue) reading.raw_value = raw_value;
-            if(flags & kHasVoltage) reading.voltage = voltage;
+            if(flags & kHasValue)
+                reading.value = value;
+            if(flags & kHasRawValue)
+                reading.raw_value = raw_value;
+            if(flags & kHasVoltage)
+                reading.voltage = voltage;
             if(flags & kHasTimestamp) {
                 reading.timestamp = std::chrono::system_clock::time_point(
-                    std::chrono::system_clock::duration(timestamp));
+                    std::chrono::system_clock::duration(timestamp)
+                );
             }
 
             reading.status = status;
@@ -102,7 +115,7 @@ private:
         Record processed;
         bool has_reading = false;
         bool has_processed = false;
-        bool is_updated = false;             // Processed and not yet taken.
+        bool is_updated = false; // Processed and not yet taken.
         uint16_t can_frame_index = SensorSlot::kInvalid;
     };
 
@@ -120,10 +133,10 @@ private:
     };
 
     std::vector<Slot> slots_;
-    std::vector<const Sensor*> sensors_;     // By slot; owned by the generation that configured the frame.
-    std::vector<float> values_;              // Latest processed value by slot, NaN for none. Addresses are stable.
-    std::vector<IndexEntry> index_;          // Sorted by hash.
-    std::vector<CanFrame> can_frames_;       // Latest frame, one per enabled CANBUS_RAW sensor.
+    std::vector<const Sensor*> sensors_; // By slot; owned by the generation that configured the frame.
+    std::vector<float> values_;          // Latest processed value by slot, NaN for none. Addresses are stable.
+    std::vector<IndexEntry> index_;      // Sorted by hash.
+    std::vector<CanFrame> can_frames_;   // Latest frame, one per enabled CANBUS_RAW sensor.
     uint32_t generation_ = 0;
 
     // Every raw frame since the log writer last drained, oldest first; sized at Configure().
@@ -146,13 +159,16 @@ private:
     }
 
     std::optional<SensorSlot> FindSlotLocked(uint32_t sensor_id_hash) const {
-        const auto it = std::lower_bound(index_.begin(), index_.end(), sensor_id_hash,
-            [](const IndexEntry& entry, uint32_t hash) { return entry.sensor_id_hash < hash; });
+        const auto it = std::lower_bound(
+            index_.begin(), index_.end(), sensor_id_hash, [](const IndexEntry& entry, uint32_t hash) {
+                return entry.sensor_id_hash < hash;
+            }
+        );
 
         if(it == index_.end() || it->sensor_id_hash != sensor_id_hash)
             return std::nullopt;
 
-        return SensorSlot{it->slot};
+        return SensorSlot{ it->slot };
     }
 
     bool IsValidLocked(SensorSlot slot) const {
@@ -225,15 +241,17 @@ public:
         size_t can_frame_count = 0;
         for(size_t i = 0; i < count; i++) {
             sensors_[i] = sensors[i].get();
-            index_[i] = IndexEntry{sensors[i]->id_hash, static_cast<uint16_t>(i)};
+            index_[i] = IndexEntry{ sensors[i]->id_hash, static_cast<uint16_t>(i) };
 
             // A disabled raw sensor never gets a frame, so it reserves no frame store or queue.
-            if(sensors[i]->is_enabled && sensors[i]->configuration.GetTraits().source == models::SensorSourceKind::CAN_FRAME)
+            if(sensors[i]->is_enabled
+                && sensors[i]->configuration.GetTraits().source == models::SensorSourceKind::CAN_FRAME)
                 slots_[i].can_frame_index = static_cast<uint16_t>(can_frame_count++);
         }
 
-        std::sort(index_.begin(), index_.end(),
-            [](const IndexEntry& a, const IndexEntry& b) { return a.sensor_id_hash < b.sensor_id_hash; });
+        std::sort(index_.begin(), index_.end(), [](const IndexEntry& a, const IndexEntry& b) {
+            return a.sensor_id_hash < b.sensor_id_hash;
+        });
 
         can_frames_.assign(can_frame_count, CanFrame{});
         raw_can_queue_.assign(can_frame_count > 0 ? SensorLimits::kRawCanQueueSize : 0, RawCanRecord{});
@@ -464,7 +482,8 @@ public:
             reading.status = ReadingStatus::PROCESSED;
             if(record.has_timestamp) {
                 reading.timestamp = std::chrono::system_clock::time_point(
-                    std::chrono::system_clock::duration(record.timestamp));
+                    std::chrono::system_clock::duration(record.timestamp)
+                );
             }
             reading.can_frame = &frames[count];
             readings[count] = reading;
@@ -595,4 +614,4 @@ public:
     }
 };
 
-} // eerie_leap::domain::sensor_domain::utilities
+} // namespace eerie_leap::domain::sensor_domain::utilities

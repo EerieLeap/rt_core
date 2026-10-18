@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <span>
 #include <set>
+#include <span>
 
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/utilities/enums.h"

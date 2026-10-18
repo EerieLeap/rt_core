@@ -15,7 +15,8 @@ class SensorEventsChannel : public EventChannel<SensorEventType, SensorPayloadTy
 private:
     static constexpr size_t k_max_queued_events = 128;
 
-    SensorEventsChannel() : EventChannel("sensor_events", k_max_queued_events) { }
+    SensorEventsChannel() :
+        EventChannel("sensor_events", k_max_queued_events) {}
 
 public:
     static SensorEventsChannel& GetInstance() {

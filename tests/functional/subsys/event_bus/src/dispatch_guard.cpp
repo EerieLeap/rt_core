@@ -38,11 +38,13 @@ k_thread dispatch_helper;
 // thread without unwinding, never leaves the helper writing to a dead stack frame.
 struct DetachRace {
     int owner = 0;
-    DispatchGuard guard { &owner };
+    DispatchGuard guard{ &owner };
     k_sem entered;
-    std::atomic<bool> finished { false };
+    std::atomic<bool> finished{ false };
 
-    DetachRace() { k_sem_init(&entered, 0, 1); }
+    DetachRace() {
+        k_sem_init(&entered, 0, 1);
+    }
 };
 
 void DispatchSlowly(void* race_holder, void*, void*) {
@@ -68,11 +70,9 @@ struct RemovalRace {
 };
 
 EventBinding ValueBinding() {
-    return EventBinding {
-        .channel = EventChannelId::Sensors,
+    return EventBinding{ .channel = EventChannelId::Sensors,
         .event_type = std::to_underlying(BindingEventType::Updated),
-        .payload_key = std::to_underlying(BindingPayloadType::Value)
-    };
+        .payload_key = std::to_underlying(BindingPayloadType::Value) };
 }
 
 } // namespace
@@ -84,7 +84,9 @@ ZTEST(dispatch_guard, test_Dispatch_runs_the_body_while_attached) {
     DispatchGuard guard(&owner);
     int runs = 0;
 
-    guard.Dispatch([&runs] { ++runs; });
+    guard.Dispatch([&runs] {
+        ++runs;
+    });
 
     zassert_equal(runs, 1);
 }
@@ -95,7 +97,9 @@ ZTEST(dispatch_guard, test_Dispatch_is_a_no_op_after_Detach) {
     int runs = 0;
 
     guard.Detach();
-    guard.Dispatch([&runs] { ++runs; });
+    guard.Dispatch([&runs] {
+        ++runs;
+    });
 
     zassert_equal(runs, 0);
 }
@@ -107,7 +111,9 @@ ZTEST(dispatch_guard, test_Detach_can_be_repeated) {
 
     guard.Detach();
     guard.Detach();
-    guard.Dispatch([&runs] { ++runs; });
+    guard.Dispatch([&runs] {
+        ++runs;
+    });
 
     zassert_equal(runs, 0);
 }
@@ -117,8 +123,10 @@ ZTEST(dispatch_guard, test_Detach_can_be_repeated) {
 ZTEST(dispatch_guard, test_Detach_waits_for_an_in_flight_dispatch) {
     auto race = std::make_shared<DetachRace>();
 
-    k_thread_create(&dispatch_helper, dispatch_helper_stack, K_THREAD_STACK_SIZEOF(dispatch_helper_stack),
-        DispatchSlowly, new std::shared_ptr<DetachRace>(race), nullptr, nullptr, k_helper_priority, 0, K_NO_WAIT);
+    k_thread_create(
+        &dispatch_helper, dispatch_helper_stack, K_THREAD_STACK_SIZEOF(dispatch_helper_stack), DispatchSlowly,
+        new std::shared_ptr<DetachRace>(race), nullptr, nullptr, k_helper_priority, 0, K_NO_WAIT
+    );
 
     zassert_ok(k_sem_take(&race->entered, K_SECONDS(1)));
 
@@ -131,7 +139,9 @@ ZTEST(dispatch_guard, test_Detach_waits_for_an_in_flight_dispatch) {
     zassert_true(finished_at_detach, "Detach() returned while a dispatch was still running.");
 
     int runs = 0;
-    race->guard.Dispatch([&runs] { ++runs; });
+    race->guard.Dispatch([&runs] {
+        ++runs;
+    });
     zassert_equal(runs, 0);
 }
 
@@ -155,7 +165,9 @@ ZTEST(dispatch_guard, test_a_guarded_handler_removed_during_dispatch_does_nothin
     race->subscription_b = SubscribeEventBinding(ValueBinding(), [race, guard = guard_b](const EventData&) {
         ++race->b_handler_calls;
 
-        guard->Dispatch([&race] { ++race->b_body_calls; });
+        guard->Dispatch([&race] {
+            ++race->b_body_calls;
+        });
     });
     zassert_not_null(race->subscription_b.get());
 

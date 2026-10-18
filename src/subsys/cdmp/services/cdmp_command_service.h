@@ -1,11 +1,11 @@
 #pragma once
 
 #include <functional>
-#include <vector>
-#include <span>
-#include <unordered_map>
 #include <memory>
 #include <optional>
+#include <span>
+#include <unordered_map>
+#include <vector>
 
 #include <zephyr/kernel.h>
 
@@ -17,13 +17,13 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
-using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
-using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
 using eerie_leap::subsys::cdmp::models::CdmpCommandRequestMessage;
 using eerie_leap::subsys::cdmp::models::CdmpCommandResponseMessage;
-using eerie_leap::subsys::cdmp::services::command_service::CdmpTransactionService;
 using eerie_leap::subsys::cdmp::services::command_service::CdmpTransactionCallback;
+using eerie_leap::subsys::cdmp::services::command_service::CdmpTransactionService;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 struct CdmpCommandResult {
     CdmpResultCode result_code;
@@ -39,7 +39,8 @@ public:
      * The result answers a request addressed to this unit; a broadcast request gets no response
      * (§4.2.1), and neither does one for which the handler returns nothing.
      */
-    using ServiceCommandHandler = std::function<std::optional<CdmpCommandResult>(const CdmpCommandRequestMessage& request)>;
+    using ServiceCommandHandler =
+        std::function<std::optional<CdmpCommandResult>(const CdmpCommandRequestMessage& request)>;
 
 private:
     int canbus_handler_id_;
@@ -77,7 +78,8 @@ public:
     CdmpCommandService(
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device,
-        std::shared_ptr<WorkQueueThread> work_queue_thread);
+        std::shared_ptr<WorkQueueThread> work_queue_thread
+    );
 
     ~CdmpCommandService();
 
@@ -92,12 +94,14 @@ public:
         uint8_t target_device_id,
         uint8_t command_code,
         std::span<const uint8_t> data = {},
-        CdmpTransactionCallback callback = nullptr);
+        CdmpTransactionCallback callback = nullptr
+    );
     uint8_t SendCommand(
         uint8_t target_device_id,
         CdmpServiceCommandCode command_code,
         std::span<const uint8_t> data = {},
-        CdmpTransactionCallback callback = nullptr);
+        CdmpTransactionCallback callback = nullptr
+    );
 };
 
 } // namespace eerie_leap::subsys::cdmp::services

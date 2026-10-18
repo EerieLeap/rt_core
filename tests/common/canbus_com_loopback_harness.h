@@ -5,21 +5,21 @@
 #include <memory>
 #include <span>
 
-#include <zephyr/kernel.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/fs_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
+#include "domain/canbus_com_domain/services/canbus_com_service.h"
+#include "domain/canbus_com_domain/services/i_network_state_transport.h"
 #include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
 #include "domain/canbus_domain/models/canbus_configuration.h"
 #include "domain/canbus_domain/services/canbus_service.h"
-#include "domain/canbus_com_domain/services/canbus_com_service.h"
-#include "domain/canbus_com_domain/services/i_network_state_transport.h"
 
 #include "cdmp_loopback_harness.h"
 #include "cdmp_test_features.h"
@@ -32,16 +32,16 @@ namespace canbus_com_loopback_test {
 
 using namespace cdmp_loopback_test;
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::configuration::services::CborConfigurationService;
-using eerie_leap::subsys::device_tree::DtFs;
-using eerie_leap::subsys::fs::services::FsService;
+using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
+using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
-using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
-using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
+using eerie_leap::subsys::device_tree::DtFs;
+using eerie_leap::subsys::fs::services::FsService;
+using eerie_leap::utilities::memory::Mrm;
 
 inline constexpr uint8_t COM_CHANNEL = 0;
 inline constexpr const char* CDMP_WORK_QUEUE_NAME = "cdmp_work_queue";
@@ -78,9 +78,15 @@ inline void SwitchToLoopbackMode() {
  */
 class Harness : public CdmpLoopbackHarness {
 protected:
-    bool StartUnit() override { return com->Start(); }
-    [[nodiscard]] CdmpDeviceStatus GetUnitStatus() const override { return com->GetNetworkInfo()->GetDeviceInfo().status; }
-    [[nodiscard]] uint8_t GetUnitDeviceId() const override { return com->GetNetworkInfo()->GetDeviceInfo().device_id; }
+    bool StartUnit() override {
+        return com->Start();
+    }
+    [[nodiscard]] CdmpDeviceStatus GetUnitStatus() const override {
+        return com->GetNetworkInfo()->GetDeviceInfo().status;
+    }
+    [[nodiscard]] uint8_t GetUnitDeviceId() const override {
+        return com->GetNetworkInfo()->GetDeviceInfo().device_id;
+    }
 
 public:
     std::shared_ptr<CanbusService> canbus_service;
@@ -92,12 +98,16 @@ public:
         zassert_true(fs_service->Format());
 
         auto configuration_manager = std::make_shared<CanbusConfigurationManager>(
-            std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service), nullptr);
+            std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service), nullptr
+        );
         zassert_true(configuration_manager->Update(ComConfiguration()));
 
         canbus_service = std::make_shared<CanbusService>(
-            [](uint8_t bus_channel) { return bus_channel == COM_CHANNEL ? LoopbackDevice() : nullptr; },
-            configuration_manager);
+            [](uint8_t bus_channel) {
+                return bus_channel == COM_CHANNEL ? LoopbackDevice() : nullptr;
+            },
+            configuration_manager
+        );
         zassert_not_null(canbus_service->GetComCanbus().get(), "The COM channel is open");
 
         SwitchToLoopbackMode();
@@ -113,7 +123,9 @@ public:
     }
 
     /** @brief The COM service as the state bridge sees it. */
-    INetworkStateTransport& Transport() { return *com; }
+    INetworkStateTransport& Transport() {
+        return *com;
+    }
 
     [[nodiscard]] bool IsInDeviceTable(uint8_t device_id) const {
         std::array<CdmpDeviceInfo, 8> devices{};
@@ -131,10 +143,13 @@ public:
     void Join(uint8_t device_id, uint32_t uid) {
         // Both reach the CDMP work queue in this order. A heartbeat without the claim would make the
         // unit rediscover the network, and on a loopback controller it would answer its own request.
-        SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
-            .claiming_device_id = device_id,
-            .uid = uid,
-            .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
+        SendAsPeer(
+            MANAGEMENT,
+            CdmpIdClaimRequestMessage{ .claiming_device_id = device_id,
+                .uid = uid,
+                .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+                .ToCanFrame()
+        );
         SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, 0, LOGGER_FEATURES));
 
         const int64_t deadline = k_uptime_get() + FRAME_TIMEOUT_MS;
@@ -146,9 +161,14 @@ public:
 
     /** @brief Waits for the unit's acknowledgement of @p source's notification @p version. */
     bool WaitForAcknowledgement(uint8_t source, uint8_t version) {
-        return bus.Wait(STATE_CHANGE_RESPONSE, [source, version](const Bytes& frame) {
-            return frame.size() >= 3 && frame[0] == OWN_ID && frame[1] == source && frame[2] == version;
-        }).has_value();
+        return bus
+            .Wait(
+                STATE_CHANGE_RESPONSE,
+                [source, version](const Bytes& frame) {
+                    return frame.size() >= 3 && frame[0] == OWN_ID && frame[1] == source && frame[2] == version;
+                }
+            )
+            .has_value();
     }
 };
 

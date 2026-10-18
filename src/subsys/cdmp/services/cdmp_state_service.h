@@ -13,9 +13,9 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
-#include "subsys/threading/work_queue_thread.h"
-#include "subsys/cdmp/models/cdmp_state_data.h"
 #include "subsys/cdmp/models/cdmp_message.h"
+#include "subsys/cdmp/models/cdmp_state_data.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "cdmp_canbus_service_base.h"
 #include "cdmp_command_service.h"
@@ -23,10 +23,10 @@
 
 namespace eerie_leap::subsys::cdmp::services {
 
-using eerie_leap::subsys::cdmp::models::CdmpStateData;
 using eerie_leap::subsys::cdmp::models::CdmpRemoteState;
 using eerie_leap::subsys::cdmp::models::CdmpStateChangeMessage;
 using eerie_leap::subsys::cdmp::models::CdmpStateChangeResponseMessage;
+using eerie_leap::subsys::cdmp::models::CdmpStateData;
 
 /**
  * @brief Shared state (§4.3): this unit's records, and its copies of every other unit's records.
@@ -59,8 +59,10 @@ private:
     static constexpr size_t MAX_LOCAL_RECORDS = CONFIG_EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS;
     // A refresh lands at most LAG + 2 * records - 3 versions after the copy it replaces, since the
     // refreshes of one change follow each other; that has to stay within the window of 127.
-    static_assert(CdmpConstants::STATE_VERSION_REFRESH_LAG + 2 * MAX_LOCAL_RECORDS - 3 <= 127,
-        "Too many local records for the version refresh lag");
+    static_assert(
+        CdmpConstants::STATE_VERSION_REFRESH_LAG + 2 * MAX_LOCAL_RECORDS - 3 <= 127,
+        "Too many local records for the version refresh lag"
+    );
     // Frames waiting for the work queue; the digest recovers what a full queue drops.
     static constexpr size_t RX_QUEUE_SIZE = 16;
 
@@ -168,9 +170,15 @@ private:
     void SendResponse(const CdmpStateChangeMessage& notification);
 
     // Under records_lock_.
-    std::span<LocalRecord> LocalRecords() { return {local_records_.data(), local_count_}; }
-    std::span<RemoteRecord> RemoteRecords() { return {remote_records_.data(), remote_count_}; }
-    std::span<const RemoteRecord> RemoteRecords() const { return {remote_records_.data(), remote_count_}; }
+    std::span<LocalRecord> LocalRecords() {
+        return { local_records_.data(), local_count_ };
+    }
+    std::span<RemoteRecord> RemoteRecords() {
+        return { remote_records_.data(), remote_count_ };
+    }
+    std::span<const RemoteRecord> RemoteRecords() const {
+        return { remote_records_.data(), remote_count_ };
+    }
     std::span<RemoteRecord> SourceRecords(uint8_t source);
     LocalRecord* FindLocalRecord(uint8_t state_type);
     /** @return The new record, or nullptr when every slot holds a record that is not withdrawn. */
@@ -205,7 +213,8 @@ public:
         std::shared_ptr<CdmpDevice> device,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<CdmpNetworkService> network_service,
-        std::shared_ptr<CdmpCommandService> command_service);
+        std::shared_ptr<CdmpCommandService> command_service
+    );
 
     ~CdmpStateService();
 

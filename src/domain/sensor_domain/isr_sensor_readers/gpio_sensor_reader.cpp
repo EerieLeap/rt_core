@@ -18,13 +18,11 @@ GpioSensorReader::GpioSensorReader(
     const SensorRuntime& runtime,
     ProcessSensorCallback process_sensor_callback,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<IGpio> gpio)
-        : IsrSensorReaderBase(
-            std::move(time_service),
-            runtime,
-            std::move(process_sensor_callback)),
-        work_queue_thread_(std::move(work_queue_thread)),
-        gpio_(std::move(gpio)) {
+    std::shared_ptr<IGpio> gpio
+) :
+    IsrSensorReaderBase(std::move(time_service), runtime, std::move(process_sensor_callback)),
+    work_queue_thread_(std::move(work_queue_thread)),
+    gpio_(std::move(gpio)) {
 
     if(GetSensor().configuration.type != SensorType::PHYSICAL_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");
@@ -41,14 +39,11 @@ GpioSensorReader::GpioSensorReader(
     k_work_init(&pending_work_.work, WorkHandler);
 
     // Handler removal is serialised against dispatch, so `this` outlives every call.
-    int handler_id = gpio_->RegisterChannelChangedHandler(
-        channel,
-        GpioEdge::BOTH,
-        [this](int channel, bool state) {
-            ARG_UNUSED(channel);
+    int handler_id = gpio_->RegisterChannelChangedHandler(channel, GpioEdge::BOTH, [this](int channel, bool state) {
+        ARG_UNUSED(channel);
 
-            QueueState(state);
-        });
+        QueueState(state);
+    });
 
     if(handler_id <= 0)
         throw std::runtime_error("Failed to register GPIO handler for channel: " + std::to_string(channel));

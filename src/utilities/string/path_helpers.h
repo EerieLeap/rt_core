@@ -43,7 +43,9 @@ public:
             const std::string_view name_a = NextName(a);
             const std::string_view name_b = NextName(b);
 
-            if(!std::ranges::equal(name_a, name_b, [](char x, char y) { return ToLowerAscii(x) == ToLowerAscii(y); }))
+            if(!std::ranges::equal(name_a, name_b, [](char x, char y) {
+                   return ToLowerAscii(x) == ToLowerAscii(y);
+               }))
                 return false;
 
             if(name_a.empty())

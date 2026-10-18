@@ -2,9 +2,9 @@
 #include <memory>
 #include <utility>
 
+#include <eerie_memory.hpp>
 #include <zephyr/devicetree.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -13,29 +13,29 @@
 #include "subsys/fs/services/fs_service.h"
 #include "subsys/threading/work_queue_thread.h"
 
-#include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/adc_domain/configuration/adc_default_configuration.h"
+#include "domain/configuration_domain/services/configuration_service.h"
 
 #include "controllers/adc_controller.h"
 
 #include "calibration_test_support.h"
 
 #ifdef CONFIG_EERIE_LEAP_SMP
-#include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
+    #include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
 
-#include "domain/adc_domain/smp/calibration_mgmt_group.h"
+    #include "domain/adc_domain/smp/calibration_mgmt_group.h"
 
-#include "smp_test_client.h"
+    #include "smp_test_client.h"
 #endif
 
 using eerie_leap::controllers::AdcController;
-using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::domain::adc_domain::configuration::AdcDefaultConfiguration;
+using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::subsys::device_tree::DtAdc;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::domain::configuration_domain::services::ConfigurationService;
-using eerie_leap::domain::adc_domain::configuration::AdcDefaultConfiguration;
+using eerie_leap::utilities::memory::Mrm;
 
 using calibration_test_support::MakeTimeService;
 using calibration_test_support::RecordingService;
@@ -78,7 +78,9 @@ void ExpectDefaultConfiguration(const AdcController& controller) {
     for(size_t i = 0; i < kDtChannelCount; i++) {
         const auto& calibrator = configuration->channel_configurations->at(i)->calibrator;
         zassert_not_null(calibrator.get(), "channel %zu", i);
-        zassert_equal(calibrator->GetInterpolationMethod(), default_calibrator->GetInterpolationMethod(), "channel %zu", i);
+        zassert_equal(
+            calibrator->GetInterpolationMethod(), default_calibrator->GetInterpolationMethod(), "channel %zu", i
+        );
 
         const auto& table = *calibrator->GetCalibrationTable();
         zassert_equal(table.size(), default_table.size(), "channel %zu", i);
@@ -149,7 +151,7 @@ ZTEST(adc_controller, test_Initialize_without_a_configuration_service) {
 ZTEST(adc_controller, test_Initialize_creates_the_calibration_service) {
     auto fixture = MakeFixture();
 
-    for(const bool is_registered_first : {true, false}) {
+    for(const bool is_registered_first : { true, false }) {
         auto paused_service = std::make_shared<RecordingService>();
 
         AdcController controller(fixture.fs_service, fixture.work_queue, nullptr, MakeTimeService());
@@ -172,8 +174,12 @@ ZTEST(adc_controller, test_Initialize_creates_the_calibration_service) {
         const auto calibration_service = controller.GetCalibrationService();
         zassert_not_null(calibration_service.get());
 
-        zassert_false(calibration_service->Start(static_cast<int>(kDtChannelCount)), "A channel the unit does not have");
-        zassert_true(calibration_service->Start(static_cast<int>(kDtChannelCount) - 1), "The last channel, on the second ADC");
+        zassert_false(
+            calibration_service->Start(static_cast<int>(kDtChannelCount)), "A channel the unit does not have"
+        );
+        zassert_true(
+            calibration_service->Start(static_cast<int>(kDtChannelCount) - 1), "The last channel, on the second ADC"
+        );
         zassert_true(paused_service->IsPaused(), "registered first: %d", is_registered_first);
         zassert_true(calibration_service->Stop());
         zassert_true(paused_service->IsRunning());
@@ -195,8 +201,9 @@ using Command = CalibrationMgmtGroup::Command;
 using Error = CalibrationMgmtGroup::Error;
 
 Response Start(SmpTestClient& client, uint32_t channel) {
-    return client.Write(SmpGroupId::CALIBRATION, std::to_underlying(Command::START),
-        CborMap().Put("channel", channel).Build());
+    return client.Write(
+        SmpGroupId::CALIBRATION, std::to_underlying(Command::START), CborMap().Put("channel", channel).Build()
+    );
 }
 
 Response Stop(SmpTestClient& client) {
@@ -209,8 +216,10 @@ Response Read(SmpTestClient& client) {
 
 void AssertError(const Response& response, Error error) {
     zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::CALIBRATION));
-    zassert_equal(response.error.value_or(0), std::to_underlying(error),
-        "Expected error %u, got %u", std::to_underlying(error), response.error.value_or(0));
+    zassert_equal(
+        response.error.value_or(0), std::to_underlying(error), "Expected error %u, got %u", std::to_underlying(error),
+        response.error.value_or(0)
+    );
 }
 
 void AssertNotServed(SmpTestClient& client, const char* message) {

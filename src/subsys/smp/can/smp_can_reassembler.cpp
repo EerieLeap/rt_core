@@ -7,7 +7,8 @@
 
 namespace eerie_leap::subsys::smp::can {
 
-SmpCanReassembler::SmpCanReassembler(int64_t timeout_ms) : timeout_ms_(timeout_ms) {}
+SmpCanReassembler::SmpCanReassembler(int64_t timeout_ms) :
+    timeout_ms_(timeout_ms) {}
 
 void SmpCanReassembler::Attach(std::span<uint8_t> buffer, SmpCanFrameFormat format) {
     buffer_ = buffer;

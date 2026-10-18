@@ -16,4 +16,4 @@ constexpr bool IsCanbusTypeValid(CanbusType type) {
     return type < CanbusType::COUNT;
 }
 
-}  // namespace eerie_leap::subsys::canbus
+} // namespace eerie_leap::subsys::canbus

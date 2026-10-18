@@ -3,34 +3,33 @@
 #include <array>
 #include <functional>
 #include <map>
+#include <memory>
+#include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
-#include <memory>
-#include <span>
-#include <optional>
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
-#include "subsys/threading/work_queue_thread.h"
 #include "subsys/cdmp/models/cdmp_device_info.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "cdmp_canbus_service_base.h"
-
 
 namespace eerie_leap::subsys::cdmp::services {
 
 namespace threading = eerie_leap::subsys::threading;
 
-using threading::WorkQueueThread;
-using threading::WorkQueueTaskResult;
-using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
-using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+using eerie_leap::subsys::cdmp::models::CdmpDiscoveryRequestMessage;
 using eerie_leap::subsys::cdmp::models::CdmpDiscoveryResponseMessage;
 using eerie_leap::subsys::cdmp::models::CdmpHeartbeatMessage;
-using eerie_leap::subsys::cdmp::models::CdmpDiscoveryRequestMessage;
 using eerie_leap::subsys::cdmp::models::CdmpIdClaimRequestMessage;
+using eerie_leap::subsys::cdmp::utilities::CdmpConstants;
+using eerie_leap::subsys::cdmp::utilities::CdmpIdClaimResult;
+using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
 /** @brief A change in the table of other devices. */
 enum class CdmpDeviceEvent : uint8_t {
@@ -177,7 +176,8 @@ public:
     CdmpNetworkService(
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device,
-        std::shared_ptr<WorkQueueThread> work_queue_thread);
+        std::shared_ptr<WorkQueueThread> work_queue_thread
+    );
 
     ~CdmpNetworkService();
 
@@ -228,7 +228,9 @@ public:
 
     // Discovery management
     void SetAutoDiscovery(bool enabled);
-    bool IsAutoDiscoveryEnabled() const { return auto_discovery_enabled_; }
+    bool IsAutoDiscoveryEnabled() const {
+        return auto_discovery_enabled_;
+    }
     /**
      * @brief Removes the devices past the heartbeat timeout (CdmpDeviceEvent::LEFT) and updates the
      * lowest ID and the stagger. The validation task runs it every NETWORK_VALIDATION_INTERVAL_MS.

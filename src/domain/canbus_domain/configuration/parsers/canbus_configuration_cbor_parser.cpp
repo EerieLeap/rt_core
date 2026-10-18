@@ -1,14 +1,14 @@
 #include <algorithm>
 #include <climits>
+#include <optional>
 #include <stdexcept>
 #include <utility>
-#include <optional>
 
 #include "utilities/cbor/cbor_helpers.hpp"
 #include "utilities/memory/memory_resource_manager.h"
 
-#include "canbus_configuration_validator.h"
 #include "canbus_configuration_cbor_parser.h"
+#include "canbus_configuration_validator.h"
 
 namespace eerie_leap::domain::canbus_domain::configuration::parsers {
 
@@ -18,8 +18,8 @@ using namespace eerie_leap::utilities::cbor;
 using namespace eerie_leap::subsys::lua_script;
 using namespace eerie_leap::domain::canbus_domain::models;
 
-CanbusConfigurationCborParser::CanbusConfigurationCborParser(std::shared_ptr<IFsService> sd_fs_service)
-    : sd_fs_service_(std::move(sd_fs_service)) {}
+CanbusConfigurationCborParser::CanbusConfigurationCborParser(std::shared_ptr<IFsService> sd_fs_service) :
+    sd_fs_service_(std::move(sd_fs_service)) {}
 
 pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const CanbusConfiguration& configuration) {
     CanbusConfigurationValidator::Validate(configuration, sd_fs_service_.get());
@@ -40,7 +40,8 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
 
             message_config.frame_id = message_configuration->frame_id;
             message_config.is_enabled = message_configuration->is_enabled;
-            message_config.send_interval_ms = message_configuration->send_interval_ms.has_value() && message_configuration->send_interval_ms.value() > 0
+            message_config.send_interval_ms = message_configuration->send_interval_ms.has_value()
+                    && message_configuration->send_interval_ms.value() > 0
                 ? message_configuration->send_interval_ms.value()
                 : -1;
             message_config.script_path = CborHelpers::ToZcborString(message_configuration->script_path);
@@ -48,16 +49,16 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
             message_config.message_size = message_configuration->message_size;
 
             for(const auto& signal_configuration : message_configuration->signal_configurations) {
-                message_config.CborCanSignalConfig_m.push_back({
-                    .start_bit = signal_configuration.start_bit,
-                    .size_bits = signal_configuration.size_bits,
-                    .factor = signal_configuration.factor,
-                    .offset = signal_configuration.offset,
-                    .byte_order = std::to_underlying(signal_configuration.byte_order),
-                    .is_signed = signal_configuration.is_signed,
-                    .name = CborHelpers::ToZcborString(signal_configuration.name),
-                    .unit = CborHelpers::ToZcborString(signal_configuration.unit)
-                });
+                message_config.CborCanSignalConfig_m.push_back(
+                    { .start_bit = signal_configuration.start_bit,
+                        .size_bits = signal_configuration.size_bits,
+                        .factor = signal_configuration.factor,
+                        .offset = signal_configuration.offset,
+                        .byte_order = std::to_underlying(signal_configuration.byte_order),
+                        .is_signed = signal_configuration.is_signed,
+                        .name = CborHelpers::ToZcborString(signal_configuration.name),
+                        .unit = CborHelpers::ToZcborString(signal_configuration.unit) }
+                );
             }
 
             channel_config.CborCanMessageConfig_m.push_back(std::move(message_config));
@@ -77,16 +78,17 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
     return config;
 }
 
-pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborCanbusConfig& config) {
+pmr_unique_ptr<CanbusConfiguration>
+CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborCanbusConfig& config) {
     auto configuration = make_unique_pmr<CanbusConfiguration>(mr);
 
     for(const auto& canbus_config : config.CborCanChannelConfig_m) {
         // Narrowing would turn 256 into channel 0.
         if(canbus_config.bus_channel > UINT8_MAX)
             throw std::invalid_argument(
-                "Invalid CAN Bus configuration. Channel: "
-                + std::to_string(canbus_config.bus_channel)
-                + ". Bus channel out of range");
+                "Invalid CAN Bus configuration. Channel: " + std::to_string(canbus_config.bus_channel)
+                + ". Bus channel out of range"
+            );
 
         CanChannelConfiguration channel_configuration(std::allocator_arg, mr);
 
@@ -146,9 +148,9 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
             channel_configuration.message_configurations.push_back(std::move(message_configuration));
         }
 
-        bool res = configuration->channel_configurations.emplace(
-            channel_configuration.bus_channel,
-            std::move(channel_configuration)).second;
+        bool res = configuration->channel_configurations
+                       .emplace(channel_configuration.bus_channel, std::move(channel_configuration))
+                       .second;
 
         if(!res)
             throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(channel_configuration.bus_channel));
@@ -158,15 +160,15 @@ pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationCborParser::Deserialize(s
     if(config.com_config.bus_channel > UINT8_MAX)
         throw std::invalid_argument("Invalid CAN Bus COM configuration. COM bus channel out of range");
 
-    configuration->com_configuration = {
-        .bus_channel = config.com_config.bus_channel >= 0
+    configuration->com_configuration = { .bus_channel = config.com_config.bus_channel >= 0
             ? std::optional<uint8_t>(config.com_config.bus_channel)
             : std::nullopt,
         .cdmp_base_can_id = config.com_config.cdmp_base_can_id,
         .smp_can_id_base = config.com_config.smp_can_id_base,
         // Clamped rather than truncated, so an out-of-range share still fails validation.
-        .smp_bus_share_percent = static_cast<uint8_t>(std::min<uint32_t>(config.com_config.smp_bus_share_percent, UINT8_MAX))
-    };
+        .smp_bus_share_percent = static_cast<uint8_t>(
+            std::min<uint32_t>(config.com_config.smp_bus_share_percent, UINT8_MAX)
+        ) };
 
     CanbusConfigurationValidator::Validate(*configuration, sd_fs_service_.get());
 

@@ -3,18 +3,18 @@
 #include <memory>
 #include <optional>
 
+#include "domain/canbus_com_domain/services/canbus_com_service.h"
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/threading/work_queue_task.h"
 #include "subsys/threading/work_queue_thread.h"
-#include "domain/canbus_com_domain/services/canbus_com_service.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
+using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
 using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::domain::canbus_com_domain::services::CanbusComService;
 
 /**
  * @brief Writer role: keeps the LOGGING feature that this unit sends on CDMP equal to whether its
@@ -48,7 +48,8 @@ public:
     CanbusComLoggingAvailabilityReporter(
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<IFsService> sd_fs_service,
-        std::shared_ptr<CanbusComService> canbus_com_service);
+        std::shared_ptr<CanbusComService> canbus_com_service
+    );
     /** @brief Waits for a poll in progress, then clears LOGGING. */
     ~CanbusComLoggingAvailabilityReporter();
 

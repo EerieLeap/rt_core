@@ -14,14 +14,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/string/string_helpers.h"
-#include "subsys/threading/work_queue_thread.h"
 #include "domain/sensor_domain/processors/i_reading_processor.h"
 #include "domain/sensor_domain/processors/reading_pipeline.hpp"
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 #include "domain/sensor_domain/services/processing_scheduler_service.h"
 #include "domain/sensor_domain/services/rate_group.h"
 #include "domain/sensor_domain/services/rate_group_scheduler.h"
+#include "subsys/threading/work_queue_thread.h"
+#include "utilities/string/string_helpers.h"
 
 #include "processing_test_support.h"
 
@@ -38,7 +38,7 @@ namespace {
 
 struct Commit {
     uint32_t sensor_id_hash;
-    int64_t timestamp_ms;   // The tick's shared timestamp: uptime at the start of the group's tick.
+    int64_t timestamp_ms; // The tick's shared timestamp: uptime at the start of the group's tick.
 };
 
 // The last stage of the pipeline: records every reading in commit order, and makes one sensor's
@@ -50,19 +50,21 @@ public:
     std::vector<Commit> commits;
     uint32_t costly_sensor_id_hash = 0;
     uint32_t cost_us = 0;
-    bool throw_once = false;    // The next reading throws out of the pipeline once it is recorded.
+    bool throw_once = false; // The next reading throws out of the pipeline once it is recorded.
 
-    RecordingProcessor() { commits.reserve(512); }
+    RecordingProcessor() {
+        commits.reserve(512);
+    }
 
     void Process(const SensorRuntime& runtime, SensorReading& reading) override {
         const auto timestamp = reading.timestamp.value();
 
         if(commits.size() < commits.capacity()) {
-            commits.push_back({
-                .sensor_id_hash = runtime.sensor->id_hash,
-                .timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    timestamp.time_since_epoch()).count()
-            });
+            commits.push_back(
+                { .sensor_id_hash = runtime.sensor->id_hash,
+                    .timestamp_ms =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count() }
+            );
         }
 
         if(cost_us > 0 && runtime.sensor->id_hash == costly_sensor_id_hash)
@@ -102,14 +104,15 @@ struct SchedulerRig {
 SchedulerRig MakeSchedulerRig(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     std::shared_ptr<IAdcManager> adc_manager = nullptr,
-    std::shared_ptr<const AdcConfiguration> adc_configuration = nullptr) {
+    std::shared_ptr<const AdcConfiguration> adc_configuration = nullptr
+) {
 
     SchedulerRig rig;
     rig.time_service = MakeTimeService();
     rig.frame = std::make_shared<SensorReadingsFrame>();
 
-    rig.generation = SensorPipelineBuilder(nullptr, rig.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    rig.generation = SensorPipelineBuilder(nullptr, rig.frame)
+                         .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
     rig.generation->adc_configuration = std::move(adc_configuration);
 
     rig.recorder = std::make_shared<RecordingProcessor>();
@@ -118,16 +121,15 @@ SchedulerRig MakeSchedulerRig(
     rig.pipeline = std::make_shared<ReadingPipeline>(rig.frame, processors, rig.time_service);
 
     rig.work_queue_thread = std::make_shared<WorkQueueThread>(
-        "scheduler_timing",
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
+        "scheduler_timing", CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
+    );
     zassert_true(rig.work_queue_thread->Initialize());
 
     rig.scheduler_service = std::make_shared<ProcessingSchedulerService>(
-        rig.time_service,
-        std::make_shared<SensorReaderFactory>(rig.time_service, nullptr, std::move(adc_manager)),
-        rig.work_queue_thread,
-        rig.pipeline);
+        rig.time_service, std::make_shared<SensorReaderFactory>(rig.time_service, nullptr, std::move(adc_manager)),
+        rig.work_queue_thread, rig.pipeline
+    );
     zassert_true(rig.scheduler_service->Initialize());
     rig.scheduler_service->SetGeneration(rig.generation);
 
@@ -164,11 +166,13 @@ ZTEST(rate_group_scheduler, test_SetGroups_rejects_a_period_below_1_ms_and_keeps
     auto time_service = MakeTimeService();
     auto frame = std::make_shared<SensorReadingsFrame>();
     auto pipeline = std::make_shared<ReadingPipeline>(
-        frame, std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>(), time_service);
+        frame, std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>(), time_service
+    );
 
     // Never started, so the queue does not have to run.
     RateGroupScheduler scheduler(
-        std::make_shared<WorkQueueThread>("rate_group_scheduler", 4096, 7), pipeline, time_service);
+        std::make_shared<WorkQueueThread>("rate_group_scheduler", 4096, 7), pipeline, time_service
+    );
 
     std::vector<std::unique_ptr<RateGroup>> groups;
     groups.push_back(std::make_unique<RateGroup>());
@@ -187,11 +191,15 @@ ZTEST(rate_group_scheduler, test_SetGroups_rejects_a_period_below_1_ms_and_keeps
 
     std::vector<std::unique_ptr<RateGroup>> zero_period;
     zero_period.push_back(std::make_unique<RateGroup>());
-    zassert_true(ThrowsInvalidArgument([&] { scheduler.SetGroups(std::move(zero_period)); }));
+    zassert_true(ThrowsInvalidArgument([&] {
+        scheduler.SetGroups(std::move(zero_period));
+    }));
 
     std::vector<std::unique_ptr<RateGroup>> null_group;
     null_group.push_back(nullptr);
-    zassert_true(ThrowsInvalidArgument([&] { scheduler.SetGroups(std::move(null_group)); }));
+    zassert_true(ThrowsInvalidArgument([&] {
+        scheduler.SetGroups(std::move(null_group));
+    }));
 
     zassert_equal(scheduler.GetGroupCount(), 2, "A rejected set leaves the current groups in place");
 
@@ -206,10 +214,12 @@ ZTEST(rate_group_scheduler, test_SetGroups_reports_the_period_the_group_runs_at)
     auto time_service = MakeTimeService();
     auto frame = std::make_shared<SensorReadingsFrame>();
     auto pipeline = std::make_shared<ReadingPipeline>(
-        frame, std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>(), time_service);
+        frame, std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>(), time_service
+    );
 
     RateGroupScheduler scheduler(
-        std::make_shared<WorkQueueThread>("rate_group_scheduler", 4096, 7), pipeline, time_service);
+        std::make_shared<WorkQueueThread>("rate_group_scheduler", 4096, 7), pipeline, time_service
+    );
 
     // 429 496 730 ms is 4 294 967 300 ticks at 10 000 ticks/s, which a 32-bit conversion wraps to 4.
     constexpr int kLongPeriodMs = 429496730;
@@ -226,14 +236,18 @@ ZTEST(rate_group_scheduler, test_SetGroups_reports_the_period_the_group_runs_at)
 
     const uint64_t tick_us = k_ticks_to_us_ceil64(1);
     zassert_equal(stats[0].period_us, 20000, "20 ms is whole ticks at 100 and 10 000 ticks/s");
-    zassert_true(stats[1].period_us >= 25000 && stats[1].period_us < 25000 + tick_us,
-        "25 ms runs every %llu us", static_cast<unsigned long long>(stats[1].period_us));
+    zassert_true(
+        stats[1].period_us >= 25000 && stats[1].period_us < 25000 + tick_us, "25 ms runs every %llu us",
+        static_cast<unsigned long long>(stats[1].period_us)
+    );
     if(CONFIG_SYS_CLOCK_TICKS_PER_SEC == 100)
         zassert_equal(stats[1].period_us, 30000, "Rounded up to the next 10 ms tick");
 
     zassert_equal(stats[2].period_ms, kLongPeriodMs);
-    zassert_equal(stats[2].period_us, static_cast<uint64_t>(kLongPeriodMs) * 1000,
-        "The long period runs every %llu us", static_cast<unsigned long long>(stats[2].period_us));
+    zassert_equal(
+        stats[2].period_us, static_cast<uint64_t>(kLongPeriodMs) * 1000, "The long period runs every %llu us",
+        static_cast<unsigned long long>(stats[2].period_us)
+    );
 }
 
 ZTEST(rate_group_scheduler, test_Start_without_groups_schedules_nothing) {
@@ -272,8 +286,10 @@ ZTEST(scheduler_timing, test_delivered_period_equals_the_configured_period) {
     zassert_true(rig.scheduler_service->Stop());
 
     zassert_equal(timestamps.size(), kTicks, "%zu ticks", timestamps.size());
-    zassert_equal(timestamps.front(), TicksToMs(start_ticks + k_ms_to_ticks_ceil32(kPeriodMs)),
-        "The first tick is one period after Start()");
+    zassert_equal(
+        timestamps.front(), TicksToMs(start_ticks + k_ms_to_ticks_ceil32(kPeriodMs)),
+        "The first tick is one period after Start()"
+    );
 
     int64_t max_deviation_ms = 0;
     for(size_t i = 1; i < timestamps.size(); i++) {
@@ -282,16 +298,19 @@ ZTEST(scheduler_timing, test_delivered_period_equals_the_configured_period) {
     }
 
     const int64_t total_ms = timestamps.back() - timestamps.front();
-    zassert_equal(total_ms, kPeriodMs * static_cast<int64_t>(kTicks - 1),
-        "Mean period %lld/%zu ms", total_ms, kTicks - 1);
+    zassert_equal(
+        total_ms, kPeriodMs * static_cast<int64_t>(kTicks - 1), "Mean period %lld/%zu ms", total_ms, kTicks - 1
+    );
     zassert_true(max_deviation_ms <= TicksToMs(1), "Max deviation %lld ms", max_deviation_ms);
     zassert_equal(max_deviation_ms, 0, "native_sim has no jitter to explain one");
 
     zassert_equal(stats.size(), 1);
     zassert_equal(stats[0].ticks, kTicks);
     zassert_equal(stats[0].overruns, 0);
-    zassert_true(stats[0].last_us >= 5000 && stats[0].max_us < 10000,
-        "Tick last %u us, max %u us", stats[0].last_us, stats[0].max_us);
+    zassert_true(
+        stats[0].last_us >= 5000 && stats[0].max_us < 10000, "Tick last %u us, max %u us", stats[0].last_us,
+        stats[0].max_us
+    );
 }
 
 // A 30 ms tick in a 20 ms group: each tick ends past the next deadline, which is skipped and
@@ -323,19 +342,26 @@ ZTEST(scheduler_timing, test_overruns_are_counted_and_the_phase_is_kept) {
     const int64_t phase_ms = TicksToMs(start_ticks + k_ms_to_ticks_ceil32(kPeriodMs));
     zassert_equal(timestamps.front(), phase_ms);
     for(size_t i = 0; i < timestamps.size(); i++)
-        zassert_equal((timestamps[i] - phase_ms) % kPeriodMs, 0, "tick %zu at %lld ms is off the phase", i, timestamps[i]);
+        zassert_equal(
+            (timestamps[i] - phase_ms) % kPeriodMs, 0, "tick %zu at %lld ms is off the phase", i, timestamps[i]
+        );
 
     for(size_t i = 1; i < timestamps.size(); i++)
-        zassert_equal(timestamps[i] - timestamps[i - 1], 2 * kPeriodMs, "tick %zu: the missed deadline is skipped, not run late", i);
+        zassert_equal(
+            timestamps[i] - timestamps[i - 1], 2 * kPeriodMs, "tick %zu: the missed deadline is skipped, not run late",
+            i
+        );
 }
 
 // The 40 ms sensor comes first in the configuration, so its group is built first; the scheduler
 // still runs the 20 ms group first whenever both are due.
 ZTEST(scheduler_timing, test_faster_groups_run_first_at_coincident_deadlines) {
-    auto rig = MakeSchedulerRig({
-        MakeVirtualSensor("slow", "1", 40),
-        MakeVirtualSensor("fast", "2", 20),
-    });
+    auto rig = MakeSchedulerRig(
+        {
+            MakeVirtualSensor("slow", "1", 40),
+            MakeVirtualSensor("fast", "2", 20),
+        }
+    );
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.scheduler_service->Start());
@@ -384,12 +410,16 @@ ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
     auto adc = MakeEmulator();
     auto adc_manager = MakeAdcManager(adc);
     auto adc_configuration = MakeAdcConfiguration(
-        adc_manager->GetChannelCount(), kSamples, MakeCalibrator({ {0.0F, 0.0F}, {5.0F, 5.0F} }));
+        adc_manager->GetChannelCount(), kSamples, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
+    );
 
-    auto rig = MakeSchedulerRig({
-        MakeAnalogSensor("first", 0, 20),
-        MakeAnalogSensor("second", 0, 20),
-    }, adc_manager, adc_configuration);
+    auto rig = MakeSchedulerRig(
+        {
+            MakeAnalogSensor("first", 0, 20),
+            MakeAnalogSensor("second", 0, 20),
+        },
+        adc_manager, adc_configuration
+    );
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.scheduler_service->Start());
@@ -408,8 +438,10 @@ ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
     zassert_equal(stats[0].ticks, 50);
 
     zassert_equal(after.requests - before.requests, stats[0].ticks, "One Sample() per tick");
-    zassert_equal(after.conversions - before.conversions, stats[0].ticks * kSamples,
-        "%u conversions in %u ticks", after.conversions - before.conversions, stats[0].ticks);
+    zassert_equal(
+        after.conversions - before.conversions, stats[0].ticks * kSamples, "%u conversions in %u ticks",
+        after.conversions - before.conversions, stats[0].ticks
+    );
     zassert_equal(after.errors, before.errors);
 
     zassert_equal(rig.recorder->GetTimestamps("first").size(), stats[0].ticks);
@@ -453,8 +485,10 @@ ZTEST(scheduler_timing, test_pause_and_resume_realign_the_deadlines) {
         zassert_true(commits[i].timestamp_ms <= pause_ms);
 
     zassert_equal(commits.size(), commits_at_pause + 5);
-    zassert_equal(commits[commits_at_pause].timestamp_ms, TicksToMs(resume_ticks + period_ticks),
-        "The first tick after the resume is one period out");
+    zassert_equal(
+        commits[commits_at_pause].timestamp_ms, TicksToMs(resume_ticks + period_ticks),
+        "The first tick after the resume is one period out"
+    );
     for(size_t i = commits_at_pause + 1; i < commits.size(); i++)
         zassert_equal(commits[i].timestamp_ms - commits[i - 1].timestamp_ms, kPeriodMs);
 
@@ -491,8 +525,10 @@ void HaltDuringTickThenRestart(bool is_stop) {
         zassert_true(rig.scheduler_service->Stop());
     } else {
         zassert_true(rig.scheduler_service->Pause());
-        zassert_equal(rig.scheduler_service->GetRateGroupStats().at(0).ticks, 1,
-            "The tick in progress ended before Pause() returned");
+        zassert_equal(
+            rig.scheduler_service->GetRateGroupStats().at(0).ticks, 1,
+            "The tick in progress ended before Pause() returned"
+        );
     }
 
     const uint32_t halt_us = k_cyc_to_us_floor32(k_cycle_get_32() - wake_cycles);
@@ -521,9 +557,14 @@ void HaltDuringTickThenRestart(bool is_stop) {
     zassert_true(rig.scheduler_service->Stop());
 
     zassert_false(rig.recorder->throw_once, "The first tick after the restart threw");
-    zassert_equal(commits.size(), 1 + 5, "%zu commits: a throw in the first tick after the restart stopped the group", commits.size());
-    zassert_equal(commits[1].timestamp_ms, TicksToMs(restart_ticks + period_ticks),
-        "The first tick after the restart is one period out");
+    zassert_equal(
+        commits.size(), 1 + 5, "%zu commits: a throw in the first tick after the restart stopped the group",
+        commits.size()
+    );
+    zassert_equal(
+        commits[1].timestamp_ms, TicksToMs(restart_ticks + period_ticks),
+        "The first tick after the restart is one period out"
+    );
     for(size_t i = 2; i < commits.size(); i++)
         zassert_equal(commits[i].timestamp_ms - commits[i - 1].timestamp_ms, kPeriodMs);
 

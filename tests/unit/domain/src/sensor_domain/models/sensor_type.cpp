@@ -10,18 +10,9 @@ ZTEST_SUITE(sensor_type, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-constexpr std::array all_types = {
-    SensorType::NONE,
-    SensorType::PHYSICAL_ANALOG,
-    SensorType::VIRTUAL_ANALOG,
-    SensorType::PHYSICAL_INDICATOR,
-    SensorType::VIRTUAL_INDICATOR,
-    SensorType::CANBUS_RAW,
-    SensorType::CANBUS_ANALOG,
-    SensorType::CANBUS_INDICATOR,
-    SensorType::USER_ANALOG,
-    SensorType::USER_INDICATOR
-};
+constexpr std::array all_types = { SensorType::NONE, SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG,
+    SensorType::PHYSICAL_INDICATOR, SensorType::VIRTUAL_INDICATOR, SensorType::CANBUS_RAW, SensorType::CANBUS_ANALOG,
+    SensorType::CANBUS_INDICATOR, SensorType::USER_ANALOG, SensorType::USER_INDICATOR };
 
 } // namespace
 

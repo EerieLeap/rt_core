@@ -1,11 +1,11 @@
 #pragma once
 
-#include <memory>
 #include <functional>
+#include <memory>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
 #include "subsys/threading/thread.h"

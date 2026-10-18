@@ -30,7 +30,8 @@ public:
     WriterLoggingControl(
         std::shared_ptr<ILoggingControl> local,
         std::shared_ptr<ILoggingControl> network,
-        uint32_t own_uid);
+        uint32_t own_uid
+    );
 
     void RequestStart(uint32_t target_uid) override;
     void RequestStop(uint32_t target_uid) override;

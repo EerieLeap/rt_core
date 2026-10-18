@@ -16,4 +16,4 @@ struct CanFrame {
     CanFramePayload data;
 };
 
-}  // namespace eerie_leap::subsys::canbus
+} // namespace eerie_leap::subsys::canbus

@@ -1,6 +1,6 @@
-#include <ranges>
 #include <algorithm>
 #include <exception>
+#include <ranges>
 #include <stdexcept>
 #include <zephyr/logging/log.h>
 
@@ -16,8 +16,9 @@ WorkQueueThread::WorkQueueThread(
     int stack_size,
     int priority,
     bool is_cooperative,
-    std::pmr::memory_resource* mr)
-    : ThreadBase(std::move(name), stack_size, priority, is_cooperative, mr) {
+    std::pmr::memory_resource* mr
+) :
+    ThreadBase(std::move(name), stack_size, priority, is_cooperative, mr) {
 
     k_mutex_init(&runner_tasks_mutex_);
 }
@@ -81,7 +82,8 @@ void WorkQueueThread::Stop() {
 
 void WorkQueueThread::PruneCompletedTasks(std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks) {
     std::erase_if(completed_tasks, [](auto& completed_task) {
-        return !k_work_delayable_is_pending(&completed_task->work); });
+        return !k_work_delayable_is_pending(&completed_task->work);
+    });
 }
 
 void WorkQueueThread::TaskHandler(k_work* work) {
@@ -130,8 +132,7 @@ void WorkQueueThread::RunnerTaskHandler(k_work* work) {
 
     PruneCompletedTasks(completed_tasks);
 
-    completed_tasks.push_back(
-        std::move(tasks.extract(work).mapped()));
+    completed_tasks.push_back(std::move(tasks.extract(work).mapped()));
 }
 
 void WorkQueueThread::Run(const WorkQueueRunnerTask::Handler& handler) {
@@ -142,16 +143,11 @@ void WorkQueueThread::Run(const WorkQueueRunnerTask::Handler& handler) {
     PruneCompletedTasks(runner_completed_tasks_);
 
     auto task = std::make_unique<WorkQueueRunnerTask>(
-        &work_q_,
-        &sync_,
-        RunnerTaskHandler,
-        handler,
-        &runner_tasks_mutex_,
-        runner_tasks_,
-        runner_completed_tasks_);
+        &work_q_, &sync_, RunnerTaskHandler, handler, &runner_tasks_mutex_, runner_tasks_, runner_completed_tasks_
+    );
     void* work_ptr = &task->work;
 
-    if(runner_tasks_.insert({work_ptr, std::move(task)}).second)
+    if(runner_tasks_.insert({ work_ptr, std::move(task) }).second)
         runner_tasks_.at(work_ptr)->Schedule();
 }
 

@@ -24,8 +24,7 @@ int EventChannelRegistry::Register(EventChannelId id, IEventChannel& channel) {
 
     // Registration happens during composition, where a return value has nowhere to go.
     if(channels_[index] != nullptr && channels_[index] != &channel) {
-        LOG_ERR("Channel id %u is already held by '%s'.",
-            static_cast<unsigned>(index), channels_[index]->GetName());
+        LOG_ERR("Channel id %u is already held by '%s'.", static_cast<unsigned>(index), channels_[index]->GetName());
 
         return -EEXIST;
     }

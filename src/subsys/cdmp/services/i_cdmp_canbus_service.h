@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <span>
 #include <memory>
+#include <span>
 
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/threading/i_service.h"

@@ -12,8 +12,8 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 LOG_MODULE_REGISTER(script_processor_logger);
 
-ScriptProcessor::ScriptProcessor(std::string function_name)
-    : function_name_(std::move(function_name)) {}
+ScriptProcessor::ScriptProcessor(std::string function_name) :
+    function_name_(std::move(function_name)) {}
 
 void ScriptProcessor::Process(const SensorRuntime& runtime, SensorReading& reading) {
     const auto& script = runtime.script;
@@ -34,7 +34,9 @@ void ScriptProcessor::Process(const SensorRuntime& runtime, SensorReading& readi
 
     if(lua_pcall(state, 2, 1, 0) != LUA_OK) {
         const char* message = lua_tostring(state, -1);
-        LOG_ERR("Sensor %s: %s failed: %s", sensor.id.c_str(), function_name_.c_str(), message != nullptr ? message : "");
+        LOG_ERR(
+            "Sensor %s: %s failed: %s", sensor.id.c_str(), function_name_.c_str(), message != nullptr ? message : ""
+        );
         lua_pop(state, 1);
         script.host->CollectStep();
 

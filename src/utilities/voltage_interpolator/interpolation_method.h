@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 #include <stdexcept>
 #include <string_view>
 
@@ -17,11 +17,7 @@ enum class InterpolationMethod : std::uint8_t {
     CUBIC_SPLINE
 };
 
-constexpr const std::array InterpolationMethodNames = {
-    "NONE"sv,
-    "LINEAR"sv,
-    "CUBIC_SPLINE"sv
-};
+constexpr const std::array InterpolationMethodNames = { "NONE"sv, "LINEAR"sv, "CUBIC_SPLINE"sv };
 
 inline const char* GetInterpolationMethodName(InterpolationMethod method) {
     return InterpolationMethodNames[static_cast<std::uint8_t>(method)].data();

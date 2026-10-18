@@ -5,13 +5,13 @@
 #include <string>
 #include <string_view>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "domain/adc_domain/configuration/adc_default_configuration.h"
 #include "domain/adc_domain/configuration/parsers/adc_configuration_cbor_parser.h"
 #include "domain/adc_domain/configuration/parsers/adc_configuration_validator.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -29,14 +29,11 @@ constexpr size_t kChannelCount = 8;
 
 std::string ExpectedSamplesReason(uint32_t samples) {
     return "Invalid ADC configuration. Samples must be between 1 and "
-        + std::to_string(CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX)
-        + ", got "
-        + std::to_string(samples)
-        + ".";
+        + std::to_string(CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX) + ", got " + std::to_string(samples) + ".";
 }
 
 // Runs action and returns the reason of the std::invalid_argument it throws; fails if it does not.
-template <typename Action>
+template<typename Action>
 std::string ExpectInvalidArgument(Action&& action) {
     try {
         action();
@@ -49,32 +46,33 @@ std::string ExpectInvalidArgument(Action&& action) {
 }
 
 void ExpectReasonContains(const std::string& reason, std::string_view expected) {
-    zassert_true(reason.find(expected) != std::string::npos,
-        "'%s' does not contain '%.*s'", reason.c_str(), static_cast<int>(expected.size()), expected.data());
+    zassert_true(
+        reason.find(expected) != std::string::npos, "'%s' does not contain '%.*s'", reason.c_str(),
+        static_cast<int>(expected.size()), expected.data()
+    );
 }
 
 } // namespace
 
 AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t channel_count = kChannelCount) {
-    std::pmr::vector<CalibrationData> adc_calibration_data_samples_1 {
-        {0.0, 0.0},
-        {5.0, 5.0}
-    };
+    std::pmr::vector<CalibrationData> adc_calibration_data_samples_1{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
-    auto adc_calibration_data_samples_ptr_1 = std::make_shared<std::pmr::vector<CalibrationData>>(adc_calibration_data_samples_1);
-    auto adc_calibrator_1 = std::make_shared<AdcCalibrator>(InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr_1);
+    auto adc_calibration_data_samples_ptr_1 = std::make_shared<std::pmr::vector<CalibrationData>>(
+        adc_calibration_data_samples_1
+    );
+    auto adc_calibrator_1 = std::make_shared<AdcCalibrator>(
+        InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr_1
+    );
 
-    std::pmr::vector<CalibrationData> adc_calibration_data_samples_2 {
-        {0.501, 0.469},
-        {1.0, 0.968},
-        {2.0, 1.970},
-        {3.002, 2.98},
-        {4.003, 4.01},
-        {5.0, 5.0}
-    };
+    std::pmr::vector<CalibrationData> adc_calibration_data_samples_2{ { 0.501, 0.469 }, { 1.0, 0.968 }, { 2.0, 1.970 },
+        { 3.002, 2.98 }, { 4.003, 4.01 }, { 5.0, 5.0 } };
 
-    auto adc_calibration_data_samples_ptr_2 = std::make_shared<std::pmr::vector<CalibrationData>>(adc_calibration_data_samples_2);
-    auto adc_calibrator_2 = std::make_shared<AdcCalibrator>(InterpolationMethod::CUBIC_SPLINE, adc_calibration_data_samples_ptr_2);
+    auto adc_calibration_data_samples_ptr_2 = std::make_shared<std::pmr::vector<CalibrationData>>(
+        adc_calibration_data_samples_2
+    );
+    auto adc_calibrator_2 = std::make_shared<AdcCalibrator>(
+        InterpolationMethod::CUBIC_SPLINE, adc_calibration_data_samples_ptr_2
+    );
 
     std::vector<std::shared_ptr<AdcChannelConfiguration>> channel_configurations = {
         std::make_shared<AdcChannelConfiguration>(adc_calibrator_1),
@@ -90,13 +88,17 @@ AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t channel_co
 
     AdcConfiguration adc_configuration;
     adc_configuration.samples = 40;
-    adc_configuration.channel_configurations =
-        std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(channel_configurations);
+    adc_configuration.channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(
+        channel_configurations
+    );
 
     return adc_configuration;
 }
 
-void adc_configuration_parser_CompareCalibrators(const AdcCalibrator& calibrator, const AdcCalibrator& deserialized_calibrator) {
+void adc_configuration_parser_CompareCalibrators(
+    const AdcCalibrator& calibrator,
+    const AdcCalibrator& deserialized_calibrator
+) {
     zassert_equal(deserialized_calibrator.GetInterpolationMethod(), calibrator.GetInterpolationMethod());
 
     auto calibration_table = calibrator.GetCalibrationTable();
@@ -109,14 +111,20 @@ void adc_configuration_parser_CompareCalibrators(const AdcCalibrator& calibrator
     }
 }
 
-void adc_configuration_parser_CompareAdcConfigurations(AdcConfiguration& adc_configuration, AdcConfiguration& deserialized_adc_configuration) {
+void adc_configuration_parser_CompareAdcConfigurations(
+    AdcConfiguration& adc_configuration,
+    AdcConfiguration& deserialized_adc_configuration
+) {
     zassert_equal(deserialized_adc_configuration.samples, adc_configuration.samples);
-    zassert_equal(deserialized_adc_configuration.channel_configurations->size(), adc_configuration.channel_configurations->size());
+    zassert_equal(
+        deserialized_adc_configuration.channel_configurations->size(), adc_configuration.channel_configurations->size()
+    );
 
     for(size_t i = 0; i < adc_configuration.channel_configurations->size(); i++) {
         adc_configuration_parser_CompareCalibrators(
             *adc_configuration.channel_configurations->at(i)->calibrator,
-            *deserialized_adc_configuration.channel_configurations->at(i)->calibrator);
+            *deserialized_adc_configuration.channel_configurations->at(i)->calibrator
+        );
     }
 }
 
@@ -126,7 +134,9 @@ ZTEST(adc_configuration_parser, test_CborSerializeDeserialize) {
     auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
 
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
-    auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration.get());
+    auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
+        Mrm::GetDefaultPmr(), *serialized_adc_configuration.get()
+    );
 
     adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
 }
@@ -140,7 +150,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_orders_an_unordered_calibration
     for(auto& adc_channel_config : serialized_adc_configuration->CborAdcChannelConfig_m)
         std::ranges::reverse(adc_channel_config.calibration_table.float32float);
 
-    auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
+    auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
+        Mrm::GetDefaultPmr(), *serialized_adc_configuration
+    );
 
     adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
 }
@@ -159,8 +171,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_monotonic_values) {
         auto reason = ExpectInvalidArgument([&] {
             adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
         });
-        zassert_str_equal(reason.c_str(),
-            "Invalid ADC configuration. Channel: 5. Calibration values must be strictly increasing.");
+        zassert_str_equal(
+            reason.c_str(), "Invalid ADC configuration. Channel: 5. Calibration values must be strictly increasing."
+        );
     }
 
     // A reversal on a linear channel: the readings fall while the voltages rise.
@@ -172,17 +185,23 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_monotonic_values) {
         auto reason = ExpectInvalidArgument([&] {
             adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
         });
-        zassert_str_equal(reason.c_str(),
-            "Invalid ADC configuration. Channel: 2. Calibration values must be strictly increasing.");
+        zassert_str_equal(
+            reason.c_str(), "Invalid ADC configuration. Channel: 2. Calibration values must be strictly increasing."
+        );
     }
 
     // The same rule guards Serialize, so a non-monotonic table is never stored.
     {
-        auto falling_calibrator = std::make_shared<AdcCalibrator>(InterpolationMethod::LINEAR,
-            std::make_shared<std::pmr::vector<CalibrationData>>(std::pmr::vector<CalibrationData> { {0.0F, 5.0F}, {5.0F, 0.0F} }));
+        auto falling_calibrator = std::make_shared<AdcCalibrator>(
+            InterpolationMethod::LINEAR,
+            std::make_shared<std::pmr::vector<CalibrationData>>(std::pmr::vector<CalibrationData>{
+                { 0.0F, 5.0F }, { 5.0F, 0.0F } })
+        );
 
         auto falling_configuration = adc_configuration_parser_GetTestConfiguration();
-        falling_configuration.channel_configurations->at(3) = std::make_shared<AdcChannelConfiguration>(falling_calibrator);
+        falling_configuration.channel_configurations->at(3) = std::make_shared<AdcChannelConfiguration>(
+            falling_calibrator
+        );
 
         auto reason = ExpectInvalidArgument([&] {
             adc_configuration_cbor_parser.Serialize(falling_configuration);
@@ -202,8 +221,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_duplicate_voltages) {
     auto reason = ExpectInvalidArgument([&] {
         adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
     });
-    zassert_str_equal(reason.c_str(),
-        "Invalid ADC configuration. Channel: 1. Calibration voltages must be strictly increasing.");
+    zassert_str_equal(
+        reason.c_str(), "Invalid ADC configuration. Channel: 1. Calibration voltages must be strictly increasing."
+    );
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_values_that_saturate_together) {
@@ -215,7 +235,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_values_that_saturate_to
     // Both readings lie beyond the sensor maximum, so both map to the top of the ADC range.
     auto& table = serialized_adc_configuration->CborAdcChannelConfig_m.at(4).calibration_table.float32float;
     table.back().float32float = CONFIG_EERIE_LEAP_SENSOR_VOLTAGE_MAX_MV / 1000.0F + 1.0F;
-    table.push_back({ .float32float_key = 6.0F, .float32float = CONFIG_EERIE_LEAP_SENSOR_VOLTAGE_MAX_MV / 1000.0F + 2.0F });
+    table.push_back(
+        { .float32float_key = 6.0F, .float32float = CONFIG_EERIE_LEAP_SENSOR_VOLTAGE_MAX_MV / 1000.0F + 2.0F }
+    );
 
     auto reason = ExpectInvalidArgument([&] {
         adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
@@ -236,7 +258,8 @@ ZTEST(adc_configuration_parser, test_Deserialize_loads_a_value_beyond_the_sensor
     table.back().float32float = 5.05F;
 
     auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
-        Mrm::GetDefaultPmr(), *serialized_adc_configuration);
+        Mrm::GetDefaultPmr(), *serialized_adc_configuration
+    );
 
     const auto& calibrator = *deserialized_adc_configuration->channel_configurations->at(0)->calibrator;
     zassert_equal(calibrator.GetCalibrationTable()->back().value, 5.05F);
@@ -248,7 +271,10 @@ ZTEST(adc_configuration_parser, test_Deserialize_loads_a_value_beyond_the_sensor
 
     // It stores back unchanged.
     auto reserialized_adc_configuration = adc_configuration_cbor_parser.Serialize(*deserialized_adc_configuration);
-    zassert_equal(reserialized_adc_configuration->CborAdcChannelConfig_m.at(0).calibration_table.float32float.back().float32float, 5.05F);
+    zassert_equal(
+        reserialized_adc_configuration->CborAdcChannelConfig_m.at(0).calibration_table.float32float.back().float32float,
+        5.05F
+    );
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_finite_points) {
@@ -262,8 +288,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_finite_points) {
     auto reason = ExpectInvalidArgument([&] {
         adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
     });
-    zassert_str_equal(reason.c_str(),
-        "Invalid ADC configuration. Channel: 6. Calibration table must hold finite numbers.");
+    zassert_str_equal(
+        reason.c_str(), "Invalid ADC configuration. Channel: 6. Calibration table must hold finite numbers."
+    );
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_samples_out_of_range) {
@@ -287,12 +314,13 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_samples_out_of_range) {
         serialized_adc_configuration->samples = samples;
 
         auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
-            Mrm::GetDefaultPmr(), *serialized_adc_configuration);
+            Mrm::GetDefaultPmr(), *serialized_adc_configuration
+        );
         zassert_equal(deserialized_adc_configuration->samples, samples);
     }
 
     // Serialize applies the same bounds.
-    for(uint16_t samples : { uint16_t { 0 }, static_cast<uint16_t>(CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX + 1) }) {
+    for(uint16_t samples : { uint16_t{ 0 }, static_cast<uint16_t>(CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX + 1) }) {
         adc_configuration.samples = samples;
 
         auto reason = ExpectInvalidArgument([&] {
@@ -313,7 +341,8 @@ ZTEST(adc_configuration_parser, test_Deserialize_pads_missing_channels) {
     zassert_equal(serialized_adc_configuration->CborAdcChannelConfig_m.size(), kConfiguredChannelCount);
 
     auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
-        Mrm::GetDefaultPmr(), *serialized_adc_configuration);
+        Mrm::GetDefaultPmr(), *serialized_adc_configuration
+    );
 
     zassert_equal(deserialized_adc_configuration->samples, adc_configuration.samples);
     zassert_equal(deserialized_adc_configuration->channel_configurations->size(), kDtChannelCount);
@@ -321,7 +350,8 @@ ZTEST(adc_configuration_parser, test_Deserialize_pads_missing_channels) {
     for(size_t i = 0; i < kConfiguredChannelCount; i++) {
         adc_configuration_parser_CompareCalibrators(
             *adc_configuration.channel_configurations->at(i)->calibrator,
-            *deserialized_adc_configuration->channel_configurations->at(i)->calibrator);
+            *deserialized_adc_configuration->channel_configurations->at(i)->calibrator
+        );
     }
 
     auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());
@@ -352,7 +382,8 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_too_many_channels) {
     zassert_str_equal(serialize_reason.c_str(), expected_reason.c_str());
 
     // Stored by a unit whose device tree has more channels.
-    auto serialized_adc_configuration = AdcConfigurationCborParser(kConfiguredChannelCount).Serialize(adc_configuration);
+    auto serialized_adc_configuration =
+        AdcConfigurationCborParser(kConfiguredChannelCount).Serialize(adc_configuration);
 
     auto deserialize_reason = ExpectInvalidArgument([&] {
         adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <concepts>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 namespace eerie_leap::subsys::random {
 

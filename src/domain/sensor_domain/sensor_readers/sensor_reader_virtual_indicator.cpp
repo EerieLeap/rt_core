@@ -1,7 +1,7 @@
 #include <stdexcept>
 
-#include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/reading_status.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
 #include "sensor_reader_virtual_indicator.h"
 
 namespace eerie_leap::domain::sensor_domain::sensor_readers {
@@ -10,8 +10,9 @@ using namespace eerie_leap::domain::sensor_domain::models;
 
 SensorReaderVirtualIndicator::SensorReaderVirtualIndicator(
     std::shared_ptr<ITimeService> time_service,
-    const SensorRuntime& runtime)
-        : SensorReaderBase(std::move(time_service), runtime) {
+    const SensorRuntime& runtime
+) :
+    SensorReaderBase(std::move(time_service), runtime) {
 
     if(GetSensor().configuration.type != SensorType::VIRTUAL_INDICATOR)
         throw std::runtime_error("Unsupported sensor type");

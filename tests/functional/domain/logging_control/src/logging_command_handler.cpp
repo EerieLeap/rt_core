@@ -58,11 +58,12 @@ struct Fixture {
     uint8_t SendRequest(const Bytes& data) {
         const uint8_t transaction = next_transaction++;
 
-        harness.SendAsPeer(COMMAND, CdmpCommandRequestMessage{
-            .target_device_id = OWN_ID,
-            .command_code = LOGGING_CODE,
-            .transaction_id = transaction,
-            .data = data}.ToCanFrame());
+        harness.SendAsPeer(
+            COMMAND,
+            CdmpCommandRequestMessage{
+                .target_device_id = OWN_ID, .command_code = LOGGING_CODE, .transaction_id = transaction, .data = data }
+                .ToCanFrame()
+        );
 
         return transaction;
     }
@@ -74,7 +75,8 @@ struct Fixture {
             [transaction](const Bytes& bytes) {
                 return bytes.size() >= 4 && bytes[0] == OWN_ID && bytes[1] == LOGGING_CODE && bytes[2] == transaction;
             },
-            timeout_ms);
+            timeout_ms
+        );
         if(!frame.has_value())
             return std::nullopt;
 
@@ -137,12 +139,13 @@ ZTEST(logging_command_handler, test_AStartIsAnsweredBeforeItRuns) {
     // The queue stays held, so only the handler can make the answer late: one that waited for the
     // outcome (the fake never reports one) would not answer within this.
     const int64_t start_ms = k_uptime_get();
-    const auto result = F().Ask({0x01});
+    const auto result = F().Ask({ 0x01 });
     const int64_t answer_ms = k_uptime_get() - start_ms;
     zassert_true(result.has_value(), "The start must be answered");
     zassert_equal(*result, CdmpResultCode::SUCCESS, "which means accepted");
-    zassert_true(answer_ms < k_no_wait_ms, "The answer must not wait for the start (%lld ms)",
-        static_cast<long long>(answer_ms));
+    zassert_true(
+        answer_ms < k_no_wait_ms, "The answer must not wait for the start (%lld ms)", static_cast<long long>(answer_ms)
+    );
     zassert_false(F().control->WaitForJob(k_no_wait_ms), "The start had not run when it was answered");
 
     const auto requests = F().control->Requests();
@@ -157,11 +160,11 @@ ZTEST(logging_command_handler, test_AStartIsAnsweredBeforeItRuns) {
 ZTEST(logging_command_handler, test_AStopIsAccepted) {
     F().BuildHandler();
 
-    const auto result = F().Ask({0x00});
+    const auto result = F().Ask({ 0x00 });
     zassert_true(result.has_value());
     zassert_equal(*result, CdmpResultCode::SUCCESS);
 
-    zassert_true(F().control->Kinds() == Kinds({Kind::Stop}));
+    zassert_true(F().control->Kinds() == Kinds({ Kind::Stop }));
 }
 
 ZTEST(logging_command_handler, test_ARequestWithoutAPayloadFails) {
@@ -176,12 +179,12 @@ ZTEST(logging_command_handler, test_ARequestWithoutAPayloadFails) {
 
 ZTEST(logging_command_handler, test_DestroyingTheHandlerUnregistersTheCommand) {
     F().BuildHandler();
-    zassert_true(F().Ask({0x01}).has_value());
+    zassert_true(F().Ask({ 0x01 }).has_value());
     zassert_equal(F().control->Requests().size(), 1);
 
     F().handler.reset();
 
-    const auto result = F().Ask({0x01});
+    const auto result = F().Ask({ 0x01 });
     zassert_true(result.has_value());
     zassert_equal(*result, CdmpResultCode::UNSUPPORTED_COMMAND, "No handler, no command");
     zassert_equal(F().control->Requests().size(), 1, "and no request");
@@ -191,7 +194,7 @@ ZTEST(logging_command_handler, test_DestroyingTheHandlerWaitsForACallInProgress)
     F().control->HoldRequests();
     F().BuildHandler();
 
-    const uint8_t transaction = F().SendRequest({0x01});
+    const uint8_t transaction = F().SendRequest({ 0x01 });
     zassert_true(F().control->WaitUntilHeld(), "The request must reach the control");
 
     // Destroyed on another thread, which has to wait for the call on the CDMP work queue.
@@ -210,8 +213,9 @@ ZTEST(logging_command_handler, test_DestroyingTheHandlerWaitsForACallInProgress)
         k_sem_give(&destruction->done);
     });
 
-    zassert_not_equal(k_sem_take(&destruction->done, Ms(NO_FRAME_TIMEOUT_MS)), 0,
-        "The destructor must wait for the call in progress");
+    zassert_not_equal(
+        k_sem_take(&destruction->done, Ms(NO_FRAME_TIMEOUT_MS)), 0, "The destructor must wait for the call in progress"
+    );
 
     F().control->Release();
 
@@ -220,7 +224,7 @@ ZTEST(logging_command_handler, test_DestroyingTheHandlerWaitsForACallInProgress)
     zassert_equal(response->result_code, CdmpResultCode::SUCCESS, "as it was accepted");
     zassert_equal(k_sem_take(&destruction->done, Ms(k_wait_ms)), 0, "and the destructor returns");
 
-    const auto later = F().Ask({0x01});
+    const auto later = F().Ask({ 0x01 });
     zassert_true(later.has_value());
     zassert_equal(*later, CdmpResultCode::UNSUPPORTED_COMMAND);
     zassert_equal(F().control->Requests().size(), 1, "One request in all");
@@ -244,7 +248,7 @@ ZTEST(logging_command_handler, test_ANullArgumentIsRefused) {
     zassert_true(is_control_refused, "and a control");
 
     // The refusals registered nothing.
-    const auto result = F().Ask({0x01});
+    const auto result = F().Ask({ 0x01 });
     zassert_true(result.has_value());
     zassert_equal(*result, CdmpResultCode::UNSUPPORTED_COMMAND);
 }
@@ -280,7 +284,8 @@ std::weak_ptr<int> RegisterBlockingHandler(Fixture& fixture, const std::shared_p
             k_sem_take(&signals->release, K_SECONDS(5));
 
             return result;
-        });
+        }
+    );
 
     return weak_sentinel;
 }
@@ -292,14 +297,17 @@ ZTEST(logging_command_handler, test_AHandlerUnsetDuringItsCallFinishesThatCall) 
     const auto weak_sentinel = RegisterBlockingHandler(F(), signals, true);
     zassert_false(weak_sentinel.expired(), "the registered handler holds the sentinel");
 
-    const uint8_t transaction = F().SendRequest({0x01});
+    const uint8_t transaction = F().SendRequest({ 0x01 });
     zassert_equal(k_sem_take(&signals->entered, Ms(k_wait_ms)), 0, "The handler must be called");
 
     // The CDMP work queue is inside the call: unsetting neither waits for it nor ends it.
     const int64_t start_ms = k_uptime_get();
     F().harness.com->UnsetCommandHandler(CanbusComCommandCode::LOGGING);
     const int64_t elapsed_ms = k_uptime_get() - start_ms;
-    zassert_true(elapsed_ms < k_no_wait_ms, "Unsetting the handler waited %lld ms for its call", static_cast<long long>(elapsed_ms));
+    zassert_true(
+        elapsed_ms < k_no_wait_ms, "Unsetting the handler waited %lld ms for its call",
+        static_cast<long long>(elapsed_ms)
+    );
     zassert_false(weak_sentinel.expired(), "The call in progress must keep its handler alive");
 
     k_sem_give(&signals->release);
@@ -310,7 +318,7 @@ ZTEST(logging_command_handler, test_AHandlerUnsetDuringItsCallFinishesThatCall) 
     // Released when the call returned, before the answer went out.
     zassert_true(weak_sentinel.expired(), "The handler must go once its call returned");
 
-    const auto later = F().Ask({0x01});
+    const auto later = F().Ask({ 0x01 });
     zassert_true(later.has_value());
     zassert_equal(*later, CdmpResultCode::UNSUPPORTED_COMMAND, "A handler that was unset is not called again");
     zassert_equal(signals->calls.load(), 1);
@@ -320,19 +328,19 @@ ZTEST(logging_command_handler, test_AHandlerReplacedDuringItsCallFinishesThatCal
     auto signals = std::make_shared<Signals>();
     const auto weak_sentinel = RegisterBlockingHandler(F(), signals, true);
 
-    const uint8_t transaction = F().SendRequest({0x01});
+    const uint8_t transaction = F().SendRequest({ 0x01 });
     zassert_equal(k_sem_take(&signals->entered, Ms(k_wait_ms)), 0, "The handler must be called");
 
     // The second handler answers FAILURE at once.
     auto replacement_calls = std::make_shared<std::atomic<int>>(0);
     const int64_t start_ms = k_uptime_get();
     F().harness.com->SetCommandHandler<CanbusComLoggingCommand>(
-        CanbusComCommandCode::LOGGING,
-        [replacement_calls](std::optional<CanbusComLoggingCommand>) {
+        CanbusComCommandCode::LOGGING, [replacement_calls](std::optional<CanbusComLoggingCommand>) {
             (*replacement_calls)++;
 
             return false;
-        });
+        }
+    );
     zassert_true(k_uptime_get() - start_ms < k_no_wait_ms, "Replacing the handler must not wait for its call");
     zassert_false(weak_sentinel.expired(), "The call in progress must keep the old handler alive");
 
@@ -342,7 +350,7 @@ ZTEST(logging_command_handler, test_AHandlerReplacedDuringItsCallFinishesThatCal
     zassert_equal(response->result_code, CdmpResultCode::SUCCESS, "The call in progress finishes on the old handler");
     zassert_true(weak_sentinel.expired());
 
-    const auto later = F().Ask({0x01});
+    const auto later = F().Ask({ 0x01 });
     zassert_true(later.has_value());
     zassert_equal(*later, CdmpResultCode::FAILURE, "and the next call is the replacement's");
     zassert_equal(replacement_calls->load(), 1);
@@ -358,7 +366,7 @@ ZTEST(logging_command_handler, test_TheRemoteRoleAnswersAStopAndDropsItsWantedSt
     F().remote->RequestStart(kAllUnits);
     zassert_true(F().remote_sender->WaitForSends(1), "The start is sent");
 
-    const auto result = F().Ask({0x00});
+    const auto result = F().Ask({ 0x00 });
     zassert_true(result.has_value(), "A unit without a writer answers a stop");
     zassert_equal(*result, CdmpResultCode::SUCCESS);
 
@@ -371,7 +379,7 @@ ZTEST(logging_command_handler, test_TheRemoteRoleAnswersAStopAndDropsItsWantedSt
 ZTEST(logging_command_handler, test_TheRemoteRoleAnswersAStartFailure) {
     F().BuildRemote();
 
-    const auto result = F().Ask({0x01});
+    const auto result = F().Ask({ 0x01 });
     zassert_true(result.has_value(), "It answers a start too");
     zassert_equal(*result, CdmpResultCode::FAILURE, "but cannot serve it");
 

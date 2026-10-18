@@ -19,10 +19,9 @@ namespace {
 
 // The controller is never started here; Canbus only needs the device to exist.
 std::unique_ptr<Canbus> MakeCanbus() {
-    return std::make_unique<Canbus>(CanbusConfig(
-        DEVICE_DT_GET(DT_NODELABEL(can_loopback0)),
-        CanbusType::CLASSICAL_CAN,
-        500000));
+    return std::make_unique<Canbus>(
+        CanbusConfig(DEVICE_DT_GET(DT_NODELABEL(can_loopback0)), CanbusType::CLASSICAL_CAN, 500000)
+    );
 }
 
 } // namespace

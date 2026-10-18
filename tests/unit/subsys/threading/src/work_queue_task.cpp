@@ -20,8 +20,8 @@ struct Payload {
 };
 
 // These cases never submit anything, so the kernel objects only have to be valid storage.
-k_work_q idle_queue {};
-k_work_sync idle_sync {};
+k_work_q idle_queue{};
+k_work_sync idle_sync{};
 
 void NoopWorkHandler(k_work*) {}
 
@@ -42,7 +42,9 @@ ZTEST(work_queue_task, test_WorkQueueTaskResult_defaults_to_no_reschedule) {
 }
 
 ZTEST(work_queue_task, test_GetUserdata_is_null_until_user_data_is_set) {
-    auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+    auto task = MakeTask([](Payload*) {
+        return WorkQueueTaskResult{};
+    });
 
     zassert_is_null(task.GetUserdata());
 }
@@ -51,7 +53,7 @@ ZTEST(work_queue_task, test_Execute_forwards_owned_user_data_to_the_handler) {
     Payload* observed = nullptr;
     auto task = MakeTask([&observed](Payload* payload) {
         observed = payload;
-        return WorkQueueTaskResult {};
+        return WorkQueueTaskResult{};
     });
 
     auto payload = std::make_unique<Payload>();
@@ -73,7 +75,7 @@ ZTEST(work_queue_task, test_Execute_forwards_borrowed_user_data_to_the_handler) 
     Payload* observed = nullptr;
     auto task = MakeTask([&observed](Payload* argument) {
         observed = argument;
-        return WorkQueueTaskResult {};
+        return WorkQueueTaskResult{};
     });
 
     task.SetUserData(&payload);
@@ -85,10 +87,7 @@ ZTEST(work_queue_task, test_Execute_forwards_borrowed_user_data_to_the_handler) 
 
 ZTEST(work_queue_task, test_Execute_returns_the_handler_result) {
     auto task = MakeTask([](Payload*) {
-        return WorkQueueTaskResult {
-            .reschedule = true,
-            .delay = K_MSEC(25)
-        };
+        return WorkQueueTaskResult{ .reschedule = true, .delay = K_MSEC(25) };
     });
 
     task.SetUserData(std::make_unique<Payload>());
@@ -104,7 +103,7 @@ ZTEST(work_queue_task, test_Execute_can_be_repeated) {
     int calls = 0;
     auto task = MakeTask([&calls](Payload*) {
         ++calls;
-        return WorkQueueTaskResult {};
+        return WorkQueueTaskResult{};
     });
 
     task.SetUserData(std::make_unique<Payload>());
@@ -118,7 +117,9 @@ ZTEST(work_queue_task, test_Execute_can_be_repeated) {
 
 ZTEST(work_queue_task, test_SetUserData_releases_the_previously_owned_payload) {
     int destructions = 0;
-    auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+    auto task = MakeTask([](Payload*) {
+        return WorkQueueTaskResult{};
+    });
 
     auto first = std::make_unique<Payload>();
     first->destructions = &destructions;
@@ -136,7 +137,9 @@ ZTEST(work_queue_task, test_owned_user_data_is_released_with_the_task) {
     int destructions = 0;
 
     {
-        auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+        auto task = MakeTask([](Payload*) {
+            return WorkQueueTaskResult{};
+        });
 
         auto payload = std::make_unique<Payload>();
         payload->destructions = &destructions;
@@ -154,7 +157,9 @@ ZTEST(work_queue_task, test_borrowed_user_data_outlives_the_task) {
     payload.destructions = &destructions;
 
     {
-        auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+        auto task = MakeTask([](Payload*) {
+            return WorkQueueTaskResult{};
+        });
         task.SetUserData(&payload);
     }
 
@@ -162,14 +167,18 @@ ZTEST(work_queue_task, test_borrowed_user_data_outlives_the_task) {
 }
 
 ZTEST(work_queue_task, test_IsScheduled_is_false_before_the_task_is_submitted) {
-    auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+    auto task = MakeTask([](Payload*) {
+        return WorkQueueTaskResult{};
+    });
     task.SetUserData(std::make_unique<Payload>());
 
     zassert_false(task.IsScheduled());
 }
 
 ZTEST(work_queue_task, test_Cancel_reports_nothing_to_cancel_for_an_idle_task) {
-    auto task = MakeTask([](Payload*) { return WorkQueueTaskResult {}; });
+    auto task = MakeTask([](Payload*) {
+        return WorkQueueTaskResult{};
+    });
     task.SetUserData(std::make_unique<Payload>());
 
     zassert_false(task.Cancel());

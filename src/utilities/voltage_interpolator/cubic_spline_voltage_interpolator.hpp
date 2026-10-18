@@ -1,19 +1,19 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <memory_resource>
 #include <vector>
-#include <algorithm>
 
-#include "i_voltage_interpolator.h"
 #include "calibration_data.h"
+#include "i_voltage_interpolator.h"
 #include "interpolation_method.h"
 
 namespace eerie_leap::utilities::voltage_interpolator {
 
 class CubicSplineVoltageInterpolator : public IVoltageInterpolator {
 private:
-    struct CubicCoefficients{
+    struct CubicCoefficients {
         float a, b, c, d; // cubic coefficients: a + b*t + c*t^2 + d*t^3
     };
 
@@ -23,11 +23,12 @@ private:
     std::pmr::vector<CubicCoefficients> coefficients_;
 
 public:
-    explicit CubicSplineVoltageInterpolator(std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table)
-        : calibration_table_(std::move(calibration_table)),
-        coefficients_(calibration_table_ != nullptr
-            ? calibration_table_->get_allocator().resource()
-            : std::pmr::get_default_resource()) {
+    explicit CubicSplineVoltageInterpolator(std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_table) :
+        calibration_table_(std::move(calibration_table)),
+        coefficients_(
+            calibration_table_ != nullptr ? calibration_table_->get_allocator().resource()
+                                          : std::pmr::get_default_resource()
+        ) {
 
         if(!calibration_table_ || calibration_table_->size() < 2)
             throw std::invalid_argument("Calibration data is missing or invalid.");
@@ -50,7 +51,8 @@ public:
             h[i] = table[i + 1].voltage - table[i].voltage;
 
         for(size_t i = 1; i < n - 1; ++i)
-            alpha[i] = (3.0f / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a) - (3.0f / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
+            alpha[i] = (3.0f / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a)
+                - (3.0f / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
 
         l[0] = 1.0f;
         mu[0] = 0.0f;
@@ -68,7 +70,8 @@ public:
 
         for(int j = n - 2; j >= 0; --j) {
             coefficients_[j].c = z[j] - mu[j] * coefficients_[j + 1].c;
-            coefficients_[j].b = (coefficients_[j + 1].a - coefficients_[j].a) / h[j] - h[j] * (coefficients_[j + 1].c + 2.0f * coefficients_[j].c) / 3.0f;
+            coefficients_[j].b = (coefficients_[j + 1].a - coefficients_[j].a) / h[j]
+                - h[j] * (coefficients_[j + 1].c + 2.0f * coefficients_[j].c) / 3.0f;
             coefficients_[j].d = (coefficients_[j + 1].c - coefficients_[j].c) / (3.0f * h[j]);
         }
     }
@@ -83,8 +86,9 @@ public:
                 return table.back().value;
         }
 
-        auto it = std::upper_bound(table.begin(), table.end(), voltage,
-            [](float val, const CalibrationData& d) { return val < d.voltage; });
+        auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
+            return val < d.voltage;
+        });
 
         // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
         const size_t last_segment = table.size() - 2;
@@ -94,7 +98,8 @@ public:
 
         float dx = voltage - table[i].voltage;
 
-        return coefficients_[i].a + coefficients_[i].b * dx + coefficients_[i].c * dx * dx + coefficients_[i].d * dx * dx * dx;
+        return coefficients_[i].a + coefficients_[i].b * dx + coefficients_[i].c * dx * dx
+            + coefficients_[i].d * dx * dx * dx;
     }
 
     const std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {

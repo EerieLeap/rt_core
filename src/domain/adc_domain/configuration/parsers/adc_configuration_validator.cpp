@@ -11,30 +11,24 @@ static constexpr uint32_t SAMPLES_MAX = CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX;
 
 [[noreturn]] static void InvalidConfiguration(size_t channel, std::string_view message) {
     throw std::invalid_argument(
-        "Invalid ADC configuration. Channel: "
-        + std::to_string(channel)
-        + ". "
-        + std::string(message));
+        "Invalid ADC configuration. Channel: " + std::to_string(channel) + ". " + std::string(message)
+    );
 }
 
 void AdcConfigurationValidator::ValidateSamples(uint32_t samples) {
     if(samples < 1 || samples > SAMPLES_MAX)
         throw std::invalid_argument(
-            "Invalid ADC configuration. Samples must be between 1 and "
-            + std::to_string(SAMPLES_MAX)
-            + ", got "
-            + std::to_string(samples)
-            + ".");
+            "Invalid ADC configuration. Samples must be between 1 and " + std::to_string(SAMPLES_MAX) + ", got "
+            + std::to_string(samples) + "."
+        );
 }
 
 void AdcConfigurationValidator::ValidateChannelCount(size_t configured_channel_count, size_t channel_count) {
     if(configured_channel_count > channel_count)
         throw std::invalid_argument(
-            "Invalid ADC configuration. "
-            + std::to_string(configured_channel_count)
-            + " channels configured, the device tree has "
-            + std::to_string(channel_count)
-            + ".");
+            "Invalid ADC configuration. " + std::to_string(configured_channel_count)
+            + " channels configured, the device tree has " + std::to_string(channel_count) + "."
+        );
 }
 
 // Both interpolators binary search, and the spline divides by the distance between neighbours, so

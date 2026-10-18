@@ -10,7 +10,8 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 using namespace eerie_leap::subsys::mdf::utilities;
 
-BlockBase::BlockBase(const std::string& id): id_(id) {
+BlockBase::BlockBase(const std::string& id) :
+    id_(id) {
     if(id_.size() != BLOCK_ID_SIZE - 2)
         throw std::invalid_argument("MDF block id must be exactly 2 characters");
 }

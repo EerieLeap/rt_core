@@ -7,25 +7,28 @@
 #include <string_view>
 #include <vector>
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
+#include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/fs_service.h"
 #include "subsys/threading/service_base.h"
 #include "subsys/threading/work_queue_thread.h"
-#include "subsys/time/rtc_provider.h"
 #include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
 #include "subsys/time/time_service.h"
-#include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "controllers/sensors_controller.h"
 
 using eerie_leap::controllers::SensorsController;
-using eerie_leap::utilities::memory::Mrm;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorType;
+using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::subsys::threading::ServiceBase;
@@ -33,10 +36,7 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::BootElapsedTimeProvider;
 using eerie_leap::subsys::time::RtcProvider;
 using eerie_leap::subsys::time::TimeService;
-using eerie_leap::domain::sensor_domain::models::Sensor;
-using eerie_leap::domain::sensor_domain::models::SensorType;
-using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::utilities::memory::Mrm;
 
 ZTEST_SUITE(sensors_controller, NULL, NULL, NULL, NULL, NULL);
 
@@ -106,8 +106,8 @@ public:
     std::atomic<bool> is_processing_running_at_every_stop = true;
     std::atomic<bool> refuse_start = false;
 
-    explicit DependentService(std::shared_ptr<SensorsProcessingService> processing_service)
-        : processing_service_(std::move(processing_service)) {}
+    explicit DependentService(std::shared_ptr<SensorsProcessingService> processing_service) :
+        processing_service_(std::move(processing_service)) {}
 };
 
 } // namespace
@@ -121,7 +121,8 @@ ZTEST(sensors_controller, test_an_update_restarts_processing_once_it_was_started
     zassert_true(work_queue->Initialize());
 
     auto time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     auto frame = std::make_shared<SensorReadingsFrame>();
 
     // No GPIO, no ADC and no ADC configuration manager: the defaults rt_gauge relies on.
@@ -160,14 +161,18 @@ ZTEST(sensors_controller, test_a_restart_stops_and_starts_again_the_dependents_t
     zassert_true(work_queue->Initialize());
 
     auto time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     auto frame = std::make_shared<SensorReadingsFrame>();
 
     // rt_gauge's seven arguments.
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
-    zassert_equal(controller.Initialize([](auto manager) {
-        zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }));
-    }), 0);
+    zassert_equal(
+        controller.Initialize([](auto manager) {
+            zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }));
+        }),
+        0
+    );
 
     const auto processing_service = controller.GetProcessingService();
     auto running = std::make_shared<DependentService>(processing_service);
@@ -187,12 +192,16 @@ ZTEST(sensors_controller, test_a_restart_stops_and_starts_again_the_dependents_t
     zassert_true(controller.GetConfigurationManager()->Update({ MakeVirtualSensor("second", "2 + 2") }));
     zassert_true(WaitForReading(*frame, "second"), "the update was not put into effect");
     zassert_true(WaitFor(running->starts, 2), "a dependent that was running must be started again");
-    zassert_true(WaitFor(refusing->starts, 2), "a dependent that was running must be started again, even one that refuses");
+    zassert_true(
+        WaitFor(refusing->starts, 2), "a dependent that was running must be started again, even one that refuses"
+    );
 
     zassert_equal(running->stops.load(), 1, "a running dependent is stopped once per restart");
     zassert_true(running->IsRunning(), "the running dependent must run again");
     zassert_true(running->is_processing_running_at_every_stop.load(), "a dependent must stop before processing stops");
-    zassert_true(running->is_processing_running_at_every_start.load(), "a dependent must start once processing runs again");
+    zassert_true(
+        running->is_processing_running_at_every_start.load(), "a dependent must start once processing runs again"
+    );
 
     zassert_equal(stopped->starts.load(), 0, "a dependent that was not running must not be started");
     zassert_equal(stopped->stops.load(), 0, "a dependent that was not running must not be stopped");
@@ -215,16 +224,20 @@ ZTEST(sensors_controller, test_a_disabled_sensor_gets_no_reading_from_processing
     zassert_true(work_queue->Initialize());
 
     auto time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     auto frame = std::make_shared<SensorReadingsFrame>();
 
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
-    zassert_equal(controller.Initialize([](auto manager) {
-        auto disabled = MakeVirtualSensor("disabled", "2 + 2");
-        disabled->is_enabled = false;
+    zassert_equal(
+        controller.Initialize([](auto manager) {
+            auto disabled = MakeVirtualSensor("disabled", "2 + 2");
+            disabled->is_enabled = false;
 
-        zassert_true(manager->Update({ MakeVirtualSensor("enabled", "1 + 1"), disabled }));
-    }), 0);
+            zassert_true(manager->Update({ MakeVirtualSensor("enabled", "1 + 1"), disabled }));
+        }),
+        0
+    );
 
     const auto processing_service = controller.GetProcessingService();
 

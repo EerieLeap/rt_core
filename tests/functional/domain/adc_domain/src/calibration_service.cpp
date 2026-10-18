@@ -3,13 +3,13 @@
 #include <optional>
 #include <vector>
 
+#include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <zephyr/drivers/adc/adc_emul.h>
 
-#include "subsys/device_tree/dt_adc.h"
 #include "subsys/adc/adc_emulator.h"
 #include "subsys/adc/adc_manager.h"
+#include "subsys/device_tree/dt_adc.h"
 
 #include "domain/adc_domain/models/adc_range.h"
 #include "domain/adc_domain/services/calibration_service.h"
@@ -45,7 +45,7 @@ std::shared_ptr<AdcEmulator> MakeEmulator() {
 }
 
 std::shared_ptr<AdcManager> MakeAdcManager(std::shared_ptr<IAdc> adc) {
-    auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>> { std::move(adc) });
+    auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ std::move(adc) });
     zassert_true(adc_manager->Initialize());
 
     return adc_manager;
@@ -60,7 +60,8 @@ void DriveConstant(AdcEmulator& adc, int channel, uint32_t mv) {
 }
 
 // Polls until a result newer than @p after_sequence exists.
-std::optional<CalibrationService::Result> WaitForResultAfter(const CalibrationService& service, uint32_t after_sequence) {
+std::optional<CalibrationService::Result>
+WaitForResultAfter(const CalibrationService& service, uint32_t after_sequence) {
     const int64_t end = k_uptime_get() + 10 * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS;
     while(k_uptime_get() < end) {
         const auto latest = service.GetLatest();
@@ -121,8 +122,9 @@ ZTEST(calibration_service, test_Start_pauses_and_samples) {
     const uint32_t last_sequence = calibration_service.GetLatest()->sequence;
     const uint32_t requests = stats_after.requests - stats_before.requests;
     zassert_true(requests >= 2);
-    zassert_equal(stats_after.conversions - stats_before.conversions,
-        requests * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT);
+    zassert_equal(
+        stats_after.conversions - stats_before.conversions, requests * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT
+    );
 
     k_msleep(2 * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS);
     zassert_equal(adc->GetStats().requests, stats_after.requests);
@@ -320,8 +322,10 @@ ZTEST(calibration_service, test_Start_drops_the_previous_jobs_result) {
     zassert_true(calibration_service.Start(2));
     zassert_equal(calibration_service.GetChannel(), 2);
     const auto latest = calibration_service.GetLatest();
-    zassert_true(!latest.has_value() || latest->sequence > first_job_last,
-        "The first job's result %u is reported for channel 2", first_job_last);
+    zassert_true(
+        !latest.has_value() || latest->sequence > first_job_last, "The first job's result %u is reported for channel 2",
+        first_job_last
+    );
 
     const auto second_job = WaitForResultAfter(calibration_service, first_job_last);
     zassert_true(second_job.has_value(), "The new job samples");

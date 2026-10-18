@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -10,28 +11,27 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <chrono>
 
-#include "subsys/mdf/mdf4_file.h"
-#include "subsys/mdf/mdf4/channel_group_block.h"
-#include "subsys/mdf/mdf4/record_writer.h"
-#include "subsys/mdf/mdf4/can_record_writer.h"
-#include "subsys/mdf/mdf4/source_information_block.h"
+#include "domain/logging_domain/models/logging_configuration.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
-#include "domain/logging_domain/models/logging_configuration.h"
 #include "i_logger.h"
 #include "logger_metadata.h"
+#include "subsys/mdf/mdf4/can_record_writer.h"
+#include "subsys/mdf/mdf4/channel_group_block.h"
+#include "subsys/mdf/mdf4/record_writer.h"
+#include "subsys/mdf/mdf4/source_information_block.h"
+#include "subsys/mdf/mdf4_file.h"
 
 namespace eerie_leap::domain::logging_domain::loggers {
 
 namespace mdf4 = eerie_leap::subsys::mdf::mdf4;
 
-using eerie_leap::subsys::mdf::Mdf4File;
-using eerie_leap::domain::sensor_domain::models::Sensor;
-using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
 using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
+using eerie_leap::subsys::mdf::Mdf4File;
 
 /**
  * MDF 4.10 logger for sensor readings: one channel group per enabled sensor, named after the
@@ -87,7 +87,8 @@ private:
     void AddValueTarget(
         const Sensor& sensor,
         const SensorLoggingConfiguration& sensor_configuration,
-        const std::shared_ptr<mdf4::SourceInformationBlock>& source_information);
+        const std::shared_ptr<mdf4::SourceInformationBlock>& source_information
+    );
     void AddCanFrameTarget(const Sensor& sensor);
     void SetFileMetadata(const LoggingConfiguration& configuration, const LoggerMetadata& metadata);
 
@@ -99,14 +100,17 @@ public:
     Mdf4LoggerSensorReading(
         const LoggingConfiguration& configuration,
         std::span<const std::shared_ptr<Sensor>> sensors,
-        const LoggerMetadata& metadata);
+        const LoggerMetadata& metadata
+    );
     virtual ~Mdf4LoggerSensorReading() = default;
 
     const char* GetFileExtension() const override;
     bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) override;
     bool StopLogging() override;
     bool LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) override;
-    [[nodiscard]] uint64_t GetBytesWritten() const override { return current_file_size_bytes_; }
+    [[nodiscard]] uint64_t GetBytesWritten() const override {
+        return current_file_size_bytes_;
+    }
 
     /** 1 while every group ID (two per CAN sensor) fits into a byte, else 2. */
     static uint8_t GetRecordIdSizeBytes(size_t enabled_sensor_count);

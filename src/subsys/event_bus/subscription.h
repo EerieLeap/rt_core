@@ -18,8 +18,11 @@ struct Subscription {
     EventHandler<EventTypeEnum, PayloadTypeEnum> handler;
 
     template<EventFilter<EventTypeEnum, PayloadTypeEnum> FilterType>
-    Subscription(size_t sub_id, EventTypeEnum type, FilterType f, EventHandler<EventTypeEnum, PayloadTypeEnum> h)
-        : id(sub_id), event_type(type), filter(f), handler(std::move(h)) {}
+    Subscription(size_t sub_id, EventTypeEnum type, FilterType f, EventHandler<EventTypeEnum, PayloadTypeEnum> h) :
+        id(sub_id),
+        event_type(type),
+        filter(f),
+        handler(std::move(h)) {}
 };
 
 // Shared, so dispatch can snapshot the matching subscribers by refcount instead of
@@ -28,7 +31,6 @@ template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 Payl
 using SubscriptionPtr = std::shared_ptr<Subscription<EventTypeEnum, PayloadTypeEnum>>;
 
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
-using SubscriberMap =
-    std::unordered_map<EventTypeEnum, std::vector<SubscriptionPtr<EventTypeEnum, PayloadTypeEnum>>>;
+using SubscriberMap = std::unordered_map<EventTypeEnum, std::vector<SubscriptionPtr<EventTypeEnum, PayloadTypeEnum>>>;
 
 } // namespace eerie_leap::subsys::event_bus

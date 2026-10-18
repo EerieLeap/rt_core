@@ -15,7 +15,8 @@ LOG_MODULE_REGISTER(fs_service_logger);
 
 using eerie_leap::subsys::threading::ScopedMutex;
 
-FsService::FsService(fs_mount_t* mountpoint) : mountpoint_(mountpoint) {
+FsService::FsService(fs_mount_t* mountpoint) :
+    mountpoint_(mountpoint) {
     k_mutex_init(&mutex_);
 }
 
@@ -87,10 +88,7 @@ bool FsService::WriteFile(std::string_view relative_path, const void* data_p, si
     struct fs_file_t file;
     fs_file_t_init(&file);
 
-    int rc = fs_open(
-        &file,
-        full_path.String().CStr(),
-        FS_O_WRITE | FS_O_CREATE | (append ? FS_O_APPEND : FS_O_TRUNC));
+    int rc = fs_open(&file, full_path.String().CStr(), FS_O_WRITE | FS_O_CREATE | (append ? FS_O_APPEND : FS_O_TRUNC));
     if(rc < 0) {
         LOG_ERR("fs_open failed: %d.", rc);
         return false;
@@ -353,7 +351,9 @@ bool IsSameEntryIgnoringCase(std::string_view a, std::string_view b) {
         const std::string_view name_a = NextName(a);
         const std::string_view name_b = NextName(b);
 
-        if(!std::ranges::equal(name_a, name_b, [](char x, char y) { return ToLowerAscii(x) == ToLowerAscii(y); }))
+        if(!std::ranges::equal(name_a, name_b, [](char x, char y) {
+               return ToLowerAscii(x) == ToLowerAscii(y);
+           }))
             return false;
 
         if(name_a.empty())
@@ -362,8 +362,12 @@ bool IsSameEntryIgnoringCase(std::string_view a, std::string_view b) {
 }
 
 bool IsPlainCharacter(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-        || c == '.' || c == '_' || c == '-';
+    return (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9')
+        || c == '.'
+        || c == '_'
+        || c == '-';
 }
 
 // Whether a path is spelled so that FAT and littlefs resolve each of its names as it is written:
@@ -478,7 +482,8 @@ int FsService::ListDirectory(
     size_t first,
     size_t max_entries,
     std::vector<DirectoryEntry>& entries,
-    size_t& count) const {
+    size_t& count
+) const {
 
     ScopedMutex lock(mutex_);
 
@@ -512,8 +517,10 @@ int FsService::ListDirectory(
     struct DirectoryCloser {
         fs_dir_t* dir;
 
-        ~DirectoryCloser() { fs_closedir(dir); }
-    } closer{&dir};
+        ~DirectoryCloser() {
+            fs_closedir(dir);
+        }
+    } closer{ &dir };
 
     while(true) {
         rc = fs_readdir(&dir, &entry);
@@ -530,11 +537,13 @@ int FsService::ListDirectory(
 
         if(count >= first && entries.size() < max_entries) {
             const bool is_directory = entry.type == FS_DIR_ENTRY_DIR;
-            entries.push_back({
-                .name = entry.name,
-                .size = is_directory ? 0 : entry.size,
-                .is_directory = is_directory,
-            });
+            entries.push_back(
+                {
+                    .name = entry.name,
+                    .size = is_directory ? 0 : entry.size,
+                    .is_directory = is_directory,
+                }
+            );
         }
 
         count++;

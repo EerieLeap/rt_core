@@ -6,7 +6,8 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-FileHistoryBlock::FileHistoryBlock(): BlockBase("FH") {
+FileHistoryBlock::FileHistoryBlock() :
+    BlockBase("FH") {
     time_ns_ = 0;
     tz_offset_min_ = 0;
     dst_offset_min_ = 0;
@@ -25,11 +26,17 @@ FileHistoryBlock::~FileHistoryBlock() {
 
 void FileHistoryBlock::SetTool(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version) {
     auto metadata_comment_block = std::dynamic_pointer_cast<MetadataBlock>(links_.GetLink(LinkType::MetadataComment));
-    metadata_comment_block->SetText(GetId(),
+    metadata_comment_block->SetText(
+        GetId(),
         "<TX>created</TX>"
-        "<tool_id>" + MetadataBlock::EscapeXml(tool_id) + "</tool_id>"
-        "<tool_vendor>" + MetadataBlock::EscapeXml(tool_vendor) + "</tool_vendor>"
-        "<tool_version>" + MetadataBlock::EscapeXml(tool_version) + "</tool_version>"
+        "<tool_id>"
+            + MetadataBlock::EscapeXml(tool_id)
+            + "</tool_id>"
+              "<tool_vendor>"
+            + MetadataBlock::EscapeXml(tool_vendor)
+            + "</tool_vendor>"
+              "<tool_version>"
+            + MetadataBlock::EscapeXml(tool_version) + "</tool_version>"
     );
 }
 
@@ -69,6 +76,5 @@ std::unique_ptr<uint8_t[]> FileHistoryBlock::Serialize() const {
 
     return buffer;
 }
-
 
 } // namespace eerie_leap::subsys::mdf::mdf4

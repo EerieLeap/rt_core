@@ -24,12 +24,12 @@ ZTEST(smp_header, test_encode_matches_the_wire_layout) {
     std::array<uint8_t, SmpHeader::SIZE> data{};
     header.Encode(data);
 
-    constexpr std::array<uint8_t, SmpHeader::SIZE> expected = {0x0A, 0x00, 0x01, 0x02, 0x00, 0x40, 0x09, 0x03};
+    constexpr std::array<uint8_t, SmpHeader::SIZE> expected = { 0x0A, 0x00, 0x01, 0x02, 0x00, 0x40, 0x09, 0x03 };
     zassert_mem_equal(data.data(), expected.data(), expected.size());
 }
 
 ZTEST(smp_header, test_parse_round_trips) {
-    constexpr std::array<uint8_t, SmpHeader::SIZE> data = {0x0B, 0x00, 0x00, 0x05, 0x00, 0x00, 0x2A, 0x00};
+    constexpr std::array<uint8_t, SmpHeader::SIZE> data = { 0x0B, 0x00, 0x00, 0x05, 0x00, 0x00, 0x2A, 0x00 };
 
     auto header = SmpHeader::Parse(data);
 
@@ -51,9 +51,9 @@ ZTEST(smp_header, test_short_input_is_rejected) {
 }
 
 ZTEST(smp_header, test_read_and_write_are_requests) {
-    zassert_true(SmpHeader{.operation = SmpOperation::READ}.IsRequest());
-    zassert_true(SmpHeader{.operation = SmpOperation::WRITE}.IsRequest());
-    zassert_true(SmpHeader{.operation = SmpOperation::READ_RESPONSE}.IsResponse());
-    zassert_false(SmpHeader{.operation = static_cast<SmpOperation>(5)}.IsRequest());
-    zassert_false(SmpHeader{.operation = static_cast<SmpOperation>(5)}.IsResponse());
+    zassert_true(SmpHeader{ .operation = SmpOperation::READ }.IsRequest());
+    zassert_true(SmpHeader{ .operation = SmpOperation::WRITE }.IsRequest());
+    zassert_true(SmpHeader{ .operation = SmpOperation::READ_RESPONSE }.IsResponse());
+    zassert_false(SmpHeader{ .operation = static_cast<SmpOperation>(5) }.IsRequest());
+    zassert_false(SmpHeader{ .operation = static_cast<SmpOperation>(5) }.IsResponse());
 }

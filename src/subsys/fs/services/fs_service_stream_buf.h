@@ -25,7 +25,7 @@ private:
     // caller sees one failure instead of a file with a hole in it.
     std::vector<char> output_buffer_;
     bool write_failed_ = false;
-    uint64_t bytes_written_ = 0;    // handed to fs_write(); what is still in the put area is added on read
+    uint64_t bytes_written_ = 0; // handed to fs_write(); what is still in the put area is added on read
     uint32_t write_calls_ = 0;
 
     void ResetPutArea();
@@ -39,10 +39,8 @@ protected:
     std::streamsize xsgetn(char* s, std::streamsize n) override;
     std::streambuf::int_type underflow() override;
     int sync() override;
-    std::streambuf::pos_type seekoff(
-        std::streambuf::off_type off,
-        std::ios_base::seekdir way,
-        std::ios_base::openmode which) override;
+    std::streambuf::pos_type
+    seekoff(std::streambuf::off_type off, std::ios_base::seekdir way, std::ios_base::openmode which) override;
     std::streambuf::pos_type seekpos(std::streambuf::pos_type sp, std::ios_base::openmode which) override;
 
 public:
@@ -65,7 +63,9 @@ public:
     }
 
     /** Number of fs_write() calls issued so far: one per flush of the put area or direct write. */
-    [[nodiscard]] uint32_t GetWriteCallCount() const { return write_calls_; }
+    [[nodiscard]] uint32_t GetWriteCallCount() const {
+        return write_calls_;
+    }
 
     FsServiceStreamBuf(const FsServiceStreamBuf&) = delete;
     FsServiceStreamBuf& operator=(const FsServiceStreamBuf&) = delete;

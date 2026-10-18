@@ -9,12 +9,12 @@
 #include <vector>
 
 #ifdef CONFIG_ARCH_POSIX
-#include <fstream>
+    #include <fstream>
 #endif
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
 #include "domain/sensor_domain/models/sensor_limits.h"
 
@@ -48,8 +48,10 @@ ZTEST_SUITE(log_writer_service, NULL, NULL, ResetAfterTest, NULL, NULL);
 ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
-    zassert_equal(rig.logging_configuration_manager->Get()->logging_interval_ms, 100,
-        "the default configuration ticks every 100 ms");
+    zassert_equal(
+        rig.logging_configuration_manager->Get()->logging_interval_ms, 100,
+        "the default configuration ticks every 100 ms"
+    );
 
     constexpr uint8_t published_frames = 7;
     std::vector<std::chrono::system_clock::time_point> published_times;
@@ -82,19 +84,25 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     zassert_not_equal(data_block_address, 0, "the file has no DT block");
 
     const auto data_block_length = ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset);
-    zassert_equal(content.size(), data_block_address + static_cast<size_t>(data_block_length),
-        "the file must end where the patched DT length says it ends");
+    zassert_equal(
+        content.size(), data_block_address + static_cast<size_t>(data_block_length),
+        "the file must end where the patched DT length says it ends"
+    );
     zassert_equal(stats.bytes, content.size(), "the logger's byte count must match the file size");
 
     // Two frames 50 ms apart are drained by one tick, and each keeps the time it was published at.
     const auto records = ReadDataRecords(content);
-    zassert_equal(records.frame_times.size(), published_frames, "one CAN record per frame (got %zu)", records.frame_times.size());
+    zassert_equal(
+        records.frame_times.size(), published_frames, "one CAN record per frame (got %zu)", records.frame_times.size()
+    );
     for(size_t i = 0; i < records.frame_times.size(); i++) {
         zassert_equal(records.frame_sequences[i], i, "frame %zu is out of order", i);
 
         const double expected = SecondsSinceFileStart(content, published_times[i]);
-        zassert_within(records.frame_times[i], expected, 1e-6,
-            "frame %zu at %f s, published at %f s after the start", i, records.frame_times[i], expected);
+        zassert_within(
+            records.frame_times[i], expected, 1e-6, "frame %zu at %f s, published at %f s after the start", i,
+            records.frame_times[i], expected
+        );
     }
 
     zassert_equal(records.value_times.size(), stats.readings, "one value record per logged reading");
@@ -102,10 +110,14 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
         const auto match = std::ranges::find_if(published_times, [&](const auto& time) {
             return std::abs(SecondsSinceFileStart(content, time) - records.value_times[i]) < 1e-6;
         });
-        zassert_true(match != published_times.end(), "value %zu at %f s is no published sample time", i, records.value_times[i]);
+        zassert_true(
+            match != published_times.end(), "value %zu at %f s is no published sample time", i, records.value_times[i]
+        );
 
         if(i > 0)
-            zassert_true(records.value_times[i] > records.value_times[i - 1], "value times must strictly increase at %zu", i);
+            zassert_true(
+                records.value_times[i] > records.value_times[i - 1], "value times must strictly increase at %zu", i
+            );
     }
 
     DumpToHost(content);
@@ -139,8 +151,10 @@ ZTEST(log_writer_service, test_FramesQueuedBeforeStartAreNotLogged) {
 
     const auto content = ReadWholeFile(*rig.fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + files[0]);
     const auto records = ReadDataRecords(content);
-    zassert_equal(records.frame_times.size(), published_frames, "one CAN record per frame after the start (got %zu)",
-        records.frame_times.size());
+    zassert_equal(
+        records.frame_times.size(), published_frames, "one CAN record per frame after the start (got %zu)",
+        records.frame_times.size()
+    );
     for(size_t i = 0; i < records.frame_sequences.size(); i++)
         zassert_equal(records.frame_sequences[i], i, "frame %zu must be one published after the start", i);
 }
@@ -163,16 +177,22 @@ ZTEST(log_writer_service, test_HeldSampleIsRepeatedAtEveryTick) {
     const auto content = ReadWholeFile(*rig.fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + files[0]);
     const auto records = ReadDataRecords(content);
 
-    zassert_true(records.value_times.size() >= 4, "550 ms at 100 ms must repeat the sample (got %zu records)",
-        records.value_times.size());
-    zassert_within(records.value_times[0], SecondsSinceFileStart(content, published_time), 1e-6,
-        "the first record carries the sample's own time");
+    zassert_true(
+        records.value_times.size() >= 4, "550 ms at 100 ms must repeat the sample (got %zu records)",
+        records.value_times.size()
+    );
+    zassert_within(
+        records.value_times[0], SecondsSinceFileStart(content, published_time), 1e-6,
+        "the first record carries the sample's own time"
+    );
 
     for(size_t i = 0; i < records.value_times.size(); i++) {
         zassert_within(records.values[i], 10.5F, 1e-4F, "record %zu must hold the one sample", i);
 
         if(i > 0)
-            zassert_true(records.value_times[i] > records.value_times[i - 1], "value times must strictly increase at %zu", i);
+            zassert_true(
+                records.value_times[i] > records.value_times[i - 1], "value times must strictly increase at %zu", i
+            );
     }
 }
 
@@ -209,13 +229,22 @@ ZTEST(log_writer_service, test_FailingSensorIsLoggedInvalidUntilItRecovers) {
         if(records.value_invalid_masks[i] != 0) {
             first_invalid = std::min(first_invalid, i);
             last_invalid = i;
-            zassert_equal(records.value_invalid_masks[i], 0x03, "a failed reading has neither a value nor a raw value (record %zu)", i);
+            zassert_equal(
+                records.value_invalid_masks[i], 0x03,
+                "a failed reading has neither a value nor a raw value (record %zu)", i
+            );
             zassert_equal(records.values[i], 0.0F, "an invalid value is written as 0 (record %zu)", i);
         }
     }
 
-    zassert_true(first_invalid > 0 && first_invalid < records.values.size(), "the failure must show up after the first good samples");
-    zassert_true(last_invalid >= first_invalid + 1, "the failure is held while it lasts (records %zu..%zu)", first_invalid, last_invalid);
+    zassert_true(
+        first_invalid > 0 && first_invalid < records.values.size(),
+        "the failure must show up after the first good samples"
+    );
+    zassert_true(
+        last_invalid >= first_invalid + 1, "the failure is held while it lasts (records %zu..%zu)", first_invalid,
+        last_invalid
+    );
     zassert_within(records.values[first_invalid - 1], 10.5F, 1e-4F, "before the failure the good sample is logged");
     zassert_true(last_invalid + 1 < records.values.size(), "the recovered sensor must be logged after the failure");
     zassert_within(records.values[last_invalid + 1], 10.7F, 1e-4F, "after recovery the new sample is logged valid");
@@ -234,8 +263,9 @@ ZTEST(log_writer_service, test_SyncFollowsTheConfiguredInterval) {
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
     zassert_true(stats.ticks >= 9, "1000 ms at 100 ms must run at least 9 ticks (got %u)", stats.ticks);
-    zassert_between_inclusive(stats.syncs, 2, 4,
-        "1000 ms at a 300 ms interval is 3 syncs, give or take one tick (got %u)", stats.syncs);
+    zassert_between_inclusive(
+        stats.syncs, 2, 4, "1000 ms at a 300 ms interval is 3 syncs, give or take one tick (got %u)", stats.syncs
+    );
     zassert_equal(stats.write_errors, 0, "a sync on an empty volume must not fail");
 }
 
@@ -257,11 +287,15 @@ ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
     zassert_true(rig.log_writer_service->IsOpenFile(path), "the file Start opened is open");
 
     std::string upper_case = path;
-    std::ranges::transform(upper_case, upper_case.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    std::ranges::transform(upper_case, upper_case.begin(), [](unsigned char c) {
+        return static_cast<char>(std::toupper(c));
+    });
     zassert_true(rig.log_writer_service->IsOpenFile(upper_case), "the path is compared ignoring case");
 
     zassert_false(rig.log_writer_service->IsOpenFile(other_path), "another file is not the open one");
-    zassert_false(rig.log_writer_service->IsOpenFile(files[0]), "the path is relative to the volume, not to the directory");
+    zassert_false(
+        rig.log_writer_service->IsOpenFile(files[0]), "the path is relative to the volume, not to the directory"
+    );
     zassert_false(rig.log_writer_service->IsOpenFile(LogFileNaming::LOGS_DIR), "the directory is not the open file");
     zassert_false(rig.log_writer_service->IsOpenFile(""), "no path is the open file");
 
@@ -291,8 +325,10 @@ ZTEST(log_writer_service, test_StartFailsWhenTheHeaderCannotReachTheVolume) {
     const std::string filler_path = "start_fill.bin";
 
     // Created before the fill so that Start() gets as far as the file, not just the directory.
-    zassert_true(rig.fs_service->CreateDirectory(LogFileNaming::LOGS_DIR),
-        "the data directory could not be created on an empty volume");
+    zassert_true(
+        rig.fs_service->CreateDirectory(LogFileNaming::LOGS_DIR),
+        "the data directory could not be created on an empty volume"
+    );
 
     const std::vector<uint8_t> chunk(4096, 0xA5);
     int appends = 0;

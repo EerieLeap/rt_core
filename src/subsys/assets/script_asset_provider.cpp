@@ -11,7 +11,8 @@ AssetProvider MakeScriptProvider(
     std::string_view name,
     std::shared_ptr<AssetStore> store,
     uint32_t max_size,
-    const std::shared_ptr<AssetsManager>& manager) {
+    const std::shared_ptr<AssetsManager>& manager
+) {
 
     AssetProvider provider;
     provider.kind = kind;
@@ -22,9 +23,8 @@ AssetProvider MakeScriptProvider(
 
     // The store is kept for the path of a name; it does not refer to the manager, the registry's
     // owner, so the provider and the store do not form a cycle.
-    provider.is_in_use = [weak_manager = std::weak_ptr<AssetsManager>(manager), store](
-        AssetAccess operation, std::string_view asset_name) {
-
+    provider.is_in_use = [weak_manager = std::weak_ptr<AssetsManager>(manager),
+                             store](AssetAccess operation, std::string_view asset_name) {
         if(operation != AssetAccess::DELETE)
             return false;
 

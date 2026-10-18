@@ -17,12 +17,13 @@ SensorsConfigurationManager::SensorsConfigurationManager(
     std::shared_ptr<IFsService> sd_fs_service,
     int gpio_channel_count,
     int adc_channel_count,
-    CanbusConfigurationProvider canbus_configuration_provider)
-        : CborConfigurationManagerBase("Sensors", std::move(cbor_configuration_service)),
-        cbor_parser_(std::move(sd_fs_service)),
-        canbus_configuration_provider_(std::move(canbus_configuration_provider)),
-        gpio_channel_count_(gpio_channel_count),
-        adc_channel_count_(adc_channel_count) {
+    CanbusConfigurationProvider canbus_configuration_provider
+) :
+    CborConfigurationManagerBase("Sensors", std::move(cbor_configuration_service)),
+    cbor_parser_(std::move(sd_fs_service)),
+    canbus_configuration_provider_(std::move(canbus_configuration_provider)),
+    gpio_channel_count_(gpio_channel_count),
+    adc_channel_count_(adc_channel_count) {
 
     LoadOrCreateDefault();
 }
@@ -51,14 +52,17 @@ bool SensorsConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t
     return true;
 }
 
-pmr_unique_ptr<CborSensorsConfig> SensorsConfigurationManager::Serialize(const std::vector<std::shared_ptr<Sensor>>& sensors) {
+pmr_unique_ptr<CborSensorsConfig>
+SensorsConfigurationManager::Serialize(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     return cbor_parser_.Serialize(sensors, gpio_channel_count_, adc_channel_count_);
 }
 
-pmr_unique_ptr<std::vector<std::shared_ptr<Sensor>>> SensorsConfigurationManager::Deserialize(const CborSensorsConfig& cbor_config) {
+pmr_unique_ptr<std::vector<std::shared_ptr<Sensor>>>
+SensorsConfigurationManager::Deserialize(const CborSensorsConfig& cbor_config) {
     return make_unique_pmr<std::vector<std::shared_ptr<Sensor>>>(
         Mrm::GetExtPmr(),
-        cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config, gpio_channel_count_, adc_channel_count_));
+        cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config, gpio_channel_count_, adc_channel_count_)
+    );
 }
 
 bool SensorsConfigurationManager::CreateDefaultConfiguration() {

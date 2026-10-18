@@ -4,8 +4,8 @@
 #include <memory>
 #include <string>
 
-#include "subsys/mdf/utilities/block_links.h"
 #include "block_base.h"
+#include "subsys/mdf/utilities/block_links.h"
 #include "text_block.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {
@@ -33,13 +33,13 @@ public:
         Usb = 8
     };
 
-    enum class Flag: uint8_t {
+    enum class Flag : uint8_t {
         Default = 0x00,
         Simulated = 0x01,
     };
 
 private:
-    enum class LinkType: int {
+    enum class LinkType : int {
         TextName = 0,
         TextPath,
         MetadataComment
@@ -47,9 +47,9 @@ private:
 
     utilities::BlockLinks<LinkType, 3> links_;
 
-    SourceType source_type_;        // 1 bytes, Source type
-    BusType bus_type_;              // 1 bytes, Bus type
-    uint8_t flags_;                 // 1 bytes, Flags
+    SourceType source_type_; // 1 bytes, Source type
+    BusType bus_type_;       // 1 bytes, Bus type
+    uint8_t flags_;          // 1 bytes, Flags
     // uint8_t reserved_1_[5];      // 5 bytes, Reserved
 
 public:
@@ -58,14 +58,14 @@ public:
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
-    const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    const IBlockLinks* GetBlockLinks() const override {
+        return &links_;
+    }
     std::shared_ptr<ISerializableBlock> GetNext() const override {
         return nullptr;
     }
     std::vector<std::shared_ptr<ISerializableBlock>> GetChildren() const override {
-        return {
-            links_.GetLink(LinkType::TextName),
-            links_.GetLink(LinkType::TextPath),
+        return { links_.GetLink(LinkType::TextName), links_.GetLink(LinkType::TextPath),
             links_.GetLink(LinkType::MetadataComment) };
     }
 

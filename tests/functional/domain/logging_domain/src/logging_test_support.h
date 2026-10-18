@@ -14,9 +14,9 @@
 #include <variant>
 #include <vector>
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
 #include "subsys/canbus/can_frame.h"
 #include "subsys/device_tree/dt_fs.h"
@@ -29,31 +29,51 @@
 #include "subsys/time/rtc_provider.h"
 #include "subsys/time/time_service.h"
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #include "configuration/cbor/cbor_sensors_config/cbor_sensors_config.h"
 #include "configuration/services/cbor_configuration_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
-#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
-#include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/models/sensor_reading.h"
-#include "domain/sensor_domain/models/sources/canbus_source.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "domain/logging_domain/loggers/logger_metadata.h"
 #include "domain/logging_domain/loggers/mdf4_logger_sensor_reading.h"
 #include "domain/logging_domain/services/log_writer_service.h"
 #include "domain/logging_domain/services/log_writer_supervisor.h"
+#include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
+#include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
+#include "domain/sensor_domain/models/sources/canbus_source.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
 // The log writer over a formatted FAT volume standing in for the SD card, supervised by the
 // LogWriterSupervisor that ships. Without sensors the files it produces hold a header and nothing
 // else.
 namespace logging_test_support {
 
-using eerie_memory::make_unique_pmr;
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::configuration::services::CborConfigurationService;
+using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
+using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
+using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
+using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
+using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
+using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
+using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
+using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
+using eerie_leap::domain::logging_domain::services::LogFileNaming;
+using eerie_leap::domain::logging_domain::services::LogWriterService;
+using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
+using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
+using eerie_leap::domain::sensor_domain::models::ReadingError;
+using eerie_leap::domain::sensor_domain::models::ReadingSource;
+using eerie_leap::domain::sensor_domain::models::ReadingStatus;
+using eerie_leap::domain::sensor_domain::models::Sensor;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
+using eerie_leap::domain::sensor_domain::models::SensorType;
+using eerie_leap::domain::sensor_domain::models::sources::CanbusSource;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::event_bus::AnySubscription;
@@ -65,35 +85,15 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::BootElapsedTimeProvider;
 using eerie_leap::subsys::time::RtcProvider;
 using eerie_leap::subsys::time::TimeService;
-using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
-using eerie_leap::domain::sensor_domain::models::ReadingSource;
-using eerie_leap::domain::sensor_domain::models::ReadingError;
-using eerie_leap::domain::sensor_domain::models::ReadingStatus;
-using eerie_leap::domain::sensor_domain::models::Sensor;
-using eerie_leap::domain::sensor_domain::models::SensorReading;
-using eerie_leap::domain::sensor_domain::models::SensorType;
-using eerie_leap::domain::sensor_domain::models::sources::CanbusSource;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
-using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
-using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
-using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
-using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
-using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
-using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
-using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
-using eerie_leap::domain::logging_domain::loggers::ILogger;
-using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
-using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
-using eerie_leap::domain::logging_domain::services::LogFileNaming;
-using eerie_leap::domain::logging_domain::services::LogWriterService;
-using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
+using eerie_leap::utilities::memory::Mrm;
+using eerie_memory::make_unique_pmr;
 
 // MDF layout the tests read back: identifier(8) at 0, ID block 64 bytes, then ##XX blocks whose
 // length sits 8 bytes into their header.
 constexpr size_t kIdBlockSize = 64;
 constexpr size_t kBlockHeaderSize = 24;
 constexpr size_t kBlockLengthOffset = 8;
-constexpr size_t kHeaderStartTimeOffset = kIdBlockSize + kBlockHeaderSize + 6 * 8;   // hd_start_time_ns
+constexpr size_t kHeaderStartTimeOffset = kIdBlockSize + kBlockHeaderSize + 6 * 8; // hd_start_time_ns
 
 // The configuration work queue stops a failed session, which unwinds the exception of the finalize
 // the dead stream refused. What that costs depends on the unwinder, not the word size: ARM's EHABI
@@ -132,7 +132,7 @@ inline void RemoveDataDirectory() {
     if(fs_service->Exists(LogFileNaming::LOGS_DIR))
         fs_service->DeleteRecursive(LogFileNaming::LOGS_DIR);
 
-    for(const char* path : {"config/logging_config.cbor", "config/sensors_config.cbor"}) {
+    for(const char* path : { "config/logging_config.cbor", "config/sensors_config.cbor" }) {
         if(fs_service->Exists(path))
             fs_service->DeleteFile(path);
     }
@@ -145,8 +145,9 @@ inline std::vector<uint8_t> ReadWholeFile(FsService& fs_service, std::string_vie
     std::vector<uint8_t> content(size.value());
     size_t read_size = 0;
 
-    zassert_true(fs_service.ReadFile(relative_path, content.data(), content.size(), read_size),
-        "the file could not be read");
+    zassert_true(
+        fs_service.ReadFile(relative_path, content.data(), content.size(), read_size), "the file could not be read"
+    );
     content.resize(read_size);
 
     return content;
@@ -205,8 +206,10 @@ inline void AssertFinalizedFile(const std::vector<uint8_t>& content, const char*
     zassert_not_equal(data_block_address, 0, "%s has no DT block", name);
 
     const auto data_block_length = ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset);
-    zassert_equal(content.size(), data_block_address + static_cast<size_t>(data_block_length),
-        "%s must end where the patched DT length says it ends", name);
+    zassert_equal(
+        content.size(), data_block_address + static_cast<size_t>(data_block_length),
+        "%s must end where the patched DT length says it ends", name
+    );
 }
 
 struct LogFile {
@@ -227,7 +230,9 @@ inline std::vector<LogFile> ReadLogFiles(FsService& fs_service) {
         LogFile file;
         file.path = std::string(LogFileNaming::LOGS_DIR) + "/" + name;
         file.content = ReadWholeFile(fs_service, file.path);
-        zassert_true(file.content.size() >= kHeaderStartTimeOffset + 8, "%s is shorter than an MDF header", file.path.c_str());
+        zassert_true(
+            file.content.size() >= kHeaderStartTimeOffset + 8, "%s is shorter than an MDF header", file.path.c_str()
+        );
         file.start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(file.content, kHeaderStartTimeOffset));
         files.push_back(std::move(file));
     }
@@ -271,8 +276,10 @@ inline void FillVolume(FsService& fs_service, std::string_view path, uint64_t ma
             break;
     }
 
-    zassert_equal(max_free_bytes, 0, "the volume could not be filled down to %llu free bytes",
-        static_cast<unsigned long long>(max_free_bytes));
+    zassert_equal(
+        max_free_bytes, 0, "the volume could not be filled down to %llu free bytes",
+        static_cast<unsigned long long>(max_free_bytes)
+    );
 
     // The last clusters, which a 4 KiB write no longer fits.
     for(int i = 0; i < 64; i++) {
@@ -302,22 +309,22 @@ inline std::vector<std::shared_ptr<Sensor>> MakeLoggedSensors() {
     can_raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 0, 0x100);
     can_raw->configuration.UpdateConnectionString();
 
-    return {oil_pressure, can_raw};
+    return { oil_pressure, can_raw };
 }
 
 // Record layouts of MakeLoggedSensors(): record ids in creation order, sizes after the id.
-constexpr uint8_t kValueRecordId = 1;           // time 8, value 4, raw value 4, invalidation 1
-constexpr uint8_t kVlsdRecordId = 2;            // length 4, payload
-constexpr uint8_t kCanRecordId = 3;             // time 8, CAN_DataFrame 15
+constexpr uint8_t kValueRecordId = 1; // time 8, value 4, raw value 4, invalidation 1
+constexpr uint8_t kVlsdRecordId = 2;  // length 4, payload
+constexpr uint8_t kCanRecordId = 3;   // time 8, CAN_DataFrame 15
 constexpr size_t kValueRecordSize = 1 + 8 + 4 + 4 + 1;
 constexpr size_t kCanRecordSize = 1 + 8 + 15;
 
 struct DataRecords {
     std::vector<double> value_times;
     std::vector<float> values;
-    std::vector<uint8_t> value_invalid_masks;     // bit 0: value invalid, bit 1: raw value invalid
+    std::vector<uint8_t> value_invalid_masks; // bit 0: value invalid, bit 1: raw value invalid
     std::vector<double> frame_times;
-    std::vector<uint8_t> frame_sequences;   // first payload byte
+    std::vector<uint8_t> frame_sequences; // first payload byte
 };
 
 // Walks the records of the DT block of a file written for MakeLoggedSensors().
@@ -325,30 +332,31 @@ inline DataRecords ReadDataRecords(const std::vector<uint8_t>& content) {
     const auto data_block_address = FindDataBlockAddress(content);
     zassert_not_equal(data_block_address, 0, "the file has no DT block");
 
-    const size_t end = data_block_address + static_cast<size_t>(ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset));
+    const size_t end = data_block_address
+        + static_cast<size_t>(ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset));
     size_t position = data_block_address + kBlockHeaderSize;
     uint8_t last_sequence = 0;
     DataRecords records;
 
     while(position < end) {
         switch(content[position]) {
-        case kValueRecordId:
-            records.value_times.push_back(ReadField<double>(content, position + 1));
-            records.values.push_back(ReadField<float>(content, position + 1 + 8));
-            records.value_invalid_masks.push_back(content[position + 1 + 8 + 4 + 4]);
-            position += kValueRecordSize;
-            break;
-        case kVlsdRecordId:
-            last_sequence = content[position + 1 + 4];
-            position += 1 + 4 + ReadField<uint32_t>(content, position + 1);
-            break;
-        case kCanRecordId:
-            records.frame_times.push_back(ReadField<double>(content, position + 1));
-            records.frame_sequences.push_back(last_sequence);
-            position += kCanRecordSize;
-            break;
-        default:
-            zassert_unreachable("unknown record id %u at %zu", content[position], position);
+            case kValueRecordId:
+                records.value_times.push_back(ReadField<double>(content, position + 1));
+                records.values.push_back(ReadField<float>(content, position + 1 + 8));
+                records.value_invalid_masks.push_back(content[position + 1 + 8 + 4 + 4]);
+                position += kValueRecordSize;
+                break;
+            case kVlsdRecordId:
+                last_sequence = content[position + 1 + 4];
+                position += 1 + 4 + ReadField<uint32_t>(content, position + 1);
+                break;
+            case kCanRecordId:
+                records.frame_times.push_back(ReadField<double>(content, position + 1));
+                records.frame_sequences.push_back(last_sequence);
+                position += kCanRecordSize;
+                break;
+            default:
+                zassert_unreachable("unknown record id %u at %zu", content[position], position);
         }
     }
 
@@ -358,7 +366,8 @@ inline DataRecords ReadDataRecords(const std::vector<uint8_t>& content) {
 }
 
 // Seconds from the file's start time to @p time, as the master channel stores it.
-inline double SecondsSinceFileStart(const std::vector<uint8_t>& content, const std::chrono::system_clock::time_point& time) {
+inline double
+SecondsSinceFileStart(const std::vector<uint8_t>& content, const std::chrono::system_clock::time_point& time) {
     const auto start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(content, kHeaderStartTimeOffset));
     const auto time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
 
@@ -383,7 +392,8 @@ inline LoggerMetadata MakeTestLoggerMetadata() {
 inline LogWriterService::LoggerFactory MakeLoggerFactory(
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::vector<std::shared_ptr<Sensor>> sensors,
-    bool log_only_new_data) {
+    bool log_only_new_data
+) {
 
     return [logging_configuration_manager, sensors, log_only_new_data]() -> std::shared_ptr<ILogger<SensorReading>> {
         const auto stored_configuration = logging_configuration_manager->Get();
@@ -392,11 +402,11 @@ inline LogWriterService::LoggerFactory MakeLoggerFactory(
         logger_configuration.logging_interval_ms = stored_configuration->logging_interval_ms;
         logger_configuration.max_log_size_mb = stored_configuration->max_log_size_mb;
         for(const auto& sensor : sensors) {
-            logger_configuration.sensor_configurations.emplace(sensor->id_hash, SensorLoggingConfiguration {
-                .is_enabled = true,
-                .log_raw_value = true,
-                .log_only_new_data = log_only_new_data
-            });
+            logger_configuration.sensor_configurations.emplace(
+                sensor->id_hash,
+                SensorLoggingConfiguration{
+                    .is_enabled = true, .log_raw_value = true, .log_only_new_data = log_only_new_data }
+            );
         }
 
         return std::make_shared<Mdf4LoggerSensorReading>(logger_configuration, sensors, MakeTestLoggerMetadata());
@@ -413,7 +423,8 @@ class LoggingTestBus : public EventBus {
 private:
     static constexpr int k_stack_size = 4096;
 
-    LoggingTestBus() : EventBus("logging_test_bus", k_stack_size) {
+    LoggingTestBus() :
+        EventBus("logging_test_bus", k_stack_size) {
         RegisterChannel(LoggingEventsChannel::GetInstance());
     }
 
@@ -448,7 +459,8 @@ struct LogWriterRig {
 
 // Default logging configuration (100 ms), initialized, not started. The frame is laid out for
 // @p sensors, and the logger logs every one of them with its raw value.
-inline LogWriterRig MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> sensors = {}, bool log_only_new_data = true) {
+inline LogWriterRig
+MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> sensors = {}, bool log_only_new_data = true) {
     LogWriterRig rig;
 
     LoggingTestBus::Get();
@@ -460,22 +472,26 @@ inline LogWriterRig MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> se
 
     rig.logging_configuration_manager = std::make_shared<LoggingConfigurationManager>(
         std::make_unique<CborConfigurationService<CborLoggingConfig>>(
-            "logging_config", rig.fs_service, rig.config_work_queue));
+            "logging_config", rig.fs_service, rig.config_work_queue
+        )
+    );
     zassert_not_null(rig.logging_configuration_manager->Get().get(), "no logging configuration is available");
 
     rig.time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     rig.frame = std::make_shared<SensorReadingsFrame>();
     rig.frame->Configure(sensors);
 
     rig.log_writer_service = std::make_shared<LogWriterService>(
-        rig.fs_service, rig.logging_configuration_manager, rig.time_service, rig.frame);
+        rig.fs_service, rig.logging_configuration_manager, rig.time_service, rig.frame
+    );
     zassert_true(rig.log_writer_service->Initialize(), "the log writer service did not initialize");
 
     rig.logger_factory = MakeLoggerFactory(
-        rig.logging_configuration_manager,
-        std::vector<std::shared_ptr<Sensor>>(sensors.begin(), sensors.end()),
-        log_only_new_data);
+        rig.logging_configuration_manager, std::vector<std::shared_ptr<Sensor>>(sensors.begin(), sensors.end()),
+        log_only_new_data
+    );
     rig.log_writer_service->SetLoggerFactory(rig.logger_factory);
     LastRigService() = rig.log_writer_service;
 
@@ -483,7 +499,8 @@ inline LogWriterRig MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> se
 }
 
 // For code off the test thread, which must not assert: an assertion there aborts that thread.
-inline bool TryStoreLoggingConfiguration(LoggingConfigurationManager& manager, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
+inline bool
+TryStoreLoggingConfiguration(LoggingConfigurationManager& manager, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
     LoggingConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = interval_ms;
     configuration.max_log_size_mb = max_log_size_mb;
@@ -494,25 +511,31 @@ inline bool TryStoreLoggingConfiguration(LoggingConfigurationManager& manager, u
 // Stores a logging configuration with @p interval_ms and @p max_log_size_mb and no sensor entries;
 // the rig's factory enables its sensors itself. Never while the queue is gated: the save runs there.
 inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
-    zassert_true(TryStoreLoggingConfiguration(*rig.logging_configuration_manager, interval_ms, max_log_size_mb),
-        "the logging configuration was not stored");
+    zassert_true(
+        TryStoreLoggingConfiguration(*rig.logging_configuration_manager, interval_ms, max_log_size_mb),
+        "the logging configuration was not stored"
+    );
 }
 
 // Stores a logging configuration that logs @p sensors, for the supervisor's own factory.
-inline void EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> sensors, uint32_t interval_ms = 100) {
+inline void
+EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> sensors, uint32_t interval_ms = 100) {
     LoggingConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = interval_ms;
     configuration.max_log_size_mb = 0;
     for(const auto& sensor : sensors) {
-        configuration.sensor_configurations.emplace(sensor->id_hash, SensorLoggingConfiguration {
-            .is_enabled = true
-        });
+        configuration.sensor_configurations.emplace(sensor->id_hash, SensorLoggingConfiguration{ .is_enabled = true });
     }
 
     zassert_true(rig.logging_configuration_manager->Update(configuration), "the logging configuration was not stored");
 }
 
-inline void PublishValue(LogWriterRig& rig, const Sensor& sensor, uint8_t sequence, const std::chrono::system_clock::time_point& time) {
+inline void PublishValue(
+    LogWriterRig& rig,
+    const Sensor& sensor,
+    uint8_t sequence,
+    const std::chrono::system_clock::time_point& time
+) {
     SensorReading value_reading(&sensor);
     value_reading.source = ReadingSource::PROCESSING;
     value_reading.status = ReadingStatus::PROCESSED;
@@ -522,10 +545,15 @@ inline void PublishValue(LogWriterRig& rig, const Sensor& sensor, uint8_t sequen
     rig.frame->AddOrUpdateReading(value_reading);
 }
 
-inline void PublishFrame(LogWriterRig& rig, const Sensor& sensor, uint8_t sequence, const std::chrono::system_clock::time_point& time) {
+inline void PublishFrame(
+    LogWriterRig& rig,
+    const Sensor& sensor,
+    uint8_t sequence,
+    const std::chrono::system_clock::time_point& time
+) {
     CanFrame can_frame;
     can_frame.id = 0x100;
-    can_frame.data = {sequence, 0x22, 0x33, 0x44};
+    can_frame.data = { sequence, 0x22, 0x33, 0x44 };
 
     SensorReading frame_reading(&sensor);
     frame_reading.source = ReadingSource::ISR;
@@ -536,8 +564,8 @@ inline void PublishFrame(LogWriterRig& rig, const Sensor& sensor, uint8_t sequen
 }
 
 // One processed value and one raw frame, stamped now, as the sensor pipeline commits them.
-inline std::chrono::system_clock::time_point PublishReadings(
-    LogWriterRig& rig, const std::vector<std::shared_ptr<Sensor>>& sensors, uint8_t sequence) {
+inline std::chrono::system_clock::time_point
+PublishReadings(LogWriterRig& rig, const std::vector<std::shared_ptr<Sensor>>& sensors, uint8_t sequence) {
 
     const auto now = rig.time_service->GetCurrentTime();
 
@@ -567,23 +595,23 @@ inline LogWriterSupervisor& AttachSupervisor(
     LogWriterRig& rig,
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager = nullptr,
     bool uses_own_logger_factory = false,
-    LogWriterSupervisor::DeviceIdProvider device_id_provider = nullptr) {
+    LogWriterSupervisor::DeviceIdProvider device_id_provider = nullptr
+) {
 
     if(sensors_configuration_manager == nullptr) {
         sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
             std::make_unique<CborConfigurationService<CborSensorsConfig>>(
-                "sensors_config", rig.fs_service, rig.config_work_queue),
-            nullptr, 0, 0);
+                "sensors_config", rig.fs_service, rig.config_work_queue
+            ),
+            nullptr, 0, 0
+        );
     }
     rig.sensors_configuration_manager = sensors_configuration_manager;
 
     auto supervisor = std::make_shared<LogWriterSupervisor>(
-        rig.config_work_queue,
-        rig.log_writer_service,
-        rig.logging_configuration_manager,
-        std::move(sensors_configuration_manager),
-        kTestToolId,
-        std::move(device_id_provider));
+        rig.config_work_queue, rig.log_writer_service, rig.logging_configuration_manager,
+        std::move(sensors_configuration_manager), kTestToolId, std::move(device_id_provider)
+    );
     SupervisorSlot() = supervisor;
     zassert_true(supervisor->Initialize(), "the log writer supervisor did not initialize");
 
@@ -651,7 +679,9 @@ inline ConfigQueueGate& Gate() {
     auto done = std::make_shared<k_sem>();
     k_sem_init(done.get(), 0, 1);
 
-    rig.config_work_queue->Run([done] { k_sem_give(done.get()); });
+    rig.config_work_queue->Run([done] {
+        k_sem_give(done.get());
+    });
 
     return k_sem_take(done.get(), K_SECONDS(5)) == 0;
 }
@@ -702,9 +732,11 @@ public:
         LoggingTestBus::Get();
 
         subscription_ = CreateScopedSubscription(
-            LoggingEventsChannel::GetInstance(),
-            LoggingEventType::StatusUpdated,
-            [this](const LoggingEventsChannel::EventMessage& event) { OnStatusUpdated(event); });
+            LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
+            [this](const LoggingEventsChannel::EventMessage& event) {
+                OnStatusUpdated(event);
+            }
+        );
         zassert_not_null(subscription_.get(), "the logging_events subscription was refused");
 
         Active() = this;
@@ -738,7 +770,12 @@ public:
     }
 
     bool WaitForEventCount(size_t count, int64_t timeout_ms = 2000) const {
-        return WaitFor([&] { return GetEvents().size() >= count; }, timeout_ms);
+        return WaitFor(
+            [&] {
+                return GetEvents().size() >= count;
+            },
+            timeout_ms
+        );
     }
 };
 
@@ -769,15 +806,16 @@ private:
     }
 
 public:
-    StatusBlocker() : context_(std::make_shared<Context>()) {
+    StatusBlocker() :
+        context_(std::make_shared<Context>()) {
         LoggingTestBus::Get();
 
         subscription_ = CreateScopedSubscription(
-            LoggingEventsChannel::GetInstance(),
-            LoggingEventType::StatusUpdated,
+            LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [context = context_](const LoggingEventsChannel::EventMessage& event) {
                 const auto is_active = event.payload.find(LoggingPayloadType::IsActive);
-                if(is_active == event.payload.end() || !std::holds_alternative<bool>(is_active->second)
+                if(is_active == event.payload.end()
+                    || !std::holds_alternative<bool>(is_active->second)
                     || std::get<bool>(is_active->second)) {
                     return;
                 }
@@ -787,7 +825,8 @@ public:
 
                 k_sem_give(&context->entered);
                 k_sem_take(&context->release, K_SECONDS(5));
-            });
+            }
+        );
         zassert_not_null(subscription_.get(), "the logging_events subscription was refused");
 
         Active() = this;
@@ -800,13 +839,17 @@ public:
     StatusBlocker(const StatusBlocker&) = delete;
     StatusBlocker& operator=(const StatusBlocker&) = delete;
 
-    void Arm() { context_->is_armed = true; }
+    void Arm() {
+        context_->is_armed = true;
+    }
 
     [[nodiscard]] bool WaitUntilBlocking(int32_t timeout_ms = 2000) {
         return k_sem_take(&context_->entered, K_MSEC(timeout_ms)) == 0;
     }
 
-    void Unblock() { k_sem_give(&context_->release); }
+    void Unblock() {
+        k_sem_give(&context_->release);
+    }
 
     void Release() {
         Unblock();

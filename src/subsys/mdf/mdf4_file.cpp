@@ -7,12 +7,12 @@
 #include <utility>
 #include <vector>
 
-#include "subsys/time/time_helpers.hpp"
+#include "mdf_helpers.h"
 #include "subsys/mdf/mdf4/channel_block.h"
 #include "subsys/mdf/mdf4/channel_group_block.h"
 #include "subsys/mdf/mdf4/data_group_block.h"
 #include "subsys/mdf/mdf4/source_information_block.h"
-#include "mdf_helpers.h"
+#include "subsys/time/time_helpers.hpp"
 
 #include "mdf4_file.h"
 
@@ -31,8 +31,10 @@ constexpr uint32_t MAX_INVALIDATION_BITS = INVALIDATION_BYTES * 8;
 
 } // namespace
 
-Mdf4File::Mdf4File(Mdf4FileOptions options)
-    : options_(options), is_header_written_(false), is_finalized_(false) {
+Mdf4File::Mdf4File(Mdf4FileOptions options) :
+    options_(options),
+    is_header_written_(false),
+    is_finalized_(false) {
 
     const auto id_size = options_.record_id_size_bytes;
     if(id_size != 1 && id_size != 2 && id_size != 4 && id_size != 8)
@@ -87,7 +89,10 @@ void Mdf4File::EnsureStructureEditable() const {
 }
 
 std::shared_ptr<mdf4::MetadataBlock> Mdf4File::CreateCommentBlock(
-    const std::string& block_id, std::string_view text, std::span<const MdfProperty> properties) {
+    const std::string& block_id,
+    std::string_view text,
+    std::span<const MdfProperty> properties
+) {
 
     EnsureStructureEditable();
 
@@ -113,7 +118,10 @@ void Mdf4File::SetChannelComment(const std::shared_ptr<mdf4::ChannelBlock>& chan
     channel->SetComment(CreateCommentBlock(channel->GetId(), text));
 }
 
-void Mdf4File::SetChannelGroupComment(const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group, std::string_view text) {
+void Mdf4File::SetChannelGroupComment(
+    const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
+    std::string_view text
+) {
     if(!channel_group)
         throw std::invalid_argument("Channel group cannot be null");
 
@@ -127,9 +135,7 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateChannelGroupBlock(uint6
         throw std::runtime_error("Record ID already exists");
 
     // Throws when the record ID does not fit into the data group record ID size.
-    auto channel_group = std::make_shared<mdf4::ChannelGroupBlock>(
-        data_group_->GetRecordIdSizeBytes(),
-        record_id);
+    auto channel_group = std::make_shared<mdf4::ChannelGroupBlock>(data_group_->GetRecordIdSizeBytes(), record_id);
 
     record_ids_.insert(record_id);
     channel_groups_.push_back(channel_group);
@@ -151,10 +157,9 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateTimeChannelGroup(uint64
 
     auto channel_data_type = MdfHelpers::ToMdf4ChannelDataType(options_.time_type);
     auto channel_time = std::make_shared<mdf4::ChannelBlock>(
-        mdf4::ChannelBlock::Type::Master,
-        mdf4::ChannelBlock::SyncType::Time,
-        channel_data_type.data_type,
-        channel_data_type.bit_count);
+        mdf4::ChannelBlock::Type::Master, mdf4::ChannelBlock::SyncType::Time, channel_data_type.data_type,
+        channel_data_type.bit_count
+    );
     channel_time->SetName(GetOrCreateTextBlock("Timestamp"));
     channel_time->SetUnit(GetOrCreateTextBlock("s"));
     channel_group->AddChannel(channel_time);
@@ -172,7 +177,8 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateVLSDChannelGroup(uint64
 std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateCanDataFrameChannelGroup(
     const std::shared_ptr<mdf4::ChannelGroupBlock>& vlsd_channel_group,
     uint64_t record_id,
-    const std::string& name) {
+    const std::string& name
+) {
 
     if(!vlsd_channel_group)
         throw std::invalid_argument("VLSD channel group cannot be null");
@@ -183,12 +189,13 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateCanDataFrameChannelGrou
     auto channel_group = CreateTimeChannelGroup(record_id, name);
     channel_group->SetFlags(
         std::to_underlying(mdf4::ChannelGroupBlock::Flag::BusEvent)
-        | std::to_underlying(mdf4::ChannelGroupBlock::Flag::PlainBusEvent));
+        | std::to_underlying(mdf4::ChannelGroupBlock::Flag::PlainBusEvent)
+    );
     channel_group->SetPathSeparator('.');
 
     auto source_information = std::make_shared<mdf4::SourceInformationBlock>(
-        mdf4::SourceInformationBlock::SourceType::Bus,
-        mdf4::SourceInformationBlock::BusType::Can);
+        mdf4::SourceInformationBlock::SourceType::Bus, mdf4::SourceInformationBlock::BusType::Can
+    );
     source_information->SetName(GetOrCreateTextBlock("CAN"));
     source_information->SetPath(GetOrCreateTextBlock("CAN"));
     channel_group->AddSourceInformation(source_information);
@@ -219,24 +226,38 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateCanDataFrameChannelGrou
     can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.ID", CanRecordWriter::ID_OFFSET, 0, 29));
 
     // IDE (Identifier Extension) | 0 - 11 bit ID, 1 - 29 bit ID; bit 31 of the ID word
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.IDE", CanRecordWriter::ID_OFFSET + CanRecordWriter::IDE_BIT / 8, CanRecordWriter::IDE_BIT % 8, 1));
+    can_data_frame_bus_channel->LinkBlock(add_member(
+        "CAN_DataFrame.IDE", CanRecordWriter::ID_OFFSET + CanRecordWriter::IDE_BIT / 8, CanRecordWriter::IDE_BIT % 8, 1
+    ));
 
     // DLC (Data Length Code)
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.DLC", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::DLC_BIT, 4));
+    can_data_frame_bus_channel->LinkBlock(
+        add_member("CAN_DataFrame.DLC", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::DLC_BIT, 4)
+    );
 
     // Dir (Direction) | 0 - Receive, 1 - Transmit
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.Dir", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::DIR_BIT, 1));
+    can_data_frame_bus_channel->LinkBlock(
+        add_member("CAN_DataFrame.Dir", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::DIR_BIT, 1)
+    );
 
     // EDL (Extended Data Length) | 0 - Standard CAN, 1 - CAN FD
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.EDL", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::EDL_BIT, 1));
+    can_data_frame_bus_channel->LinkBlock(
+        add_member("CAN_DataFrame.EDL", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::EDL_BIT, 1)
+    );
 
     // BRS (Bit Rate Switch)
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.BRS", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::BRS_BIT, 1));
+    can_data_frame_bus_channel->LinkBlock(
+        add_member("CAN_DataFrame.BRS", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::BRS_BIT, 1)
+    );
 
     // ESI (Error State Indicator); always 0 because CanFrame carries no ESI field.
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.ESI", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::ESI_BIT, 1));
+    can_data_frame_bus_channel->LinkBlock(
+        add_member("CAN_DataFrame.ESI", CanRecordWriter::FLAGS_OFFSET, CanRecordWriter::ESI_BIT, 1)
+    );
 
-    can_data_frame_bus_channel->LinkBlock(add_member("CAN_DataFrame.DataLength", CanRecordWriter::DATA_LENGTH_OFFSET, 0, 8));
+    can_data_frame_bus_channel->LinkBlock(
+        add_member("CAN_DataFrame.DataLength", CanRecordWriter::DATA_LENGTH_OFFSET, 0, 8)
+    );
 
     // VLSD data block offset
     auto can_data_frame_data_bytes_channel = CreateChannelBlock(MdfDataType::ByteArray, "CAN_DataFrame.DataBytes");
@@ -250,21 +271,20 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateCanDataFrameChannelGrou
     if(channel_group->GetDataSizeBytes() != frame_offset + frame_size)
         throw std::runtime_error("Unexpected CAN data frame record size");
 
-    can_channel_groups_.push_back(CanChannelGroups{
-        .channel_group = channel_group,
-        .vlsd_channel_group = vlsd_channel_group
-    });
+    can_channel_groups_.push_back(
+        CanChannelGroups{ .channel_group = channel_group, .vlsd_channel_group = vlsd_channel_group }
+    );
 
     return channel_group;
 }
 
-std::shared_ptr<mdf4::ChannelBlock> Mdf4File::CreateChannelBlock(MdfDataType data_type, const std::string& name, const std::string& unit) {
+std::shared_ptr<mdf4::ChannelBlock>
+Mdf4File::CreateChannelBlock(MdfDataType data_type, const std::string& name, const std::string& unit) {
     auto channel_data_type = MdfHelpers::ToMdf4ChannelDataType(data_type);
     auto channel = std::make_shared<mdf4::ChannelBlock>(
-        mdf4::ChannelBlock::Type::FixedLength,
-        mdf4::ChannelBlock::SyncType::NoSync,
-        channel_data_type.data_type,
-        channel_data_type.bit_count);
+        mdf4::ChannelBlock::Type::FixedLength, mdf4::ChannelBlock::SyncType::NoSync, channel_data_type.data_type,
+        channel_data_type.bit_count
+    );
 
     if(!name.empty())
         channel->SetName(GetOrCreateTextBlock(name));
@@ -279,7 +299,8 @@ std::shared_ptr<mdf4::ChannelBlock> Mdf4File::CreateDataChannel(
     MdfDataType data_type,
     const std::string& name,
     const std::string& unit,
-    bool with_invalidation_bit) {
+    bool with_invalidation_bit
+) {
 
     EnsureStructureEditable();
 
@@ -288,16 +309,20 @@ std::shared_ptr<mdf4::ChannelBlock> Mdf4File::CreateDataChannel(
 
     const auto channels = channel_group->GetChannels();
     if(channels.size() + 1 > RecordWriter::kMaxFields) {
-        throw std::runtime_error("A record of more than " + std::to_string(RecordWriter::kMaxFields)
-            + " channels does not fit the record writer");
+        throw std::runtime_error(
+            "A record of more than " + std::to_string(RecordWriter::kMaxFields)
+            + " channels does not fit the record writer"
+        );
     }
 
-    const auto invalidation_bit_count = static_cast<uint32_t>(std::ranges::count_if(channels,
-        [](const auto& channel) { return channel->HasInvalidationBit(); }));
+    const auto invalidation_bit_count = static_cast<uint32_t>(std::ranges::count_if(channels, [](const auto& channel) {
+        return channel->HasInvalidationBit();
+    }));
 
     if(with_invalidation_bit && invalidation_bit_count >= MAX_INVALIDATION_BITS) {
-        throw std::runtime_error("A channel group has invalidation bits for at most "
-            + std::to_string(MAX_INVALIDATION_BITS) + " channels");
+        throw std::runtime_error(
+            "A channel group has invalidation bits for at most " + std::to_string(MAX_INVALIDATION_BITS) + " channels"
+        );
     }
 
     const uint32_t invalidation_bytes = with_invalidation_bit
@@ -306,12 +331,13 @@ std::shared_ptr<mdf4::ChannelBlock> Mdf4File::CreateDataChannel(
 
     const uint64_t record_size = channel_group->GetRecordIdSizeBytes()
         + static_cast<uint64_t>(channel_group->GetDataSizeBytes())
-        + MdfHelpers::ToMdf4ChannelDataType(data_type).bit_count / 8
-        + invalidation_bytes;
+        + MdfHelpers::ToMdf4ChannelDataType(data_type).bit_count / 8 + invalidation_bytes;
 
     if(record_size > RecordWriter::kMaxRecordBytes) {
-        throw std::runtime_error("A record of " + std::to_string(record_size) + " bytes exceeds the "
-            + std::to_string(RecordWriter::kMaxRecordBytes) + " byte limit of the record writer");
+        throw std::runtime_error(
+            "A record of " + std::to_string(record_size) + " bytes exceeds the "
+            + std::to_string(RecordWriter::kMaxRecordBytes) + " byte limit of the record writer"
+        );
     }
 
     auto channel = CreateChannelBlock(data_type, name, unit);
@@ -390,10 +416,8 @@ void Mdf4File::BuildRecordWriters() {
     can_record_writers_.reserve(can_channel_groups_.size());
     for(const auto& groups : can_channel_groups_) {
         can_record_writers_.emplace_back(
-            *groups.channel_group,
-            *groups.vlsd_channel_group,
-            options_.time_type,
-            options_.vlsd_offset_size_bytes);
+            *groups.channel_group, *groups.vlsd_channel_group, options_.time_type, options_.vlsd_offset_size_bytes
+        );
     }
 }
 
@@ -423,7 +447,8 @@ uint64_t Mdf4File::WriteDataRecordToStream(
     const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
     std::streambuf& stream,
     std::span<const MdfValue> values,
-    uint32_t invalid_mask) {
+    uint32_t invalid_mask
+) {
 
     EnsureRecordsWritable();
 
@@ -431,11 +456,12 @@ uint64_t Mdf4File::WriteDataRecordToStream(
 }
 
 uint64_t Mdf4File::WriteCanbusDataRecordToStream(
-        const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
-        std::streambuf& stream,
-        const CanFrame& can_frame,
-        double time,
-        uint8_t bus_channel) {
+    const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
+    std::streambuf& stream,
+    const CanFrame& can_frame,
+    double time,
+    uint8_t bus_channel
+) {
 
     EnsureRecordsWritable();
 

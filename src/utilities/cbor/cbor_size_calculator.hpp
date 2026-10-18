@@ -26,10 +26,14 @@ public:
      * Calculate CBOR encoding size for unsigned integer
      */
     static size_t SizeOfUint(uint64_t value) {
-        if (value <= 23) return 1;
-        if (value <= 0xFF) return 2;
-        if (value <= 0xFFFF) return 3;
-        if (value <= 0xFFFFFFFF) return 5;
+        if(value <= 23)
+            return 1;
+        if(value <= 0xFF)
+            return 2;
+        if(value <= 0xFFFF)
+            return 3;
+        if(value <= 0xFFFFFFFF)
+            return 5;
         return 9;
     }
 
@@ -37,7 +41,7 @@ public:
      * Calculate CBOR encoding size for signed integer
      */
     static size_t SizeOfInt(int64_t value) {
-        if (value >= 0) {
+        if(value >= 0) {
             return SizeOfUint(static_cast<uint64_t>(value));
         } else {
             // Negative integers encoded as -1 - value
@@ -49,7 +53,7 @@ public:
      * Calculate size for fixed-size integer (like uint .size 8)
      */
     static size_t SizeOfUintFixed(size_t bytes) {
-        return 1 + bytes;  // 1 byte type + N bytes data
+        return 1 + bytes; // 1 byte type + N bytes data
     }
 
     // ========================================================================
@@ -60,10 +64,14 @@ public:
      * Calculate CBOR encoding overhead for length prefix
      */
     static size_t SizeOfLength(size_t length) {
-        if (length <= 23) return 1;
-        if (length <= 0xFF) return 2;
-        if (length <= 0xFFFF) return 3;
-        if (length <= 0xFFFFFFFF) return 5;
+        if(length <= 23)
+            return 1;
+        if(length <= 0xFF)
+            return 2;
+        if(length <= 0xFFFF)
+            return 3;
+        if(length <= 0xFFFFFFFF)
+            return 5;
         return 9;
     }
 
@@ -110,7 +118,7 @@ public:
     template<typename T, typename SizeFunc>
     static size_t SizeOfArray(const std::vector<T>& items, SizeFunc sizeFunc) {
         size_t size = SizeOfArrayStart(items.size());
-        for (const auto& item : items) {
+        for(const auto& item : items) {
             size += sizeFunc(item);
         }
         return size;
@@ -125,7 +133,7 @@ public:
      * This is what zcbor uses for [] syntax in CDDL
      */
     static size_t SizeOfIndefiniteArrayMarkers() {
-        return 2;  // 0x9f (start) + 0xff (break)
+        return 2; // 0x9f (start) + 0xff (break)
     }
 
     /**
@@ -142,7 +150,7 @@ public:
     template<typename SizeFunc>
     static size_t SizeOfIndefiniteArray(size_t count, SizeFunc elementSizeFunc) {
         size_t size = SizeOfIndefiniteArrayMarkers();
-        for (size_t i = 0; i < count; i++) {
+        for(size_t i = 0; i < count; i++) {
             size += elementSizeFunc(i);
         }
         return size;
@@ -174,7 +182,7 @@ public:
      * Size for indefinite-length map markers (0xbf start + 0xff break)
      */
     static size_t SizeOfIndefiniteMapMarkers() {
-        return 2;  // 0xbf (start) + 0xff (break)
+        return 2; // 0xbf (start) + 0xff (break)
     }
 
     /**
@@ -192,7 +200,7 @@ public:
      * Calculate CBOR encoding size for boolean
      */
     static size_t SizeOfBool(bool value) {
-        (void)value;  // Always 1 byte regardless of value
+        (void)value; // Always 1 byte regardless of value
         return 1;
     }
 
@@ -205,7 +213,7 @@ public:
      */
     static size_t SizeOfFloat(float value) {
         (void)value;
-        return 5;  // 1 byte type + 4 bytes data
+        return 5; // 1 byte type + 4 bytes data
     }
 
     /**
@@ -213,7 +221,7 @@ public:
      */
     static size_t SizeOfDouble(double value) {
         (void)value;
-        return 9;  // 1 byte type + 8 bytes data
+        return 9; // 1 byte type + 8 bytes data
     }
 
     // ========================================================================

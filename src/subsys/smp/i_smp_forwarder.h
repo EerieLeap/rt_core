@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "smp_packet.h"
 #include "i_smp_response_sink.h"
+#include "smp_packet.h"
 
 namespace eerie_leap::subsys::smp {
 

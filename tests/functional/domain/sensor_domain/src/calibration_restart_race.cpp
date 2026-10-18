@@ -76,28 +76,38 @@ ZTEST(calibration_restart_race, test_calibration_and_restarts_leave_processing_r
     DriveConstant(*adc, 1, 2000);
 
     auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
-    zassert_true(adc_configuration_manager->Update(*MakeAdcConfiguration(
-        adc_manager->GetChannelCount(), 8, MakeCalibrator({ {0.0F, 0.0F}, {5.0F, 5.0F} }))));
+    zassert_true(adc_configuration_manager->Update(
+        *MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } }))
+    ));
 
-    auto rig = MakeProcessingRig(fs_service, adc_manager, adc_configuration_manager, {
-        MakeAnalogSensor("fast", 0, 10),
-        MakeAnalogSensor("slow", 0, 30),
-    }, adc_manager->GetChannelCount());
+    auto rig = MakeProcessingRig(
+        fs_service, adc_manager, adc_configuration_manager,
+        {
+            MakeAnalogSensor("fast", 0, 10),
+            MakeAnalogSensor("slow", 0, 30),
+        },
+        adc_manager->GetChannelCount()
+    );
 
     auto calibration_service = std::make_shared<CalibrationService>(
-        rig.time_service, adc_manager, rig.processing_service);
+        rig.time_service, adc_manager, rig.processing_service
+    );
     zassert_true(calibration_service->Initialize());
 
     zassert_true(rig.processing_service->Start());
 
-    Race race { .processing_service = rig.processing_service, .calibration_service = calibration_service };
+    Race race{ .processing_service = rig.processing_service, .calibration_service = calibration_service };
 
     k_thread calibrating;
     k_thread restarting;
-    k_thread_create(&calibrating, calibrating_stack, K_THREAD_STACK_SIZEOF(calibrating_stack),
-        Calibrate, &race, nullptr, nullptr, kMcumgrPriority, 0, K_NO_WAIT);
-    k_thread_create(&restarting, restarting_stack, K_THREAD_STACK_SIZEOF(restarting_stack),
-        Restart, &race, nullptr, nullptr, kConfigPriority, 0, K_NO_WAIT);
+    k_thread_create(
+        &calibrating, calibrating_stack, K_THREAD_STACK_SIZEOF(calibrating_stack), Calibrate, &race, nullptr, nullptr,
+        kMcumgrPriority, 0, K_NO_WAIT
+    );
+    k_thread_create(
+        &restarting, restarting_stack, K_THREAD_STACK_SIZEOF(restarting_stack), Restart, &race, nullptr, nullptr,
+        kConfigPriority, 0, K_NO_WAIT
+    );
 
     zassert_ok(k_thread_join(&calibrating, K_SECONDS(30)), "The calibration loop hung");
     zassert_ok(k_thread_join(&restarting, K_SECONDS(30)), "The restart loop hung");

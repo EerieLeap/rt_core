@@ -1,10 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
-#include <chrono>
 #include <string_view>
 
 #include "utilities/string/static_string.hpp"
@@ -31,7 +31,8 @@ public:
         std::string_view prefix,
         const std::chrono::system_clock::time_point& time,
         uint32_t random_value,
-        std::string_view extension) {
+        std::string_view extension
+    ) {
 
         const std::time_t time_s = std::chrono::system_clock::to_time_t(time);
         std::tm time_utc{};
@@ -39,10 +40,11 @@ public:
 
         // Sized for any int in every field, which the format truncation check assumes.
         char stamp[80];
-        snprintf(stamp, sizeof(stamp), "%04d%02d%02dT%02d%02d%02dZ_%04u",
-            time_utc.tm_year + 1900, time_utc.tm_mon + 1, time_utc.tm_mday,
-            time_utc.tm_hour, time_utc.tm_min, time_utc.tm_sec,
-            static_cast<unsigned int>(random_value % RANDOM_SUFFIX_MODULO));
+        snprintf(
+            stamp, sizeof(stamp), "%04d%02d%02dT%02d%02d%02dZ_%04u", time_utc.tm_year + 1900, time_utc.tm_mon + 1,
+            time_utc.tm_mday, time_utc.tm_hour, time_utc.tm_min, time_utc.tm_sec,
+            static_cast<unsigned int>(random_value % RANDOM_SUFFIX_MODULO)
+        );
 
         StaticString<PATH_MAX_LENGTH> path;
 

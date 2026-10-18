@@ -10,11 +10,11 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/fs_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "domain/logging_domain/control/configuration/logging_control_configuration_manager.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
@@ -23,12 +23,12 @@
 
 using namespace logging_control_test;
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::configuration::services::CborConfigurationService;
-using eerie_leap::subsys::device_tree::DtFs;
-using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::domain::logging_domain::control::configuration::LoggingControlConfigurationManager;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
+using eerie_leap::subsys::device_tree::DtFs;
+using eerie_leap::subsys::fs::services::FsService;
+using eerie_leap::utilities::memory::Mrm;
 
 namespace {
 
@@ -43,7 +43,8 @@ std::shared_ptr<FsService> FormattedFs() {
 
 std::shared_ptr<LoggingControlConfigurationManager> MakeManager(const std::shared_ptr<FsService>& fs_service) {
     return std::make_shared<LoggingControlConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborLoggingControlConfig>>("logging_control_config", fs_service));
+        std::make_unique<CborConfigurationService<CborLoggingControlConfig>>("logging_control_config", fs_service)
+    );
 }
 
 LoggingControlConfiguration MakeConfiguration(const std::vector<LoggingTrigger>& triggers) {
@@ -78,7 +79,7 @@ std::vector<LoggingTrigger> MixedTriggers() {
     none.binding.payload_key = 6;
     none.binding.selector_key = 9;
 
-    return {text, number, flag, none};
+    return { text, number, flag, none };
 }
 
 void AssertSame(const LoggingControlConfiguration& expected, const LoggingControlConfiguration& actual) {
@@ -92,7 +93,9 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
         zassert_equal(b.event_type, a.event_type);
         zassert_equal(b.payload_key, a.payload_key);
         zassert_equal(b.selector_key, a.selector_key);
-        zassert_equal(b.selector_value.index(), a.selector_value.index(), "trigger %u selector kind", static_cast<unsigned>(i));
+        zassert_equal(
+            b.selector_value.index(), a.selector_value.index(), "trigger %u selector kind", static_cast<unsigned>(i)
+        );
         zassert_true(b.selector_value == a.selector_value, "trigger %u selector", static_cast<unsigned>(i));
     }
 }
@@ -100,12 +103,12 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
 using Bytes = std::vector<uint8_t>;
 
 // {Sensors, DataUpdated, Value, selector SensorId = "ab"}
-const Bytes k_valid = {0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF};
+const Bytes k_valid = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
 // A trigger on channel 99, which names no channel, without a selector.
-const Bytes k_unknown_channel = {0x9F, 0x9F, 0x9F, 0x18, 0x63, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+const Bytes k_unknown_channel = { 0x9F, 0x9F, 0x9F, 0x18, 0x63, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
 // The same as the first with the selector a float64 (1.0), which cannot select.
-const Bytes k_float_selector = {
-    0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0xFB, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+const Bytes k_float_selector = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0xFB, 0x3F, 0xF0, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
 
 } // namespace
 
@@ -141,23 +144,27 @@ ZTEST(logging_control_configuration_manager, test_StoredTriggersSurviveARestart)
 
 ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefused) {
     auto manager = MakeManager(FormattedFs());
-    const auto good = MakeConfiguration({SensorTrigger("a")});
+    const auto good = MakeConfiguration({ SensorTrigger("a") });
     zassert_true(manager->Update(good));
     const auto stored = manager->GetCborConfigurationInfo();
 
     LoggingTrigger no_channel = SensorTrigger("a");
     no_channel.binding.channel = EventChannelId::None;
-    zassert_false(manager->Update(MakeConfiguration({no_channel})), "A trigger without a channel is refused");
+    zassert_false(manager->Update(MakeConfiguration({ no_channel })), "A trigger without a channel is refused");
     AssertSame(good, *manager->Get());
     zassert_equal(manager->GetCborConfigurationInfo().crc, stored.crc, "and nothing is stored");
 
     std::array<char, 128> reason{};
-    zassert_false(manager->ApplyCborConfiguration(k_unknown_channel, reason), "Stored CBOR that names no channel is refused");
+    zassert_false(
+        manager->ApplyCborConfiguration(k_unknown_channel, reason), "Stored CBOR that names no channel is refused"
+    );
     zassert_not_null(std::strstr(reason.data(), "unknown event channel"), "with the reason: %s", reason.data());
     AssertSame(good, *manager->Get());
 
     reason = {};
-    zassert_false(manager->ApplyCborConfiguration(k_float_selector, reason), "A selector that cannot select does not decode");
+    zassert_false(
+        manager->ApplyCborConfiguration(k_float_selector, reason), "A selector that cannot select does not decode"
+    );
     zassert_not_null(std::strstr(reason.data(), "Malformed CBOR"), "with the reason: %s", reason.data());
     AssertSame(good, *manager->Get());
     zassert_equal(manager->GetCborConfigurationInfo().crc, stored.crc);
@@ -183,11 +190,11 @@ ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEach
     });
     zassert_equal(calls->load(), 0, "Registering calls nothing");
 
-    zassert_true(manager->Update(MakeConfiguration({SensorTrigger("a")})));
+    zassert_true(manager->Update(MakeConfiguration({ SensorTrigger("a") })));
     zassert_equal(calls->load(), 1);
     zassert_equal(thread->load(), k_current_get(), "on the storing thread");
 
-    zassert_false(manager->Update(MakeConfiguration({LoggingTrigger{}})), "A refused store calls nobody");
+    zassert_false(manager->Update(MakeConfiguration({ LoggingTrigger{} })), "A refused store calls nobody");
     zassert_equal(calls->load(), 1);
 
     // An apply on the configuration work queue, as SMP does it.
@@ -204,7 +211,7 @@ ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEach
     zassert_equal(thread->load(), QueueThread(*TestConfigQueue()), "An apply calls it on the thread that stored it");
 
     manager->RegisterConfigurationUpdatedHandler(nullptr);
-    zassert_true(manager->Update(MakeConfiguration({SensorTrigger("b")})));
+    zassert_true(manager->Update(MakeConfiguration({ SensorTrigger("b") })));
     zassert_equal(calls->load(), 2, "A cleared handler is not called");
 }
 
@@ -238,7 +245,7 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
     zassert_false(weak_sentinel.expired(), "the registered handler holds the sentinel");
 
     TestConfigQueue()->Run([signals, manager] {
-        signals->is_stored = manager->Update(MakeConfiguration({SensorTrigger("a")}));
+        signals->is_stored = manager->Update(MakeConfiguration({ SensorTrigger("a") }));
         k_sem_give(&signals->stored);
     });
     zassert_equal(k_sem_take(&signals->entered, K_SECONDS(2)), 0, "the store must call the handler");
@@ -246,7 +253,10 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
     const int64_t start_ms = k_uptime_get();
     manager->RegisterConfigurationUpdatedHandler(nullptr);
     const int64_t elapsed_ms = k_uptime_get() - start_ms;
-    zassert_true(elapsed_ms < k_no_wait_ms, "clearing the handler waited %lld ms for its call", static_cast<long long>(elapsed_ms));
+    zassert_true(
+        elapsed_ms < k_no_wait_ms, "clearing the handler waited %lld ms for its call",
+        static_cast<long long>(elapsed_ms)
+    );
     zassert_false(weak_sentinel.expired(), "the call in progress must keep its handler alive");
 
     k_sem_give(&signals->release);
@@ -255,7 +265,7 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
     zassert_true(signals->is_stored.load(), "the configuration must have been stored");
     zassert_true(weak_sentinel.expired(), "the handler must go once its call returned");
 
-    zassert_true(manager->Update(MakeConfiguration({SensorTrigger("b")})));
+    zassert_true(manager->Update(MakeConfiguration({ SensorTrigger("b") })));
     zassert_equal(signals->calls.load(), 1, "a cleared handler must not be called again");
 }
 
@@ -271,7 +281,7 @@ ZTEST(logging_control_configuration_manager, test_AHandlerThatThrowsDoesNotFailT
         throw std::runtime_error("the trigger set could not be rebuilt");
     });
 
-    zassert_true(manager->Update(MakeConfiguration({SensorTrigger("a")})), "The store happened");
+    zassert_true(manager->Update(MakeConfiguration({ SensorTrigger("a") })), "The store happened");
     zassert_equal(calls->load(), 1);
     zassert_equal(manager->Get()->triggers.size(), 1, "and is in use");
 
@@ -284,7 +294,7 @@ ZTEST(logging_control_configuration_manager, test_AHandlerThatThrowsDoesNotFailT
 
         throw 7;
     });
-    zassert_true(manager->Update(MakeConfiguration({SensorTrigger("b")})));
+    zassert_true(manager->Update(MakeConfiguration({ SensorTrigger("b") })));
     zassert_equal(calls->load(), 3);
 
     manager->RegisterConfigurationUpdatedHandler(nullptr);

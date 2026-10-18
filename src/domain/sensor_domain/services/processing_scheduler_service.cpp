@@ -16,9 +16,10 @@ ProcessingSchedulerService::ProcessingSchedulerService(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
     std::shared_ptr<WorkQueueThread> work_queue_thread,
-    std::shared_ptr<ReadingPipeline> pipeline)
-        : sensor_reader_factory_(std::move(sensor_reader_factory)),
-        scheduler_(std::move(work_queue_thread), std::move(pipeline), std::move(time_service)) {};
+    std::shared_ptr<ReadingPipeline> pipeline
+) :
+    sensor_reader_factory_(std::move(sensor_reader_factory)),
+    scheduler_(std::move(work_queue_thread), std::move(pipeline), std::move(time_service)) {};
 
 void ProcessingSchedulerService::SetGeneration(std::shared_ptr<const SensorGeneration> generation) {
     generation_ = std::move(generation);
@@ -55,10 +56,8 @@ std::vector<std::unique_ptr<RateGroup>> ProcessingSchedulerService::CreateRateGr
             groups.push_back(std::move(new_group));
         }
 
-        RateGroupBuildContext context{
-            .adc_samples = group->adc_samples,
-            .adc_configuration = generation_->adc_configuration.get()
-        };
+        RateGroupBuildContext context{ .adc_samples = group->adc_samples,
+            .adc_configuration = generation_->adc_configuration.get() };
 
         std::unique_ptr<ISensorReader> reader;
         try {
@@ -73,11 +72,13 @@ std::vector<std::unique_ptr<RateGroup>> ProcessingSchedulerService::CreateRateGr
             continue;
         }
 
-        group->entries.push_back(RateGroupEntry{.runtime = &runtime, .reader = std::move(reader)});
+        group->entries.push_back(RateGroupEntry{ .runtime = &runtime, .reader = std::move(reader) });
     }
 
     // A group whose every sensor was left out has nothing to run.
-    std::erase_if(groups, [](const auto& group) { return group->entries.empty(); });
+    std::erase_if(groups, [](const auto& group) {
+        return group->entries.empty();
+    });
 
     for(auto& group : groups)
         group->adc_samples.Seal();

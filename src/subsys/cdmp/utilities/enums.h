@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 
 namespace eerie_leap::subsys::cdmp::utilities {
 

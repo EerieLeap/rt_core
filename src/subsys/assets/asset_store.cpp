@@ -345,8 +345,9 @@ void AssetWriter::Abort() {
 
 // ======== AssetStore ========
 
-AssetStore::AssetStore(std::shared_ptr<IFsService> fs_service, std::string_view directory)
-    : fs_service_(std::move(fs_service)), directory_(directory) {
+AssetStore::AssetStore(std::shared_ptr<IFsService> fs_service, std::string_view directory) :
+    fs_service_(std::move(fs_service)),
+    directory_(directory) {
 
     if(fs_service_ == nullptr)
         throw std::invalid_argument("fs_service cannot be null");
@@ -449,8 +450,14 @@ uint64_t AssetStore::GetFreeSpace() const {
     return total > used ? total - used : 0;
 }
 
-int AssetStore::List(size_t first, size_t max_entries, std::span<const std::string_view> extensions,
-    std::vector<AssetEntry>& entries, size_t& scanned, size_t& count) const {
+int AssetStore::List(
+    size_t first,
+    size_t max_entries,
+    std::span<const std::string_view> extensions,
+    std::vector<AssetEntry>& entries,
+    size_t& scanned,
+    size_t& count
+) const {
 
     entries.clear();
     scanned = 0;
@@ -485,11 +492,13 @@ int AssetStore::List(size_t first, size_t max_entries, std::span<const std::stri
         if(entry.is_directory || !IsValidName(entry.name, extensions))
             continue;
 
-        entries.push_back({
-            .name = std::move(entry.name),
-            .size = entry.size,
-            .index = first + i,
-        });
+        entries.push_back(
+            {
+                .name = std::move(entry.name),
+                .size = entry.size,
+                .index = first + i,
+            }
+        );
     }
 
     return 0;

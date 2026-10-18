@@ -1,9 +1,9 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
-#include <functional>
 
 #include <zephyr/kernel.h>
 
@@ -35,8 +35,10 @@ private:
     }
 
 public:
-    explicit CanbusProxy(std::unique_ptr<Canbus> canbus)
-        : canbus_(std::move(canbus)) { k_mutex_init(&lock_); }
+    explicit CanbusProxy(std::unique_ptr<Canbus> canbus) :
+        canbus_(std::move(canbus)) {
+        k_mutex_init(&lock_);
+    }
 
     CanbusProxy(const CanbusProxy&) = delete;
     CanbusProxy& operator=(const CanbusProxy&) = delete;
@@ -97,4 +99,4 @@ public:
     }
 };
 
-}
+} // namespace eerie_leap::subsys::canbus

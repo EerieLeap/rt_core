@@ -25,8 +25,8 @@
 #include "subsys/assets/smp/assets_mgmt_group.h"
 #include "subsys/threading/work_queue_thread.h"
 
-#include "smp_groups_test_support.h"
 #include "assets_test_support.h"
+#include "smp_groups_test_support.h"
 
 using namespace smp_groups_test;
 using namespace assets_group_test;
@@ -112,12 +112,12 @@ constexpr uint32_t IMAGES_MAX_SIZE = 3000;
 constexpr uint32_t ANIMATIONS_MAX_SIZE = 4000;
 constexpr uint32_t SCRIPTS_MAX_SIZE = 2000;
 
-constexpr std::array<std::string_view, 2> IMAGE_EXTENSIONS = {".png", ".bin"};
-constexpr std::array<std::string_view, 1> ANIMATION_EXTENSIONS = {".json"};
-constexpr std::array<std::string_view, 1> SCRIPT_EXTENSIONS = {".lua"};
-constexpr std::array<std::string_view, 1> LOG_EXTENSIONS = {".mdf"};
+constexpr std::array<std::string_view, 2> IMAGE_EXTENSIONS = { ".png", ".bin" };
+constexpr std::array<std::string_view, 1> ANIMATION_EXTENSIONS = { ".json" };
+constexpr std::array<std::string_view, 1> SCRIPT_EXTENSIONS = { ".lua" };
+constexpr std::array<std::string_view, 1> LOG_EXTENSIONS = { ".mdf" };
 // The kind on the root of the volume lists a staged file too, if one were there under its own name.
-constexpr std::array<std::string_view, 2> ROOT_EXTENSIONS = {".lua", ".part"};
+constexpr std::array<std::string_view, 2> ROOT_EXTENSIONS = { ".lua", ".part" };
 
 // Unwinding an exception on qemu_riscv64 needs more stack than the usual work queue has.
 constexpr int WORK_QUEUE_STACK_SIZE = 16384;
@@ -140,8 +140,10 @@ uint32_t Crc(const Bytes& data) {
 
 void AssertError(const Response& response, Error error) {
     zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::ASSETS));
-    zassert_equal(response.error.value_or(0), std::to_underlying(error),
-        "Expected error %u, got %u", std::to_underlying(error), response.error.value_or(0));
+    zassert_equal(
+        response.error.value_or(0), std::to_underlying(error), "Expected error %u, got %u", std::to_underlying(error),
+        response.error.value_or(0)
+    );
 }
 
 // "img_<index>_xxx.bin" of the length, as long as the name of an asset can be.
@@ -193,22 +195,26 @@ public:
 
         images_store = std::make_shared<AssetStore>(images_volume, "images");
         Register(AssetKind::IMAGES, "images", images_store, IMAGE_EXTENSIONS, ALL_ACCESS, IMAGES_MAX_SIZE);
-        Register(AssetKind::ANIMATIONS, "animations", std::make_shared<AssetStore>(animations_volume, "animations"),
-            ANIMATION_EXTENSIONS, ALL_ACCESS, ANIMATIONS_MAX_SIZE);
-        Register(AssetKind::SENSOR_SCRIPTS, "sensor_scripts", std::make_shared<AssetStore>(volume, "scripts"),
-            SCRIPT_EXTENSIONS, ALL_ACCESS, SCRIPTS_MAX_SIZE,
-            [this](AssetAccess operation, std::string_view name) {
+        Register(
+            AssetKind::ANIMATIONS, "animations", std::make_shared<AssetStore>(animations_volume, "animations"),
+            ANIMATION_EXTENSIONS, ALL_ACCESS, ANIMATIONS_MAX_SIZE
+        );
+        Register(
+            AssetKind::SENSOR_SCRIPTS, "sensor_scripts", std::make_shared<AssetStore>(volume, "scripts"),
+            SCRIPT_EXTENSIONS, ALL_ACCESS, SCRIPTS_MAX_SIZE, [this](AssetAccess operation, std::string_view name) {
                 in_use.calls.emplace_back(operation, std::string(name));
 
                 if(in_use.throws_bad_alloc)
                     throw std::bad_alloc();
 
                 return in_use.names.contains(name);
-            });
-        Register(AssetKind::CAN_SCRIPTS, "can_scripts", std::make_shared<AssetStore>(volume, "can_scripts"),
-            SCRIPT_EXTENSIONS, WRITE_ONLY, SCRIPTS_MAX_SIZE);
-        Register(AssetKind::LOGS, "logs", std::make_shared<AssetStore>(volume, "logs"),
-            LOG_EXTENSIONS, READ_ONLY, 0);
+            }
+        );
+        Register(
+            AssetKind::CAN_SCRIPTS, "can_scripts", std::make_shared<AssetStore>(volume, "can_scripts"),
+            SCRIPT_EXTENSIONS, WRITE_ONLY, SCRIPTS_MAX_SIZE
+        );
+        Register(AssetKind::LOGS, "logs", std::make_shared<AssetStore>(volume, "logs"), LOG_EXTENSIONS, READ_ONLY, 0);
 
         StartGroup();
     }
@@ -231,8 +237,10 @@ public:
     // files is too.
     void ReregisterCanScriptsAtRoot() {
         registry->Unregister(AssetKind::CAN_SCRIPTS);
-        Register(AssetKind::CAN_SCRIPTS, "can_scripts", std::make_shared<AssetStore>(volume, ""), ROOT_EXTENSIONS,
-            ALL_ACCESS, SCRIPTS_MAX_SIZE);
+        Register(
+            AssetKind::CAN_SCRIPTS, "can_scripts", std::make_shared<AssetStore>(volume, ""), ROOT_EXTENSIONS,
+            ALL_ACCESS, SCRIPTS_MAX_SIZE
+        );
     }
 
     // Serves the group on a new instance, as after a restart of the unit.
@@ -250,7 +258,9 @@ public:
         if(slash != std::string_view::npos && !volume->Exists(path.substr(0, slash)))
             zassert_true(volume->CreateDirectory(path.substr(0, slash)));
 
-        zassert_true(volume->WriteFile(path, data.data(), data.size()), "Failed to write %s", std::string(path).c_str());
+        zassert_true(
+            volume->WriteFile(path, data.data(), data.size()), "Failed to write %s", std::string(path).c_str()
+        );
     }
 
     std::vector<DirectoryEntry> RawEntries(std::string_view directory) {
@@ -277,28 +287,48 @@ public:
     }
 
     Response Read(uint32_t kind, std::string_view name, uint32_t offset) {
-        return client.Read(SmpGroupId::ASSETS, std::to_underlying(Command::READ),
-            CborMap().Put("kind", kind).PutText("name", name).Put("off", offset).Build());
+        return client.Read(
+            SmpGroupId::ASSETS, std::to_underlying(Command::READ),
+            CborMap().Put("kind", kind).PutText("name", name).Put("off", offset).Build()
+        );
     }
 
     Response Delete(uint32_t kind, std::string_view name) {
-        return client.Write(SmpGroupId::ASSETS, std::to_underlying(Command::DELETE),
-            CborMap().Put("kind", kind).PutText("name", name).Build());
+        return client.Write(
+            SmpGroupId::ASSETS, std::to_underlying(Command::DELETE),
+            CborMap().Put("kind", kind).PutText("name", name).Build()
+        );
     }
 
-    Response WriteFirst(uint32_t kind, std::string_view name, std::span<const uint8_t> chunk, uint32_t length,
-        uint32_t crc, std::optional<uint32_t> token = std::nullopt) {
+    Response WriteFirst(
+        uint32_t kind,
+        std::string_view name,
+        std::span<const uint8_t> chunk,
+        uint32_t length,
+        uint32_t crc,
+        std::optional<uint32_t> token = std::nullopt
+    ) {
 
         CborMap body;
-        body.Put("kind", kind).PutText("name", name).Put("off", 0).Put("len", length).Put("crc", crc).Put("data", chunk);
+        body.Put("kind", kind)
+            .PutText("name", name)
+            .Put("off", 0)
+            .Put("len", length)
+            .Put("crc", crc)
+            .Put("data", chunk);
         if(token.has_value())
             body.Put("tok", *token);
 
         return client.Write(SmpGroupId::ASSETS, std::to_underlying(Command::WRITE), body.Build());
     }
 
-    Response WriteNext(uint32_t kind, std::string_view name, uint32_t offset, std::optional<uint32_t> token,
-        std::span<const uint8_t> chunk) {
+    Response WriteNext(
+        uint32_t kind,
+        std::string_view name,
+        uint32_t offset,
+        std::optional<uint32_t> token,
+        std::span<const uint8_t> chunk
+    ) {
 
         CborMap body;
         body.Put("kind", kind).PutText("name", name).Put("off", offset).Put("data", chunk);
@@ -311,8 +341,14 @@ public:
     // Sends the chunks of @p data from @p offset on, as a client does, and checks that each answer says
     // where the next chunk goes and carries no token. Returns the answer to the last chunk, or the first
     // that is an error.
-    Response SendRest(uint32_t kind, std::string_view name, const Bytes& data, uint32_t token, size_t offset,
-        const std::function<void()>& before_last = {}) {
+    Response SendRest(
+        uint32_t kind,
+        std::string_view name,
+        const Bytes& data,
+        uint32_t token,
+        size_t offset,
+        const std::function<void()>& before_last = {}
+    ) {
 
         Response response;
 
@@ -336,12 +372,18 @@ public:
 
     // Sends a file in chunks. Returns the answer to its last chunk, or the first that is an error.
     // @p crc is what the first chunk declares, the file's own unless given.
-    Response UploadAll(uint32_t kind, std::string_view name, const Bytes& data,
-        const std::function<void()>& before_last = {}, std::optional<uint32_t> crc = std::nullopt) {
+    Response UploadAll(
+        uint32_t kind,
+        std::string_view name,
+        const Bytes& data,
+        const std::function<void()>& before_last = {},
+        std::optional<uint32_t> crc = std::nullopt
+    ) {
 
         const size_t first = std::min(data.size(), UPLOAD_CHUNK_SIZE);
-        auto response = WriteFirst(kind, name, std::span<const uint8_t>(data).first(first), data.size(),
-            crc.value_or(Crc(data)));
+        auto response = WriteFirst(
+            kind, name, std::span<const uint8_t>(data).first(first), data.size(), crc.value_or(Crc(data))
+        );
 
         if(!response.IsOk() || first == data.size())
             return response;
@@ -452,19 +494,27 @@ public:
     }
 
 private:
-    void Register(AssetKind kind, std::string_view name, std::shared_ptr<AssetStore> store,
-        std::span<const std::string_view> extensions, uint8_t access, uint32_t max_size,
-        std::function<bool(AssetAccess, std::string_view)> is_in_use = {}) {
+    void Register(
+        AssetKind kind,
+        std::string_view name,
+        std::shared_ptr<AssetStore> store,
+        std::span<const std::string_view> extensions,
+        uint8_t access,
+        uint32_t max_size,
+        std::function<bool(AssetAccess, std::string_view)> is_in_use = {}
+    ) {
 
-        zassert_true(registry->Register({
-            .kind = kind,
-            .name = name,
-            .store = std::move(store),
-            .extensions = extensions,
-            .access = access,
-            .max_size = max_size,
-            .is_in_use = std::move(is_in_use),
-        }));
+        zassert_true(registry->Register(
+            {
+                .kind = kind,
+                .name = name,
+                .store = std::move(store),
+                .extensions = extensions,
+                .access = access,
+                .max_size = max_size,
+                .is_in_use = std::move(is_in_use),
+            }
+        ));
     }
 };
 
@@ -515,13 +565,13 @@ ZTEST_F(smp_assets_group, test_kinds_lists_the_registered_kinds_in_order) {
         bool available;
     };
 
-    const std::array<Expected, 5> expected = {{
-        {IMAGES, "images", "images", ALL_ACCESS, IMAGES_MAX_SIZE, {".png", ".bin"}, true},
-        {ANIMATIONS, "animations", "animations", ALL_ACCESS, ANIMATIONS_MAX_SIZE, {".json"}, false},
-        {SENSOR_SCRIPTS, "sensor_scripts", "scripts", ALL_ACCESS, SCRIPTS_MAX_SIZE, {".lua"}, true},
-        {CAN_SCRIPTS, "can_scripts", "can_scripts", WRITE_ONLY, SCRIPTS_MAX_SIZE, {".lua"}, true},
-        {LOGS, "logs", "logs", READ_ONLY, 0, {".mdf"}, true},
-    }};
+    const std::array<Expected, 5> expected = { {
+        { IMAGES, "images", "images", ALL_ACCESS, IMAGES_MAX_SIZE, { ".png", ".bin" }, true },
+        { ANIMATIONS, "animations", "animations", ALL_ACCESS, ANIMATIONS_MAX_SIZE, { ".json" }, false },
+        { SENSOR_SCRIPTS, "sensor_scripts", "scripts", ALL_ACCESS, SCRIPTS_MAX_SIZE, { ".lua" }, true },
+        { CAN_SCRIPTS, "can_scripts", "can_scripts", WRITE_ONLY, SCRIPTS_MAX_SIZE, { ".lua" }, true },
+        { LOGS, "logs", "logs", READ_ONLY, 0, { ".mdf" }, true },
+    } };
 
     for(size_t i = 0; i < expected.size(); i++) {
         zassert_equal(response.entries[i].at("kind"), expected[i].kind, "Kind %u", static_cast<unsigned>(i));
@@ -529,8 +579,10 @@ ZTEST_F(smp_assets_group, test_kinds_lists_the_registered_kinds_in_order) {
         zassert_str_equal(response.entry_texts[i].at("dir").c_str(), expected[i].dir);
         zassert_equal(response.entries[i].at("access"), expected[i].access);
         zassert_equal(response.entries[i].at("max"), expected[i].max);
-        zassert_true(response.entry_lists[i].at("ext") == expected[i].extensions, "Extensions of kind %u",
-            static_cast<unsigned>(i));
+        zassert_true(
+            response.entry_lists[i].at("ext") == expected[i].extensions, "Extensions of kind %u",
+            static_cast<unsigned>(i)
+        );
         zassert_equal(response.entry_flags[i].at("avail"), expected[i].available, "Kind %u", static_cast<unsigned>(i));
     }
 }
@@ -600,7 +652,7 @@ ZTEST_F(smp_assets_group, test_list_returns_only_files_with_valid_names) {
     zassert_equal(listing.pages, 1);
 
     const std::set<std::pair<std::string, uint32_t>> listed(listing.files.begin(), listing.files.end());
-    const std::set<std::pair<std::string, uint32_t>> expected = {{"a.png", 10}, {"b.bin", 0}, {"UPPER.PNG", 5}};
+    const std::set<std::pair<std::string, uint32_t>> expected = { { "a.png", 10 }, { "b.bin", 0 }, { "UPPER.PNG", 5 } };
 
     zassert_equal(listing.files.size(), expected.size(), "No entry twice");
     zassert_true(listed == expected, "Only the files whose names are valid for the kind are listed");
@@ -837,7 +889,9 @@ ZTEST_F(smp_assets_group, test_read_of_a_file_as_big_as_a_chunk_fits_one_respons
 
     const auto response = harness.Read(IMAGES, "exact.bin", 0);
 
-    zassert_true(response.IsOk(), "off, len, data and crc fit next to a chunk of %u bytes", static_cast<unsigned>(chunk));
+    zassert_true(
+        response.IsOk(), "off, len, data and crc fit next to a chunk of %u bytes", static_cast<unsigned>(chunk)
+    );
     zassert_equal(response.Value("off"), 0);
     zassert_equal(response.Value("len"), chunk);
     zassert_equal(response.Value("crc"), Crc(data));
@@ -1018,8 +1072,10 @@ ZTEST_F(smp_assets_group, test_read_resume_after_a_timeout_continues_from_the_ch
     // Without the checkpoint the group would read the file from its start for the CRC. It reads from
     // the file block that holds the offset instead.
     const size_t read = static_cast<size_t>(atomic_get(&bytes_read_from_files));
-    zassert_true(read <= data.size() - AssetReader::BUFFER_SIZE,
-        "The resume read %u of %u bytes", static_cast<unsigned>(read), static_cast<unsigned>(data.size()));
+    zassert_true(
+        read <= data.size() - AssetReader::BUFFER_SIZE, "The resume read %u of %u bytes", static_cast<unsigned>(read),
+        static_cast<unsigned>(data.size())
+    );
 }
 
 ZTEST_F(smp_assets_group, test_read_resume_of_another_file_does_not_use_the_checkpoint) {
@@ -1127,8 +1183,9 @@ ZTEST_F(smp_assets_group, test_read_of_a_bad_name_is_a_bad_name) {
     AssertError(harness.Read(IMAGES, ".a.bin", 0), Error::BAD_NAME);
     AssertError(harness.Read(IMAGES, "a b.bin", 0), Error::BAD_NAME);
     AssertError(harness.Read(IMAGES, std::string_view("a\0.bin", 6), 0), Error::BAD_NAME);
-    AssertError(harness.Read(IMAGES, std::string(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH, 'n') + ".bin", 0),
-        Error::BAD_NAME);
+    AssertError(
+        harness.Read(IMAGES, std::string(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH, 'n') + ".bin", 0), Error::BAD_NAME
+    );
 
     // The extension of another kind's file.
     AssertError(harness.Read(SENSOR_SCRIPTS, "a.bin", 0), Error::BAD_NAME);
@@ -1238,17 +1295,30 @@ ZTEST_F(smp_assets_group, test_a_request_with_a_missing_or_malformed_key_is_inva
         return harness.client.Read(SmpGroupId::ASSETS, command, body);
     };
 
-    zassert_equal(client_read(read_command, CborMap().PutText("name", "a.bin").Put("off", 0).Build()).Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_read(read_command, CborMap().Put("kind", IMAGES).Put("off", 0).Build()).Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_read(read_command, CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Build()).Value("rc"),
-        MGMT_ERR_EINVAL);
-    zassert_equal(client_read(read_command, CborMap().PutText("kind", "images").PutText("name", "a.bin").Put("off", 0).Build())
-        .Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_read(read_command, CborMap().Put("kind", IMAGES).Put("name", 7).Put("off", 0).Build()).Value("rc"),
-        MGMT_ERR_EINVAL);
+    zassert_equal(
+        client_read(read_command, CborMap().PutText("name", "a.bin").Put("off", 0).Build()).Value("rc"), MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_read(read_command, CborMap().Put("kind", IMAGES).Put("off", 0).Build()).Value("rc"), MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_read(read_command, CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Build()).Value("rc"),
+        MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_read(read_command, CborMap().PutText("kind", "images").PutText("name", "a.bin").Put("off", 0).Build())
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_read(read_command, CborMap().Put("kind", IMAGES).Put("name", 7).Put("off", 0).Build()).Value("rc"),
+        MGMT_ERR_EINVAL
+    );
     zassert_equal(client_read(list_command, CborMap().Build()).Value("rc"), MGMT_ERR_EINVAL);
 
-    const auto no_name = harness.client.Write(SmpGroupId::ASSETS, delete_command, CborMap().Put("kind", IMAGES).Build());
+    const auto no_name = harness.client.Write(
+        SmpGroupId::ASSETS, delete_command, CborMap().Put("kind", IMAGES).Build()
+    );
     zassert_equal(no_name.Value("rc"), MGMT_ERR_EINVAL);
 }
 
@@ -1424,8 +1494,10 @@ ZTEST_F(smp_assets_group, test_delete_closes_the_read_session_of_the_file) {
     const atomic_val_t closed_before = atomic_get(&files_closed);
 
     zassert_true(harness.Delete(IMAGES, "a.bin").IsOk());
-    zassert_equal(atomic_get(&files_closed), closed_before + 1,
-        "The file is closed before it is deleted: FatFs does not lock open files");
+    zassert_equal(
+        atomic_get(&files_closed), closed_before + 1,
+        "The file is closed before it is deleted: FatFs does not lock open files"
+    );
 
     // The next chunk finds no file, not a session on a deleted one.
     AssertError(harness.Read(IMAGES, "a.bin", chunk), Error::NOT_FOUND);
@@ -1708,8 +1780,12 @@ ZTEST_F(smp_assets_group, test_write_first_chunk_sent_again_after_more_data_is_b
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
 
-    zassert_true(harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
-        std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)).IsOk());
+    zassert_true(harness
+            .WriteNext(
+                IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
+                std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+            )
+            .IsOk());
 
     AssertError(harness.WriteFirst(IMAGES, "a.bin", first, data.size(), Crc(data)), Error::BUSY);
 
@@ -1723,14 +1799,16 @@ ZTEST_F(smp_assets_group, test_write_owner_starts_over_with_its_token) {
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
     const Bytes other = Pattern(2 * UPLOAD_CHUNK_SIZE, 2);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
 
     // The same name, another file, with the token.
-    const auto restarted = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(other).first(400),
-        other.size(), Crc(other), token);
+    const auto restarted = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(other).first(400), other.size(), Crc(other), token
+    );
 
     zassert_true(restarted.IsOk());
     zassert_equal(restarted.Value("off"), 400);
@@ -1738,14 +1816,17 @@ ZTEST_F(smp_assets_group, test_write_owner_starts_over_with_its_token) {
     const uint32_t new_token = restarted.Value("tok");
 
     // There is one staged file, and the upload is where the restart left it.
-    const auto wrong_offset = harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, new_token,
-        std::span<const uint8_t>(other).subspan(UPLOAD_CHUNK_SIZE, 10));
+    const auto wrong_offset = harness.WriteNext(
+        IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, new_token, std::span<const uint8_t>(other).subspan(UPLOAD_CHUNK_SIZE, 10)
+    );
     AssertError(wrong_offset, Error::BAD_OFFSET);
     zassert_equal(wrong_offset.Value("off"), 400);
 
     if(new_token != token) {
-        AssertError(harness.WriteNext(IMAGES, "a.bin", 400, token, std::span<const uint8_t>(other).subspan(400, 100)),
-            Error::BAD_TOKEN);
+        AssertError(
+            harness.WriteNext(IMAGES, "a.bin", 400, token, std::span<const uint8_t>(other).subspan(400, 100)),
+            Error::BAD_TOKEN
+        );
     }
 
     zassert_true(harness.SendRest(IMAGES, "a.bin", other, new_token, 400).IsOk());
@@ -1814,8 +1895,9 @@ ZTEST_F(smp_assets_group, test_write_larger_than_the_kind_takes_is_too_large) {
 
     // It is the first thing looked at once the kind and the name are known: another upload's session
     // does not make it busy.
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(small).first(UPLOAD_CHUNK_SIZE),
-        small.size(), Crc(small));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(small).first(UPLOAD_CHUNK_SIZE), small.size(), Crc(small)
+    );
     zassert_true(started.IsOk());
 
     AssertError(harness.UploadAll(IMAGES, "big.bin", data), Error::TOO_LARGE);
@@ -1827,20 +1909,31 @@ ZTEST_F(smp_assets_group, test_write_with_more_data_than_it_declares_is_too_larg
     const Bytes data = Pattern(2 * UPLOAD_CHUNK_SIZE, 1);
 
     // In the first chunk.
-    AssertError(harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(100), 50, 0), Error::TOO_LARGE);
+    AssertError(
+        harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(100), 50, 0), Error::TOO_LARGE
+    );
     zassert_false(harness.IsStaged());
 
     // In a later one: the upload is aborted.
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        UPLOAD_CHUNK_SIZE + 100, Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), UPLOAD_CHUNK_SIZE + 100, Crc(data)
+    );
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
 
-    AssertError(harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
-        std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, 101)), Error::TOO_LARGE);
+    AssertError(
+        harness.WriteNext(
+            IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token, std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, 101)
+        ),
+        Error::TOO_LARGE
+    );
     zassert_false(harness.IsStaged());
-    AssertError(harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
-        std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, 100)), Error::BAD_TOKEN);
+    AssertError(
+        harness.WriteNext(
+            IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token, std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, 100)
+        ),
+        Error::BAD_TOKEN
+    );
     zassert_false(harness.volume->Exists("images/a.bin"));
 }
 
@@ -1866,8 +1959,9 @@ ZTEST_F(smp_assets_group, test_write_checks_the_kind_the_access_the_name_the_vol
 
     // The size comes before the check whether the file is in use.
     harness.in_use.names.insert("busy.lua");
-    AssertError(harness.WriteFirst(SENSOR_SCRIPTS, "busy.lua", data, SCRIPTS_MAX_SIZE + 1, Crc(data)),
-        Error::TOO_LARGE);
+    AssertError(
+        harness.WriteFirst(SENSOR_SCRIPTS, "busy.lua", data, SCRIPTS_MAX_SIZE + 1, Crc(data)), Error::TOO_LARGE
+    );
     zassert_true(harness.in_use.calls.empty());
 
     zassert_false(harness.IsStaged());
@@ -1948,8 +2042,9 @@ ZTEST_F(smp_assets_group, test_write_whose_in_use_check_throws_leaves_the_upload
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
 
     harness.in_use.throws_bad_alloc = true;
@@ -1965,8 +2060,9 @@ ZTEST_F(smp_assets_group, test_write_that_the_client_leaves_is_abandoned_with_it
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 2);
     harness.Put("images/a.bin", old_data);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     zassert_true(harness.IsStaged());
 
@@ -1976,8 +2072,13 @@ ZTEST_F(smp_assets_group, test_write_that_the_client_leaves_is_abandoned_with_it
     zassert_true(atomic_get(&files_closed) > closed_before, "The idle upload closes its staged file");
     zassert_false(harness.IsStaged());
     zassert_true(harness.FileContent("images/a.bin") == old_data, "The asset is untouched");
-    AssertError(harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, started.Value("tok"),
-        std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)), Error::BAD_TOKEN);
+    AssertError(
+        harness.WriteNext(
+            IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, started.Value("tok"),
+            std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+        ),
+        Error::BAD_TOKEN
+    );
 
     // The group takes the next upload.
     zassert_true(harness.UploadAll(IMAGES, "a.bin", data).IsOk());
@@ -1989,8 +2090,11 @@ ZTEST_F(smp_assets_group, test_write_expired_session_does_not_make_another_uploa
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
     const Bytes other = Pattern(2 * UPLOAD_CHUNK_SIZE, 2);
 
-    zassert_true(harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data)).IsOk());
+    zassert_true(harness
+            .WriteFirst(
+                IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+            )
+            .IsOk());
 
     k_msleep(PAST_TIMEOUT_MS);
 
@@ -2003,8 +2107,9 @@ ZTEST_F(smp_assets_group, test_write_chunks_keep_the_session_alive) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(4 * UPLOAD_CHUNK_SIZE, 1);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
 
     // Each pause is shorter than the timeout, together they are longer.
@@ -2012,8 +2117,10 @@ ZTEST_F(smp_assets_group, test_write_chunks_keep_the_session_alive) {
     while(offset < data.size()) {
         k_msleep(SESSION_TIMEOUT_MS / 2);
 
-        const auto response = harness.WriteNext(IMAGES, "a.bin", offset, started.Value("tok"),
-            std::span<const uint8_t>(data).subspan(offset, UPLOAD_CHUNK_SIZE));
+        const auto response = harness.WriteNext(
+            IMAGES, "a.bin", offset, started.Value("tok"),
+            std::span<const uint8_t>(data).subspan(offset, UPLOAD_CHUNK_SIZE)
+        );
         zassert_true(response.IsOk(), "Chunk at %u: %u", static_cast<unsigned>(offset), response.error.value_or(0));
         offset += UPLOAD_CHUNK_SIZE;
     }
@@ -2031,8 +2138,9 @@ ZTEST_F(smp_assets_group, test_write_the_staged_file_is_not_listed) {
     harness.Put("keep.lua", Pattern(20, 1));
     harness.Put("other.txt", Pattern(20, 1));
 
-    const auto started = harness.WriteFirst(CAN_SCRIPTS, "new.lua", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        CAN_SCRIPTS, "new.lua", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     zassert_true(harness.IsStaged());
 
@@ -2062,7 +2170,7 @@ ZTEST_F(smp_assets_group, test_write_the_staged_file_is_not_listed) {
         names.insert(file.first);
 
     zassert_equal(stored.files.size(), 2);
-    zassert_true(names == std::set<std::string>({"keep.lua", "new.lua"}));
+    zassert_true(names == std::set<std::string>({ "keep.lua", "new.lua" }));
 }
 
 ZTEST_F(smp_assets_group, test_write_that_commits_while_the_file_is_being_read_closes_the_download) {
@@ -2118,8 +2226,9 @@ ZTEST_F(smp_assets_group, test_write_last_chunk_sent_again_gets_the_answer_again
     const Bytes other = Pattern(data.size(), 2);
     const auto last = std::span<const uint8_t>(data).subspan(2 * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
 
@@ -2137,8 +2246,9 @@ ZTEST_F(smp_assets_group, test_write_last_chunk_sent_again_gets_the_answer_again
     zassert_false(harness.IsStaged());
 
     // Also while another client's upload is open.
-    const auto next = harness.WriteFirst(IMAGES, "b.bin", std::span<const uint8_t>(other).first(UPLOAD_CHUNK_SIZE),
-        other.size(), Crc(other));
+    const auto next = harness.WriteFirst(
+        IMAGES, "b.bin", std::span<const uint8_t>(other).first(UPLOAD_CHUNK_SIZE), other.size(), Crc(other)
+    );
     zassert_true(next.IsOk());
 
     const auto while_busy = harness.WriteNext(IMAGES, "a.bin", 2 * UPLOAD_CHUNK_SIZE, token, last);
@@ -2147,10 +2257,20 @@ ZTEST_F(smp_assets_group, test_write_last_chunk_sent_again_gets_the_answer_again
     zassert_equal(while_busy.Value("off"), data.size());
 
     // Not an earlier chunk, not another content, not another token or name.
-    AssertError(harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
-        std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)), Error::BAD_TOKEN);
-    AssertError(harness.WriteNext(IMAGES, "a.bin", 2 * UPLOAD_CHUNK_SIZE, token,
-        std::span<const uint8_t>(other).subspan(2 * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)), Error::BAD_TOKEN);
+    AssertError(
+        harness.WriteNext(
+            IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
+            std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+        ),
+        Error::BAD_TOKEN
+    );
+    AssertError(
+        harness.WriteNext(
+            IMAGES, "a.bin", 2 * UPLOAD_CHUNK_SIZE, token,
+            std::span<const uint8_t>(other).subspan(2 * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+        ),
+        Error::BAD_TOKEN
+    );
     AssertError(harness.WriteNext(IMAGES, "a.bin", 2 * UPLOAD_CHUNK_SIZE, token + 1, last), Error::BAD_TOKEN);
     AssertError(harness.WriteNext(IMAGES, "b.bin", 2 * UPLOAD_CHUNK_SIZE, token, last), Error::BAD_TOKEN);
     AssertError(harness.WriteNext(IMAGES, "a.bin", 2 * UPLOAD_CHUNK_SIZE, std::nullopt, last), Error::BAD_TOKEN);
@@ -2164,8 +2284,9 @@ ZTEST_F(smp_assets_group, test_write_last_chunk_sent_again_late_is_bad_token) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(2 * UPLOAD_CHUNK_SIZE, 1);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
 
@@ -2173,8 +2294,13 @@ ZTEST_F(smp_assets_group, test_write_last_chunk_sent_again_late_is_bad_token) {
 
     k_msleep(PAST_TIMEOUT_MS);
 
-    AssertError(harness.WriteNext(IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
-        std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)), Error::BAD_TOKEN);
+    AssertError(
+        harness.WriteNext(
+            IMAGES, "a.bin", UPLOAD_CHUNK_SIZE, token,
+            std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+        ),
+        Error::BAD_TOKEN
+    );
 }
 
 ZTEST_F(smp_assets_group, test_write_that_cannot_write_is_no_space_or_io_error_and_ends_the_upload) {
@@ -2189,34 +2315,46 @@ ZTEST_F(smp_assets_group, test_write_that_cannot_write_is_no_space_or_io_error_a
         Error expected;
     };
 
-    const std::array<Case, 3> cases = {{
-        {-ENOSPC, Error::NO_SPACE},
-        {WRITE_FAULT_SHORT, Error::NO_SPACE},
-        {-EIO, Error::IO_ERROR},
-    }};
+    const std::array<Case, 3> cases = { {
+        { -ENOSPC, Error::NO_SPACE },
+        { WRITE_FAULT_SHORT, Error::NO_SPACE },
+        { -EIO, Error::IO_ERROR },
+    } };
 
     for(const Case& test_case : cases) {
-        const auto started = harness.WriteFirst(IMAGES, "big.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-            data.size(), Crc(data));
+        const auto started = harness.WriteFirst(
+            IMAGES, "big.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+        );
         zassert_true(started.IsOk());
         const uint32_t token = started.Value("tok");
 
         // The chunks fill the buffer of the staged file with the eighth, which writes it out.
         for(size_t chunk = 1; chunk < 7; chunk++) {
-            zassert_true(harness.WriteNext(IMAGES, "big.bin", chunk * UPLOAD_CHUNK_SIZE, token,
-                std::span<const uint8_t>(data).subspan(chunk * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)).IsOk());
+            zassert_true(harness
+                    .WriteNext(
+                        IMAGES, "big.bin", chunk * UPLOAD_CHUNK_SIZE, token,
+                        std::span<const uint8_t>(data).subspan(chunk * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+                    )
+                    .IsOk());
         }
 
         atomic_set(&write_fault, test_case.fault);
-        const auto failed = harness.WriteNext(IMAGES, "big.bin", 7 * UPLOAD_CHUNK_SIZE, token,
-            std::span<const uint8_t>(data).subspan(7 * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE));
+        const auto failed = harness.WriteNext(
+            IMAGES, "big.bin", 7 * UPLOAD_CHUNK_SIZE, token,
+            std::span<const uint8_t>(data).subspan(7 * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE)
+        );
         atomic_set(&write_fault, 0);
 
         AssertError(failed, test_case.expected);
         zassert_false(harness.IsStaged());
         zassert_true(harness.FileContent("images/big.bin") == old_data, "The asset is untouched");
-        AssertError(harness.WriteNext(IMAGES, "big.bin", 8 * UPLOAD_CHUNK_SIZE, token,
-            std::span<const uint8_t>(data).subspan(8 * UPLOAD_CHUNK_SIZE, 100)), Error::BAD_TOKEN);
+        AssertError(
+            harness.WriteNext(
+                IMAGES, "big.bin", 8 * UPLOAD_CHUNK_SIZE, token,
+                std::span<const uint8_t>(data).subspan(8 * UPLOAD_CHUNK_SIZE, 100)
+            ),
+            Error::BAD_TOKEN
+        );
     }
 }
 
@@ -2226,7 +2364,7 @@ ZTEST_F(smp_assets_group, test_write_that_cannot_store_the_file_is_no_space_or_i
     const Bytes data = Pattern(300, 5);
     harness.Put("images/a.bin", old_data);
 
-    for(const atomic_val_t fault : {static_cast<atomic_val_t>(-ENOSPC), static_cast<atomic_val_t>(-EIO)}) {
+    for(const atomic_val_t fault : { static_cast<atomic_val_t>(-ENOSPC), static_cast<atomic_val_t>(-EIO) }) {
         // The buffer of the staged file is written out when the file is stored.
         atomic_set(&write_fault, fault);
         const auto failed = harness.WriteFirst(IMAGES, "a.bin", data, data.size(), Crc(data));
@@ -2276,8 +2414,9 @@ ZTEST_F(smp_assets_group, test_write_into_a_nearly_full_volume_is_no_space) {
             break;
     }
 
-    zassert_true(harness.volume->GetTotalSpace() - harness.volume->GetUsedSpace() < NEARLY_FULL,
-        "The volume has room left");
+    zassert_true(
+        harness.volume->GetTotalSpace() - harness.volume->GetUsedSpace() < NEARLY_FULL, "The volume has room left"
+    );
 
     const Bytes first = Pattern(100, 2);
 
@@ -2292,8 +2431,9 @@ ZTEST_F(smp_assets_group, test_write_stops_when_the_volume_goes_away) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
     const auto second = std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE);
@@ -2312,8 +2452,9 @@ ZTEST_F(smp_assets_group, test_write_stops_when_its_kind_is_unregistered) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
     const uint32_t token = started.Value("tok");
     const auto second = std::span<const uint8_t>(data).subspan(UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE);
@@ -2327,8 +2468,11 @@ ZTEST_F(smp_assets_group, test_a_destroyed_group_aborts_its_upload) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
 
-    zassert_true(harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data)).IsOk());
+    zassert_true(harness
+            .WriteFirst(
+                IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+            )
+            .IsOk());
     zassert_true(harness.IsStaged());
 
     const atomic_val_t closed_before = atomic_get(&files_closed);
@@ -2365,20 +2509,66 @@ ZTEST_F(smp_assets_group, test_a_request_to_write_without_its_keys_is_invalid) {
     };
 
     // The first chunk needs `len` and `crc`.
-    zassert_equal(client_write(CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Put("off", 0)
-        .Put("crc", 0).Put("data", chunk).Build()).Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_write(CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Put("off", 0)
-        .Put("len", 10).Put("data", chunk).Build()).Value("rc"), MGMT_ERR_EINVAL);
+    zassert_equal(
+        client_write(
+            CborMap()
+                .Put("kind", IMAGES)
+                .PutText("name", "a.bin")
+                .Put("off", 0)
+                .Put("crc", 0)
+                .Put("data", chunk)
+                .Build()
+        )
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_write(
+            CborMap()
+                .Put("kind", IMAGES)
+                .PutText("name", "a.bin")
+                .Put("off", 0)
+                .Put("len", 10)
+                .Put("data", chunk)
+                .Build()
+        )
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
 
     // Every chunk needs the rest.
-    zassert_equal(client_write(CborMap().PutText("name", "a.bin").Put("off", 0).Put("len", 10).Put("crc", 0)
-        .Put("data", chunk).Build()).Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_write(CborMap().Put("kind", IMAGES).Put("off", 0).Put("len", 10).Put("crc", 0)
-        .Put("data", chunk).Build()).Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_write(CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Put("len", 10).Put("crc", 0)
-        .Put("data", chunk).Build()).Value("rc"), MGMT_ERR_EINVAL);
-    zassert_equal(client_write(CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Put("off", 10).Put("tok", 1)
-        .Build()).Value("rc"), MGMT_ERR_EINVAL);
+    zassert_equal(
+        client_write(
+            CborMap().PutText("name", "a.bin").Put("off", 0).Put("len", 10).Put("crc", 0).Put("data", chunk).Build()
+        )
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_write(
+            CborMap().Put("kind", IMAGES).Put("off", 0).Put("len", 10).Put("crc", 0).Put("data", chunk).Build()
+        )
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_write(
+            CborMap()
+                .Put("kind", IMAGES)
+                .PutText("name", "a.bin")
+                .Put("len", 10)
+                .Put("crc", 0)
+                .Put("data", chunk)
+                .Build()
+        )
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
+    zassert_equal(
+        client_write(CborMap().Put("kind", IMAGES).PutText("name", "a.bin").Put("off", 10).Put("tok", 1).Build())
+            .Value("rc"),
+        MGMT_ERR_EINVAL
+    );
 
     zassert_false(harness.IsStaged());
 }
@@ -2395,16 +2585,18 @@ ZTEST_F(smp_assets_group, test_write_deletes_a_stale_staged_file_before_it_looks
     for(size_t i = 0; i < 100; i++)
         zassert_true(harness.volume->WriteFile(STAGED_PATH, block.data(), block.size(), true));
 
-    zassert_true(harness.volume->GetTotalSpace() - harness.volume->GetUsedSpace() < LENGTH,
-        "The stale file takes the room");
+    zassert_true(
+        harness.volume->GetTotalSpace() - harness.volume->GetUsedSpace() < LENGTH, "The stale file takes the room"
+    );
 
     const Bytes first = Pattern(UPLOAD_CHUNK_SIZE, 4);
     const auto started = harness.WriteFirst(IMAGES, "big.bin", first, LENGTH, 0);
 
     zassert_true(started.IsOk(), "Refused with %u", started.error.value_or(0));
     zassert_true(harness.IsStaged());
-    zassert_true(harness.volume->GetFileSize(STAGED_PATH).value_or(UINT32_MAX) < block.size(),
-        "The staged file is the upload's");
+    zassert_true(
+        harness.volume->GetFileSize(STAGED_PATH).value_or(UINT32_MAX) < block.size(), "The staged file is the upload's"
+    );
 }
 
 ZTEST_F(smp_assets_group, test_write_is_busy_before_it_looks_at_the_room) {
@@ -2412,8 +2604,9 @@ ZTEST_F(smp_assets_group, test_write_is_busy_before_it_looks_at_the_room) {
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 1);
     harness.ReregisterImages(8 * 1024 * 1024);
 
-    const auto started = harness.WriteFirst(IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data));
+    const auto started = harness.WriteFirst(
+        IMAGES, "a.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
     zassert_true(started.IsOk());
 
     // More than the volume holds, from another client.
@@ -2438,8 +2631,9 @@ ZTEST_F(smp_assets_group, test_write_one_chunk_file_sent_again_gets_its_token_ag
     // client opens an upload.
     harness.Put("images/one.bin", other);
 
-    const auto started = harness.WriteFirst(IMAGES, "b.bin", std::span<const uint8_t>(busy).first(UPLOAD_CHUNK_SIZE),
-        busy.size(), Crc(busy));
+    const auto started = harness.WriteFirst(
+        IMAGES, "b.bin", std::span<const uint8_t>(busy).first(UPLOAD_CHUNK_SIZE), busy.size(), Crc(busy)
+    );
     zassert_true(started.IsOk());
 
     // The answer got lost: the same request, without a token. It is no stranger to be told to wait for.
@@ -2497,8 +2691,11 @@ ZTEST_F(smp_assets_group, test_a_destroyed_group_with_a_download_and_an_upload_g
     harness.Put("images/a.bin", Pattern(3 * CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE, 2));
 
     zassert_true(harness.Read(IMAGES, "a.bin", 0).IsOk());
-    zassert_true(harness.WriteFirst(IMAGES, "b.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE),
-        data.size(), Crc(data)).IsOk());
+    zassert_true(harness
+            .WriteFirst(
+                IMAGES, "b.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+            )
+            .IsOk());
 
     // The idle task is armed for both.
     const atomic_val_t closed_before = atomic_get(&files_closed);

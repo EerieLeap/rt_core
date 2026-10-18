@@ -16,8 +16,10 @@ private:
     size_t size_;
 
 public:
-    CborSizeBuilder() : size_(0) {}
-    explicit CborSizeBuilder(size_t initialSize) : size_(initialSize) {}
+    CborSizeBuilder() :
+        size_(0) {}
+    explicit CborSizeBuilder(size_t initialSize) :
+        size_(initialSize) {}
 
     // Integer types
     CborSizeBuilder& AddUint(uint64_t value) {

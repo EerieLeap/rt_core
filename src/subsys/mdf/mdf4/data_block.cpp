@@ -5,7 +5,9 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-DataBlock::DataBlock(uint64_t size_bytes): BlockBase("DT"), size_bytes_(size_bytes) {}
+DataBlock::DataBlock(uint64_t size_bytes) :
+    BlockBase("DT"),
+    size_bytes_(size_bytes) {}
 
 void DataBlock::SetDataSizeBytes(uint64_t size_bytes) {
     size_bytes_ = size_bytes;

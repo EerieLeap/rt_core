@@ -2,8 +2,8 @@
 
 #include "utilities/memory/memory_resource_manager.h"
 
-#include "system_configuration_validator.h"
 #include "system_configuration_cbor_parser.h"
+#include "system_configuration_validator.h"
 
 namespace eerie_leap::domain::system_domain::configuration::parsers {
 
@@ -22,9 +22,8 @@ pmr_unique_ptr<CborSystemConfig> SystemConfigurationCborParser::Serialize(const 
     return config;
 }
 
-pmr_unique_ptr<SystemConfiguration> SystemConfigurationCborParser::Deserialize(
-    std::pmr::memory_resource* mr,
-    const CborSystemConfig& config) {
+pmr_unique_ptr<SystemConfiguration>
+SystemConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborSystemConfig& config) {
 
     auto configuration = make_unique_pmr<SystemConfiguration>(mr);
 

@@ -5,14 +5,14 @@
 #include <cstdint>
 #include <memory>
 
-#include "subsys/smp/smp_group.h"
 #include "subsys/cdmp/services/i_cdmp_network_info.h"
+#include "subsys/smp/smp_group.h"
 
 namespace eerie_leap::domain::canbus_com_domain::smp {
 
-using eerie_leap::subsys::smp::SmpGroup;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
 using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
+using eerie_leap::subsys::smp::SmpGroup;
 
 /** @brief SMP `network` group: the other devices on the CDMP network. */
 class NetworkMgmtGroup : public SmpGroup<NetworkMgmtGroup> {

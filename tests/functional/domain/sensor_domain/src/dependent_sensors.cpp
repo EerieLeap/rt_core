@@ -4,20 +4,20 @@
 #include <memory>
 #include <vector>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "subsys/time/rtc_provider.h"
-#include "subsys/time/boot_elapsed_time_provider.h"
-#include "subsys/time/time_service.h"
-#include "subsys/gpio/gpio_simulator.h"
 #include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
-#include "domain/sensor_domain/sensor_readers/sensor_reader_physical_indicator.h"
 #include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "domain/sensor_domain/sensor_readers/sensor_reader_physical_indicator.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/gpio/gpio_simulator.h"
+#include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
+#include "subsys/time/time_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -44,10 +44,13 @@ struct Fixture {
         return *generation->Find(StringHelpers::GetHash(id));
     }
 
-    [[nodiscard]] TickContext Tick() const { return { time_service->GetCurrentTime() }; }
+    [[nodiscard]] TickContext Tick() const {
+        return { time_service->GetCurrentTime() };
+    }
 };
 
-std::shared_ptr<Sensor> MakeVirtual(std::string_view id, const char* expression, std::optional<int> sampling_rate_ms = std::nullopt) {
+std::shared_ptr<Sensor>
+MakeVirtual(std::string_view id, const char* expression, std::optional<int> sampling_rate_ms = std::nullopt) {
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = SensorType::VIRTUAL_ANALOG;
     sensor->configuration.expression = expression;
@@ -62,7 +65,8 @@ Fixture MakeFixture() {
     Fixture fixture;
 
     fixture.time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
 
     auto gpio = std::make_shared<GpioSimulator>();
     gpio->Initialize();
@@ -79,14 +83,16 @@ Fixture MakeFixture() {
     };
 
     fixture.frame = std::make_shared<SensorReadingsFrame>();
-    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame)
+                             .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
     auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
     fixture.pipeline = std::make_shared<ReadingPipeline>(fixture.frame, processors, fixture.time_service);
 
-    fixture.indicator_reader = std::make_unique<SensorReaderPhysicalIndicator>(fixture.time_service, fixture.Runtime("indicator"), gpio);
+    fixture.indicator_reader = std::make_unique<SensorReaderPhysicalIndicator>(
+        fixture.time_service, fixture.Runtime("indicator"), gpio
+    );
 
     return fixture;
 }
@@ -133,10 +139,14 @@ ZTEST(dependent_sensors, test_committing_an_input_evaluates_its_dependents) {
     zassert_true(doubled.timestamp.has_value());
     zassert_equal(doubled.value.value(), indicator * 2.0F);
 
-    zassert_equal(fixture.frame->TryGetReadingValue("doubled_plus").value(), indicator * 2.0F + 1.0F,
-        "A dependent of a dependent sees the fresh value in the same pass");
+    zassert_equal(
+        fixture.frame->TryGetReadingValue("doubled_plus").value(), indicator * 2.0F + 1.0F,
+        "A dependent of a dependent sees the fresh value in the same pass"
+    );
 
-    zassert_false(fixture.frame->TryGetReadingValue("polled").has_value(), "A polled virtual sensor waits for its timer");
+    zassert_false(
+        fixture.frame->TryGetReadingValue("polled").has_value(), "A polled virtual sensor waits for its timer"
+    );
 }
 
 ZTEST(dependent_sensors, test_a_failed_input_leaves_its_dependents_untouched) {
@@ -166,6 +176,8 @@ ZTEST(dependent_sensors, test_dependents_carry_the_timestamp_of_their_input) {
     fixture.pipeline->Process(fixture.Runtime("indicator"), reading);
 
     zassert_equal(fixture.frame->TryGetReading("doubled").value().timestamp.value(), tick.timestamp);
-    zassert_equal(fixture.frame->TryGetReading("doubled_plus").value().timestamp.value(), tick.timestamp,
-        "A dependent of a dependent shares the tick as well");
+    zassert_equal(
+        fixture.frame->TryGetReading("doubled_plus").value().timestamp.value(), tick.timestamp,
+        "A dependent of a dependent shares the tick as well"
+    );
 }

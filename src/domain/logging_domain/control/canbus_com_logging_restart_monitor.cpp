@@ -8,28 +8,29 @@
 
 #include "domain/canbus_com_domain/states/canbus_com_logging_state.h"
 #include "domain/canbus_com_domain/states/canbus_com_state_type.h"
-#include "domain/system_domain/models/product_feature.h"
 #include "domain/logging_domain/event_bus/logging_network_state.h"
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "domain/system_domain/models/product_feature.h"
 
 #include "canbus_com_logging_restart_monitor.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
-using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::domain::canbus_com_domain::states::CanbusComLoggingState;
 using eerie_leap::domain::canbus_com_domain::states::CanbusComStateType;
-using eerie_leap::domain::system_domain::models::HasFeature;
-using eerie_leap::domain::system_domain::models::ProductFeature;
 using eerie_leap::domain::logging_domain::event_bus::LoggingNetworkState;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::system_domain::models::HasFeature;
+using eerie_leap::domain::system_domain::models::ProductFeature;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 LOG_MODULE_REGISTER(canbus_com_logging_restart_monitor_logger);
 
 CanbusComLoggingRestartMonitor::CanbusComLoggingRestartMonitor(
     std::shared_ptr<CanbusComService> canbus_com_service,
-    bool has_status_rule)
-    : canbus_com_service_(std::move(canbus_com_service)),
+    bool has_status_rule
+) :
+    canbus_com_service_(std::move(canbus_com_service)),
     has_status_rule_(has_status_rule) {
 
     if(canbus_com_service_ == nullptr)
@@ -51,18 +52,26 @@ CanbusComLoggingRestartMonitor::CanbusComLoggingRestartMonitor(
     // A constructor that throws runs no destructor, so it withdraws what it registered itself.
     try {
         device_event_handler_id_ = canbus_com_service_->RegisterDeviceEventHandler(
-            [this](CdmpDeviceEvent event, const CdmpDeviceInfo& device) { OnDeviceEvent(event, device); });
+            [this](CdmpDeviceEvent event, const CdmpDeviceInfo& device) {
+                OnDeviceEvent(event, device);
+            }
+        );
         if(device_event_handler_id_ < 0)
             throw std::runtime_error("The logging restart monitor could not register its device event handler.");
 
         heartbeat_handler_id_ = canbus_com_service_->RegisterHeartbeatHandler(
-            [this](const CdmpHeartbeatMessage& heartbeat) { OnHeartbeat(heartbeat); });
+            [this](const CdmpHeartbeatMessage& heartbeat) {
+                OnHeartbeat(heartbeat);
+            }
+        );
         if(heartbeat_handler_id_ < 0)
             throw std::runtime_error("The logging restart monitor could not register its heartbeat handler.");
 
         state_handler_id_ = canbus_com_service_->RegisterStateHandler(
-            CanbusComStateType::LOGGING_STATUS,
-            [this](CanbusComStateType /*state_type*/) { OnStatesChanged(); });
+            CanbusComStateType::LOGGING_STATUS, [this](CanbusComStateType /*state_type*/) {
+                OnStatesChanged();
+            }
+        );
         if(state_handler_id_ < 0)
             throw std::runtime_error("The logging restart monitor could not register its state handler.");
     } catch(...) {
@@ -107,8 +116,10 @@ void CanbusComLoggingRestartMonitor::OnDeviceEvent(CdmpDeviceEvent event, const 
             has_logging_.set(device.device_id, HasFeature(device.features, ProductFeature::LOGGING));
             if(IsLoggingUnit(device)) {
                 restarted_.set(device.device_id);
-                LOG_INF("Logging unit %u %s.", static_cast<unsigned>(device.device_id),
-                    event == CdmpDeviceEvent::RESTARTED ? "restarted" : "joined");
+                LOG_INF(
+                    "Logging unit %u %s.", static_cast<unsigned>(device.device_id),
+                    event == CdmpDeviceEvent::RESTARTED ? "restarted" : "joined"
+                );
             }
             break;
 
@@ -203,8 +214,10 @@ void CanbusComLoggingRestartMonitor::Resolve(size_t count, std::optional<uint8_t
 
         if(is_left_to_status_rule) {
             restarted_.reset(record.device_id);
-            LOG_DBG("Logging unit %u is back with the status: the status rule sends.",
-                static_cast<unsigned>(record.device_id));
+            LOG_DBG(
+                "Logging unit %u is back with the status: the status rule sends.",
+                static_cast<unsigned>(record.device_id)
+            );
             continue;
         }
 
@@ -217,8 +230,10 @@ void CanbusComLoggingRestartMonitor::Resolve(size_t count, std::optional<uint8_t
         if(!state.IsActive() && state.GetReason() == LoggingStatusReason::Stopped)
             Report(record.device_id);
         else
-            LOG_DBG("Logging unit %u is back and %s.", static_cast<unsigned>(record.device_id),
-                state.IsActive() ? "logs" : "does not report Stopped");
+            LOG_DBG(
+                "Logging unit %u is back and %s.", static_cast<unsigned>(record.device_id),
+                state.IsActive() ? "logs" : "does not report Stopped"
+            );
     }
 }
 

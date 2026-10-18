@@ -11,7 +11,7 @@ namespace {
 template<typename T>
 T RunSteps(EmaFilter<T>& filter, T input, uint8_t k2, int steps) {
     T last = filter.Get();
-    for (int i = 0; i < steps; ++i)
+    for(int i = 0; i < steps; ++i)
         last = filter.Filter(input, k2);
 
     return last;
@@ -84,7 +84,7 @@ ZTEST(ema_filter, test_step_response_never_overshoots) {
     EmaFilter<int32_t> filter(0);
 
     int32_t previous = 0;
-    for (int i = 0; i < 128; ++i) {
+    for(int i = 0; i < 128; ++i) {
         int32_t current = filter.Filter(1000, 3);
 
         zassert_true(current >= previous, "filter went backwards at step %d", i);
@@ -111,7 +111,7 @@ ZTEST(ema_filter, test_larger_k2_reacts_slower) {
 ZTEST(ema_filter, test_smooths_alternating_input) {
     EmaFilter<int32_t> filter(0);
 
-    for (int i = 0; i < 200; ++i) {
+    for(int i = 0; i < 200; ++i) {
         int32_t value = filter.Filter((i % 2 == 0) ? 100 : -100, 3);
 
         zassert_between_inclusive(value, -25, 25, "unsmoothed output %d at step %d", value, i);

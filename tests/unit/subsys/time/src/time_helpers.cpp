@@ -58,7 +58,7 @@ ZTEST(time_helpers, test_ToMilliseconds_truncates_towards_epoch) {
 }
 
 ZTEST(time_helpers, test_FromMilliseconds_round_trips) {
-    for (auto value : {0ms, 1ms, 999ms, 1000ms, 1761106217000ms})
+    for(auto value : { 0ms, 1ms, 999ms, 1000ms, 1761106217000ms })
         zassert_equal(TimeHelpers::ToMilliseconds(TimeHelpers::FromMilliseconds(value)).count(), value.count());
 }
 
@@ -68,7 +68,7 @@ ZTEST(time_helpers, test_ToNanoseconds_returns_duration_since_epoch) {
 }
 
 ZTEST(time_helpers, test_FromNanoseconds_round_trips) {
-    for (auto value : {0ns, 1ns, 999ns, 1000ns, 1761106217123456789ns})
+    for(auto value : { 0ns, 1ns, 999ns, 1000ns, 1761106217123456789ns })
         zassert_equal(TimeHelpers::ToNanoseconds(TimeHelpers::FromNanoseconds(value)).count(), value.count());
 }
 
@@ -101,19 +101,23 @@ ZTEST(time_helpers, test_ToUint64_keeps_sub_millisecond_precision) {
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_invokes_the_callable) {
     int calls = 0;
 
-    TimeHelpers::MeasureExecutionTimeUs([&calls]() { ++calls; });
+    TimeHelpers::MeasureExecutionTimeUs([&calls]() {
+        ++calls;
+    });
 
     zassert_equal(calls, 1);
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_returns_non_negative_duration) {
-    auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() { });
+    auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {});
 
     zassert_true(elapsed_us >= 0.0f, "measured %f us", (double)elapsed_us);
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_measures_busy_work) {
-    auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() { k_busy_wait(5000); });
+    auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {
+        k_busy_wait(5000);
+    });
 
     // Emulated targets are noisy, so only the order of magnitude is checked.
     zassert_true(elapsed_us > 0.0f, "measured %f us", (double)elapsed_us);
@@ -121,10 +125,12 @@ ZTEST(time_helpers, test_MeasureExecutionTimeUs_measures_busy_work) {
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_can_be_called_repeatedly) {
-    for (int i = 0; i < 3; ++i) {
+    for(int i = 0; i < 3; ++i) {
         int calls = 0;
 
-        auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([&calls]() { ++calls; });
+        auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([&calls]() {
+            ++calls;
+        });
 
         zassert_equal(calls, 1, "iteration %d", i);
         zassert_true(elapsed_us >= 0.0f, "iteration %d measured %f us", i, (double)elapsed_us);

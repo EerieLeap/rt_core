@@ -17,7 +17,7 @@ struct LoggerMetadata {
     uint8_t device_id = 0;
     uint32_t hw_version = 0;
     uint32_t sw_version = 0;
-    uint32_t sensors_configuration_hash = 0;   // 0 when unknown
+    uint32_t sensors_configuration_hash = 0; // 0 when unknown
 };
 
 } // namespace eerie_leap::domain::logging_domain::loggers

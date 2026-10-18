@@ -1,5 +1,5 @@
-#include <zephyr/ztest.h>
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
+#include <zephyr/ztest.h>
 
 #include "smp_ble_test_support.h"
 
@@ -21,7 +21,7 @@ ZTEST(smp_ble_router, test_local_route_reaches_the_smp_server) {
 ZTEST(smp_ble_router, test_own_address_is_served_locally) {
     RouterHarness harness;
     harness.forwarder->address = 5;
-    harness.forwarder->reachable = {7};
+    harness.forwarder->reachable = { 7 };
 
     harness.router->OnReceive(Routed(5, MakeEchoRequest("self", 12)));
 
@@ -37,7 +37,7 @@ ZTEST(smp_ble_router, test_packets_span_writes_and_notifications) {
 
     // One byte per write splits the route and the SMP header too.
     for(uint8_t byte : Routed(0, MakeEchoRequest(text, 13)))
-        harness.router->OnReceive({&byte, 1});
+        harness.router->OnReceive({ &byte, 1 });
 
     auto packets = harness.link->WaitForPackets(1);
     zassert_equal(packets.size(), 1);
@@ -45,7 +45,9 @@ ZTEST(smp_ble_router, test_packets_span_writes_and_notifications) {
 
     const auto sizes = harness.link->Sizes();
     zassert_true(sizes.size() > 1);
-    zassert_true(std::ranges::all_of(sizes, [](size_t size) { return size <= 20; }));
+    zassert_true(std::ranges::all_of(sizes, [](size_t size) {
+        return size <= 20;
+    }));
 }
 
 ZTEST(smp_ble_router, test_one_write_may_hold_several_packets) {
@@ -66,7 +68,7 @@ ZTEST(smp_ble_router, test_one_write_may_hold_several_packets) {
 ZTEST(smp_ble_router, test_peer_route_is_forwarded_and_its_response_notified) {
     RouterHarness harness;
     harness.forwarder->address = 5;
-    harness.forwarder->reachable = {7};
+    harness.forwarder->reachable = { 7 };
 
     const Bytes request = MakeEchoRequest("peer", 14);
     harness.router->OnReceive(Routed(7, request));
@@ -75,7 +77,7 @@ ZTEST(smp_ble_router, test_peer_route_is_forwarded_and_its_response_notified) {
     zassert_equal(harness.forwarder->forwarded[0].first, 7);
     zassert_true(harness.forwarder->forwarded[0].second == request);
 
-    Bytes body = {0xA1, 0x61, 'r'};
+    Bytes body = { 0xA1, 0x61, 'r' };
     const Bytes text = CborText("peer");
     body.insert(body.end(), text.begin(), text.end());
     const Bytes response = MakePacket(SmpOperation::WRITE_RESPONSE, 0, 0, 14, body);
@@ -89,7 +91,7 @@ ZTEST(smp_ble_router, test_peer_route_is_forwarded_and_its_response_notified) {
 
 ZTEST(smp_ble_router, test_refused_forward_is_dropped) {
     RouterHarness harness;
-    harness.forwarder->reachable = {7};
+    harness.forwarder->reachable = { 7 };
     harness.forwarder->accept = false;
 
     harness.router->OnReceive(Routed(7, MakeEchoRequest("lost", 15)));
@@ -100,7 +102,7 @@ ZTEST(smp_ble_router, test_refused_forward_is_dropped) {
 }
 
 ZTEST(smp_ble_router, test_unreachable_destination_gets_enoent) {
-    for(bool has_forwarder : {true, false}) {
+    for(bool has_forwarder : { true, false }) {
         RouterHarness harness(has_forwarder);
 
         harness.router->OnReceive(Routed(9, MakeEchoRequest("nobody", 16, SmpOperation::READ)));
@@ -197,7 +199,7 @@ ZTEST(smp_ble_router, test_oversized_packets_and_responses_are_skipped) {
     for(size_t offset = 0; offset < routed.size(); offset += 100)
         harness.router->OnReceive(std::span(routed).subspan(offset, std::min<size_t>(100, routed.size() - offset)));
 
-    harness.router->OnReceive(Routed(0, MakePacket(SmpOperation::READ_RESPONSE, 0, 0, 24, {0xA0})));
+    harness.router->OnReceive(Routed(0, MakePacket(SmpOperation::READ_RESPONSE, 0, 0, 24, { 0xA0 })));
     harness.router->OnReceive(Routed(0, MakeEchoRequest("after", 25)));
 
     auto packets = harness.link->WaitForPackets(1);

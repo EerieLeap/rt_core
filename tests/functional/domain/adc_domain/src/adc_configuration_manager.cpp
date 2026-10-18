@@ -1,11 +1,11 @@
 #include <algorithm>
 #include <array>
+#include <eerie_memory.hpp>
 #include <memory>
 #include <string>
 #include <vector>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -13,11 +13,11 @@
 #include "configuration/cbor/cbor_serializer.h"
 #include "configuration/services/cbor_configuration_service.h"
 
+#include "subsys/adc/adc_emulator.h"
+#include "subsys/adc/adc_manager.h"
 #include "subsys/device_tree/dt_adc.h"
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/fs_service.h"
-#include "subsys/adc/adc_emulator.h"
-#include "subsys/adc/adc_manager.h"
 
 #include "domain/adc_domain/configuration/adc_configuration_manager.h"
 #include "domain/adc_domain/configuration/adc_default_configuration.h"
@@ -63,20 +63,18 @@ std::shared_ptr<IAdcManager> MakeAdcManager(int adc_count = kDtAdcCount) {
     return adc_manager;
 }
 
-std::shared_ptr<AdcConfigurationManager> MakeAdcConfigurationManager(
-    std::shared_ptr<FsService> fs_service, std::shared_ptr<IAdcManager> adc_manager) {
+std::shared_ptr<AdcConfigurationManager>
+MakeAdcConfigurationManager(std::shared_ptr<FsService> fs_service, std::shared_ptr<IAdcManager> adc_manager) {
 
     return std::make_shared<AdcConfigurationManager>(
         std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", std::move(fs_service)),
-        std::move(adc_manager));
+        std::move(adc_manager)
+    );
 }
 
 std::string ExpectedSamplesReason(uint32_t samples) {
     return "Invalid ADC configuration. Samples must be between 1 and "
-        + std::to_string(CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX)
-        + ", got "
-        + std::to_string(samples)
-        + ".";
+        + std::to_string(CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX) + ", got " + std::to_string(samples) + ".";
 }
 
 void ExpectSameCalibrator(const AdcCalibrator& expected, const AdcCalibrator& actual, size_t channel) {
@@ -97,13 +95,14 @@ void ExpectSameCalibrator(const AdcCalibrator& expected, const AdcCalibrator& ac
 ZTEST_SUITE(adc_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
 AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_count = kDtChannelCount) {
-    std::pmr::vector<CalibrationData> adc_calibration_data_samples {
-        {0.0, 0.0},
-        {5.0, 5.0}
-    };
+    std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
-    auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(adc_calibration_data_samples);
-    auto adc_calibrator = std::make_shared<AdcCalibrator>(InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr);
+    auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
+        adc_calibration_data_samples
+    );
+    auto adc_calibrator = std::make_shared<AdcCalibrator>(
+        InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr
+    );
 
     auto adc_channel_configuration = std::make_shared<AdcChannelConfiguration>(adc_calibrator);
 
@@ -114,13 +113,17 @@ AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_coun
 
     AdcConfiguration adc_configuration;
     adc_configuration.samples = 40;
-    adc_configuration.channel_configurations =
-        std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(channel_configurations);
+    adc_configuration.channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(
+        channel_configurations
+    );
 
     return adc_configuration;
 }
 
-void adc_configuration_manager_ExpectTestConfiguration(const std::shared_ptr<AdcConfiguration>& configuration, int channel_count) {
+void adc_configuration_manager_ExpectTestConfiguration(
+    const std::shared_ptr<AdcConfiguration>& configuration,
+    int channel_count
+) {
     zassert_not_null(configuration.get());
     zassert_equal(configuration->channel_configurations->size(), static_cast<size_t>(channel_count));
 
@@ -198,10 +201,13 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfigura
 
     auto expect_imported_configuration = [&](const std::shared_ptr<AdcConfiguration>& imported_configuration) {
         zassert_not_null(imported_configuration.get());
-        zassert_equal(imported_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount()));
+        zassert_equal(
+            imported_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount())
+        );
 
         for(int i = 0; i < adc_manager->GetChannelCount(); i++) {
-            auto calibration_table = imported_configuration->channel_configurations->at(i)->calibrator->GetCalibrationTable();
+            auto calibration_table =
+                imported_configuration->channel_configurations->at(i)->calibrator->GetCalibrationTable();
 
             zassert_equal(calibration_table->size(), 2);
             zassert_equal(calibration_table->at(0).voltage, 0.0F);
@@ -234,7 +240,10 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfigura
     zassert_str_equal(reason.data(), ExpectedSamplesReason(0).c_str());
 }
 
-ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfiguration_rejects_more_channels_than_the_device_tree) {
+ZTEST(
+    adc_configuration_manager,
+    test_AdcConfigurationManager_ApplyCborConfiguration_rejects_more_channels_than_the_device_tree
+) {
     auto fs_service = MakeFormattedFsService();
     auto adc_manager = MakeAdcManager();
 
@@ -266,7 +275,9 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_notifies_after_an_
     auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
 
     int notified = 0;
-    adc_configuration_manager->RegisterConfigurationUpdatedHandler([&notified] { notified++; });
+    adc_configuration_manager->RegisterConfigurationUpdatedHandler([&notified] {
+        notified++;
+    });
 
     auto adc_configuration = adc_configuration_manager_GetTestConfiguration();
     adc_configuration.samples = 10;
@@ -324,8 +335,8 @@ ZTEST(adc_configuration_manager, test_LoadOrCreateDefault_pads_a_stored_configur
     for(size_t i = 0; i < kFirstAdcChannels; i++) {
         ExpectSameCalibrator(
             *stored_configuration.channel_configurations->at(i)->calibrator,
-            *loaded_configuration->channel_configurations->at(i)->calibrator,
-            i);
+            *loaded_configuration->channel_configurations->at(i)->calibrator, i
+        );
     }
 
     auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());
@@ -346,7 +357,9 @@ ZTEST(adc_configuration_manager, test_Default_configuration_matches_the_device_t
 
     zassert_not_null(default_configuration.get());
     zassert_equal(default_configuration->samples, AdcDefaultConfiguration::SAMPLES);
-    zassert_equal(default_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount()));
+    zassert_equal(
+        default_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount())
+    );
     zassert_equal(default_configuration->channel_configurations->size(), kDtChannelCount);
 
     auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());

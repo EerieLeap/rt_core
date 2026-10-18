@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
-#include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
 #include "adc_calibrator.h"
+#include "utilities/voltage_interpolator/cubic_spline_voltage_interpolator.hpp"
+#include "utilities/voltage_interpolator/linear_voltage_interpolator.hpp"
 
 namespace eerie_leap::domain::adc_domain::utilities {
 
@@ -12,8 +12,10 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 AdcCalibrator::AdcCalibrator(
     InterpolationMethod interpolation_method,
     std::shared_ptr<std::pmr::vector<CalibrationData>> calibration_data,
-    AdcRange range)
-        : range_(range), calibration_data_(std::move(calibration_data)) {
+    AdcRange range
+) :
+    range_(range),
+    calibration_data_(std::move(calibration_data)) {
 
     if(calibration_data_ == nullptr)
         throw std::invalid_argument("Calibration data is missing or invalid.");
@@ -27,27 +29,26 @@ AdcCalibrator::AdcCalibrator(
     normalized_data->reserve(calibration_data_->size());
 
     for(const auto& point : *calibration_data_) {
-        normalized_data->push_back({
-            .voltage = range_.ToAdcVolts(point.value),
-            .value = point.voltage
-        });
+        normalized_data->push_back({ .voltage = range_.ToAdcVolts(point.value), .value = point.voltage });
     }
 
     // Both interpolators binary search their key, and a table ordered by its true voltages is
     // ordered by its readings only when the readings are monotonic.
     std::ranges::sort(*normalized_data, {}, &CalibrationData::voltage);
 
-    switch (interpolation_method) {
-    case InterpolationMethod::LINEAR:
-        calibrated_voltage_interpolator_ = std::make_unique<LinearVoltageInterpolator>(std::move(normalized_data));
-        break;
+    switch(interpolation_method) {
+        case InterpolationMethod::LINEAR:
+            calibrated_voltage_interpolator_ = std::make_unique<LinearVoltageInterpolator>(std::move(normalized_data));
+            break;
 
-    case InterpolationMethod::CUBIC_SPLINE:
-        calibrated_voltage_interpolator_ = std::make_unique<CubicSplineVoltageInterpolator>(std::move(normalized_data));
-        break;
+        case InterpolationMethod::CUBIC_SPLINE:
+            calibrated_voltage_interpolator_ = std::make_unique<CubicSplineVoltageInterpolator>(
+                std::move(normalized_data)
+            );
+            break;
 
-    default:
-        throw std::runtime_error("Interpolation method is not supported.");
+        default:
+            throw std::runtime_error("Interpolation method is not supported.");
     }
 }
 

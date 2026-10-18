@@ -1,63 +1,62 @@
 #pragma once
 
-#include <cstdint>
 #include <array>
-#include <span>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
-#include <functional>
 
-#include <zephyr/kernel.h>
-#include <zephyr/devicetree.h>
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
-#include <subsys/threading/thread.h>
 #include <subsys/threading/service_base.h>
+#include <subsys/threading/thread.h>
 
-#include "canbus_type.h"
+#include "can_filter.h"
 #include "can_frame.h"
 #include "can_id.h"
-#include "can_filter.h"
+#include "canbus_type.h"
 
 namespace eerie_leap::subsys::canbus {
 
 using eerie_leap::subsys::threading::IThread;
-using eerie_leap::subsys::threading::Thread;
 using eerie_leap::subsys::threading::ServiceBase;
 using eerie_leap::subsys::threading::ServiceState;
+using eerie_leap::subsys::threading::Thread;
 
-using CanFrameHandler = std::function<void (const CanFrame&)>;
+using CanFrameHandler = std::function<void(const CanFrame&)>;
 
 // The header is pulled in by domains that can be built without the subsystem.
 #ifndef CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE
-#define CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE 32
+    #define CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE 32
 #endif
 
 /** @brief Controller, bus type and bitrates of one CAN channel. */
 struct CanbusConfig {
-    const device *canbus_dev;
+    const device* canbus_dev;
     CanbusType type;
     uint32_t bitrate;      ///< Nominal bitrate; 0 detects it from bus activity.
     uint32_t data_bitrate; ///< CAN FD data phase bitrate; 0 when unused.
     /// Additional controller modes OR'ed into the base mode, e.g. CAN_MODE_LOOPBACK.
     can_mode_t extra_modes;
 
-    CanbusConfig(
-        const device *dev,
-        CanbusType t,
-        uint32_t br,
-        uint32_t data_br = 0,
-        can_mode_t extra = 0)
-        : canbus_dev(dev), type(t), bitrate(br), data_bitrate(data_br), extra_modes(extra) {}
+    CanbusConfig(const device* dev, CanbusType t, uint32_t br, uint32_t data_br = 0, can_mode_t extra = 0) :
+        canbus_dev(dev),
+        type(t),
+        bitrate(br),
+        data_bitrate(data_br),
+        extra_modes(extra) {}
 };
 
 class Canbus : public IThread, public ServiceBase<> {
 public:
-    using BitrateDetectedCallback = std::function<void (uint32_t bitrate)>;
+    using BitrateDetectedCallback = std::function<void(uint32_t bitrate)>;
 
     /** @name Handler registration results */
     ///@{
@@ -65,8 +64,8 @@ public:
     static constexpr int ERR_FILTER_REJECTED = -2;   ///< The driver has no free hardware filter.
     static constexpr int ERR_TOO_MANY_HANDLERS = -3; ///< MAX_HANDLERS_PER_FILTER reached.
     static constexpr int ERR_INVALID_ARGUMENT = -4;
-    static constexpr int ERR_FILTER_OVERLAP = -5;    ///< Another filter accepts some of the same identifiers.
-    static constexpr int ERR_TOO_MANY_FILTERS = -6;  ///< MAX_MASK_FILTERS reached.
+    static constexpr int ERR_FILTER_OVERLAP = -5;   ///< Another filter accepts some of the same identifiers.
+    static constexpr int ERR_TOO_MANY_FILTERS = -6; ///< MAX_MASK_FILTERS reached.
     ///@}
 
     /// Handlers that may share one filter.
@@ -126,14 +125,20 @@ private:
 
     // Ordered by most common first
     static constexpr std::array<uint32_t, 9> classical_can_supported_bitrates_ = {
-        500000, 1000000, 250000, 125000, 100000, 83333, 50000, 20000, 10000,
+        500000,
+        1000000,
+        250000,
+        125000,
+        100000,
+        83333,
+        50000,
+        20000,
+        10000,
     };
 
     // Ordered by most common first
-    static constexpr std::array<uint32_t, 13> canfd_supported_bitrates_ = {
-        500000, 1000000, 250000, 125000, 100000, 83333, 50000, 20000, 10000,
-        2000000, 4000000, 5000000, 8000000
-    };
+    static constexpr std::array<uint32_t, 13> canfd_supported_bitrates_ = { 500000, 1000000, 250000, 125000, 100000,
+        83333, 50000, 20000, 10000, 2000000, 4000000, 5000000, 8000000 };
 
     void ThreadEntry() override;
     void BitrateAutodetectTask();
@@ -166,9 +171,14 @@ private:
     static void SendFrameCallback(const device* dev, int error, void* user_data);
     bool SetTiming(uint32_t bitrate) const;
     bool SetDataTiming(uint32_t bitrate) const;
-    static void CanFrameReceivedCallback(const device *dev, can_frame *frame, void *user_data);
-    static void AutoDetectFrameCallback(const device *dev, can_frame *frame, void *user_data);
-    static void BusStateChangedCallback(const device *dev, can_state_change_callback *callback, can_state state, can_bus_err_cnt err_cnt);
+    static void CanFrameReceivedCallback(const device* dev, can_frame* frame, void* user_data);
+    static void AutoDetectFrameCallback(const device* dev, can_frame* frame, void* user_data);
+    static void BusStateChangedCallback(
+        const device* dev,
+        can_state_change_callback* callback,
+        can_state state,
+        can_bus_err_cnt err_cnt
+    );
     void PrintCanLimits() const;
     void PrintCanFdLimits() const;
 
@@ -213,14 +223,19 @@ public:
     int SendFrame(
         const CanId& frame_id,
         std::span<const uint8_t> frame_data,
-        k_timeout_t timeout = DEFAULT_SEND_TIMEOUT) const;
+        k_timeout_t timeout = DEFAULT_SEND_TIMEOUT
+    ) const;
     uint32_t GetDetectedBitrate() const;
-    bool IsBitrateDetected() const { return atomic_get(&bitrate_detected_) != 0; }
-    uint32_t GetRxDroppedCount() const { return static_cast<uint32_t>(atomic_get(&rx_dropped_)); }
+    bool IsBitrateDetected() const {
+        return atomic_get(&bitrate_detected_) != 0;
+    }
+    uint32_t GetRxDroppedCount() const {
+        return static_cast<uint32_t>(atomic_get(&rx_dropped_));
+    }
     void RegisterBitrateDetectedCallback(const BitrateDetectedCallback& callback);
 
     static bool IsBitrateSupported(CanbusType type, uint32_t bitrate);
     static uint32_t GetMaxDataLength(CanbusType type);
 };
 
-}  // namespace eerie_leap::subsys::canbus
+} // namespace eerie_leap::subsys::canbus

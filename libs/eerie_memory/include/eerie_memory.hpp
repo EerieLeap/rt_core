@@ -27,8 +27,8 @@ private:
     // size_t alignment_;
 
 public:
-    pmr_deleter(std::pmr::memory_resource* mr = std::pmr::get_default_resource())
-        : mr_(mr) {}
+    pmr_deleter(std::pmr::memory_resource* mr = std::pmr::get_default_resource()) :
+        mr_(mr) {}
 
     pmr_deleter(pmr_deleter const&) noexcept = default;
     pmr_deleter& operator=(pmr_deleter const&) noexcept = default;
@@ -37,13 +37,13 @@ public:
 
     template<class U>
         requires std::convertible_to<U*, T*>
-    pmr_deleter(const pmr_deleter<U>& other) noexcept
-        : mr_(other.get_memory_resource()) {}
+    pmr_deleter(const pmr_deleter<U>& other) noexcept :
+        mr_(other.get_memory_resource()) {}
 
     template<class U>
         requires std::convertible_to<U*, T*>
-    pmr_deleter(pmr_deleter<U>&& other) noexcept
-        : mr_(other.get_memory_resource()) {}
+    pmr_deleter(pmr_deleter<U>&& other) noexcept :
+        mr_(other.get_memory_resource()) {}
 
     void operator()(T* p) const noexcept {
         if(!p)
@@ -61,7 +61,6 @@ public:
     // Make all instantiations friends of each other
     template<class U>
     friend class pmr_deleter;
-
 
     // pmr_deleter(
     //     std::pmr::memory_resource* mr = std::pmr::get_default_resource(),
@@ -99,7 +98,7 @@ pmr_unique_ptr<T> make_unique_pmr(std::pmr::memory_resource* mr, Args&&... args)
     try {
         prm_allocator.construct(ptr, std::forward<Args>(args)...);
         return pmr_unique_ptr<T>(ptr, pmr_deleter<T>(mr));
-    } catch (...) {
+    } catch(...) {
         prm_allocator.deallocate(ptr, 1);
         throw;
     }

@@ -106,7 +106,7 @@ ZTEST(guid_generator, test_Guid_is_packed) {
 }
 
 ZTEST(guid_generator, test_AsUint64_matches_object_representation) {
-    Guid guid { .device_hash = 0x1234, .counter = 0x5678, .timestamp = 0x9ABCDEF0 };
+    Guid guid{ .device_hash = 0x1234, .counter = 0x5678, .timestamp = 0x9ABCDEF0 };
 
     uint64_t expected = 0;
     memcpy(&expected, &guid, sizeof(guid));
@@ -115,10 +115,10 @@ ZTEST(guid_generator, test_AsUint64_matches_object_representation) {
 }
 
 ZTEST(guid_generator, test_AsUint64_changes_with_every_field) {
-    Guid base { .device_hash = 1, .counter = 2, .timestamp = 3 };
-    Guid other_device { .device_hash = 9, .counter = 2, .timestamp = 3 };
-    Guid other_counter { .device_hash = 1, .counter = 9, .timestamp = 3 };
-    Guid other_timestamp { .device_hash = 1, .counter = 2, .timestamp = 9 };
+    Guid base{ .device_hash = 1, .counter = 2, .timestamp = 3 };
+    Guid other_device{ .device_hash = 9, .counter = 2, .timestamp = 3 };
+    Guid other_counter{ .device_hash = 1, .counter = 9, .timestamp = 3 };
+    Guid other_timestamp{ .device_hash = 1, .counter = 2, .timestamp = 9 };
 
     zassert_not_equal(base.AsUint64(), other_device.AsUint64());
     zassert_not_equal(base.AsUint64(), other_counter.AsUint64());

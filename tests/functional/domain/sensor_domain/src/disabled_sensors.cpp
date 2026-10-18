@@ -8,17 +8,17 @@
 #include <string_view>
 #include <vector>
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
-#include "utilities/string/string_helpers.h"
 #include "domain/sensor_domain/models/reading_source.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/sensor_reading_update_method.h"
-#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 #include "domain/sensor_domain/processors/expression_processor.h"
 #include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "utilities/string/string_helpers.h"
 
 #include "processing_test_support.h"
 
@@ -58,7 +58,8 @@ struct Fixture {
 };
 
 // Enabled, they would get an interpolator, GPIO edges, or an expression bound to input.
-constexpr std::array<std::string_view, 4> kDisabledIds = { "analog", "indicator", "disabled_dependent", "disabled_polled" };
+constexpr std::array<std::string_view, 4> kDisabledIds = { "analog", "indicator", "disabled_dependent",
+    "disabled_polled" };
 
 // input (polled) -> dependent, next to the disabled sensors.
 Fixture MakeFixture() {
@@ -77,8 +78,8 @@ Fixture MakeFixture() {
 
     Fixture fixture;
     fixture.frame = std::make_shared<SensorReadingsFrame>();
-    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame)
+                             .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
     return fixture;
 }
@@ -162,7 +163,8 @@ ZTEST(disabled_sensors, test_a_disabled_sensor_never_gets_a_reading_while_the_ot
     auto adc_manager = MakeAdcManager(adc);
     auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
     zassert_true(adc_configuration_manager->Update(
-        *MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, MakeCalibrator({ {0.0F, 0.0F}, {5.0F, 5.0F} }))));
+        *MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } }))
+    ));
 
     // A disabled sensor may read an enabled one.
     const std::vector<std::shared_ptr<Sensor>> disabled = {
@@ -170,12 +172,16 @@ ZTEST(disabled_sensors, test_a_disabled_sensor_never_gets_a_reading_while_the_ot
         Disabled(MakeVirtualSensor("disabled_virtual", "enabled_virtual + 1", 20)),
     };
 
-    auto rig = MakeProcessingRig(fs_service, adc_manager, adc_configuration_manager, {
-        disabled[0],
-        MakeAnalogSensor("enabled_analog", 1, 20),
-        MakeVirtualSensor("enabled_virtual", "40 + 2", 20),
-        disabled[1],
-    }, adc_manager->GetChannelCount());
+    auto rig = MakeProcessingRig(
+        fs_service, adc_manager, adc_configuration_manager,
+        {
+            disabled[0],
+            MakeAnalogSensor("enabled_analog", 1, 20),
+            MakeVirtualSensor("enabled_virtual", "40 + 2", 20),
+            disabled[1],
+        },
+        adc_manager->GetChannelCount()
+    );
 
     const int requests_before = adc->requests;
 

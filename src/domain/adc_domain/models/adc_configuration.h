@@ -14,4 +14,4 @@ struct AdcConfiguration {
     std::shared_ptr<std::vector<std::shared_ptr<AdcChannelConfiguration>>> channel_configurations = nullptr;
 };
 
-}  // namespace eerie_leap::domain::adc_domain::models
+} // namespace eerie_leap::domain::adc_domain::models

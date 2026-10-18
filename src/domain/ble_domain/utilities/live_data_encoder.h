@@ -19,14 +19,16 @@ public:
     static constexpr size_t ENTRY_SIZE = 5;
     static constexpr size_t MAX_VALUES = UINT8_MAX;
 
-    static constexpr size_t GetMaxSize(size_t value_count) { return HEADER_SIZE + value_count * ENTRY_SIZE; }
+    static constexpr size_t GetMaxSize(size_t value_count) {
+        return HEADER_SIZE + value_count * ENTRY_SIZE;
+    }
 
     /**
      * @param out At least GetMaxSize(values.size()) bytes.
      * @return The encoded size; 0 if @p out is too small or there are more than MAX_VALUES values.
      */
-    static size_t Encode(
-        uint8_t sequence, uint32_t time_ms, std::span<const std::optional<float>> values, std::span<uint8_t> out);
+    static size_t
+    Encode(uint8_t sequence, uint32_t time_ms, std::span<const std::optional<float>> values, std::span<uint8_t> out);
 };
 
 } // namespace eerie_leap::domain::ble_domain::utilities

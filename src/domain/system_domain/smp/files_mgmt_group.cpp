@@ -28,15 +28,16 @@ constexpr size_t ENTRY_OVERHEAD = 32;
 } // namespace
 
 const mgmt_handler FilesMgmtGroup::HANDLERS[] = {
-    {.mh_read = Dispatch<&FilesMgmtGroup::HandleList>, .mh_write = nullptr},
+    { .mh_read = Dispatch<&FilesMgmtGroup::HandleList>, .mh_write = nullptr },
 };
 
 FilesMgmtGroup::FilesMgmtGroup(
     std::shared_ptr<const IFsService> sd_fs_service,
-    std::shared_ptr<WorkQueueThread> config_work_queue_thread)
-        : SmpGroup(SmpGroupId::FILES, HANDLERS, TranslateError),
-        sd_fs_service_(std::move(sd_fs_service)),
-        work_queue_thread_(std::move(config_work_queue_thread)) {
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread
+) :
+    SmpGroup(SmpGroupId::FILES, HANDLERS, TranslateError),
+    sd_fs_service_(std::move(sd_fs_service)),
+    work_queue_thread_(std::move(config_work_queue_thread)) {
 
     k_sem_init(&job_done_, 0, 1);
 }
@@ -54,7 +55,11 @@ bool FilesMgmtGroup::Initialize() {
 
     try {
         job_task_ = work_queue_thread_->CreateTask(
-            [](FilesMgmtGroup* group) { return group->ProcessJob(); }, this);
+            [](FilesMgmtGroup* group) {
+                return group->ProcessJob();
+            },
+            this
+        );
     } catch(const std::exception& e) {
         LOG_ERR("Failed to create the files group task: %s", e.what());
         job_task_.reset();
@@ -97,9 +102,12 @@ int FilesMgmtGroup::HandleList(smp_streamer* ctxt) {
     }
 
     zcbor_state_t* zse = ctxt->writer->zs;
-    bool ok = zcbor_tstr_put_lit(zse, "total") && zcbor_uint32_put(zse, static_cast<uint32_t>(count_))
-        && zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, offset)
-        && zcbor_tstr_put_lit(zse, "entries") && zcbor_list_start_encode(zse, page_.size());
+    bool ok = zcbor_tstr_put_lit(zse, "total")
+        && zcbor_uint32_put(zse, static_cast<uint32_t>(count_))
+        && zcbor_tstr_put_lit(zse, "off")
+        && zcbor_uint32_put(zse, offset)
+        && zcbor_tstr_put_lit(zse, "entries")
+        && zcbor_list_start_encode(zse, page_.size());
 
     size_t listed = 0;
     for(const auto& entry : page_) {
@@ -108,9 +116,12 @@ int FilesMgmtGroup::HandleList(smp_streamer* ctxt) {
 
         const auto size = static_cast<uint32_t>(std::min<size_t>(entry.size, UINT32_MAX));
         ok = zcbor_map_start_encode(zse, 3)
-            && zcbor_tstr_put_lit(zse, "name") && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
-            && zcbor_tstr_put_lit(zse, "size") && zcbor_uint32_put(zse, size)
-            && zcbor_tstr_put_lit(zse, "type") && zcbor_uint32_put(zse, entry.is_directory ? 1 : 0)
+            && zcbor_tstr_put_lit(zse, "name")
+            && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
+            && zcbor_tstr_put_lit(zse, "size")
+            && zcbor_uint32_put(zse, size)
+            && zcbor_tstr_put_lit(zse, "type")
+            && zcbor_uint32_put(zse, entry.is_directory ? 1 : 0)
             && zcbor_map_end_encode(zse, 3);
         listed++;
     }
@@ -146,8 +157,9 @@ void FilesMgmtGroup::ReleasePage() {
 
 WorkQueueTaskResult FilesMgmtGroup::ProcessJob() {
     try {
-        job_result_ = ToError(sd_fs_service_->ListDirectory(
-            job_directory_, job_offset_, MAX_PAGE_ENTRIES, page_, count_));
+        job_result_ = ToError(
+            sd_fs_service_->ListDirectory(job_directory_, job_offset_, MAX_PAGE_ENTRIES, page_, count_)
+        );
     } catch(const std::bad_alloc&) {
         job_result_ = Error::NO_MEMORY;
     } catch(const std::exception& e) {

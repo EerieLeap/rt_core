@@ -74,7 +74,9 @@ public:
         k_sem_init(&pause_release, 0, 1);
     }
 
-    [[nodiscard]] bool IsPausable() const noexcept override { return true; }
+    [[nodiscard]] bool IsPausable() const noexcept override {
+        return true;
+    }
 };
 
 constexpr int kTransitionThreadPriority = 5;
@@ -107,16 +109,20 @@ ZTEST(service_base, test_a_transition_waits_for_one_in_progress_on_another_threa
     BlockingPauseService service;
     zassert_true(service.Start());
 
-    Transition pause { .service = &service, .result = false };
+    Transition pause{ .service = &service, .result = false };
     k_thread pausing;
-    k_thread_create(&pausing, pausing_stack, K_THREAD_STACK_SIZEOF(pausing_stack),
-        PauseFromAnotherThread, &pause, nullptr, nullptr, kTransitionThreadPriority, 0, K_NO_WAIT);
+    k_thread_create(
+        &pausing, pausing_stack, K_THREAD_STACK_SIZEOF(pausing_stack), PauseFromAnotherThread, &pause, nullptr, nullptr,
+        kTransitionThreadPriority, 0, K_NO_WAIT
+    );
     zassert_ok(k_sem_take(&service.pause_entered, K_SECONDS(1)));
 
-    Transition stop { .service = &service, .result = false };
+    Transition stop{ .service = &service, .result = false };
     k_thread stopping;
-    k_thread_create(&stopping, stopping_stack, K_THREAD_STACK_SIZEOF(stopping_stack),
-        StopFromAnotherThread, &stop, nullptr, nullptr, kTransitionThreadPriority, 0, K_NO_WAIT);
+    k_thread_create(
+        &stopping, stopping_stack, K_THREAD_STACK_SIZEOF(stopping_stack), StopFromAnotherThread, &stop, nullptr,
+        nullptr, kTransitionThreadPriority, 0, K_NO_WAIT
+    );
     k_msleep(50);
 
     // Taken before the release and asserted after the joins, so a failure leaves no thread behind.

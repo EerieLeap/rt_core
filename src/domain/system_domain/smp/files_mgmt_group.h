@@ -9,19 +9,19 @@
 
 #include <zephyr/kernel.h>
 
-#include "subsys/smp/smp_group.h"
 #include "subsys/fs/services/i_fs_service.h"
-#include "subsys/threading/work_queue_thread.h"
+#include "subsys/smp/smp_group.h"
 #include "subsys/threading/work_queue_task.h"
+#include "subsys/threading/work_queue_thread.h"
 
 namespace eerie_leap::domain::system_domain::smp {
 
-using eerie_leap::subsys::smp::SmpGroup;
 using eerie_leap::subsys::fs::services::DirectoryEntry;
 using eerie_leap::subsys::fs::services::IFsService;
-using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::subsys::smp::SmpGroup;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 /**
  * @brief SMP `files` group: lists a directory of the SD card, so a client can pick a script.
@@ -95,7 +95,8 @@ public:
      */
     FilesMgmtGroup(
         std::shared_ptr<const IFsService> sd_fs_service,
-        std::shared_ptr<WorkQueueThread> config_work_queue_thread);
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread
+    );
     ~FilesMgmtGroup();
 
     /** @brief Creates the work queue task; needs a running work queue. Call before Register(). */

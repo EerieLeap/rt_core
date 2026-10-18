@@ -69,8 +69,7 @@ ZTEST_F(smp_can_transport, test_lost_frame_drops_the_request) {
 
     harness.SendPacket(FIRST_PEER, MakeEchoRequest(text, 4));
 
-    zassert_true(IsEchoResponse(harness.peers.WaitPacket(FIRST_PEER), text, 4),
-        "The retried request must succeed");
+    zassert_true(IsEchoResponse(harness.peers.WaitPacket(FIRST_PEER), text, 4), "The retried request must succeed");
 }
 
 ZTEST_F(smp_can_transport, test_interleaved_sources_are_reassembled_separately) {
@@ -152,7 +151,7 @@ ZTEST_F(smp_can_transport, test_forwarded_request_and_its_response) {
     zassert_true(received.has_value());
     zassert_true(*received == request, "The target receives the packet unchanged");
 
-    const Bytes response = MakePacket(SmpOperation::WRITE_RESPONSE, 0, 0, 14, {0xA1, 0x61, 'r', 0x61, 'x'});
+    const Bytes response = MakePacket(SmpOperation::WRITE_RESPONSE, 0, 0, 14, { 0xA1, 0x61, 'r', 0x61, 'x' });
     harness.SendPacket(FIRST_PEER + 3, response);
 
     auto delivered = sink->Wait();
@@ -165,7 +164,7 @@ ZTEST_F(smp_can_transport, test_response_without_a_sink_is_dropped) {
     Harness& harness = *fixture->harness;
     const uint32_t dropped_before = harness.transport->GetRxDroppedCount();
 
-    harness.SendPacket(FIRST_PEER, MakePacket(SmpOperation::READ_RESPONSE, 0, 0, 1, {0xA0}));
+    harness.SendPacket(FIRST_PEER, MakePacket(SmpOperation::READ_RESPONSE, 0, 0, 1, { 0xA0 }));
     k_msleep(50);
 
     zassert_equal(harness.transport->GetRxDroppedCount(), dropped_before + 1);
@@ -177,10 +176,10 @@ ZTEST_F(smp_can_transport, test_paced_rate_stays_within_the_share) {
     const Bytes packet = MakePacket(SmpOperation::WRITE, 64, 0, 15, body);
     const size_t frame_count = SmpCanFramer::GetFrameCount(packet.size());
 
-    const uint32_t frames_per_second = SmpCanPacer(
-        harness.format.GetFrameTimeNs(BITRATE), BUS_SHARE_PERCENT, 1).GetFramesPerSecond();
-    const int64_t minimum_ms =
-        static_cast<int64_t>(frame_count - CONFIG_EERIE_LEAP_SMP_CAN_TX_BURST_FRAMES) * 1000 / frames_per_second;
+    const uint32_t frames_per_second =
+        SmpCanPacer(harness.format.GetFrameTimeNs(BITRATE), BUS_SHARE_PERCENT, 1).GetFramesPerSecond();
+    const int64_t minimum_ms = static_cast<int64_t>(frame_count - CONFIG_EERIE_LEAP_SMP_CAN_TX_BURST_FRAMES) * 1000
+        / frames_per_second;
 
     const int64_t start_ms = k_uptime_get();
     zassert_true(harness.transport->Forward(FIRST_PEER, ToSmpPacket(packet)));
@@ -193,9 +192,10 @@ ZTEST_F(smp_can_transport, test_paced_rate_stays_within_the_share) {
     // One tick of slack for the uptime granularity.
     const int64_t elapsed_ms = harness.peers.GetLastFrameMs() - start_ms;
     const int64_t tick_ms = 1000 / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
-    zassert_true(elapsed_ms + tick_ms >= minimum_ms,
-        "%zu frames took %lld ms, the share allows no less than %lld ms",
-        frame_count, static_cast<long long>(elapsed_ms), static_cast<long long>(minimum_ms));
+    zassert_true(
+        elapsed_ms + tick_ms >= minimum_ms, "%zu frames took %lld ms, the share allows no less than %lld ms",
+        frame_count, static_cast<long long>(elapsed_ms), static_cast<long long>(minimum_ms)
+    );
 }
 
 ZTEST_F(smp_can_transport, test_unbound_transport_ignores_requests) {

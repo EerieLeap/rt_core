@@ -7,10 +7,10 @@
 
 #include "subsys/canbus/can_frame.h"
 
-#include "sensor.h"
+#include "reading_error.h"
 #include "reading_source.h"
 #include "reading_status.h"
-#include "reading_error.h"
+#include "sensor.h"
 
 namespace eerie_leap::domain::sensor_domain::models {
 
@@ -27,8 +27,8 @@ struct SensorReading {
     uint32_t sensor_id_hash = 0;
 
     std::optional<float> value;
-    std::optional<float> raw_value;   ///< The value before the expression was applied.
-    std::optional<float> voltage;     ///< Calibrated ADC voltage, PHYSICAL_ANALOG only.
+    std::optional<float> raw_value; ///< The value before the expression was applied.
+    std::optional<float> voltage;   ///< Calibrated ADC voltage, PHYSICAL_ANALOG only.
     std::optional<std::chrono::system_clock::time_point> timestamp;
 
     ReadingSource source = ReadingSource::NONE;
@@ -42,10 +42,13 @@ struct SensorReading {
 
     SensorReading() = default;
 
-    explicit SensorReading(const Sensor* sensor)
-        : sensor(sensor), sensor_id_hash(sensor != nullptr ? sensor->id_hash : 0) {}
+    explicit SensorReading(const Sensor* sensor) :
+        sensor(sensor),
+        sensor_id_hash(sensor != nullptr ? sensor->id_hash : 0) {}
 
-    [[nodiscard]] bool HasError() const { return status == ReadingStatus::ERROR; }
+    [[nodiscard]] bool HasError() const {
+        return status == ReadingStatus::ERROR;
+    }
 
     void SetError(ReadingError reading_error) {
         status = ReadingStatus::ERROR;
@@ -53,6 +56,9 @@ struct SensorReading {
     }
 };
 
-static_assert(std::is_trivially_copyable_v<SensorReading>, "Readings are copied on every sample and must not allocate.");
+static_assert(
+    std::is_trivially_copyable_v<SensorReading>,
+    "Readings are copied on every sample and must not allocate."
+);
 
 } // namespace eerie_leap::domain::sensor_domain::models

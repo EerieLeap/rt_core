@@ -13,6 +13,6 @@ enum class ReadingStatus : uint8_t {
     ERROR,
 };
 
-}
+} // namespace eerie_leap::domain::sensor_domain::models
 
 // namespace eerie_leap::domain::sensor_domain::models

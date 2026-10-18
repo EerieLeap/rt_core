@@ -18,8 +18,7 @@ using eerie_leap::subsys::time::RtcProvider;
 using eerie_leap::subsys::time::TimeService;
 
 inline std::shared_ptr<TimeService> MakeTimeService() {
-    return std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+    return std::make_shared<TimeService>(std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
 }
 
 // Stands in for the processing service: running, pausable and resumable unless told otherwise,
@@ -36,9 +35,17 @@ public:
     int pauses = 0;
     int resumes = 0;
 
-    bool Initialize() override { return true; }
-    bool Start() override { state_ = ServiceState::RUNNING; return true; }
-    bool Stop() override { state_ = ServiceState::STOPPED; return true; }
+    bool Initialize() override {
+        return true;
+    }
+    bool Start() override {
+        state_ = ServiceState::RUNNING;
+        return true;
+    }
+    bool Stop() override {
+        state_ = ServiceState::STOPPED;
+        return true;
+    }
 
     bool Pause() override {
         pauses++;
@@ -64,8 +71,12 @@ public:
         return true;
     }
 
-    [[nodiscard]] bool IsPausable() const noexcept override { return true; }
-    [[nodiscard]] ServiceState GetState() const noexcept override { return state_; }
+    [[nodiscard]] bool IsPausable() const noexcept override {
+        return true;
+    }
+    [[nodiscard]] ServiceState GetState() const noexcept override {
+        return state_;
+    }
 };
 
 } // namespace calibration_test_support

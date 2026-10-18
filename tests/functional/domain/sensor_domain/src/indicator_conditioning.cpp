@@ -19,13 +19,10 @@
 #include <string_view>
 #include <vector>
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "utilities/string/string_helpers.h"
-#include "subsys/threading/scoped_mutex.h"
 #include "domain/sensor_domain/models/indicator_input_mode.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
@@ -36,27 +33,30 @@
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/gpio/i_gpio.h"
+#include "subsys/threading/scoped_mutex.h"
+#include "utilities/memory/memory_resource_manager.h"
+#include "utilities/string/string_helpers.h"
 
 #include "processing_test_support.h"
 
 #ifdef CONFIG_BOARD_NATIVE_SIM
-#include <zephyr/device.h>
-#include <zephyr/devicetree.h>
-#include <zephyr/drivers/can.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/gpio/gpio_emul.h>
-#include <zephyr/sys/atomic.h>
+    #include <zephyr/device.h>
+    #include <zephyr/devicetree.h>
+    #include <zephyr/drivers/can.h>
+    #include <zephyr/drivers/gpio.h>
+    #include <zephyr/drivers/gpio/gpio_emul.h>
+    #include <zephyr/sys/atomic.h>
 
-#include "subsys/canbus/can_id.h"
-#include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/gpio/gpio.h"
-#include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
-#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
-#include "domain/canbus_domain/models/canbus_configuration.h"
-#include "domain/canbus_domain/models/can_channel_configuration.h"
-#include "domain/canbus_domain/models/can_message_configuration.h"
-#include "domain/canbus_domain/services/canbus_service.h"
-#include "domain/sensor_domain/models/sources/canbus_source.h"
+    #include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
+    #include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
+    #include "domain/canbus_domain/models/can_channel_configuration.h"
+    #include "domain/canbus_domain/models/can_message_configuration.h"
+    #include "domain/canbus_domain/models/canbus_configuration.h"
+    #include "domain/canbus_domain/services/canbus_service.h"
+    #include "domain/sensor_domain/models/sources/canbus_source.h"
+    #include "subsys/canbus/can_id.h"
+    #include "subsys/canbus/canbus_proxy.hpp"
+    #include "subsys/gpio/gpio.h"
 #endif
 
 using namespace eerie_memory;
@@ -79,7 +79,8 @@ std::shared_ptr<Sensor> MakeIndicator(
     int channel,
     uint32_t debounce_ms = 0,
     IndicatorInputMode input_mode = IndicatorInputMode::Level,
-    std::optional<int> sampling_rate_ms = std::nullopt) {
+    std::optional<int> sampling_rate_ms = std::nullopt
+) {
 
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = SensorType::PHYSICAL_INDICATOR;
@@ -96,7 +97,8 @@ std::shared_ptr<Sensor> MakeDerivedIndicator(
     std::string_view id,
     std::string_view expression,
     uint32_t debounce_ms = 0,
-    IndicatorInputMode input_mode = IndicatorInputMode::Level) {
+    IndicatorInputMode input_mode = IndicatorInputMode::Level
+) {
 
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = SensorType::VIRTUAL_INDICATOR;
@@ -122,18 +124,23 @@ struct Built {
     std::shared_ptr<SensorReadingsFrame> frame;
     std::shared_ptr<SensorGeneration> generation;
 
-    const SensorGeneration& operator*() const { return *generation; }
-    const SensorGeneration* operator->() const { return generation.get(); }
+    const SensorGeneration& operator*() const {
+        return *generation;
+    }
+    const SensorGeneration* operator->() const {
+        return generation.get();
+    }
 };
 
 Built Build(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
-    std::span<const IndicatorSwitchState> switch_states = {}) {
+    std::span<const IndicatorSwitchState> switch_states = {}
+) {
 
     Built built;
     built.frame = std::make_shared<SensorReadingsFrame>();
-    built.generation = SensorPipelineBuilder(nullptr, built.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors), switch_states);
+    built.generation = SensorPipelineBuilder(nullptr, built.frame)
+                           .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors), switch_states);
 
     return built;
 }
@@ -150,8 +157,7 @@ const IndicatorConditioner* ConditionerOf(const SensorGeneration& generation, st
 }
 
 IndicatorSwitchState SwitchState(std::string_view id, SensorType type, uint32_t debounce_ms, bool is_on) {
-    return {
-        .sensor_id_hash = StringHelpers::GetHash(id),
+    return { .sensor_id_hash = StringHelpers::GetHash(id),
         .type = type,
         .debounce_ms = debounce_ms,
         .input_mode = IndicatorInputMode::Toggle,
@@ -188,8 +194,8 @@ struct HandPipeline {
 HandPipeline MakeHandPipeline(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     HandPipeline hand;
     hand.frame = std::make_shared<SensorReadingsFrame>();
-    hand.generation = SensorPipelineBuilder(nullptr, hand.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    hand.generation = SensorPipelineBuilder(nullptr, hand.frame)
+                          .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
     auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(hand.frame));
@@ -214,12 +220,22 @@ private:
 public:
     bool is_refusing = false;
 
-    int Initialize() override { return 0; }
-    bool ReadChannel(int channel) override { ARG_UNUSED(channel); return false; }
-    int GetChannelCount() override { return 4; }
+    int Initialize() override {
+        return 0;
+    }
+    bool ReadChannel(int channel) override {
+        ARG_UNUSED(channel);
+        return false;
+    }
+    int GetChannelCount() override {
+        return 4;
+    }
 
     int RegisterChannelChangedHandler(
-        int channel, eerie_leap::subsys::gpio::GpioEdge edge, eerie_leap::subsys::gpio::GpioChannelHandler handler) override {
+        int channel,
+        eerie_leap::subsys::gpio::GpioEdge edge,
+        eerie_leap::subsys::gpio::GpioChannelHandler handler
+    ) override {
 
         ARG_UNUSED(edge);
 
@@ -235,7 +251,8 @@ public:
         ARG_UNUSED(channel);
 
         std::erase_if(registrations_, [handler_id](const Registration& registration) {
-            return registration.handler_id == handler_id; });
+            return registration.handler_id == handler_id;
+        });
 
         return true;
     }
@@ -298,7 +315,7 @@ ZTEST(indicator_conditioning, test_only_an_indicator_with_conditioning_gets_a_co
 }
 
 ZTEST(indicator_conditioning, test_a_switch_takes_over_its_state_only_when_id_type_and_conditioning_are_unchanged) {
-    const std::vector<IndicatorSwitchState> switch_states {
+    const std::vector<IndicatorSwitchState> switch_states{
         SwitchState("take_same", SensorType::PHYSICAL_INDICATOR, 30, true),
         SwitchState("take_debounce", SensorType::PHYSICAL_INDICATOR, 40, true),
         SwitchState("take_type", SensorType::PHYSICAL_INDICATOR, 30, true),
@@ -306,7 +323,7 @@ ZTEST(indicator_conditioning, test_a_switch_takes_over_its_state_only_when_id_ty
         SwitchState("take_off", SensorType::PHYSICAL_INDICATOR, 30, false),
     };
 
-    const std::vector<std::shared_ptr<Sensor>> sensors {
+    const std::vector<std::shared_ptr<Sensor>> sensors{
         MakeIndicator("take_same", 0, 30, IndicatorInputMode::Toggle),
         MakeIndicator("take_debounce", 1, 30, IndicatorInputMode::Toggle),
         MakeDerivedIndicator("take_type", "take_same", 30, IndicatorInputMode::Toggle),
@@ -328,16 +345,19 @@ ZTEST(indicator_conditioning, test_a_switch_takes_over_its_state_only_when_id_ty
 }
 
 ZTEST(indicator_conditioning, test_GetSwitchStates_lists_every_switch_with_its_conditioning) {
-    const std::vector<IndicatorSwitchState> switch_states {
+    const std::vector<IndicatorSwitchState> switch_states{
         SwitchState("list_on", SensorType::VIRTUAL_INDICATOR, 0, true),
     };
 
-    const auto generation = Build({
-        MakeIndicator("list_plain", 0),
-        MakeDerivedIndicator("list_on", "list_plain", 0, IndicatorInputMode::Toggle),
-        MakeIndicator("list_level", 1, 30),
-        MakeIndicator("list_off", 2, 20, IndicatorInputMode::Toggle),
-    }, switch_states);
+    const auto generation = Build(
+        {
+            MakeIndicator("list_plain", 0),
+            MakeDerivedIndicator("list_on", "list_plain", 0, IndicatorInputMode::Toggle),
+            MakeIndicator("list_level", 1, 30),
+            MakeIndicator("list_off", 2, 20, IndicatorInputMode::Toggle),
+        },
+        switch_states
+    );
 
     const auto states = generation->GetSwitchStates();
     zassert_equal(states.size(), 2, "%zu states", states.size());
@@ -359,16 +379,19 @@ ZTEST(indicator_conditioning, test_GetSwitchStates_lists_every_switch_with_its_c
 // it unchanged, and the first value sets the input without a flip. The dependent sees the switch,
 // raw_value the input.
 ZTEST(indicator_conditioning, test_a_toggle_driven_by_hand_flips_on_each_press) {
-    auto hand = MakeHandPipeline({
-        MakeIndicator("hand_toggle", 0, 0, IndicatorInputMode::Toggle),
-        MakeProbe("hand_probe", "hand_toggle"),
-    });
+    auto hand = MakeHandPipeline(
+        {
+            MakeIndicator("hand_toggle", 0, 0, IndicatorInputMode::Toggle),
+            MakeProbe("hand_probe", "hand_toggle"),
+        }
+    );
 
     hand.Feed("hand_toggle", 1.0F);
     zassert_equal(hand.Value("hand_toggle"), 0.0F, "A button held at the first reading is no press");
     zassert_equal(hand.frame->TryGetReading("hand_toggle")->raw_value.value(), 1.0F);
 
-    const float expected[][2] = { {0.0F, 0.0F}, {1.0F, 1.0F}, {0.0F, 1.0F}, {1.0F, 0.0F}, {0.0F, 0.0F}, {1.0F, 1.0F} };
+    const float expected[][2] = { { 0.0F, 0.0F }, { 1.0F, 1.0F }, { 0.0F, 1.0F }, { 1.0F, 0.0F }, { 0.0F, 0.0F },
+        { 1.0F, 1.0F } };
     for(const auto& [input, value] : expected) {
         hand.Feed("hand_toggle", input);
 
@@ -383,17 +406,21 @@ ZTEST(indicator_conditioning, test_a_toggle_driven_by_hand_flips_on_each_press) 
 ZTEST(indicator_conditioning, test_without_a_work_queue_a_held_change_settles_on_a_later_reading) {
     constexpr int kDebounceMs = 500;
 
-    auto hand = MakeHandPipeline({
-        MakeIndicator("hand_level", 0, kDebounceMs),
-        MakeProbe("hand_level_probe", "hand_level"),
-    });
+    auto hand = MakeHandPipeline(
+        {
+            MakeIndicator("hand_level", 0, kDebounceMs),
+            MakeProbe("hand_level_probe", "hand_level"),
+        }
+    );
 
     hand.Feed("hand_level", 0.0F);
     zassert_equal(hand.Value("hand_level"), 0.0F);
 
     hand.Feed("hand_level", 1.0F);
     zassert_equal(hand.Value("hand_level"), 0.0F, "Held");
-    zassert_equal(hand.frame->TryGetReading("hand_level")->raw_value.value(), 0.0F, "A held reading is not committed at all");
+    zassert_equal(
+        hand.frame->TryGetReading("hand_level")->raw_value.value(), 0.0F, "A held reading is not committed at all"
+    );
 
     hand.Feed("hand_level", 0.0F);
     k_msleep(kDebounceMs + 100);
@@ -412,22 +439,34 @@ ZTEST(indicator_conditioning, test_without_a_work_queue_a_held_change_settles_on
 // with another debounce that would start the switch off, takes nothing from them.
 ZTEST(indicator_conditioning, test_a_failed_start_keeps_the_switches_of_the_last_generation_that_ran) {
     auto gpio = std::make_shared<HandGpio>();
-    const std::vector<std::shared_ptr<Sensor>> sensors { MakeIndicator("failed_start", 0, 0, IndicatorInputMode::Toggle) };
+    const std::vector<std::shared_ptr<Sensor>> sensors{
+        MakeIndicator("failed_start", 0, 0, IndicatorInputMode::Toggle)
+    };
 
     auto rig = MakeProcessingRig(MakeFormattedFsService(), nullptr, nullptr, sensors, 0, gpio);
     zassert_true(rig.processing_service->Start());
 
     // The level at start goes first, or the press would coalesce with it and be taken as that level.
-    zassert_true(WaitFor([&rig] {
-        const auto reading = rig.frame->TryGetReading("failed_start");
-        return reading.has_value() && reading->raw_value.has_value();
-    }), "Seeded");
+    zassert_true(
+        WaitFor([&rig] {
+            const auto reading = rig.frame->TryGetReading("failed_start");
+            return reading.has_value() && reading->raw_value.has_value();
+        }),
+        "Seeded"
+    );
 
     gpio->SetInput(0, true);
-    zassert_true(WaitFor([&rig] { return rig.frame->TryGetReadingValue("failed_start") == 1.0F; }), "Switched on");
+    zassert_true(
+        WaitFor([&rig] {
+            return rig.frame->TryGetReadingValue("failed_start") == 1.0F;
+        }),
+        "Switched on"
+    );
     gpio->SetInput(0, false);
 
-    zassert_true(rig.sensors_configuration_manager->Update({ MakeIndicator("failed_start", 0, 30, IndicatorInputMode::Toggle) }));
+    zassert_true(
+        rig.sensors_configuration_manager->Update({ MakeIndicator("failed_start", 0, 30, IndicatorInputMode::Toggle) })
+    );
     zassert_true(rig.processing_service->Stop());
 
     gpio->is_refusing = true;
@@ -456,7 +495,7 @@ namespace {
 // The emulated controller of native_sim; led0 holds its pin 0.
 const device* const kGpioPort = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 constexpr gpio_pin_t kFirstPin = 4;
-constexpr int kChannelCount = 28;   // Pins 4 to 31.
+constexpr int kChannelCount = 28; // Pins 4 to 31.
 
 // One channel per sensor and case: a case that fails ends without its destructors, so its readers
 // stay attached to the channels it drove.
@@ -492,10 +531,9 @@ std::shared_ptr<eerie_leap::subsys::gpio::Gpio> TestGpio() {
     static const auto gpio = [] {
         std::vector<gpio_dt_spec> gpio_specs;
         for(int i = 0; i < kChannelCount; i++) {
-            gpio_specs.push_back({
-                .port = kGpioPort,
-                .pin = static_cast<gpio_pin_t>(kFirstPin + i),
-                .dt_flags = GPIO_ACTIVE_HIGH });
+            gpio_specs.push_back(
+                { .port = kGpioPort, .pin = static_cast<gpio_pin_t>(kFirstPin + i), .dt_flags = GPIO_ACTIVE_HIGH }
+            );
         }
 
         auto gpio = std::make_shared<eerie_leap::subsys::gpio::Gpio>(std::move(gpio_specs));
@@ -573,8 +611,9 @@ public:
     }
 
     [[nodiscard]] size_t CountOf(std::string_view sensor_id, float value) const {
-        return static_cast<size_t>(
-            std::ranges::count_if(Of(sensor_id), [value](const Record& record) { return record.value == value; }));
+        return static_cast<size_t>(std::ranges::count_if(Of(sensor_id), [value](const Record& record) {
+            return record.value == value;
+        }));
     }
 };
 
@@ -601,7 +640,8 @@ struct Clock {
 
     [[nodiscard]] int64_t Ms(int offset_ms) const {
         return static_cast<int64_t>(k_ticks_to_ms_floor64(
-            static_cast<uint64_t>(start_ticks + static_cast<int64_t>(k_ms_to_ticks_ceil64(offset_ms)))));
+            static_cast<uint64_t>(start_ticks + static_cast<int64_t>(k_ms_to_ticks_ceil64(offset_ms)))
+        ));
     }
 };
 
@@ -630,7 +670,8 @@ struct ConditioningRig {
 ConditioningRig MakeRig(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     std::shared_ptr<FaultInjector> fault_injector = nullptr,
-    std::shared_ptr<FsService> fs_service = nullptr) {
+    std::shared_ptr<FsService> fs_service = nullptr
+) {
 
     ConditioningRig rig;
     rig.fs_service = fs_service != nullptr ? std::move(fs_service) : MakeFormattedFsService();
@@ -645,7 +686,11 @@ ConditioningRig MakeRig(
     return rig;
 }
 
-void AssertTransitions(const std::vector<Record>& transitions, std::initializer_list<Record> expected, const char* sensor_id) {
+void AssertTransitions(
+    const std::vector<Record>& transitions,
+    std::initializer_list<Record> expected,
+    const char* sensor_id
+) {
     std::string actual;
     for(const auto& record : transitions)
         actual += " " + std::to_string(static_cast<int>(record.value)) + "@" + std::to_string(record.uptime_ms);
@@ -677,17 +722,21 @@ ZTEST(indicator_conditioning, test_without_conditioning_an_edge_is_committed_at_
     clock.SleepUntil(40);
     zassert_equal(rig.Value("at_once"), 1.0F);
 
-    AssertTransitions(rig.recorder->TransitionsOf("at_once_probe"), { {clock.Ms(0), 0.0F}, {clock.Ms(20), 1.0F} }, "at_once_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("at_once_probe"), { { clock.Ms(0), 0.0F }, { clock.Ms(20), 1.0F } }, "at_once_probe"
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
 
 ZTEST(indicator_conditioning, test_with_debounce_0_a_toggle_flips_at_once) {
     SetInput(kChToggleAtOnce, false);
-    auto rig = MakeRig({
-        MakeIndicator("toggle_at_once", kChToggleAtOnce, 0, IndicatorInputMode::Toggle),
-        MakeProbe("toggle_at_once_probe", "toggle_at_once"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("toggle_at_once", kChToggleAtOnce, 0, IndicatorInputMode::Toggle),
+            MakeProbe("toggle_at_once_probe", "toggle_at_once"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -707,8 +756,10 @@ ZTEST(indicator_conditioning, test_with_debounce_0_a_toggle_flips_at_once) {
     clock.SleepUntil(80);
     zassert_equal(rig.Value("toggle_at_once"), 0.0F, "Pressed again");
 
-    AssertTransitions(rig.recorder->TransitionsOf("toggle_at_once_probe"),
-        { {clock.Ms(0), 0.0F}, {clock.Ms(20), 1.0F}, {clock.Ms(60), 0.0F} }, "toggle_at_once_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("toggle_at_once_probe"),
+        { { clock.Ms(0), 0.0F }, { clock.Ms(20), 1.0F }, { clock.Ms(60), 0.0F } }, "toggle_at_once_probe"
+    );
     zassert_equal(rig.recorder->CountOf("toggle_at_once_probe", 1.0F), 2, "The release committed the unchanged switch");
 
     zassert_true(rig.processing.processing_service->Stop());
@@ -756,12 +807,17 @@ ZTEST(indicator_conditioning, test_an_edge_that_holds_is_committed_once_at_the_e
     zassert_equal(committed->raw_value.value(), 1.0F);
 
     // Stamped when it settled, not when the edge came.
-    const auto stamped_after_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        committed->timestamp.value() - edge_time).count();
-    zassert_true(stamped_after_ms >= 100, "Stamped %lld ms after the edge, the window is 100 ms",
-        static_cast<long long>(stamped_after_ms));
+    const auto stamped_after_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(committed->timestamp.value() - edge_time).count();
+    zassert_true(
+        stamped_after_ms >= 100, "Stamped %lld ms after the edge, the window is 100 ms",
+        static_cast<long long>(stamped_after_ms)
+    );
 
-    AssertTransitions(rig.recorder->TransitionsOf("held_edge_probe"), { {clock.Ms(0), 0.0F}, {clock.Ms(120), 1.0F} }, "held_edge_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("held_edge_probe"), { { clock.Ms(0), 0.0F }, { clock.Ms(120), 1.0F } },
+        "held_edge_probe"
+    );
     zassert_equal(rig.recorder->CountOf("held_edge_probe", 1.0F), 1, "Committed once");
 
     zassert_true(rig.processing.processing_service->Stop());
@@ -771,10 +827,12 @@ ZTEST(indicator_conditioning, test_an_edge_that_holds_is_committed_once_at_the_e
 // it do not restart it, and the change commits at its end.
 ZTEST(indicator_conditioning, test_a_polled_change_is_committed_once_at_the_end_of_its_window) {
     SetInput(kChPolled, false);
-    auto rig = MakeRig({
-        MakeIndicator("polled", kChPolled, 100, IndicatorInputMode::Level, 10),
-        MakeProbe("polled_probe", "polled"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("polled", kChPolled, 100, IndicatorInputMode::Level, 10),
+            MakeProbe("polled_probe", "polled"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -801,9 +859,11 @@ ZTEST(indicator_conditioning, test_a_polled_change_is_committed_once_at_the_end_
     zassert_equal(transitions.size(), 2, "One change");
     zassert_equal(transitions[0].value, 0.0F);
     zassert_equal(transitions[1].value, 1.0F);
-    zassert_true(transitions[1].uptime_ms >= clock.Ms(400) && transitions[1].uptime_ms <= clock.Ms(410),
-        "Committed at %lld ms, the window ends at %lld ms",
-        static_cast<long long>(transitions[1].uptime_ms), static_cast<long long>(clock.Ms(400)));
+    zassert_true(
+        transitions[1].uptime_ms >= clock.Ms(400) && transitions[1].uptime_ms <= clock.Ms(410),
+        "Committed at %lld ms, the window ends at %lld ms", static_cast<long long>(transitions[1].uptime_ms),
+        static_cast<long long>(clock.Ms(400))
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
@@ -843,22 +903,26 @@ ZTEST(indicator_conditioning, test_bounce_around_an_edge_commits_one_change) {
     clock.SleepUntil(300);
     zassert_equal(rig.Value("bounce"), 0.0F);
 
-    AssertTransitions(rig.recorder->TransitionsOf("bounce_probe"),
-        { {clock.Ms(0), 0.0F}, {clock.Ms(110), 1.0F}, {clock.Ms(270), 0.0F} }, "bounce_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("bounce_probe"),
+        { { clock.Ms(0), 0.0F }, { clock.Ms(110), 1.0F }, { clock.Ms(270), 0.0F } }, "bounce_probe"
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
 
 ZTEST(indicator_conditioning, test_the_first_value_of_a_generation_is_committed_at_once) {
     SetInput(kChFirstValue, true);
-    auto rig = MakeRig({ MakeIndicator("first_value", kChFirstValue, 100), MakeProbe("first_value_probe", "first_value") });
+    auto rig = MakeRig(
+        { MakeIndicator("first_value", kChFirstValue, 100), MakeProbe("first_value_probe", "first_value") }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
 
     clock.SleepUntil(20);
     zassert_equal(rig.Value("first_value"), 1.0F, "Nothing to settle against");
-    AssertTransitions(rig.recorder->TransitionsOf("first_value_probe"), { {clock.Ms(0), 1.0F} }, "first_value_probe");
+    AssertTransitions(rig.recorder->TransitionsOf("first_value_probe"), { { clock.Ms(0), 1.0F } }, "first_value_probe");
 
     zassert_true(rig.processing.processing_service->Stop());
     SetInput(kChFirstValue, false);
@@ -866,10 +930,12 @@ ZTEST(indicator_conditioning, test_the_first_value_of_a_generation_is_committed_
 
 ZTEST(indicator_conditioning, test_toggle_flips_on_each_settled_press_and_holds) {
     SetInput(kChToggle, false);
-    auto rig = MakeRig({
-        MakeIndicator("toggle", kChToggle, 30, IndicatorInputMode::Toggle),
-        MakeProbe("toggle_probe", "toggle"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("toggle", kChToggle, 30, IndicatorInputMode::Toggle),
+            MakeProbe("toggle_probe", "toggle"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -885,7 +951,9 @@ ZTEST(indicator_conditioning, test_toggle_flips_on_each_settled_press_and_holds)
     SetInput(kChToggle, false);
     clock.SleepUntil(160);
     zassert_equal(rig.Value("toggle"), 1.0F, "The release leaves it on");
-    zassert_equal(rig.Reading("toggle")->raw_value.value(), 0.0F, "The release was committed, with the switch as its value");
+    zassert_equal(
+        rig.Reading("toggle")->raw_value.value(), 0.0F, "The release was committed, with the switch as its value"
+    );
 
     clock.SleepUntil(200);
     SetInput(kChToggle, true);
@@ -903,13 +971,22 @@ ZTEST(indicator_conditioning, test_toggle_flips_on_each_settled_press_and_holds)
     clock.SleepUntil(500);
     zassert_equal(rig.Value("toggle"), 0.0F, "A 10 ms press is ignored");
 
-    AssertTransitions(rig.recorder->TransitionsOf("toggle_probe"),
-        { {clock.Ms(0), 0.0F}, {clock.Ms(50), 1.0F}, {clock.Ms(230), 0.0F} }, "toggle_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("toggle_probe"),
+        { { clock.Ms(0), 0.0F }, { clock.Ms(50), 1.0F }, { clock.Ms(230), 0.0F } }, "toggle_probe"
+    );
 
     // The settled release at 130 committed the switch, still on.
     const auto records = rig.recorder->Of("toggle_probe");
-    zassert_true(std::ranges::any_of(records, [&clock](const Record& record) {
-        return record.uptime_ms == clock.Ms(130) && record.value == 1.0F; }), "No commit at the settled release");
+    zassert_true(
+        std::ranges::any_of(
+            records,
+            [&clock](const Record& record) {
+                return record.uptime_ms == clock.Ms(130) && record.value == 1.0F;
+            }
+        ),
+        "No commit at the settled release"
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
@@ -943,10 +1020,13 @@ ZTEST(indicator_conditioning, test_an_error_during_a_window_neither_cancels_nor_
     auto fault_injector = std::make_shared<FaultInjector>();
     fault_injector->sensor_id_hash = StringHelpers::GetHash("faulty");
 
-    auto rig = MakeRig({
-        MakeIndicator("faulty", kChError, 100, IndicatorInputMode::Level, 10),
-        MakeProbe("faulty_probe", "faulty"),
-    }, fault_injector);
+    auto rig = MakeRig(
+        {
+            MakeIndicator("faulty", kChError, 100, IndicatorInputMode::Level, 10),
+            MakeProbe("faulty_probe", "faulty"),
+        },
+        fault_injector
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -970,15 +1050,19 @@ ZTEST(indicator_conditioning, test_an_error_during_a_window_neither_cancels_nor_
     zassert_equal(rig.Value("faulty"), 0.0F);
 
     clock.SleepUntil(220);
-    zassert_equal(rig.Value("faulty"), 1.0F, "Settled at the end of the window that began at 100, not 100 ms after the errors");
+    zassert_equal(
+        rig.Value("faulty"), 1.0F, "Settled at the end of the window that began at 100, not 100 ms after the errors"
+    );
     zassert_false(rig.Reading("faulty")->HasError());
 
     const auto transitions = rig.recorder->TransitionsOf("faulty_probe");
     zassert_equal(transitions.size(), 2);
     zassert_equal(transitions[1].value, 1.0F);
-    zassert_true(transitions[1].uptime_ms >= clock.Ms(200) && transitions[1].uptime_ms <= clock.Ms(210),
-        "Committed at %lld ms, the window ends at %lld ms",
-        static_cast<long long>(transitions[1].uptime_ms), static_cast<long long>(clock.Ms(200)));
+    zassert_true(
+        transitions[1].uptime_ms >= clock.Ms(200) && transitions[1].uptime_ms <= clock.Ms(210),
+        "Committed at %lld ms, the window ends at %lld ms", static_cast<long long>(transitions[1].uptime_ms),
+        static_cast<long long>(clock.Ms(200))
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
@@ -986,10 +1070,12 @@ ZTEST(indicator_conditioning, test_an_error_during_a_window_neither_cancels_nor_
 // A dependent is evaluated on commits only, so what the conditioner holds never reaches it.
 ZTEST(indicator_conditioning, test_a_dependent_sees_only_settled_values) {
     SetInput(kChFollowed, false);
-    auto rig = MakeRig({
-        MakeIndicator("followed", kChFollowed, 100),
-        MakeDerivedIndicator("follower", "followed"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("followed", kChFollowed, 100),
+            MakeDerivedIndicator("follower", "followed"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1018,7 +1104,9 @@ ZTEST(indicator_conditioning, test_a_dependent_sees_only_settled_values) {
     clock.SleepUntil(750);
     zassert_equal(rig.Value("follower"), 1.0F);
 
-    AssertTransitions(rig.recorder->TransitionsOf("follower"), { {clock.Ms(0), 0.0F}, {clock.Ms(700), 1.0F} }, "follower");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("follower"), { { clock.Ms(0), 0.0F }, { clock.Ms(700), 1.0F } }, "follower"
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
@@ -1027,11 +1115,13 @@ ZTEST(indicator_conditioning, test_a_dependent_sees_only_settled_values) {
 // sensors that read it.
 ZTEST(indicator_conditioning, test_a_derived_indicator_settles_on_its_own_window) {
     SetInput(kChContact, false);
-    auto rig = MakeRig({
-        MakeIndicator("contact", kChContact),
-        MakeDerivedIndicator("moving", "contact", 100),
-        MakeProbe("moving_probe", "moving"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("contact", kChContact),
+            MakeDerivedIndicator("moving", "contact", 100),
+            MakeProbe("moving_probe", "moving"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1047,7 +1137,9 @@ ZTEST(indicator_conditioning, test_a_derived_indicator_settles_on_its_own_window
     zassert_equal(rig.Value("moving"), 1.0F);
     zassert_equal(rig.Reading("moving")->source, ReadingSource::PROCESSING);
 
-    AssertTransitions(rig.recorder->TransitionsOf("moving_probe"), { {clock.Ms(0), 0.0F}, {clock.Ms(120), 1.0F} }, "moving_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("moving_probe"), { { clock.Ms(0), 0.0F }, { clock.Ms(120), 1.0F } }, "moving_probe"
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
 }
@@ -1087,10 +1179,12 @@ ZTEST(indicator_conditioning, test_Stop_drops_a_held_change) {
 // confirms or cancels the change as any reading does.
 ZTEST(indicator_conditioning, test_a_pause_stops_the_window_of_a_held_change) {
     SetInput(kChPause, false);
-    auto rig = MakeRig({
-        MakeIndicator("paused", kChPause, 100, IndicatorInputMode::Toggle),
-        MakeProbe("paused_probe", "paused"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("paused", kChPause, 100, IndicatorInputMode::Toggle),
+            MakeProbe("paused_probe", "paused"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1121,7 +1215,9 @@ ZTEST(indicator_conditioning, test_a_pause_stops_the_window_of_a_held_change) {
     clock.SleepUntil(580);
     zassert_equal(rig.Value("paused"), 1.0F, "Settled 70 ms after Resume()");
 
-    AssertTransitions(rig.recorder->TransitionsOf("paused_probe"), { {clock.Ms(0), 0.0F}, {clock.Ms(570), 1.0F} }, "paused_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("paused_probe"), { { clock.Ms(0), 0.0F }, { clock.Ms(570), 1.0F } }, "paused_probe"
+    );
 
     zassert_true(rig.processing.processing_service->Stop());
     SetInput(kChPause, false);
@@ -1132,11 +1228,13 @@ ZTEST(indicator_conditioning, test_a_pause_stops_the_window_of_a_held_change) {
 ZTEST(indicator_conditioning, test_a_switch_is_committed_before_its_input_has_a_reading) {
     SetInput(kChSwitchAtStart, false);
     SetInput(kChLevelAtStart, false);
-    auto rig = MakeRig({
-        MakeIndicator("switch_at_start", kChSwitchAtStart, 30, IndicatorInputMode::Toggle, 1000),
-        MakeProbe("switch_at_start_probe", "switch_at_start"),
-        MakeIndicator("level_at_start", kChLevelAtStart, 30, IndicatorInputMode::Level, 1000),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("switch_at_start", kChSwitchAtStart, 30, IndicatorInputMode::Toggle, 1000),
+            MakeProbe("switch_at_start_probe", "switch_at_start"),
+            MakeIndicator("level_at_start", kChLevelAtStart, 30, IndicatorInputMode::Level, 1000),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1165,11 +1263,13 @@ ZTEST(indicator_conditioning, test_a_switch_is_committed_before_its_input_has_a_
 ZTEST(indicator_conditioning, test_a_sensors_apply_keeps_a_switch_that_is_unchanged) {
     SetInput(kChKeepEdge, false);
     SetInput(kChKeepPolled, false);
-    auto rig = MakeRig({
-        MakeIndicator("keep_edge", kChKeepEdge, 30, IndicatorInputMode::Toggle),
-        MakeIndicator("keep_polled", kChKeepPolled, 30, IndicatorInputMode::Toggle, 100),
-        MakeProbe("keep_polled_probe", "keep_polled"),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("keep_edge", kChKeepEdge, 30, IndicatorInputMode::Toggle),
+            MakeIndicator("keep_polled", kChKeepPolled, 30, IndicatorInputMode::Toggle, 100),
+            MakeProbe("keep_polled_probe", "keep_polled"),
+        }
+    );
 
     const Clock clock;
     zassert_true(rig.processing.processing_service->Start());
@@ -1188,12 +1288,14 @@ ZTEST(indicator_conditioning, test_a_sensors_apply_keeps_a_switch_that_is_unchan
     zassert_equal(rig.Value("keep_edge"), 1.0F);
     zassert_equal(rig.Value("keep_polled"), 1.0F);
 
-    rig.Apply({
-        MakeIndicator("keep_edge", kChKeepEdge, 30, IndicatorInputMode::Toggle),
-        MakeIndicator("keep_polled", kChKeepPolled, 30, IndicatorInputMode::Toggle, 1000),
-        MakeProbe("keep_polled_probe", "keep_polled"),
-        MakeVirtualSensor("keep_other", "1 + 1", 1000),
-    });
+    rig.Apply(
+        {
+            MakeIndicator("keep_edge", kChKeepEdge, 30, IndicatorInputMode::Toggle),
+            MakeIndicator("keep_polled", kChKeepPolled, 30, IndicatorInputMode::Toggle, 1000),
+            MakeProbe("keep_polled_probe", "keep_polled"),
+            MakeVirtualSensor("keep_other", "1 + 1", 1000),
+        }
+    );
 
     const Clock restart;
     zassert_equal(rig.Value("keep_edge"), 1.0F, "Still on when Start() returns");
@@ -1233,48 +1335,60 @@ ZTEST(indicator_conditioning, test_a_sensors_apply_resets_a_switch_whose_conditi
         zassert_equal(rig.Value("reset"), 1.0F, "Switched on");
     };
 
-    auto rig = MakeRig({
-        MakeIndicator("reset", kChReset, 30, IndicatorInputMode::Toggle),
-        MakeIndicator("reset_input", kChResetInput),
-    });
+    auto rig = MakeRig(
+        {
+            MakeIndicator("reset", kChReset, 30, IndicatorInputMode::Toggle),
+            MakeIndicator("reset_input", kChResetInput),
+        }
+    );
     zassert_true(rig.processing.processing_service->Start());
     switch_on(rig, 30);
 
-    rig.Apply({
-        MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Toggle),
-        MakeIndicator("reset_input", kChResetInput),
-    });
+    rig.Apply(
+        {
+            MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Toggle),
+            MakeIndicator("reset_input", kChResetInput),
+        }
+    );
     zassert_equal(rig.Value("reset"), 0.0F, "Another debounce starts off");
 
     switch_on(rig, 40);
 
     // A sensor that stops being a switch, or leaves the configuration, leaves no switch behind:
     // back exactly as it was, it starts off.
-    rig.Apply({
-        MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Level),
-        MakeIndicator("reset_input", kChResetInput),
-    });
-    rig.Apply({
-        MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Toggle),
-        MakeIndicator("reset_input", kChResetInput),
-    });
+    rig.Apply(
+        {
+            MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Level),
+            MakeIndicator("reset_input", kChResetInput),
+        }
+    );
+    rig.Apply(
+        {
+            MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Toggle),
+            MakeIndicator("reset_input", kChResetInput),
+        }
+    );
     zassert_equal(rig.Value("reset"), 0.0F, "A switch that was Level in between starts off");
 
     switch_on(rig, 40);
 
     rig.Apply({ MakeIndicator("reset_input", kChResetInput) });
-    rig.Apply({
-        MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Toggle),
-        MakeIndicator("reset_input", kChResetInput),
-    });
+    rig.Apply(
+        {
+            MakeIndicator("reset", kChReset, 40, IndicatorInputMode::Toggle),
+            MakeIndicator("reset_input", kChResetInput),
+        }
+    );
     zassert_equal(rig.Value("reset"), 0.0F, "A switch that was removed in between starts off");
 
     switch_on(rig, 40);
 
-    rig.Apply({
-        MakeDerivedIndicator("reset", "reset_input", 40, IndicatorInputMode::Toggle),
-        MakeIndicator("reset_input", kChResetInput),
-    });
+    rig.Apply(
+        {
+            MakeDerivedIndicator("reset", "reset_input", 40, IndicatorInputMode::Toggle),
+            MakeIndicator("reset_input", kChResetInput),
+        }
+    );
     zassert_equal(rig.Value("reset"), 0.0F, "Another type starts off");
 
     const Clock clock;
@@ -1286,7 +1400,9 @@ ZTEST(indicator_conditioning, test_a_sensors_apply_resets_a_switch_whose_conditi
 
 ZTEST(indicator_conditioning, test_a_new_service_starts_every_switch_off) {
     SetInput(kChReboot, false);
-    const std::vector<std::shared_ptr<Sensor>> sensors { MakeIndicator("reboot", kChReboot, 0, IndicatorInputMode::Toggle) };
+    const std::vector<std::shared_ptr<Sensor>> sensors{
+        MakeIndicator("reboot", kChReboot, 0, IndicatorInputMode::Toggle)
+    };
 
     auto before = MakeRig(sensors);
     zassert_true(before.processing.processing_service->Start());
@@ -1311,9 +1427,6 @@ ZTEST(indicator_conditioning, test_a_new_service_starts_every_switch_off) {
 
 namespace {
 
-using eerie_leap::subsys::canbus::CanbusProxy;
-using eerie_leap::subsys::canbus::CanbusType;
-using eerie_leap::subsys::canbus::CanId;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanChannelConfiguration;
@@ -1321,6 +1434,9 @@ using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
 using eerie_leap::domain::canbus_domain::models::CanSignalConfiguration;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::domain::sensor_domain::models::sources::CanbusSource;
+using eerie_leap::subsys::canbus::CanbusProxy;
+using eerie_leap::subsys::canbus::CanbusType;
+using eerie_leap::subsys::canbus::CanId;
 
 constexpr uint8_t kCanBus = 0;
 constexpr uint32_t kCanFrameId = 0x300;
@@ -1359,7 +1475,8 @@ std::shared_ptr<CanbusConfigurationManager> MakeCanbusConfigurationManager(std::
     configuration.channel_configurations.emplace(kCanBus, std::move(channel));
 
     auto manager = std::make_shared<CanbusConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr);
+        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr
+    );
     zassert_true(manager->Update(configuration), "The CAN configuration is valid");
 
     return manager;
@@ -1368,7 +1485,9 @@ std::shared_ptr<CanbusConfigurationManager> MakeCanbusConfigurationManager(std::
 std::shared_ptr<Sensor> MakeCanIndicator(std::string_view id, uint32_t debounce_ms) {
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = SensorType::CANBUS_INDICATOR;
-    sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), kCanBus, kCanFrameId, "sig");
+    sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(
+        Mrm::GetDefaultPmr(), kCanBus, kCanFrameId, "sig"
+    );
     sensor->configuration.UpdateConnectionString();
     sensor->configuration.debounce_ms = debounce_ms;
 
@@ -1383,7 +1502,7 @@ struct CanConditioningRig : ConditioningRig {
 
     // On this thread; the frame reaches the pipeline once the thread sleeps, at this tick.
     void Send(uint8_t signal) const {
-        const std::array<uint8_t, 8> data { signal };
+        const std::array<uint8_t, 8> data{ signal };
         zassert_ok((*canbus)->SendFrame(CanId::Standard(kCanFrameId), data, K_MSEC(100)));
     }
 };
@@ -1393,8 +1512,11 @@ CanConditioningRig MakeCanRig(const std::vector<std::shared_ptr<Sensor>>& sensor
     rig.fs_service = MakeFormattedFsService();
 
     rig.canbus_service = std::make_shared<CanbusService>(
-        [](uint8_t bus_channel) { return bus_channel == kCanBus ? CanLoopbackDevice() : nullptr; },
-        MakeCanbusConfigurationManager(rig.fs_service));
+        [](uint8_t bus_channel) {
+            return bus_channel == kCanBus ? CanLoopbackDevice() : nullptr;
+        },
+        MakeCanbusConfigurationManager(rig.fs_service)
+    );
     rig.canbus = rig.canbus_service->GetCanbus(kCanBus);
     zassert_not_null(rig.canbus.get(), "The channel is open");
 
@@ -1408,17 +1530,14 @@ CanConditioningRig MakeCanRig(const std::vector<std::shared_ptr<Sensor>>& sensor
     processing.time_service = MakeTimeService();
     processing.frame = std::make_shared<SensorReadingsFrame>();
     processing.sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", rig.fs_service), nullptr, 0, 0);
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", rig.fs_service), nullptr, 0, 0
+    );
     zassert_true(processing.sensors_configuration_manager->Update(sensors), "The sensors configuration is valid");
 
     processing.processing_service = std::make_shared<SensorsProcessingService>(
-        processing.sensors_configuration_manager,
-        processing.frame,
-        processing.time_service,
-        nullptr,
-        nullptr,
-        nullptr,
-        rig.canbus_service);
+        processing.sensors_configuration_manager, processing.frame, processing.time_service, nullptr, nullptr, nullptr,
+        rig.canbus_service
+    );
     zassert_true(processing.processing_service->Initialize());
 
     rig.recorder = std::make_shared<CommitRecorder>();
@@ -1463,8 +1582,10 @@ ZTEST(indicator_conditioning_can, test_a_can_signal_that_stops_changing_settles_
     clock.SleepUntil(410);
     zassert_equal(rig.Value("can_signal"), 0.0F, "Settled 70 ms after Resume()");
 
-    AssertTransitions(rig.recorder->TransitionsOf("can_signal_probe"),
-        { {clock.Ms(10), 0.0F}, {clock.Ms(120), 1.0F}, {clock.Ms(400), 0.0F} }, "can_signal_probe");
+    AssertTransitions(
+        rig.recorder->TransitionsOf("can_signal_probe"),
+        { { clock.Ms(10), 0.0F }, { clock.Ms(120), 1.0F }, { clock.Ms(400), 0.0F } }, "can_signal_probe"
+    );
     zassert_equal(rig.recorder->CountOf("can_signal_probe", 1.0F), 1, "Committed once");
 
     zassert_true(rig.processing.processing_service->Stop());

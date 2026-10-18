@@ -3,10 +3,10 @@
 
 #include <zephyr/kernel.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "utilities/cbor/cbor_helpers.hpp"
 #include "domain/sensor_domain/utilities/sensors_order_resolver.h"
 #include "sensor_validator.h"
+#include "utilities/cbor/cbor_helpers.hpp"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "sensors_cbor_parser.h"
 
@@ -19,14 +19,15 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 using namespace eerie_leap::domain::sensor_domain::utilities;
 using namespace eerie_leap::domain::sensor_domain::models;
 
-SensorsCborParser::SensorsCborParser(std::shared_ptr<IFsService> sd_fs_service)
-    : sd_fs_service_(std::move(sd_fs_service)) {}
+SensorsCborParser::SensorsCborParser(std::shared_ptr<IFsService> sd_fs_service) :
+    sd_fs_service_(std::move(sd_fs_service)) {}
 
 // Serializes plain configuration data; nothing executable is built or touched here.
 pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     uint32_t gpio_channel_count,
-    uint32_t adc_channel_count) {
+    uint32_t adc_channel_count
+) {
 
     // NOTE: UpdateConnectionString() must be called before validation
     for(auto& sensor : sensors)
@@ -51,26 +52,33 @@ pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
             sensor_config.configuration.channel_present = false;
         }
 
-        sensor_config.configuration.connection_string = CborHelpers::ToZcborString(sensor->configuration.connection_string);
+        sensor_config.configuration.connection_string = CborHelpers::ToZcborString(
+            sensor->configuration.connection_string
+        );
         sensor_config.configuration.script_path = CborHelpers::ToZcborString(sensor->configuration.script_path);
-        sensor_config.configuration.sampling_rate_ms = sensor->configuration.sampling_rate_ms.has_value() && sensor->configuration.sampling_rate_ms.value() > 0
+        sensor_config.configuration.sampling_rate_ms = sensor->configuration.sampling_rate_ms.has_value()
+                && sensor->configuration.sampling_rate_ms.value() > 0
             ? sensor->configuration.sampling_rate_ms.value()
             : -1;
 
-        sensor_config.configuration.interpolation_method = static_cast<uint32_t>(sensor->configuration.interpolation_method);
+        sensor_config.configuration.interpolation_method = static_cast<uint32_t>(
+            sensor->configuration.interpolation_method
+        );
         if(sensor->configuration.HasInterpolation()) {
             sensor_config.configuration.calibration_table_present = true;
 
             // Stored sorted; the caller's table is left as it is.
             for(const auto& calibration_data : sensor->configuration.calibration_table) {
-                sensor_config.configuration.calibration_table.float32float.push_back({
-                    .float32float_key = calibration_data.voltage,
-                    .float32float = calibration_data.value});
+                sensor_config.configuration.calibration_table.float32float.push_back(
+                    { .float32float_key = calibration_data.voltage, .float32float = calibration_data.value }
+                );
             }
 
             std::ranges::sort(
-                sensor_config.configuration.calibration_table.float32float,
-                [](const auto& a, const auto& b) { return a.float32float_key < b.float32float_key; });
+                sensor_config.configuration.calibration_table.float32float, [](const auto& a, const auto& b) {
+                    return a.float32float_key < b.float32float_key;
+                }
+            );
         } else {
             sensor_config.configuration.calibration_table_present = false;
         }
@@ -107,7 +115,8 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
     std::pmr::memory_resource* mr,
     const CborSensorsConfig& sensors_config,
     uint32_t gpio_channel_count,
-    uint32_t adc_channel_count) {
+    uint32_t adc_channel_count
+) {
 
     std::vector<std::shared_ptr<Sensor>> stored_sensors;
     stored_sensors.reserve(sensors_config.CborSensorConfig_m.size());
@@ -124,7 +133,9 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
             sensor->configuration.channel = std::nullopt;
 
         // Parsed into canbus_source once the validator has read the text.
-        sensor->configuration.connection_string = CborHelpers::ToPmrString(mr, sensor_config.configuration.connection_string);
+        sensor->configuration.connection_string = CborHelpers::ToPmrString(
+            mr, sensor_config.configuration.connection_string
+        );
 
         sensor->configuration.script_path = CborHelpers::ToPmrString(mr, sensor_config.configuration.script_path);
 
@@ -140,9 +151,9 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
             auto& calibration_table = sensor->configuration.calibration_table;
             calibration_table.reserve(sensor_config.configuration.calibration_table.float32float.size());
             for(const auto& calibration_data : sensor_config.configuration.calibration_table.float32float) {
-                calibration_table.push_back({
-                    .voltage = calibration_data.float32float_key,
-                    .value = calibration_data.float32float});
+                calibration_table.push_back(
+                    { .voltage = calibration_data.float32float_key, .value = calibration_data.float32float }
+                );
             }
         } else {
             sensor->configuration.interpolation_method = InterpolationMethod::NONE;
@@ -174,11 +185,9 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
 
         // Interpolators binary search the table, and an imported one may be stored unordered. Its
         // voltages are finite and distinct now, which the sort's ordering needs.
-        std::ranges::sort(
-            configuration.calibration_table,
-            [](const CalibrationData& a, const CalibrationData& b) {
-                return a.voltage < b.voltage;
-            });
+        std::ranges::sort(configuration.calibration_table, [](const CalibrationData& a, const CalibrationData& b) {
+            return a.voltage < b.voltage;
+        });
 
         // The validator has parsed the text, so this does not throw.
         configuration.UnwrapConnectionString();

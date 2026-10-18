@@ -1,12 +1,12 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/ztest.h>
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
+#include <zephyr/ztest.h>
 
-#include "smp_test_client.h"
-#include "live_data_test_support.h"
 #include "domain/ble_domain/smp/live_mgmt_group.h"
+#include "live_data_test_support.h"
+#include "smp_test_client.h"
 
 using namespace live_data_test;
 using namespace smp_test;
@@ -25,17 +25,21 @@ struct GroupHarness {
     std::shared_ptr<FakeNotifier> notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     std::shared_ptr<LiveDataService> service = std::make_shared<LiveDataService>(notifier, readings.frame);
-    LiveMgmtGroup group{service};
+    LiveMgmtGroup group{ service };
     SmpTestClient client;
 
     GroupHarness() {
-        notifier->on_notified = [service = service.get()]() { service->OnNotificationSent(); };
+        notifier->on_notified = [service = service.get()]() {
+            service->OnNotificationSent();
+        };
         group.Register();
     }
 
     Response Subscribe(const std::vector<uint32_t>& hashes, uint32_t period_ms) {
-        return client.Write(SmpGroupId::LIVE, Id(Command::SUBSCRIBE),
-            CborMap().Put("ids", std::span<const uint32_t>(hashes)).Put("period", period_ms).Build());
+        return client.Write(
+            SmpGroupId::LIVE, Id(Command::SUBSCRIBE),
+            CborMap().Put("ids", std::span<const uint32_t>(hashes)).Put("period", period_ms).Build()
+        );
     }
 };
 
@@ -53,7 +57,7 @@ ZTEST(smp_live_group, test_subscribe_reports_the_period_and_capacity) {
     GroupHarness harness;
     const uint32_t hash = harness.readings.Add("sensor", 2.5F);
 
-    const auto response = harness.Subscribe({hash}, 20);
+    const auto response = harness.Subscribe({ hash }, 20);
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("period"), LiveDataService::MIN_PERIOD_MS);
@@ -69,7 +73,7 @@ ZTEST(smp_live_group, test_too_many_sensors_report_the_capacity) {
     GroupHarness harness;
 
     harness.notifier->SetMaxSize(20);
-    auto response = harness.Subscribe({1, 2, 3}, 100);
+    auto response = harness.Subscribe({ 1, 2, 3 }, 100);
     ExpectGroupError(response, Error::TOO_MANY);
     zassert_equal(response.Value("max"), 2);
 
@@ -86,18 +90,21 @@ ZTEST(smp_live_group, test_central_must_listen_on_live) {
     GroupHarness harness;
     harness.notifier->SetMaxSize(0);
 
-    ExpectGroupError(harness.Subscribe({1}, 100), Error::NOT_LISTENING);
+    ExpectGroupError(harness.Subscribe({ 1 }, 100), Error::NOT_LISTENING);
 }
 
 ZTEST(smp_live_group, test_incomplete_requests_are_invalid) {
     GroupHarness harness;
 
-    auto response = harness.client.Write(SmpGroupId::LIVE, Id(Command::SUBSCRIBE), CborMap().Put("period", 100).Build());
+    auto response = harness.client.Write(
+        SmpGroupId::LIVE, Id(Command::SUBSCRIBE), CborMap().Put("period", 100).Build()
+    );
     zassert_equal(response.Value("rc"), MGMT_ERR_EINVAL);
 
-    const std::vector<uint32_t> hashes = {1};
-    response = harness.client.Write(SmpGroupId::LIVE, Id(Command::SUBSCRIBE),
-        CborMap().Put("ids", std::span<const uint32_t>(hashes)).Build());
+    const std::vector<uint32_t> hashes = { 1 };
+    response = harness.client.Write(
+        SmpGroupId::LIVE, Id(Command::SUBSCRIBE), CborMap().Put("ids", std::span<const uint32_t>(hashes)).Build()
+    );
     zassert_equal(response.Value("rc"), MGMT_ERR_EINVAL);
 
     zassert_equal(harness.Subscribe({}, 100).Value("rc"), MGMT_ERR_EINVAL);
@@ -105,7 +112,7 @@ ZTEST(smp_live_group, test_incomplete_requests_are_invalid) {
 
 ZTEST(smp_live_group, test_unsubscribe_stops_the_samples) {
     GroupHarness harness;
-    zassert_true(harness.Subscribe({harness.readings.Add("sensor", 1.0F)}, 50).IsOk());
+    zassert_true(harness.Subscribe({ harness.readings.Add("sensor", 1.0F) }, 50).IsOk());
 
     const auto response = harness.client.Write(SmpGroupId::LIVE, Id(Command::UNSUBSCRIBE), CborMap().Build());
 

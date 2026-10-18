@@ -6,7 +6,8 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 class TextBlock : public TextBlockBase {
 public:
-    TextBlock(): TextBlockBase("TX") {}
+    TextBlock() :
+        TextBlockBase("TX") {}
     virtual ~TextBlock() = default;
 
     void SetText(const std::string& text) {

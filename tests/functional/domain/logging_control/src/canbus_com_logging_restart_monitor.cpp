@@ -13,12 +13,12 @@
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
 
 #include "canbus_com_loopback_harness.h"
+#include "cdmp_test_features.h"
 #include "logging_control_test_support.h"
 #include "logging_restart_test_support.h"
-#include "cdmp_test_features.h"
 
-using eerie_leap::tests::LOGGER_FEATURES;
 using eerie_leap::tests::DISPLAY_FEATURES;
+using eerie_leap::tests::LOGGER_FEATURES;
 
 using namespace logging_control_test;
 using namespace logging_restart_test;
@@ -42,8 +42,8 @@ constexpr uint32_t THIRD_UID = 0x55555555;
 constexpr uint8_t NO_SPACE = static_cast<uint8_t>(LoggingStatusReason::NoSpace);
 
 // The record the peer's status takes: {active}, or {inactive, reason}.
-const Bytes ACTIVE = {0x01};
-const Bytes STOPPED = {0x00, 0x00};
+const Bytes ACTIVE = { 0x01 };
+const Bytes STOPPED = { 0x00, 0x00 };
 
 // What the recording handler saw: the device IDs it was called with, in order.
 struct Reports {
@@ -118,12 +118,15 @@ struct Fixture {
         uint32_t uid,
         std::initializer_list<Record> records,
         bool is_sync_request_due,
-        uint16_t features = LOGGER_FEATURES) {
+        uint16_t features = LOGGER_FEATURES
+    ) {
 
         SendRestart(harness, device_id, uid, records, features);
         next_version.at(device_id) = 1;
-        zassert_false(WaitForRestartTaken(harness, device_id, is_sync_request_due),
-            "Nothing is sent before the restarted unit can accept it");
+        zassert_false(
+            WaitForRestartTaken(harness, device_id, is_sync_request_due),
+            "Nothing is sent before the restarted unit can accept it"
+        );
     }
 
     void Restart(std::initializer_list<Record> records, bool is_sync_request_due) {
@@ -198,7 +201,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartIsReportedOnceTheUnitsSta
     F().ShareStatus(ACTIVE);
     zassert_true(F().HasNoReport(), "A status is no restart");
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
     zassert_true(F().HasNoReport(), "The copy is stale until the unit says otherwise");
 
     F().ShareStatus(STOPPED);
@@ -206,7 +209,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartIsReportedOnceTheUnitsSta
     zassert_true(report.has_value(), "The unit is back and idle");
     zassert_equal(report.value(), PEER_ID);
 
-    F().Heartbeat(PEER_ID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    F().Heartbeat(PEER_ID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
     zassert_true(F().HasNoReport(), "Once per restart: a later heartbeat reports nothing");
 }
 
@@ -217,12 +220,12 @@ ZTEST(canbus_com_logging_restart_monitor, test_AnUnchangedStatusIsConfirmedByThe
     F().ShareStatus(ACTIVE);
     F().ShareStatus(STOPPED);
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
 
     F().ShareStatus(STOPPED);
     zassert_true(F().HasNoReport(), "The same value raises no change");
 
-    F().Heartbeat(PEER_ID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    F().Heartbeat(PEER_ID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
     const auto report = F().WaitForReport();
     zassert_true(report.has_value(), "The heartbeat confirms the copy");
     zassert_equal(report.value(), PEER_ID);
@@ -234,7 +237,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AnUnchangedStatusIsConfirmedByThe
 ZTEST(canbus_com_logging_restart_monitor, test_AMatchingDigestConfirmsTheRestartAtOnce) {
     F().ShareStatus(STOPPED);
 
-    SendRestart(F().harness, PEER_ID, PEER_UID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    SendRestart(F().harness, PEER_ID, PEER_UID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
 
     const auto report = F().WaitForReport();
     zassert_true(report.has_value(), "The first heartbeat confirms the copy");
@@ -357,7 +360,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitBackIdleWhileAnotherIsBackFa
     CdmpQueueHold hold(F().harness);
     zassert_true(hold.Close(PEER_ID), "The CDMP work queue is held");
     const uint8_t peer_version = F().SendStatus(PEER_ID, STOPPED);
-    const uint8_t other_version = F().SendStatus(OTHER_ID, {0x00, NO_SPACE});
+    const uint8_t other_version = F().SendStatus(OTHER_ID, { 0x00, NO_SPACE });
     hold.Open();
 
     zassert_true(F().harness.WaitForAcknowledgement(PEER_ID, peer_version));
@@ -377,7 +380,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AHeartbeatAheadOfTheStateHandlers
     CdmpQueueHold hold(F().harness);
     zassert_true(hold.Close(PEER_ID), "The CDMP work queue is held");
     const uint8_t version = F().SendStatus(PEER_ID, STOPPED);
-    F().Heartbeat(PEER_ID, {{LOGGING_STATUS_CODE, version, STOPPED}});
+    F().Heartbeat(PEER_ID, { { LOGGING_STATUS_CODE, version, STOPPED } });
     hold.Open();
 
     zassert_true(F().harness.WaitForAcknowledgement(PEER_ID, version));
@@ -390,7 +393,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AHeartbeatAheadOfTheStateHandlers
 // restarts afterwards is tracked again.
 ZTEST(canbus_com_logging_restart_monitor, test_TheUnitsOwnComRestartLeavesTrackedUnitsToTheStatusRule) {
     F().ShareStatus(ACTIVE);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
 
     zassert_true(F().harness.com->Stop());
     F().harness.BringOnline();
@@ -402,7 +405,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_TheUnitsOwnComRestartLeavesTracke
 
     // The handlers survived: the peer restarts again and is reported once.
     F().ShareStatus(ACTIVE);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
     F().ShareStatus(STOPPED);
     const auto report = F().WaitForReport();
     zassert_true(report.has_value(), "The monitor still hears the restart after the COM restart");
@@ -413,8 +416,8 @@ ZTEST(canbus_com_logging_restart_monitor, test_TheUnitsOwnComRestartLeavesTracke
 ZTEST(canbus_com_logging_restart_monitor, test_AFailureAfterTheRestartIsNotReported) {
     F().ShareStatus(ACTIVE);
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, {0x00, NO_SPACE}}}, true);
-    F().ShareStatus({0x00, NO_SPACE});
+    F().Restart({ { LOGGING_STATUS_CODE, 1, { 0x00, NO_SPACE } } }, true);
+    F().ShareStatus({ 0x00, NO_SPACE });
 
     zassert_true(F().HasNoReport(), "A unit that comes back failing is no unit to start");
 
@@ -430,12 +433,12 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatComesBackLoggingConsumes
     F().ShareStatus(STOPPED);
     F().ShareStatus(ACTIVE);
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, ACTIVE}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, ACTIVE } }, true);
     F().ShareStatus(ACTIVE);
     zassert_true(F().HasNoReport(), "It logs");
 
     // The heartbeat confirms the renewed copy: that is what consumes the restart.
-    F().Heartbeat(PEER_ID, {{LOGGING_STATUS_CODE, 1, ACTIVE}});
+    F().Heartbeat(PEER_ID, { { LOGGING_STATUS_CODE, 1, ACTIVE } });
     F().ShareStatus(STOPPED);
     zassert_true(F().HasNoReport(), "and its later stop is its own doing");
 }
@@ -447,7 +450,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AStopBeforeTheHeartbeatThatConfir
     F().ShareStatus(STOPPED);
     F().ShareStatus(ACTIVE);
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, ACTIVE}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, ACTIVE } }, true);
     F().ShareStatus(ACTIVE);
     zassert_true(F().HasNoReport(), "The renewal changes nothing the monitor sees");
 
@@ -456,7 +459,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AStopBeforeTheHeartbeatThatConfir
     zassert_true(report.has_value(), "The stop is the first change: the unit is back and idle");
     zassert_equal(report.value(), PEER_ID);
 
-    F().Heartbeat(PEER_ID, {{LOGGING_STATUS_CODE, 2, STOPPED}});
+    F().Heartbeat(PEER_ID, { { LOGGING_STATUS_CODE, 2, STOPPED } });
     zassert_true(F().HasNoReport(), "once: the heartbeat that follows reports nothing");
 }
 
@@ -465,8 +468,8 @@ ZTEST(canbus_com_logging_restart_monitor, test_AStopBeforeTheHeartbeatThatConfir
 ZTEST(canbus_com_logging_restart_monitor, test_TwoRestartsBeforeTheRecordAreReportedOnce) {
     F().ShareStatus(ACTIVE);
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, false);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, false);
     zassert_true(F().HasNoReport());
 
     F().ShareStatus(STOPPED);
@@ -479,13 +482,13 @@ ZTEST(canbus_com_logging_restart_monitor, test_TwoRestartsBeforeTheRecordAreRepo
 // Each later restart arms the unit again.
 ZTEST(canbus_com_logging_restart_monitor, test_EachRestartIsReportedOnce) {
     F().ShareStatus(ACTIVE);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
     F().ShareStatus(STOPPED);
     zassert_true(F().WaitForReport().has_value(), "The first restart");
 
     F().ShareStatus(ACTIVE);
     // The sync request is rate limited per unit, so none is due.
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, false);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, false);
     F().ShareStatus(STOPPED);
     zassert_true(F().WaitForReport().has_value(), "The second restart");
     zassert_true(F().HasNoReport());
@@ -495,29 +498,37 @@ namespace {
 
 // The same unit claims another ID, which gives up the old one: the table drops it, and its copy.
 void LeaveTable(Fixture& fixture) {
-    fixture.harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
-        .claiming_device_id = SPARE_ID,
-        .uid = PEER_UID,
-        .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
+    fixture.harness.SendAsPeer(
+        MANAGEMENT,
+        CdmpIdClaimRequestMessage{ .claiming_device_id = SPARE_ID,
+            .uid = PEER_UID,
+            .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+            .ToCanFrame()
+    );
     zassert_true(WaitForTableEntry(fixture.harness, PEER_ID, false), "The table dropped the old ID");
 }
 
 // A unit with the given features joins: its ID claim, then its first heartbeat.
 void JoinAs(Fixture& fixture, uint8_t device_id, uint32_t uid, uint16_t features) {
-    fixture.harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
-        .claiming_device_id = device_id,
-        .uid = uid,
-        .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
+    fixture.harness.SendAsPeer(
+        MANAGEMENT,
+        CdmpIdClaimRequestMessage{
+            .claiming_device_id = device_id, .uid = uid, .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+            .ToCanFrame()
+    );
     fixture.harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, 0, features));
     zassert_true(WaitForTableEntry(fixture.harness, device_id, true), "and joins on its first heartbeat");
 }
 
 // It returns under its first ID, as a new device with the given features, on its first heartbeat.
 void ReturnToTable(Fixture& fixture, uint16_t features) {
-    fixture.harness.SendAsPeer(MANAGEMENT, CdmpIdClaimRequestMessage{
-        .claiming_device_id = PEER_ID,
-        .uid = PEER_UID,
-        .protocol_version = CdmpDevice::GetCurrentProtocolVersion()}.ToCanFrame());
+    fixture.harness.SendAsPeer(
+        MANAGEMENT,
+        CdmpIdClaimRequestMessage{ .claiming_device_id = PEER_ID,
+            .uid = PEER_UID,
+            .protocol_version = CdmpDevice::GetCurrentProtocolVersion() }
+            .ToCanFrame()
+    );
     fixture.harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(PEER_ID, 0, features));
     zassert_true(WaitForTableEntry(fixture.harness, PEER_ID, true), "and joins on its first heartbeat");
     fixture.next_version.at(PEER_ID) = 1;
@@ -533,7 +544,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatLeavesIsForgotten) {
     F().ShareStatus(OTHER_ID, ACTIVE);
     F().ShareStatus(ACTIVE);
 
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
     LeaveTable(F());
     ReturnToTable(F(), DISPLAY_FEATURES);
 
@@ -592,7 +603,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_ARestartOfAnotherTypeThatHoldsASt
     JoinAs(F(), SPARE_ID, DISPLAY_UID, DISPLAY_FEATURES);
     F().ShareStatus(SPARE_ID, ACTIVE);
 
-    F().Restart(SPARE_ID, DISPLAY_UID, {{LOGGING_STATUS_CODE, 1, STOPPED}}, true, DISPLAY_FEATURES);
+    F().Restart(SPARE_ID, DISPLAY_UID, { { LOGGING_STATUS_CODE, 1, STOPPED } }, true, DISPLAY_FEATURES);
     F().ShareStatus(SPARE_ID, STOPPED);
     const auto report = F().WaitForReport();
     zassert_true(report.has_value(), "A unit that shared a status is a logging unit");
@@ -677,21 +688,21 @@ ZTEST(canbus_com_logging_restart_monitor, test_NoReportAfterTheHandlerIsRemovedO
     F().ShareStatus(ACTIVE);
 
     F().monitor->SetRestartHandler(nullptr);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
     F().ShareStatus(STOPPED);
     zassert_true(F().HasNoReport(), "Reports without a handler are dropped");
 
     // A new handler hears the next restart.
     F().monitor->SetRestartHandler(F().MakeHandler());
     F().ShareStatus(ACTIVE);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, false);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, false);
     F().ShareStatus(STOPPED);
     zassert_true(F().WaitForReport().has_value(), "A handler set later is called");
 
     // A monitor that is gone unregistered everything.
     F().ShareStatus(ACTIVE);
     F().monitor.reset();
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, false);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, false);
     F().ShareStatus(STOPPED);
     zassert_true(F().HasNoReport(), "and calls nothing");
 }
@@ -707,26 +718,31 @@ ZTEST(canbus_com_logging_restart_monitor, test_AHandlerThatThrowsDoesNotSkipTheH
 
     struct Heartbeats {
         k_sem received;
-        Heartbeats() { k_sem_init(&received, 0, K_SEM_MAX_LIMIT); }
+        Heartbeats() {
+            k_sem_init(&received, 0, K_SEM_MAX_LIMIT);
+        }
     };
     auto heartbeats = std::make_shared<Heartbeats>();
-    const int handler_id = F().harness.com->RegisterHeartbeatHandler(
-        [heartbeats](const CdmpHeartbeatMessage&) { k_sem_give(&heartbeats->received); });
+    const int handler_id = F().harness.com->RegisterHeartbeatHandler([heartbeats](const CdmpHeartbeatMessage&) {
+        k_sem_give(&heartbeats->received);
+    });
     zassert_true(handler_id >= 0);
 
     F().ShareStatus(STOPPED);
     F().reports->is_throwing = true;
 
     // The first heartbeat confirms the copy, and the monitor reports from inside the heartbeat round.
-    SendRestart(F().harness, PEER_ID, PEER_UID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    SendRestart(F().harness, PEER_ID, PEER_UID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
     zassert_true(F().WaitForReport().has_value(), "The handler was called, and threw");
-    zassert_equal(k_sem_take(&heartbeats->received, Ms(k_wait_ms)), 0,
-        "The handler registered after the monitor's still saw the heartbeat");
+    zassert_equal(
+        k_sem_take(&heartbeats->received, Ms(k_wait_ms)), 0,
+        "The handler registered after the monitor's still saw the heartbeat"
+    );
 
     // The monitor goes on: another restart is reported. The first restart's digest matched, so this is
     // the first that asks for a replay.
     F().ShareStatus(ACTIVE);
-    F().Restart({{LOGGING_STATUS_CODE, 1, STOPPED}}, true);
+    F().Restart({ { LOGGING_STATUS_CODE, 1, STOPPED } }, true);
     F().ShareStatus(STOPPED);
     zassert_true(F().WaitForReport().has_value(), "The monitor survived the exception");
 
@@ -753,12 +769,12 @@ ZTEST(canbus_com_logging_restart_monitor, test_AUnitThatGainsLoggingAfterItsReco
     F().ShareStatus(OTHER_ID, STOPPED);
     zassert_true(F().HasNoReport(), "It cannot log as far as anyone knows");
 
-    F().Heartbeat(OTHER_ID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    F().Heartbeat(OTHER_ID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
     const auto report = F().WaitForReport();
     zassert_true(report.has_value(), "The heartbeat with LOGGING arms it, and its record is current");
     zassert_equal(report.value(), OTHER_ID);
 
-    F().Heartbeat(OTHER_ID, {{LOGGING_STATUS_CODE, 1, STOPPED}});
+    F().Heartbeat(OTHER_ID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
     zassert_true(F().HasNoReport(), "once");
 }
 

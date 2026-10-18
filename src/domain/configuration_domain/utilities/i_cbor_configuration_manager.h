@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <memory_resource>
 #include <span>
 #include <string_view>
-#include <memory_resource>
 #include <vector>
 
 #include "configuration/services/stored_cbor_info.h"
@@ -36,7 +36,9 @@ public:
     // For ConfigurationService::RegisterCborConfigurationManager(); nullptr clears it, and a manager
     // reports to the last service that set it. Callable from any thread. A manager that cannot report
     // ignores it, so only a manager registered with the unit's ConfigurationService reports.
-    virtual void SetStoredHandler(StoredHandler handler) { (void)handler; }
+    virtual void SetStoredHandler(StoredHandler handler) {
+        (void)handler;
+    }
 
     // Non-virtual shorthand: default arguments on virtuals bind to the static type.
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data) {

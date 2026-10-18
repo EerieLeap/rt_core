@@ -11,21 +11,21 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/threading/work_queue_thread.h"
-#include "subsys/smp/smp_header.h"
-#include "subsys/smp/smp_packet.h"
 #include "subsys/smp/can/smp_can_framer.h"
 #include "subsys/smp/can/smp_can_id_layout.h"
 #include "subsys/smp/can/smp_can_reassembler.h"
 #include "subsys/smp/can/smp_can_transport.h"
+#include "subsys/smp/smp_header.h"
+#include "subsys/smp/smp_packet.h"
+#include "subsys/threading/work_queue_thread.h"
 
 namespace smp_can_test {
 
@@ -53,7 +53,8 @@ inline void ResetLoopbackDevice() {
     can_stop(LoopbackDevice());
 }
 
-inline Bytes MakePacket(SmpOperation operation, uint16_t group, uint8_t command_id, uint8_t sequence, const Bytes& body) {
+inline Bytes
+MakePacket(SmpOperation operation, uint16_t group, uint8_t command_id, uint8_t sequence, const Bytes& body) {
     const SmpHeader header{
         .operation = operation,
         .version = 1,
@@ -85,7 +86,7 @@ inline Bytes CborText(std::string_view text) {
 
 // os group (0), echo (0): {"d": text}
 inline Bytes MakeEchoRequest(std::string_view text, uint8_t sequence) {
-    Bytes body = {0xA1, 0x61, 'd'};
+    Bytes body = { 0xA1, 0x61, 'd' };
     auto value = CborText(text);
     body.insert(body.end(), value.begin(), value.end());
 
@@ -101,13 +102,16 @@ inline bool IsEchoResponse(const std::optional<Bytes>& packet, std::string_view 
         return false;
 
     auto header = SmpHeader::Parse(*packet);
-    if(!header.has_value() || header->operation != SmpOperation::WRITE_RESPONSE
-        || header->group != 0 || header->command_id != 0 || header->sequence != sequence) {
+    if(!header.has_value()
+        || header->operation != SmpOperation::WRITE_RESPONSE
+        || header->group != 0
+        || header->command_id != 0
+        || header->sequence != sequence) {
 
         return false;
     }
 
-    Bytes expected = {0x61, 'r'};
+    Bytes expected = { 0x61, 'r' };
     auto value = CborText(text);
     expected.insert(expected.end(), value.begin(), value.end());
 
@@ -221,8 +225,8 @@ public:
         if(SmpCanReassembler::IsStartFrame(frame.data))
             peer.reassembler.Attach(peer.buffer, SmpCanFrameFormat(frame.is_can_fd));
 
-        const bool is_complete =
-            peer.reassembler.Accept(frame.data, last_frame_ms_) == SmpCanReassembler::Result::COMPLETE;
+        const bool is_complete = peer.reassembler.Accept(frame.data, last_frame_ms_)
+            == SmpCanReassembler::Result::COMPLETE;
         if(is_complete)
             peer.packets.emplace_back(peer.buffer.begin(), peer.buffer.begin() + peer.reassembler.GetLength());
 
@@ -300,11 +304,12 @@ public:
     std::unique_ptr<SmpCanTransport> transport;
     Peers peers;
 
-    explicit Harness(CanbusType type = CanbusType::CLASSICAL_CAN, uint32_t data_bitrate = 0)
-        : format(type == CanbusType::CANFD) {
+    explicit Harness(CanbusType type = CanbusType::CLASSICAL_CAN, uint32_t data_bitrate = 0) :
+        format(type == CanbusType::CANFD) {
 
         auto running_canbus = std::make_unique<Canbus>(
-            CanbusConfig(LoopbackDevice(), type, BITRATE, data_bitrate, CAN_MODE_LOOPBACK));
+            CanbusConfig(LoopbackDevice(), type, BITRATE, data_bitrate, CAN_MODE_LOOPBACK)
+        );
         zassert_true(running_canbus->Initialize(), "Canbus::Initialize() failed");
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
@@ -318,8 +323,10 @@ public:
         zassert_true(transport->Bind(OWN_ADDRESS));
 
         peer_handler_id_ = (*canbus)->RegisterFrameReceivedHandler(
-            CanFilter(layout.GetTargetFilterId(FIRST_PEER), PEER_FILTER_MASK, true),
-            [this](const CanFrame& frame) { peers.OnFrame(frame); });
+            CanFilter(layout.GetTargetFilterId(FIRST_PEER), PEER_FILTER_MASK, true), [this](const CanFrame& frame) {
+                peers.OnFrame(frame);
+            }
+        );
         zassert_true(peer_handler_id_ > 0, "Peer filter rejected: %d", peer_handler_id_);
     }
 
@@ -331,8 +338,7 @@ public:
     }
 
     void SendFrame(uint8_t source, uint8_t target, const Bytes& frame) {
-        const int result = (*canbus)->SendFrame(
-            CanId::Extended(layout.MakeId(target, source)), frame, K_MSEC(100));
+        const int result = (*canbus)->SendFrame(CanId::Extended(layout.MakeId(target, source)), frame, K_MSEC(100));
         zassert_equal(result, 0, "SendFrame failed: %d", result);
     }
 

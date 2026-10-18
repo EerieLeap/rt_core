@@ -19,7 +19,7 @@ constexpr int kSimulatorChannels = 8;
 float SampleOne(IAdc& adc, uint8_t channel, uint16_t samples = 16) {
     const uint8_t channels[1] = { channel };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = samples };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = samples };
 
     adc.Sample(request);
     zassert_equal(results[0].error, AdcError::NONE, "channel %u", channel);
@@ -53,9 +53,9 @@ ZTEST(adc_simulator, test_Sample_marks_out_of_range_channels) {
     AdcSimulator adc;
     adc.Initialize();
 
-    const uint8_t channels[3] = {7, kSimulatorChannels, 100};
+    const uint8_t channels[3] = { 7, kSimulatorChannels, 100 };
     AdcSample results[3];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 16 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 16 };
     adc.Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
@@ -75,9 +75,9 @@ ZTEST(adc_simulator, test_Sample_marks_unordered_channels) {
     adc.Initialize();
 
     // The same contract as the hardware ADC: channels ascending, each at most once.
-    const uint8_t channels[3] = {3, 1, 3};
+    const uint8_t channels[3] = { 3, 1, 3 };
     AdcSample results[3];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = 16 };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 16 };
     adc.Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
@@ -95,7 +95,7 @@ ZTEST(adc_simulator, test_Sample_accepts_an_empty_request) {
     AdcSimulator adc;
     adc.Initialize();
 
-    adc.Sample(AdcSampleRequest {});
+    adc.Sample(AdcSampleRequest{});
 
     zassert_equal(adc.GetStats().requests, 1);
     zassert_equal(adc.GetStats().errors, 0);
@@ -218,17 +218,15 @@ ZTEST(adc_simulator_manager, test_resolved_channels_read_within_range) {
 #ifndef CONFIG_ADC
 // A unit without an ADC driver (rt_gauge) may still describe ADCs in its device tree.
 ZTEST(adc_simulator_manager, test_factory_ignores_device_tree_without_a_driver) {
-    static std::optional<std::vector<AdcDTInfo>> dt_adcs = std::vector<AdcDTInfo> {
-        AdcDTInfo {
-            .adc_device = nullptr,
-            .channel_configs = { adc_channel_cfg {} },
-            .references_mv = { 3300 },
-            .resolutions = { 12 },
-            .oversampling = { 0 }
-        }
-    };
+    static std::optional<std::vector<AdcDTInfo>> dt_adcs = std::vector<AdcDTInfo>{ AdcDTInfo{ .adc_device = nullptr,
+        .channel_configs = { adc_channel_cfg{} },
+        .references_mv = { 3300 },
+        .resolutions = { 12 },
+        .oversampling = { 0 } } };
 
-    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& { return dt_adcs; });
+    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& {
+        return dt_adcs;
+    });
     auto manager = factory.Create();
 
     zassert_equal(manager->GetAdcCount(), 1);

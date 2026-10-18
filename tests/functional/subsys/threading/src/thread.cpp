@@ -25,7 +25,9 @@ private:
     atomic_t exits_;
 
 public:
-    BlockingWorker() : entries_(ATOMIC_INIT(0)), exits_(ATOMIC_INIT(0)) {
+    BlockingWorker() :
+        entries_(ATOMIC_INIT(0)),
+        exits_(ATOMIC_INIT(0)) {
         k_sem_init(&entered_, 0, K_SEM_MAX_LIMIT);
         k_sem_init(&resume_, 0, K_SEM_MAX_LIMIT);
     }
@@ -37,11 +39,19 @@ public:
         atomic_inc(&exits_);
     }
 
-    bool WaitForEntry(int timeout_ms) { return k_sem_take(&entered_, K_MSEC(timeout_ms)) == 0; }
-    void Resume() { k_sem_give(&resume_); }
+    bool WaitForEntry(int timeout_ms) {
+        return k_sem_take(&entered_, K_MSEC(timeout_ms)) == 0;
+    }
+    void Resume() {
+        k_sem_give(&resume_);
+    }
 
-    [[nodiscard]] int Entries() const { return static_cast<int>(atomic_get(&entries_)); }
-    [[nodiscard]] int Exits() const { return static_cast<int>(atomic_get(&exits_)); }
+    [[nodiscard]] int Entries() const {
+        return static_cast<int>(atomic_get(&entries_));
+    }
+    [[nodiscard]] int Exits() const {
+        return static_cast<int>(atomic_get(&exits_));
+    }
 };
 
 // Terminates on its own so Join() has something to wait for.
@@ -52,8 +62,10 @@ private:
     atomic_t finished_;
 
 public:
-    explicit SleepingWorker(int sleep_ms)
-        : sleep_ms_(sleep_ms), entries_(ATOMIC_INIT(0)), finished_(ATOMIC_INIT(0)) {}
+    explicit SleepingWorker(int sleep_ms) :
+        sleep_ms_(sleep_ms),
+        entries_(ATOMIC_INIT(0)),
+        finished_(ATOMIC_INIT(0)) {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);
@@ -61,8 +73,12 @@ public:
         atomic_inc(&finished_);
     }
 
-    [[nodiscard]] int Entries() const { return static_cast<int>(atomic_get(&entries_)); }
-    [[nodiscard]] int Finished() const { return static_cast<int>(atomic_get(&finished_)); }
+    [[nodiscard]] int Entries() const {
+        return static_cast<int>(atomic_get(&entries_));
+    }
+    [[nodiscard]] int Finished() const {
+        return static_cast<int>(atomic_get(&finished_));
+    }
 };
 
 // Throws instead of returning, so the entry-point trampoline must catch it.
@@ -72,7 +88,9 @@ private:
     atomic_t entries_;
 
 public:
-    explicit ThrowingWorker(bool throw_std_exception) : throw_std_exception_(throw_std_exception), entries_(ATOMIC_INIT(0)) {}
+    explicit ThrowingWorker(bool throw_std_exception) :
+        throw_std_exception_(throw_std_exception),
+        entries_(ATOMIC_INIT(0)) {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);
@@ -83,7 +101,9 @@ public:
         throw 42;
     }
 
-    [[nodiscard]] int Entries() const { return static_cast<int>(atomic_get(&entries_)); }
+    [[nodiscard]] int Entries() const {
+        return static_cast<int>(atomic_get(&entries_));
+    }
 };
 
 } // namespace
@@ -308,11 +328,8 @@ ZTEST(thread, test_threads_run_independently_of_each_other) {
     constexpr int THREAD_COUNT = 3;
 
     BlockingWorker workers[THREAD_COUNT];
-    Thread threads[] = {
-        Thread("worker_0", &workers[0], STACK_SIZE, PRIORITY),
-        Thread("worker_1", &workers[1], STACK_SIZE, PRIORITY),
-        Thread("worker_2", &workers[2], STACK_SIZE, PRIORITY)
-    };
+    Thread threads[] = { Thread("worker_0", &workers[0], STACK_SIZE, PRIORITY),
+        Thread("worker_1", &workers[1], STACK_SIZE, PRIORITY), Thread("worker_2", &workers[2], STACK_SIZE, PRIORITY) };
 
     for(auto& thread : threads) {
         thread.Initialize();

@@ -27,9 +27,15 @@ inline constexpr uint8_t TYPE_B = 0x11;
 /** @brief A CdmpService on the loopback controller, and a peer scripted on the same bus. */
 class Harness : public CdmpLoopbackHarness {
 protected:
-    bool StartUnit() override { return unit->Start(); }
-    [[nodiscard]] CdmpDeviceStatus GetUnitStatus() const override { return unit->GetDevice()->GetStatus(); }
-    [[nodiscard]] uint8_t GetUnitDeviceId() const override { return unit->GetDevice()->GetDeviceId(); }
+    bool StartUnit() override {
+        return unit->Start();
+    }
+    [[nodiscard]] CdmpDeviceStatus GetUnitStatus() const override {
+        return unit->GetDevice()->GetStatus();
+    }
+    [[nodiscard]] uint8_t GetUnitDeviceId() const override {
+        return unit->GetDevice()->GetDeviceId();
+    }
 
 public:
     std::shared_ptr<CanbusProxy> canbus;
@@ -37,7 +43,8 @@ public:
 
     Harness() {
         auto running_canbus = std::make_unique<Canbus>(
-            CanbusConfig(LoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK));
+            CanbusConfig(LoopbackDevice(), CanbusType::CLASSICAL_CAN, 500000, 0, CAN_MODE_LOOPBACK)
+        );
         zassert_true(running_canbus->Initialize(), "Canbus::Initialize() failed");
         zassert_true(running_canbus->Start(), "Canbus::Start() failed");
         canbus = std::make_shared<CanbusProxy>(std::move(running_canbus));
@@ -54,7 +61,9 @@ public:
         unit.reset();
     }
 
-    std::shared_ptr<CdmpStateService> State() const { return unit->GetStateService(); }
+    std::shared_ptr<CdmpStateService> State() const {
+        return unit->GetStateService();
+    }
 };
 
 } // namespace cdmp_state_test

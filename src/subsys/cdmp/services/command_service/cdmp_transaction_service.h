@@ -8,21 +8,22 @@
 #include "subsys/cdmp/models/cdmp_device.h"
 #include "subsys/cdmp/models/cdmp_message.h"
 
-#include <unordered_map>
 #include <functional>
+#include <unordered_map>
 #include <zephyr/kernel.h>
 
 namespace eerie_leap::subsys::cdmp::services::command_service {
 
 namespace threading = eerie_leap::subsys::threading;
 
-using threading::WorkQueueThread;
-using threading::WorkQueueTaskResult;
-using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
-using eerie_leap::subsys::cdmp::models::CdmpDevice;
 using eerie_leap::subsys::cdmp::models::CdmpCommandResponseMessage;
+using eerie_leap::subsys::cdmp::models::CdmpDevice;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
-using CdmpTransactionCallback = std::function<void(uint8_t transaction_id, const CdmpResultCode, std::span<const uint8_t>)>;
+using CdmpTransactionCallback =
+    std::function<void(uint8_t transaction_id, const CdmpResultCode, std::span<const uint8_t>)>;
 
 struct PendingTransaction {
     uint8_t transaction_id;
@@ -54,12 +55,11 @@ private:
     void CleanupExpiredTransactions();
     uint8_t GetNextTransactionId();
     static bool IsResponseTo(const PendingTransaction& transaction, const CdmpCommandResponseMessage& response);
-    static void InvokeCallback(PendingTransaction& transaction, CdmpResultCode result_code, std::span<const uint8_t> data);
+    static void
+    InvokeCallback(PendingTransaction& transaction, CdmpResultCode result_code, std::span<const uint8_t> data);
 
 public:
-    CdmpTransactionService(
-        std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<CdmpDevice> device);
+    CdmpTransactionService(std::shared_ptr<WorkQueueThread> work_queue_thread, std::shared_ptr<CdmpDevice> device);
 
     ~CdmpTransactionService();
 
@@ -72,7 +72,8 @@ public:
         uint8_t target_device_id,
         uint8_t expected_command,
         int timeout = CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS,
-        CdmpTransactionCallback callback = nullptr);
+        CdmpTransactionCallback callback = nullptr
+    );
     /**
      * @brief Completes the transaction @p response answers, if any.
      *

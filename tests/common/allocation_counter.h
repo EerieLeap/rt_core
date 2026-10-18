@@ -13,7 +13,7 @@ namespace rt_core_test {
 
 namespace allocation_counter_detail {
 
-std::atomic<size_t> allocation_count{0};
+std::atomic<size_t> allocation_count{ 0 };
 
 void* CountedAllocate(size_t size) {
     allocation_count.fetch_add(1, std::memory_order_relaxed);
@@ -40,11 +40,27 @@ size_t GetAllocationCount() {
 
 } // namespace rt_core_test
 
-void* operator new(size_t size) { return rt_core_test::allocation_counter_detail::CountedAllocate(size); }
-void* operator new[](size_t size) { return rt_core_test::allocation_counter_detail::CountedAllocate(size); }
-void* operator new(size_t size, const std::nothrow_t& tag) noexcept { return rt_core_test::allocation_counter_detail::CountedAllocate(size, tag); }
-void* operator new[](size_t size, const std::nothrow_t& tag) noexcept { return rt_core_test::allocation_counter_detail::CountedAllocate(size, tag); }
-void operator delete(void* pointer) noexcept { std::free(pointer); }
-void operator delete[](void* pointer) noexcept { std::free(pointer); }
-void operator delete(void* pointer, size_t) noexcept { std::free(pointer); }
-void operator delete[](void* pointer, size_t) noexcept { std::free(pointer); }
+void* operator new(size_t size) {
+    return rt_core_test::allocation_counter_detail::CountedAllocate(size);
+}
+void* operator new[](size_t size) {
+    return rt_core_test::allocation_counter_detail::CountedAllocate(size);
+}
+void* operator new(size_t size, const std::nothrow_t& tag) noexcept {
+    return rt_core_test::allocation_counter_detail::CountedAllocate(size, tag);
+}
+void* operator new[](size_t size, const std::nothrow_t& tag) noexcept {
+    return rt_core_test::allocation_counter_detail::CountedAllocate(size, tag);
+}
+void operator delete(void* pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer) noexcept {
+    std::free(pointer);
+}
+void operator delete(void* pointer, size_t) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer, size_t) noexcept {
+    std::free(pointer);
+}

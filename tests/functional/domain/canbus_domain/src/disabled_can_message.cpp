@@ -3,44 +3,44 @@
 #include <memory>
 #include <string_view>
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "configuration/cbor/cbor_serializer.h"
 #include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
+#include "configuration/cbor/cbor_serializer.h"
 #include "configuration/services/cbor_configuration_service.h"
+#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
+#include "domain/canbus_domain/configuration/parsers/canbus_configuration_cbor_parser.h"
+#include "domain/canbus_domain/models/can_channel_configuration.h"
+#include "domain/canbus_domain/models/can_message_configuration.h"
+#include "domain/canbus_domain/models/canbus_configuration.h"
+#include "domain/canbus_domain/services/canbus_scheduler_service.h"
+#include "domain/canbus_domain/services/canbus_service.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/canbus/can_frame.h"
 #include "subsys/canbus/can_id.h"
 #include "subsys/device_tree/dt_fs.h"
 #include "subsys/fs/services/fs_service.h"
-#include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
-#include "domain/canbus_domain/configuration/parsers/canbus_configuration_cbor_parser.h"
-#include "domain/canbus_domain/models/canbus_configuration.h"
-#include "domain/canbus_domain/models/can_channel_configuration.h"
-#include "domain/canbus_domain/models/can_message_configuration.h"
-#include "domain/canbus_domain/services/canbus_scheduler_service.h"
-#include "domain/canbus_domain/services/canbus_service.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_leap::domain::canbus_domain::models;
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::configuration::cbor::CborSerializer;
 using eerie_leap::configuration::services::CborConfigurationService;
-using eerie_leap::subsys::canbus::CanFrame;
-using eerie_leap::subsys::canbus::CanId;
-using eerie_leap::subsys::device_tree::DtFs;
-using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 using eerie_leap::domain::canbus_domain::configuration::parsers::CanbusConfigurationCborParser;
 using eerie_leap::domain::canbus_domain::services::CanbusSchedulerService;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::canbus::CanFrame;
+using eerie_leap::subsys::canbus::CanId;
+using eerie_leap::subsys::device_tree::DtFs;
+using eerie_leap::subsys::fs::services::FsService;
+using eerie_leap::utilities::memory::Mrm;
 
 namespace {
 
@@ -102,7 +102,8 @@ CanbusConfiguration MakeConfiguration() {
 
 std::shared_ptr<CanbusConfigurationManager> MakeConfigurationManager(std::shared_ptr<FsService> fs_service) {
     auto manager = std::make_shared<CanbusConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr);
+        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr
+    );
     zassert_true(manager->Update(MakeConfiguration()), "The CAN configuration is valid");
 
     return manager;
@@ -187,22 +188,32 @@ ZTEST(disabled_can_message, test_the_scheduler_does_not_send_a_disabled_message)
 
     auto configuration_manager = MakeConfigurationManager(MakeFormattedFsService());
     auto canbus_service = std::make_shared<CanbusService>(
-        [](uint8_t bus_channel) { return bus_channel == kBus ? LoopbackDevice() : nullptr; },
-        configuration_manager);
+        [](uint8_t bus_channel) {
+            return bus_channel == kBus ? LoopbackDevice() : nullptr;
+        },
+        configuration_manager
+    );
 
     const auto canbus = canbus_service->GetCanbus(kBus);
     zassert_not_null(canbus.get(), "The channel is open");
     SwitchToLoopbackMode();
 
     const int enabled_handler_id = (*canbus)->RegisterFrameReceivedHandler(
-        CanId::Standard(kEnabledFrameId), [&enabled_frames](const CanFrame&) { enabled_frames.Count(); });
+        CanId::Standard(kEnabledFrameId), [&enabled_frames](const CanFrame&) {
+            enabled_frames.Count();
+        }
+    );
     const int disabled_handler_id = (*canbus)->RegisterFrameReceivedHandler(
-        CanId::Standard(kDisabledFrameId), [&disabled_frames](const CanFrame&) { disabled_frames.Count(); });
+        CanId::Standard(kDisabledFrameId), [&disabled_frames](const CanFrame&) {
+            disabled_frames.Count();
+        }
+    );
     zassert_true(enabled_handler_id > 0, "Frame handler rejected: %d", enabled_handler_id);
     zassert_true(disabled_handler_id > 0, "Frame handler rejected: %d", disabled_handler_id);
 
     auto scheduler = std::make_shared<CanbusSchedulerService>(
-        configuration_manager, canbus_service, std::make_shared<SensorReadingsFrame>());
+        configuration_manager, canbus_service, std::make_shared<SensorReadingsFrame>()
+    );
     zassert_true(scheduler->Initialize());
     zassert_true(scheduler->Start());
 

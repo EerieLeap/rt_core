@@ -1,8 +1,8 @@
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <string_view>
-#include <bit>
 
 class XxHash64 {
 public:
@@ -24,21 +24,21 @@ private:
     static constexpr uint64_t XXH_PRIME64_5 = 0x27D4EB2F165667C5ULL;
 
     static constexpr uint64_t ReadLE64(std::string_view str, size_t i) noexcept {
-        return  static_cast<uint64_t>(static_cast<unsigned char>(str[i]))
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 1])) << 8)
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 2])) << 16)
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 3])) << 24)
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 4])) << 32)
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 5])) << 40)
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 6])) << 48)
-              | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 7])) << 56);
+        return static_cast<uint64_t>(static_cast<unsigned char>(str[i]))
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 1])) << 8)
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 2])) << 16)
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 3])) << 24)
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 4])) << 32)
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 5])) << 40)
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 6])) << 48)
+            | (static_cast<uint64_t>(static_cast<unsigned char>(str[i + 7])) << 56);
     }
 
     static constexpr uint32_t ReadLE32(std::string_view str, size_t i) noexcept {
-        return  static_cast<uint32_t>(static_cast<unsigned char>(str[i]))
-              | (static_cast<uint32_t>(static_cast<unsigned char>(str[i + 1])) << 8)
-              | (static_cast<uint32_t>(static_cast<unsigned char>(str[i + 2])) << 16)
-              | (static_cast<uint32_t>(static_cast<unsigned char>(str[i + 3])) << 24);
+        return static_cast<uint32_t>(static_cast<unsigned char>(str[i]))
+            | (static_cast<uint32_t>(static_cast<unsigned char>(str[i + 1])) << 8)
+            | (static_cast<uint32_t>(static_cast<unsigned char>(str[i + 2])) << 16)
+            | (static_cast<uint32_t>(static_cast<unsigned char>(str[i + 3])) << 24);
     }
 
     static constexpr uint64_t Round(uint64_t acc, uint64_t input) noexcept {
@@ -69,7 +69,7 @@ private:
         size_t i = 0;
         uint64_t h64;
 
-        if (len >= 32) {
+        if(len >= 32) {
             const size_t limit = len - 32;
             uint64_t v1 = seed + XXH_PRIME64_1 + XXH_PRIME64_2;
             uint64_t v2 = seed + XXH_PRIME64_2;
@@ -77,11 +77,15 @@ private:
             uint64_t v4 = seed - XXH_PRIME64_1;
 
             do {
-                v1 = Round(v1, ReadLE64(str, i)); i += 8;
-                v2 = Round(v2, ReadLE64(str, i)); i += 8;
-                v3 = Round(v3, ReadLE64(str, i)); i += 8;
-                v4 = Round(v4, ReadLE64(str, i)); i += 8;
-            } while (i <= limit);
+                v1 = Round(v1, ReadLE64(str, i));
+                i += 8;
+                v2 = Round(v2, ReadLE64(str, i));
+                i += 8;
+                v3 = Round(v3, ReadLE64(str, i));
+                i += 8;
+                v4 = Round(v4, ReadLE64(str, i));
+                i += 8;
+            } while(i <= limit);
 
             h64 = std::rotl(v1, 1) + std::rotl(v2, 7) + std::rotl(v3, 12) + std::rotl(v4, 18);
             h64 = MergeRound(h64, v1);
@@ -94,19 +98,19 @@ private:
 
         h64 += static_cast<uint64_t>(len);
 
-        while (i + 8 <= len) {
+        while(i + 8 <= len) {
             h64 ^= Round(0, ReadLE64(str, i));
             h64 = std::rotl(h64, 27) * XXH_PRIME64_1 + XXH_PRIME64_4;
             i += 8;
         }
 
-        if (i + 4 <= len) {
+        if(i + 4 <= len) {
             h64 ^= static_cast<uint64_t>(ReadLE32(str, i)) * XXH_PRIME64_1;
             h64 = std::rotl(h64, 23) * XXH_PRIME64_2 + XXH_PRIME64_3;
             i += 4;
         }
 
-        while (i < len) {
+        while(i < len) {
             h64 ^= static_cast<uint64_t>(static_cast<unsigned char>(str[i])) * XXH_PRIME64_5;
             h64 = std::rotl(h64, 11) * XXH_PRIME64_1;
             ++i;

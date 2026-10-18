@@ -14,7 +14,8 @@ public:
     SystemConfigurationCborParser() = default;
 
     eerie_memory::pmr_unique_ptr<CborSystemConfig> Serialize(const SystemConfiguration& configuration);
-    eerie_memory::pmr_unique_ptr<SystemConfiguration> Deserialize(std::pmr::memory_resource* mr, const CborSystemConfig& config);
+    eerie_memory::pmr_unique_ptr<SystemConfiguration>
+    Deserialize(std::pmr::memory_resource* mr, const CborSystemConfig& config);
 };
 
 } // namespace eerie_leap::domain::system_domain::configuration::parsers

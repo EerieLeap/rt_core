@@ -22,7 +22,9 @@ public:
     explicit SmpCanFramer(std::span<const uint8_t> packet, SmpCanFrameFormat format = {});
 
     /** @brief True once every frame has been passed by Advance(). */
-    [[nodiscard]] bool IsDone() const { return offset_ >= packet_.size(); }
+    [[nodiscard]] bool IsDone() const {
+        return offset_ >= packet_.size();
+    }
 
     /**
      * @brief Writes the current frame without advancing, so a failed send can be repeated.

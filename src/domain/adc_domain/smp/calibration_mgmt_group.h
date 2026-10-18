@@ -3,13 +3,13 @@
 #include <cstdint>
 #include <memory>
 
-#include "subsys/smp/smp_group.h"
 #include "domain/adc_domain/services/calibration_service.h"
+#include "subsys/smp/smp_group.h"
 
 namespace eerie_leap::domain::adc_domain::smp {
 
-using eerie_leap::subsys::smp::SmpGroup;
 using eerie_leap::domain::adc_domain::services::CalibrationService;
+using eerie_leap::subsys::smp::SmpGroup;
 
 /**
  * @brief SMP `calibration` group: samples one ADC channel for a client that calibrates it.

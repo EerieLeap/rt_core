@@ -48,4 +48,4 @@ bool GpioSimulator::RemoveChannelChangedHandler(int channel, int handler_id) {
     return false;
 }
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

@@ -19,4 +19,4 @@ public:
     bool RemoveChannelChangedHandler(int channel, int handler_id) override;
 };
 
-}  // namespace eerie_leap::subsys::gpio
+} // namespace eerie_leap::subsys::gpio

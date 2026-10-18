@@ -10,8 +10,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/crc.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/random/rng.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "assets_mgmt_group.h"
 
@@ -19,11 +19,11 @@ LOG_MODULE_REGISTER(assets_mgmt_group, LOG_LEVEL_INF);
 
 namespace eerie_leap::subsys::assets::smp {
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::subsys::random::Rng;
 using eerie_leap::subsys::smp::SmpDecodeRequest;
 using eerie_leap::subsys::smp::SmpGroupId;
 using eerie_leap::subsys::smp::SmpMapKey;
+using eerie_leap::utilities::memory::Mrm;
 
 namespace {
 
@@ -31,7 +31,9 @@ constexpr int64_t SESSION_TIMEOUT_MS = CONFIG_EERIE_LEAP_SMP_ASSETS_SESSION_TIME
 
 // Worst-case encodings, in bytes, of what the responses are made of.
 // A text key shorter than 24 bytes: its head byte and its characters.
-constexpr size_t KeySize(size_t length) { return 1 + length; }
+constexpr size_t KeySize(size_t length) {
+    return 1 + length;
+}
 // An unsigned integer of up to 32 bits: a head byte and four value bytes.
 constexpr size_t MAX_UINT_SIZE = 5;
 // The head of a byte string of up to 4 GiB.
@@ -43,8 +45,9 @@ constexpr size_t MAP_END_SIZE = 1;
 // and an unsigned integer), the key and head of `data`, and the end of the map. That is 38 bytes
 // at most; the rest is margin, as in the config group.
 constexpr size_t READ_RESPONSE_OVERHEAD = 48;
-static_assert(READ_RESPONSE_OVERHEAD >= 3 * (KeySize(3) + MAX_UINT_SIZE)
-    + KeySize(4) + MAX_STRING_HEAD_SIZE + MAP_END_SIZE);
+static_assert(
+    READ_RESPONSE_OVERHEAD >= 3 * (KeySize(3) + MAX_UINT_SIZE) + KeySize(4) + MAX_STRING_HEAD_SIZE + MAP_END_SIZE
+);
 
 // Names are shorter than 256 bytes, so their head is two bytes at most.
 static_assert(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH < 256);
@@ -64,11 +67,13 @@ constexpr char ToLowerAscii(char c) {
 }
 
 bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
-    return std::ranges::equal(a, b, [](char x, char y) { return ToLowerAscii(x) == ToLowerAscii(y); });
+    return std::ranges::equal(a, b, [](char x, char y) {
+        return ToLowerAscii(x) == ToLowerAscii(y);
+    });
 }
 
 std::string_view ToView(const zcbor_string& text) {
-    return {reinterpret_cast<const char*>(text.value), text.len};
+    return { reinterpret_cast<const char*>(text.value), text.len };
 }
 
 // The room the encoder has left.
@@ -79,20 +84,21 @@ size_t Remaining(const zcbor_state_t* zse) {
 } // namespace
 
 const mgmt_handler AssetsMgmtGroup::HANDLERS[] = {
-    {.mh_read = Dispatch<&AssetsMgmtGroup::HandleKinds>, .mh_write = nullptr},
-    {.mh_read = Dispatch<&AssetsMgmtGroup::HandleList>, .mh_write = nullptr},
-    {.mh_read = Dispatch<&AssetsMgmtGroup::HandleRead>, .mh_write = nullptr},
-    {.mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleWrite>},
-    {.mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleDelete>},
+    { .mh_read = Dispatch<&AssetsMgmtGroup::HandleKinds>, .mh_write = nullptr },
+    { .mh_read = Dispatch<&AssetsMgmtGroup::HandleList>, .mh_write = nullptr },
+    { .mh_read = Dispatch<&AssetsMgmtGroup::HandleRead>, .mh_write = nullptr },
+    { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleWrite> },
+    { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleDelete> },
 };
 
 AssetsMgmtGroup::AssetsMgmtGroup(
     std::shared_ptr<AssetsManager> assets_manager,
-    std::shared_ptr<WorkQueueThread> config_work_queue_thread)
-        : SmpGroup(SmpGroupId::ASSETS, HANDLERS, TranslateError),
-        assets_manager_(std::move(assets_manager)),
-        work_queue_thread_(std::move(config_work_queue_thread)),
-        transfer_buffer_(Mrm::GetExtPmr()) {
+    std::shared_ptr<WorkQueueThread> config_work_queue_thread
+) :
+    SmpGroup(SmpGroupId::ASSETS, HANDLERS, TranslateError),
+    assets_manager_(std::move(assets_manager)),
+    work_queue_thread_(std::move(config_work_queue_thread)),
+    transfer_buffer_(Mrm::GetExtPmr()) {
 
     k_sem_init(&job_done_, 0, 1);
 }
@@ -135,15 +141,25 @@ bool AssetsMgmtGroup::Initialize() {
         transfer_buffer_.resize(CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE);
 
         job_task_ = work_queue_thread_->CreateTask(
-            [](AssetsMgmtGroup* group) { return group->ProcessJob(); }, this);
+            [](AssetsMgmtGroup* group) {
+                return group->ProcessJob();
+            },
+            this
+        );
         idle_task_ = work_queue_thread_->CreateTask(
-            [](AssetsMgmtGroup* group) { return group->ProcessIdle(); }, this);
+            [](AssetsMgmtGroup* group) {
+                return group->ProcessIdle();
+            },
+            this
+        );
 
         // A staged upload is deleted by the next one, but holds its space until then.
         for(const auto& provider : assets_manager_->GetProviders()) {
             if(provider->store->IsAvailable() && !provider->store->RemoveStaged()) {
-                LOG_WRN("Failed to delete the staged upload of asset kind %u.",
-                    static_cast<unsigned>(std::to_underlying(provider->kind)));
+                LOG_WRN(
+                    "Failed to delete the staged upload of asset kind %u.",
+                    static_cast<unsigned>(std::to_underlying(provider->kind))
+                );
             }
         }
     } catch(const std::exception& e) {
@@ -179,7 +195,7 @@ int AssetsMgmtGroup::HandleDelete(smp_streamer* ctxt) {
 }
 
 int AssetsMgmtGroup::RunJob(Command command, smp_streamer* ctxt) {
-    Job job{.command = command, .ctxt = ctxt};
+    Job job{ .command = command, .ctxt = ctxt };
 
     job_ = &job;
     job_task_->Schedule();
@@ -251,7 +267,7 @@ WorkQueueTaskResult AssetsMgmtGroup::ProcessIdle() {
     if(delay_ms == INT64_MAX)
         return {};
 
-    return {.reschedule = true, .delay = K_MSEC(delay_ms)};
+    return { .reschedule = true, .delay = K_MSEC(delay_ms) };
 }
 
 int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
@@ -265,19 +281,28 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
         const AssetStore& store = *provider->store;
         const std::string& directory = store.GetDirectory();
 
-        ok = ok && zcbor_map_start_encode(zse, 7)
-            && zcbor_tstr_put_lit(zse, "kind") && zcbor_uint32_put(zse, std::to_underlying(provider->kind))
-            && zcbor_tstr_put_lit(zse, "name") && zcbor_tstr_encode_ptr(zse, provider->name.data(), provider->name.size())
-            && zcbor_tstr_put_lit(zse, "dir") && zcbor_tstr_encode_ptr(zse, directory.data(), directory.size())
-            && zcbor_tstr_put_lit(zse, "access") && zcbor_uint32_put(zse, provider->access)
-            && zcbor_tstr_put_lit(zse, "max") && zcbor_uint32_put(zse, provider->max_size)
-            && zcbor_tstr_put_lit(zse, "ext") && zcbor_list_start_encode(zse, provider->extensions.size());
+        ok = ok
+            && zcbor_map_start_encode(zse, 7)
+            && zcbor_tstr_put_lit(zse, "kind")
+            && zcbor_uint32_put(zse, std::to_underlying(provider->kind))
+            && zcbor_tstr_put_lit(zse, "name")
+            && zcbor_tstr_encode_ptr(zse, provider->name.data(), provider->name.size())
+            && zcbor_tstr_put_lit(zse, "dir")
+            && zcbor_tstr_encode_ptr(zse, directory.data(), directory.size())
+            && zcbor_tstr_put_lit(zse, "access")
+            && zcbor_uint32_put(zse, provider->access)
+            && zcbor_tstr_put_lit(zse, "max")
+            && zcbor_uint32_put(zse, provider->max_size)
+            && zcbor_tstr_put_lit(zse, "ext")
+            && zcbor_list_start_encode(zse, provider->extensions.size());
 
         for(const std::string_view extension : provider->extensions)
             ok = ok && zcbor_tstr_encode_ptr(zse, extension.data(), extension.size());
 
-        ok = ok && zcbor_list_end_encode(zse, provider->extensions.size())
-            && zcbor_tstr_put_lit(zse, "avail") && zcbor_bool_put(zse, store.IsAvailable())
+        ok = ok
+            && zcbor_list_end_encode(zse, provider->extensions.size())
+            && zcbor_tstr_put_lit(zse, "avail")
+            && zcbor_bool_put(zse, store.IsAvailable())
             && zcbor_map_end_encode(zse, 7);
     }
 
@@ -322,8 +347,10 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
 
         const auto size = static_cast<uint32_t>(std::min<size_t>(entry.size, UINT32_MAX));
         ok = zcbor_map_start_encode(zse, 2)
-            && zcbor_tstr_put_lit(zse, "name") && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
-            && zcbor_tstr_put_lit(zse, "size") && zcbor_uint32_put(zse, size)
+            && zcbor_tstr_put_lit(zse, "name")
+            && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
+            && zcbor_tstr_put_lit(zse, "size")
+            && zcbor_uint32_put(zse, size)
             && zcbor_map_end_encode(zse, 2);
         listed++;
     }
@@ -399,7 +426,7 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     zcbor_state_t* zse = ctxt->writer->zs;
     const size_t available = Remaining(zse);
     const size_t room = available > READ_RESPONSE_OVERHEAD ? available - READ_RESPONSE_OVERHEAD : 0;
-    const size_t chunk = std::min({size - offset, room, transfer_buffer_.size()});
+    const size_t chunk = std::min({ size - offset, room, transfer_buffer_.size() });
 
     if(chunk == 0 && size > offset)
         return MGMT_ERR_EMSGSIZE;
@@ -481,8 +508,16 @@ int AssetsMgmtGroup::ExecuteWrite(smp_streamer* ctxt) {
     return WriteNextChunk(ctxt, kind, asset_name, offset, has_token, token, chunk);
 }
 
-int AssetsMgmtGroup::WriteFirstChunk(smp_streamer* ctxt, uint32_t kind, std::string_view name, uint32_t length,
-    uint32_t crc, bool has_token, uint32_t token, std::span<const uint8_t> chunk) {
+int AssetsMgmtGroup::WriteFirstChunk(
+    smp_streamer* ctxt,
+    uint32_t kind,
+    std::string_view name,
+    uint32_t length,
+    uint32_t crc,
+    bool has_token,
+    uint32_t token,
+    std::span<const uint8_t> chunk
+) {
 
     std::shared_ptr<const AssetProvider> provider;
 
@@ -556,8 +591,15 @@ int AssetsMgmtGroup::WriteFirstChunk(smp_streamer* ctxt, uint32_t kind, std::str
     return AcceptChunk(ctxt, provider, 0, chunk, chunk_crc);
 }
 
-int AssetsMgmtGroup::WriteNextChunk(smp_streamer* ctxt, uint32_t kind, std::string_view name, uint32_t offset,
-    bool has_token, uint32_t token, std::span<const uint8_t> chunk) {
+int AssetsMgmtGroup::WriteNextChunk(
+    smp_streamer* ctxt,
+    uint32_t kind,
+    std::string_view name,
+    uint32_t offset,
+    bool has_token,
+    uint32_t token,
+    std::span<const uint8_t> chunk
+) {
 
     const uint32_t chunk_crc = crc32_ieee(chunk.data(), chunk.size());
 
@@ -596,8 +638,13 @@ int AssetsMgmtGroup::WriteNextChunk(smp_streamer* ctxt, uint32_t kind, std::stri
     return AcceptChunk(ctxt, provider, offset, chunk, chunk_crc);
 }
 
-int AssetsMgmtGroup::AcceptChunk(smp_streamer* ctxt, const std::shared_ptr<const AssetProvider>& provider,
-    uint32_t offset, std::span<const uint8_t> chunk, uint32_t chunk_crc) {
+int AssetsMgmtGroup::AcceptChunk(
+    smp_streamer* ctxt,
+    const std::shared_ptr<const AssetProvider>& provider,
+    uint32_t offset,
+    std::span<const uint8_t> chunk,
+    uint32_t chunk_crc
+) {
 
     // The staged file does not outlive an exception either.
     try {
@@ -626,8 +673,13 @@ int AssetsMgmtGroup::AcceptChunk(smp_streamer* ctxt, const std::shared_ptr<const
     }
 }
 
-int AssetsMgmtGroup::FinishUpload(smp_streamer* ctxt, const AssetProvider& provider, uint32_t offset,
-    size_t chunk_length, uint32_t chunk_crc) {
+int AssetsMgmtGroup::FinishUpload(
+    smp_streamer* ctxt,
+    const AssetProvider& provider,
+    uint32_t offset,
+    size_t chunk_length,
+    uint32_t chunk_crc
+) {
 
     if(upload_.crc != upload_.declared_crc) {
         AbortUpload();
@@ -773,8 +825,12 @@ std::shared_ptr<const AssetProvider> AssetsMgmtGroup::FindProvider(uint32_t kind
     return assets_manager_->Find(static_cast<AssetKind>(kind));
 }
 
-AssetsMgmtGroup::Error AssetsMgmtGroup::CheckTarget(uint32_t kind, std::string_view name, AssetAccess access,
-    std::shared_ptr<const AssetProvider>& provider) const {
+AssetsMgmtGroup::Error AssetsMgmtGroup::CheckTarget(
+    uint32_t kind,
+    std::string_view name,
+    AssetAccess access,
+    std::shared_ptr<const AssetProvider>& provider
+) const {
 
     provider = FindProvider(kind);
     if(provider == nullptr)
@@ -792,7 +848,10 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::CheckTarget(uint32_t kind, std::string_v
     return Error::OK;
 }
 
-bool AssetsMgmtGroup::IsReadSessionOf(const std::shared_ptr<const AssetProvider>& provider, std::string_view name) const {
+bool AssetsMgmtGroup::IsReadSessionOf(
+    const std::shared_ptr<const AssetProvider>& provider,
+    std::string_view name
+) const {
     return read_session_.reader.IsOpen() && read_session_.provider == provider && read_session_.name == name;
 }
 
@@ -801,7 +860,10 @@ bool AssetsMgmtGroup::MayBeReadSessionOf(AssetKind kind, std::string_view name) 
 }
 
 AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
-    const std::shared_ptr<const AssetProvider>& provider, std::string_view name, bool use_checkpoint) {
+    const std::shared_ptr<const AssetProvider>& provider,
+    std::string_view name,
+    bool use_checkpoint
+) {
 
     CloseReadSession();
 
@@ -854,7 +916,10 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
 
     // The checkpoint of a session that was closed on this very file (not one that is spelled in
     // another case, which may be another file) continues where it ended.
-    if(use_checkpoint && checkpoint_.is_valid && checkpoint_.kind == provider->kind && checkpoint_.size == size
+    if(use_checkpoint
+        && checkpoint_.is_valid
+        && checkpoint_.kind == provider->kind
+        && checkpoint_.size == size
         && checkpoint_.name == name) {
 
         read_session_.crc = checkpoint_.crc;
@@ -870,7 +935,9 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
 AssetsMgmtGroup::Error AssetsMgmtGroup::ExtendReadCrc(size_t offset) {
     while(read_session_.crc_end < offset) {
         const size_t length = std::min(offset - read_session_.crc_end, transfer_buffer_.size());
-        const ssize_t read = read_session_.reader.Read(read_session_.crc_end, std::span(transfer_buffer_).first(length));
+        const ssize_t read = read_session_.reader.Read(
+            read_session_.crc_end, std::span(transfer_buffer_).first(length)
+        );
 
         // Fewer bytes than the file had when it was opened: it was cut short.
         if(read != static_cast<ssize_t>(length))
@@ -925,26 +992,51 @@ void AssetsMgmtGroup::InvalidateCheckpoint(AssetKind kind, std::string_view name
 }
 
 bool AssetsMgmtGroup::IsUploadOf(uint32_t kind, std::string_view name, bool has_token, uint32_t token) const {
-    return upload_.writer.IsOpen() && has_token && token == upload_.token
-        && std::to_underlying(upload_.kind) == kind && upload_.name == name;
+    return upload_.writer.IsOpen()
+        && has_token
+        && token == upload_.token
+        && std::to_underlying(upload_.kind) == kind
+        && upload_.name == name;
 }
 
-bool AssetsMgmtGroup::IsFirstChunkRepeat(uint32_t kind, std::string_view name, size_t length, uint32_t crc,
-    size_t chunk_length, uint32_t chunk_crc) const {
+bool AssetsMgmtGroup::IsFirstChunkRepeat(
+    uint32_t kind,
+    std::string_view name,
+    size_t length,
+    uint32_t crc,
+    size_t chunk_length,
+    uint32_t chunk_crc
+) const {
 
     // Nothing was accepted after the first chunk.
-    return upload_.writer.IsOpen() && std::to_underlying(upload_.kind) == kind && upload_.name == name
-        && upload_.length == length && upload_.declared_crc == crc && upload_.first_length == chunk_length
-        && upload_.first_crc == chunk_crc && upload_.received == upload_.first_length;
+    return upload_.writer.IsOpen()
+        && std::to_underlying(upload_.kind) == kind
+        && upload_.name == name
+        && upload_.length == length
+        && upload_.declared_crc == crc
+        && upload_.first_length == chunk_length
+        && upload_.first_crc == chunk_crc
+        && upload_.received == upload_.first_length;
 }
 
-bool AssetsMgmtGroup::IsStoredFirstChunkRepeat(const AssetProvider& provider, std::string_view name, size_t length,
-    uint32_t crc, size_t chunk_length, uint32_t chunk_crc) const {
+bool AssetsMgmtGroup::IsStoredFirstChunkRepeat(
+    const AssetProvider& provider,
+    std::string_view name,
+    size_t length,
+    uint32_t crc,
+    size_t chunk_length,
+    uint32_t chunk_crc
+) const {
 
     // The upload had one chunk, which is this one, and ended not long ago.
-    if(last_commit_.token == 0 || last_commit_.offset != 0 || last_commit_.kind != provider.kind
-        || last_commit_.name != name || last_commit_.length != length || last_commit_.declared_crc != crc
-        || last_commit_.chunk_length != chunk_length || last_commit_.chunk_crc != chunk_crc
+    if(last_commit_.token == 0
+        || last_commit_.offset != 0
+        || last_commit_.kind != provider.kind
+        || last_commit_.name != name
+        || last_commit_.length != length
+        || last_commit_.declared_crc != crc
+        || last_commit_.chunk_length != chunk_length
+        || last_commit_.chunk_crc != chunk_crc
         || k_uptime_get() - last_commit_.time_ms >= SESSION_TIMEOUT_MS) {
 
         return false;
@@ -954,13 +1046,25 @@ bool AssetsMgmtGroup::IsStoredFirstChunkRepeat(const AssetProvider& provider, st
     return provider.store->GetSize(name) == length;
 }
 
-bool AssetsMgmtGroup::IsLastChunkRepeat(uint32_t kind, std::string_view name, bool has_token, uint32_t token,
-    uint32_t offset, size_t chunk_length, uint32_t chunk_crc) const {
+bool AssetsMgmtGroup::IsLastChunkRepeat(
+    uint32_t kind,
+    std::string_view name,
+    bool has_token,
+    uint32_t token,
+    uint32_t offset,
+    size_t chunk_length,
+    uint32_t chunk_crc
+) const {
 
-    return last_commit_.token != 0 && has_token && token == last_commit_.token
-        && std::to_underlying(last_commit_.kind) == kind && last_commit_.name == name
-        && last_commit_.offset == offset && last_commit_.chunk_length == chunk_length
-        && last_commit_.chunk_crc == chunk_crc && k_uptime_get() - last_commit_.time_ms < SESSION_TIMEOUT_MS;
+    return last_commit_.token != 0
+        && has_token
+        && token == last_commit_.token
+        && std::to_underlying(last_commit_.kind) == kind
+        && last_commit_.name == name
+        && last_commit_.offset == offset
+        && last_commit_.chunk_length == chunk_length
+        && last_commit_.chunk_crc == chunk_crc
+        && k_uptime_get() - last_commit_.time_ms < SESSION_TIMEOUT_MS;
 }
 
 void AssetsMgmtGroup::InvalidateLastCommit(AssetKind kind, std::string_view name) {
@@ -991,8 +1095,10 @@ void AssetsMgmtGroup::ExpireUpload(int64_t now_ms) {
     if(!upload_.writer.IsOpen() || now_ms - upload_.last_activity_ms < SESSION_TIMEOUT_MS)
         return;
 
-    LOG_INF("Assets upload timed out at byte %u of %u.", static_cast<unsigned>(upload_.received),
-        static_cast<unsigned>(upload_.length));
+    LOG_INF(
+        "Assets upload timed out at byte %u of %u.", static_cast<unsigned>(upload_.received),
+        static_cast<unsigned>(upload_.length)
+    );
     AbortUpload();
 }
 
@@ -1005,13 +1111,13 @@ int64_t AssetsMgmtGroup::GetIdleDelayMs(int64_t now_ms) const {
     int64_t delay_ms = INT64_MAX;
 
     if(read_session_.reader.IsOpen()) {
-        delay_ms = std::min(delay_ms,
-            std::max<int64_t>(0, SESSION_TIMEOUT_MS - (now_ms - read_session_.last_activity_ms)));
+        delay_ms = std::min(
+            delay_ms, std::max<int64_t>(0, SESSION_TIMEOUT_MS - (now_ms - read_session_.last_activity_ms))
+        );
     }
 
     if(upload_.writer.IsOpen()) {
-        delay_ms = std::min(delay_ms,
-            std::max<int64_t>(0, SESSION_TIMEOUT_MS - (now_ms - upload_.last_activity_ms)));
+        delay_ms = std::min(delay_ms, std::max<int64_t>(0, SESSION_TIMEOUT_MS - (now_ms - upload_.last_activity_ms)));
     }
 
     return delay_ms;

@@ -56,7 +56,7 @@ ZTEST(ext_memory_resource, test_backs_pmr_vector) {
     ExtMemoryResource resource;
     std::pmr::vector<int> values(&resource);
 
-    for (int i = 0; i < 256; ++i)
+    for(int i = 0; i < 256; ++i)
         values.push_back(i);
 
     zassert_equal(values.size(), 256);

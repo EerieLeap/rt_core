@@ -6,18 +6,18 @@
 #include <string_view>
 #include <vector>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "subsys/canbus/can_frame.h"
-#include "subsys/time/i_time_service.h"
 #include "domain/canbus_domain/models/can_message_configuration.h"
+#include "domain/sensor_domain/isr_sensor_readers/can_route_table.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
-#include "domain/sensor_domain/isr_sensor_readers/can_route_table.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/canbus/can_frame.h"
+#include "subsys/time/i_time_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -59,7 +59,9 @@ struct Fixture {
     std::shared_ptr<FakeTimeService> time_service;
 
     CanRouteTable::SignalResolver Resolver() const {
-        return [this](uint8_t bus, uint32_t frame_id, uint32_t signal_name_hash) -> std::shared_ptr<const CanSignalConfiguration> {
+        return [this](
+                   uint8_t bus, uint32_t frame_id, uint32_t signal_name_hash
+               ) -> std::shared_ptr<const CanSignalConfiguration> {
             if(bus != kBus || frame_id != message->frame_id)
                 return nullptr;
 
@@ -94,7 +96,9 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
     for(size_t i = 0; i < kSignalCount; i++) {
         auto sensor = std::make_shared<Sensor>(std::allocator_arg, mr, "can_" + std::to_string(i));
         sensor->configuration.type = SensorType::CANBUS_ANALOG;
-        sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(mr, kBus, kSignalsFrameId, "sig_" + std::to_string(i));
+        sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(
+            mr, kBus, kSignalsFrameId, "sig_" + std::to_string(i)
+        );
         sensor->configuration.UpdateConnectionString();
         fixture.sensors.push_back(sensor);
     }
@@ -109,8 +113,8 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
         sensor->is_enabled = std::ranges::find(disabled_ids, std::string_view(sensor->id)) == disabled_ids.end();
 
     fixture.frame = std::make_shared<SensorReadingsFrame>();
-    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(fixture.sensors));
+    fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame)
+                             .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(fixture.sensors));
 
     fixture.time_service = std::make_shared<FakeTimeService>();
 
@@ -131,8 +135,10 @@ ZTEST(can_route_table, test_Build_groups_the_sensors_of_a_frame_into_one_route) 
     const CanRoute* signals = nullptr;
     const CanRoute* raw = nullptr;
     for(const auto& route : routes) {
-        if(route.frame_id == kSignalsFrameId) signals = &route;
-        if(route.frame_id == kRawFrameId) raw = &route;
+        if(route.frame_id == kSignalsFrameId)
+            signals = &route;
+        if(route.frame_id == kRawFrameId)
+            raw = &route;
     }
 
     zassert_not_null(signals);
@@ -150,7 +156,9 @@ ZTEST(can_route_table, test_Build_leaves_out_a_sensor_whose_signal_is_not_config
     auto fixture = MakeFixture();
 
     CanRouteTable table;
-    table.Build(*fixture.generation, [](uint8_t, uint32_t, uint32_t) { return nullptr; });
+    table.Build(*fixture.generation, [](uint8_t, uint32_t, uint32_t) {
+        return nullptr;
+    });
 
     zassert_equal(table.GetRoutes().size(), 1, "Only the raw sensor needs no signal");
     zassert_equal(table.GetRoutes()[0].frame_id, kRawFrameId);
@@ -168,7 +176,9 @@ ZTEST(can_route_table, test_Build_leaves_out_disabled_sensors) {
     zassert_equal(routes[0].bindings.size(), kSignalCount - 1, "A disabled signal sensor is not decoded");
 
     for(const auto& binding : routes[0].bindings)
-        zassert_true(binding.runtime->GetSensor().is_enabled, "%s is disabled", binding.runtime->GetSensor().id.c_str());
+        zassert_true(
+            binding.runtime->GetSensor().is_enabled, "%s is disabled", binding.runtime->GetSensor().id.c_str()
+        );
 }
 
 ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
@@ -179,7 +189,8 @@ ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
 
     const CanRoute* signals = nullptr;
     for(const auto& route : table.GetRoutes())
-        if(route.frame_id == kSignalsFrameId) signals = &route;
+        if(route.frame_id == kSignalsFrameId)
+            signals = &route;
 
     // Nibble i holds the value i, little-endian.
     CanFrame frame;
@@ -189,8 +200,8 @@ ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
     std::array<std::optional<float>, kSignalCount> values;
     size_t readings = 0;
 
-    CanRouteTable::Dispatch(*signals, frame, *fixture.time_service,
-        [&](const SensorRuntime& runtime, SensorReading& reading) {
+    CanRouteTable::Dispatch(
+        *signals, frame, *fixture.time_service, [&](const SensorRuntime& runtime, SensorReading& reading) {
             readings++;
 
             zassert_equal(reading.source, ReadingSource::ISR);
@@ -200,12 +211,16 @@ ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
 
             // The sensor's position in the generation is also its signal index.
             values[runtime.slot.index] = reading.value;
-        });
+        }
+    );
 
     zassert_equal(readings, kSignalCount, "One reading per sensor on the frame");
     for(size_t i = 0; i < kSignalCount; i++) {
         zassert_true(values[i].has_value(), "Signal %zu was not decoded", i);
-        zassert_equal(values[i].value(), static_cast<float>(i), "Signal %zu decoded to %f", i, static_cast<double>(values[i].value()));
+        zassert_equal(
+            values[i].value(), static_cast<float>(i), "Signal %zu decoded to %f", i,
+            static_cast<double>(values[i].value())
+        );
     }
 }
 
@@ -217,15 +232,16 @@ ZTEST(can_route_table, test_Dispatch_hands_a_raw_sensor_the_frame_itself) {
 
     const CanRoute* raw = nullptr;
     for(const auto& route : table.GetRoutes())
-        if(route.frame_id == kRawFrameId) raw = &route;
+        if(route.frame_id == kRawFrameId)
+            raw = &route;
 
     CanFrame frame;
     frame.id = kRawFrameId;
     frame.data = { 1, 2, 3 };
 
     size_t readings = 0;
-    CanRouteTable::Dispatch(*raw, frame, *fixture.time_service,
-        [&](const SensorRuntime& runtime, SensorReading& reading) {
+    CanRouteTable::Dispatch(
+        *raw, frame, *fixture.time_service, [&](const SensorRuntime& runtime, SensorReading& reading) {
             readings++;
 
             zassert_equal(runtime.GetSensor().configuration.type, SensorType::CANBUS_RAW);
@@ -234,7 +250,8 @@ ZTEST(can_route_table, test_Dispatch_hands_a_raw_sensor_the_frame_itself) {
 
             // Committing stores the frame for the loggers.
             fixture.frame->AddOrUpdateReading(reading);
-        });
+        }
+    );
 
     zassert_equal(readings, 1);
 
@@ -254,7 +271,9 @@ ZTEST(can_route_table, test_Dispatch_ignores_an_empty_frame) {
 
     size_t readings = 0;
     for(const auto& route : table.GetRoutes())
-        CanRouteTable::Dispatch(route, frame, *fixture.time_service, [&](const SensorRuntime&, SensorReading&) { readings++; });
+        CanRouteTable::Dispatch(route, frame, *fixture.time_service, [&](const SensorRuntime&, SensorReading&) {
+            readings++;
+        });
 
     zassert_equal(readings, 0);
 }

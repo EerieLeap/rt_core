@@ -8,20 +8,21 @@
 
 namespace eerie_leap::domain::system_domain::smp {
 
-using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
-using eerie_leap::subsys::smp::SmpGroupId;
 using eerie_leap::domain::system_domain::models::ProductInfo;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
+using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+using eerie_leap::subsys::smp::SmpGroupId;
 
 const mgmt_handler DeviceMgmtGroup::HANDLERS[] = {
-    {.mh_read = Dispatch<&DeviceMgmtGroup::HandleInfo>, .mh_write = nullptr},
+    { .mh_read = Dispatch<&DeviceMgmtGroup::HandleInfo>, .mh_write = nullptr },
 };
 
 DeviceMgmtGroup::DeviceMgmtGroup(
     uint32_t build_number,
     std::shared_ptr<const ICdmpNetworkInfo> network_info,
-    std::optional<SensorCapabilities> sensor_capabilities)
-    : SmpGroup(SmpGroupId::DEVICE, HANDLERS, nullptr),
+    std::optional<SensorCapabilities> sensor_capabilities
+) :
+    SmpGroup(SmpGroupId::DEVICE, HANDLERS, nullptr),
     build_number_(build_number),
     network_info_(std::move(network_info)),
     sensor_capabilities_(sensor_capabilities) {}
@@ -39,23 +40,35 @@ int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
 
     const uint16_t features = device.has_value() ? device->features : ProductInfo::features;
 
-    bool ok = zcbor_tstr_put_lit(zse, "product") && zcbor_uint32_put(zse, ProductInfo::product_id)
-        && zcbor_tstr_put_lit(zse, "revision") && zcbor_uint32_put(zse, ProductInfo::revision)
-        && zcbor_tstr_put_lit(zse, "features") && zcbor_uint32_put(zse, features)
-        && zcbor_tstr_put_lit(zse, "hw") && zcbor_uint32_put(zse, SystemConfiguration::hw_version)
-        && zcbor_tstr_put_lit(zse, "sw") && zcbor_uint32_put(zse, SystemConfiguration::sw_version)
-        && zcbor_tstr_put_lit(zse, "build") && zcbor_uint32_put(zse, build_number_);
+    bool ok = zcbor_tstr_put_lit(zse, "product")
+        && zcbor_uint32_put(zse, ProductInfo::product_id)
+        && zcbor_tstr_put_lit(zse, "revision")
+        && zcbor_uint32_put(zse, ProductInfo::revision)
+        && zcbor_tstr_put_lit(zse, "features")
+        && zcbor_uint32_put(zse, features)
+        && zcbor_tstr_put_lit(zse, "hw")
+        && zcbor_uint32_put(zse, SystemConfiguration::hw_version)
+        && zcbor_tstr_put_lit(zse, "sw")
+        && zcbor_uint32_put(zse, SystemConfiguration::sw_version)
+        && zcbor_tstr_put_lit(zse, "build")
+        && zcbor_uint32_put(zse, build_number_);
 
     if(ok && device.has_value()) {
-        ok = zcbor_tstr_put_lit(zse, "cdmp_id") && zcbor_uint32_put(zse, device->device_id)
-            && zcbor_tstr_put_lit(zse, "uid") && zcbor_uint32_put(zse, device->uid)
-            && zcbor_tstr_put_lit(zse, "status") && zcbor_uint32_put(zse, std::to_underlying(device->status));
+        ok = zcbor_tstr_put_lit(zse, "cdmp_id")
+            && zcbor_uint32_put(zse, device->device_id)
+            && zcbor_tstr_put_lit(zse, "uid")
+            && zcbor_uint32_put(zse, device->uid)
+            && zcbor_tstr_put_lit(zse, "status")
+            && zcbor_uint32_put(zse, std::to_underlying(device->status));
     }
 
     if(ok && sensor_capabilities_.has_value()) {
-        ok = zcbor_tstr_put_lit(zse, "adc_channels") && zcbor_uint32_put(zse, sensor_capabilities_->adc_channels)
-            && zcbor_tstr_put_lit(zse, "gpio_channels") && zcbor_uint32_put(zse, sensor_capabilities_->gpio_channels)
-            && zcbor_tstr_put_lit(zse, "sensors_max") && zcbor_uint32_put(zse, sensor_capabilities_->sensors_max);
+        ok = zcbor_tstr_put_lit(zse, "adc_channels")
+            && zcbor_uint32_put(zse, sensor_capabilities_->adc_channels)
+            && zcbor_tstr_put_lit(zse, "gpio_channels")
+            && zcbor_uint32_put(zse, sensor_capabilities_->gpio_channels)
+            && zcbor_tstr_put_lit(zse, "sensors_max")
+            && zcbor_uint32_put(zse, sensor_capabilities_->sensors_max);
     }
 
     return MGMT_RETURN_CHECK(ok);

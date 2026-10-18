@@ -18,4 +18,4 @@ public:
     [[nodiscard]] virtual AdcStats GetStats() const = 0;
 };
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc

@@ -4,29 +4,32 @@
 
 #include <zephyr/logging/log.h>
 
-#include "subsys/threading/scoped_mutex.h"
 #include "domain/adc_domain/models/adc_range.h"
+#include "subsys/threading/scoped_mutex.h"
 
 #include "calibration_service.h"
 
 namespace eerie_leap::domain::adc_domain::services {
 
-using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::domain::adc_domain::models::AdcRange;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 LOG_MODULE_REGISTER(calibration_logger);
 
 // The ADC would clamp a larger request silently.
-static_assert(CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT <= CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX,
-    "Calibration samples exceed CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX");
+static_assert(
+    CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT <= CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX,
+    "Calibration samples exceed CONFIG_EERIE_LEAP_ADC_SAMPLES_MAX"
+);
 
 CalibrationService::CalibrationService(
     std::shared_ptr<ITimeService> time_service,
     std::shared_ptr<IAdcManager> adc_manager,
-    std::shared_ptr<IService> service_to_pause)
-        : time_service_(std::move(time_service)),
-        adc_manager_(std::move(adc_manager)),
-        service_to_pause_(std::move(service_to_pause)) {
+    std::shared_ptr<IService> service_to_pause
+) :
+    time_service_(std::move(time_service)),
+    adc_manager_(std::move(adc_manager)),
+    service_to_pause_(std::move(service_to_pause)) {
 
     k_mutex_init(&job_mutex_);
     k_mutex_init(&result_mutex_);
@@ -42,9 +45,8 @@ bool CalibrationService::Initialize() {
         return true;
 
     auto work_queue_thread = std::make_unique<WorkQueueThread>(
-        "calibration_service",
-        thread_stack_size_,
-        thread_priority_);
+        "calibration_service", thread_stack_size_, thread_priority_
+    );
     if(!work_queue_thread->Initialize()) {
         LOG_ERR("Failed to initialize the calibration work queue.");
         return false;
@@ -97,11 +99,9 @@ bool CalibrationService::Start(int channel) {
     channel_ = channel_handle;
     request_channel_ = channel_handle.local_channel;
     sample_ = {};
-    request_ = {
-        .channels = std::span<const uint8_t>(&request_channel_, 1),
+    request_ = { .channels = std::span<const uint8_t>(&request_channel_, 1),
         .results = std::span<AdcSample>(&sample_, 1),
-        .samples = CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT
-    };
+        .samples = CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT };
 
     // A result of the previous job is not one of this channel.
     {
@@ -176,22 +176,17 @@ void CalibrationService::Sample() {
     const auto timestamp = time_service_->GetCurrentTime();
 
     ScopedMutex guard(result_mutex_);
-    latest_ = Result{
-        .adc_volts = sample_.volts,
+    latest_ = Result{ .adc_volts = sample_.volts,
         .sensor_volts = AdcRange::Default().ToSensorVolts(sample_.volts),
         .timestamp = timestamp,
         .sequence = ++sequence_,
-        .error = sample_.error
-    };
+        .error = sample_.error };
 }
 
 WorkQueueTaskResult CalibrationService::ProcessCalibration(CalibrationService* service) {
     service->Sample();
 
-    return {
-        .reschedule = true,
-        .delay = K_MSEC(CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS)
-    };
+    return { .reschedule = true, .delay = K_MSEC(CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS) };
 }
 
 } // namespace eerie_leap::domain::adc_domain::services

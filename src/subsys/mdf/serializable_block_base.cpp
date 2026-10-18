@@ -5,8 +5,9 @@
 
 namespace eerie_leap::subsys::mdf {
 
-SerializableBlockBase::SerializableBlockBase()
-    : address_(0), is_serialized_(false) {}
+SerializableBlockBase::SerializableBlockBase() :
+    address_(0),
+    is_serialized_(false) {}
 
 uint64_t SerializableBlockBase::GetSerializedSize() const {
     return GetBlockSize();
@@ -42,7 +43,8 @@ uint64_t SerializableBlockBase::RewriteToStream(std::streambuf& stream) {
         throw std::runtime_error("Block was never written to the stream");
 
     const auto position = stream.pubseekpos(
-        std::streambuf::pos_type(static_cast<std::streamoff>(address_)), std::ios_base::out);
+        std::streambuf::pos_type(static_cast<std::streamoff>(address_)), std::ios_base::out
+    );
 
     if(position == std::streambuf::pos_type(std::streambuf::off_type(-1)))
         throw std::ios_base::failure("Stream does not support seeking.");

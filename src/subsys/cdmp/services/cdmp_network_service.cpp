@@ -2,9 +2,9 @@
 
 #include <zephyr/logging/log.h>
 
-#include "subsys/threading/scoped_mutex.h"
-#include "subsys/cdmp/utilities/cdmp_status_machine.h"
 #include "subsys/cdmp/utilities/cdmp_helpers.h"
+#include "subsys/cdmp/utilities/cdmp_status_machine.h"
+#include "subsys/threading/scoped_mutex.h"
 
 #include "cdmp_network_service.h"
 
@@ -21,12 +21,10 @@ using eerie_leap::subsys::threading::ScopedMutex;
 namespace {
 
 CdmpDeviceInfo ToDeviceInfo(const CdmpDevice& device) {
-    return {
-        .device_id = device.GetDeviceId(),
+    return { .device_id = device.GetDeviceId(),
         .uid = device.GetUniqueIdentifier(),
         .features = device.GetFeatures(),
-        .status = device.GetStatus()
-    };
+        .status = device.GetStatus() };
 }
 
 } // namespace
@@ -34,9 +32,10 @@ CdmpDeviceInfo ToDeviceInfo(const CdmpDevice& device) {
 CdmpNetworkService::CdmpNetworkService(
     std::shared_ptr<CdmpCanIdManager> can_id_manager,
     std::shared_ptr<CdmpDevice> device,
-    std::shared_ptr<WorkQueueThread> work_queue_thread)
-        : CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
-        work_queue_thread_(std::move(work_queue_thread)) {
+    std::shared_ptr<WorkQueueThread> work_queue_thread
+) :
+    CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
+    work_queue_thread_(std::move(work_queue_thread)) {
 
     k_mutex_init(&devices_lock_);
     k_mutex_init(&handlers_lock_);
@@ -47,12 +46,9 @@ CdmpNetworkService::~CdmpNetworkService() {
 }
 
 bool CdmpNetworkService::DoInitialize() {
-    validation_task_ = work_queue_thread_->CreateTask(
-        ProcessPeriodicValidation, this);
-    discovery_task_ = work_queue_thread_->CreateTask(
-        ProcessDiscoveryAttempt, this);
-    id_claim_task_ = work_queue_thread_->CreateTask(
-        ProcessIdClaimAttempt, this);
+    validation_task_ = work_queue_thread_->CreateTask(ProcessPeriodicValidation, this);
+    discovery_task_ = work_queue_thread_->CreateTask(ProcessDiscoveryAttempt, this);
+    id_claim_task_ = work_queue_thread_->CreateTask(ProcessIdClaimAttempt, this);
 
     return true;
 }
@@ -98,19 +94,22 @@ void CdmpNetworkService::StartValidationTask() {
 }
 
 void CdmpNetworkService::RegisterCanHandlers() {
-    if (!canbus_ || !canbus_->IsValid()) {
+    if(!canbus_ || !canbus_->IsValid()) {
         LOG_ERR("Cannot register CAN handlers: CAN bus is not valid");
         return;
     }
 
-    canbus_handler_id_ = RegisterReceiveHandler(
-        can_id_manager_->GetManagementCanId(),
-        [this](const CanFrame& frame) {
-            RunInSession([this, frame]() { ProcessFrame(frame.data); }); });
+    canbus_handler_id_ = RegisterReceiveHandler(can_id_manager_->GetManagementCanId(), [this](const CanFrame& frame) {
+        RunInSession([this, frame]() {
+            ProcessFrame(frame.data);
+        });
+    });
 
     if(canbus_handler_id_ < 0) {
-        throw std::runtime_error("Failed to register CAN frame handler for frame ID: "
-            + std::to_string(can_id_manager_->GetManagementCanId().id));
+        throw std::runtime_error(
+            "Failed to register CAN frame handler for frame ID: "
+            + std::to_string(can_id_manager_->GetManagementCanId().id)
+        );
     }
 }
 
@@ -126,11 +125,15 @@ void CdmpNetworkService::UnregisterCanHandlers() {
 void CdmpNetworkService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
     switch(new_status) {
         case CdmpDeviceStatus::INIT:
-            RunInSession([this]() { StartInitialization(); });
+            RunInSession([this]() {
+                StartInitialization();
+            });
             break;
 
         case CdmpDeviceStatus::CLAIMING:
-            RunInSession([this]() { StartIdClaim(); });
+            RunInSession([this]() {
+                StartIdClaim();
+            });
             break;
 
         case CdmpDeviceStatus::ONLINE:
@@ -220,10 +223,7 @@ WorkQueueTaskResult CdmpNetworkService::RunDiscoveryAttempt() {
     SendDiscoveryRequest();
     LOG_INF("Sending discovery request with backoff: %d ms", backoff);
 
-    return {
-        .reschedule = true,
-        .delay = K_MSEC(backoff)
-    };
+    return { .reschedule = true, .delay = K_MSEC(backoff) };
 }
 
 void CdmpNetworkService::ProcessDiscoveryRequestFrame(std::span<const uint8_t> frame_data) {
@@ -233,15 +233,16 @@ void CdmpNetworkService::ProcessDiscoveryRequestFrame(std::span<const uint8_t> f
         auto message = CdmpDiscoveryRequestMessage::FromCanFrame(frame_data);
 
         if(message.uid == 0 || message.uid == device_->GetUniqueIdentifier()) {
-            LOG_ERR("Device UID conflict detected during discovery - received UID: %08X",
-                message.uid);
+            LOG_ERR("Device UID conflict detected during discovery - received UID: %08X", message.uid);
         }
 
         if(device_->GetStatus() == CdmpDeviceStatus::INIT && message.uid < device_->GetUniqueIdentifier())
             lower_uid_discovering_ = true;
 
-        RunInSession([this]() { SendDiscoveryResponse(); });
-    } catch (const std::exception& e) {
+        RunInSession([this]() {
+            SendDiscoveryResponse();
+        });
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing discovery request frame: %s", e.what());
     }
 }
@@ -254,15 +255,14 @@ void CdmpNetworkService::ProcessDiscoveryResponseFrame(std::span<const uint8_t> 
         discovery_response_received_ = true;
 
         if(message.uid == device_->GetUniqueIdentifier()) {
-            LOG_ERR("Device UID conflict detected during discovery - received UID: %08X",
-                message.uid);
+            LOG_ERR("Device UID conflict detected during discovery - received UID: %08X", message.uid);
             device_->EnterError();
 
             return;
         }
 
         UpdateDeviceFromDiscovery(message);
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing discovery response frame: %s", e.what());
     }
 }
@@ -347,7 +347,9 @@ WorkQueueTaskResult CdmpNetworkService::RunIdClaimAttempt() {
     if(id_claim_result_ == CdmpIdClaimResult::VERSION_INCOMPATIBLE) {
         LOG_ERR("ID claim refused: incompatible protocol version.");
         claiming_device_id_ = CdmpDevice::DEVICE_ID_UNASSIGNED;
-        RunInSession([this]() { device_->EnterVersionMismatch(); });
+        RunInSession([this]() {
+            device_->EnterVersionMismatch();
+        });
 
         return {};
     }
@@ -363,10 +365,12 @@ WorkQueueTaskResult CdmpNetworkService::RunIdClaimAttempt() {
 
         try {
             claiming_device_id_ = GetLowestAvailableId(claiming_device_id_);
-        } catch (const std::exception& e) {
+        } catch(const std::exception& e) {
             LOG_ERR("Error getting lowest available ID: %s", e.what());
             claiming_device_id_ = CdmpDevice::DEVICE_ID_UNASSIGNED;
-            RunInSession([this]() { device_->EnterError(); });
+            RunInSession([this]() {
+                device_->EnterError();
+            });
 
             return {};
         }
@@ -382,10 +386,7 @@ WorkQueueTaskResult CdmpNetworkService::RunIdClaimAttempt() {
     SendIdClaim();
     id_claim_attempt_++;
 
-    return {
-        .reschedule = true,
-        .delay = K_MSEC(CdmpConstants::ID_CLAIM_RESPONSE_TIMEOUT_MS)
-    };
+    return { .reschedule = true, .delay = K_MSEC(CdmpConstants::ID_CLAIM_RESPONSE_TIMEOUT_MS) };
 }
 
 void CdmpNetworkService::CompleteIdClaim() {
@@ -425,8 +426,7 @@ void CdmpNetworkService::ProcessIdClaimRequestFrame(std::span<const uint8_t> fra
 
         bool send_response = false;
 
-        if(device_->IsLowestIdOnNetwork()
-           && !device_->IsProtocolCompatible(id_claim_message.protocol_version)) {
+        if(device_->IsLowestIdOnNetwork() && !device_->IsProtocolCompatible(id_claim_message.protocol_version)) {
 
             message.result = CdmpIdClaimResult::VERSION_INCOMPATIBLE;
             send_response = true;
@@ -446,7 +446,7 @@ void CdmpNetworkService::ProcessIdClaimRequestFrame(std::span<const uint8_t> fra
 
             return;
         }
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing ID claim frame: %s", e.what());
     }
 }
@@ -461,13 +461,15 @@ void CdmpNetworkService::ProcessIdClaimResponseFrame(std::span<const uint8_t> fr
         if(response.claiming_device_id != claiming_device_id_)
             return;
 
-        LOG_INF("Received ID claim response from device %d for device %d with result %d",
-            response.responding_device_id, response.claiming_device_id, static_cast<int>(response.result));
+        LOG_INF(
+            "Received ID claim response from device %d for device %d with result %d", response.responding_device_id,
+            response.claiming_device_id, static_cast<int>(response.result)
+        );
 
         // The lowest ID accepts any claim, so the owner's objection to the same claim outweighs it.
         if(response.result != CdmpIdClaimResult::ACCEPT || !id_claim_result_.has_value())
             id_claim_result_ = response.result;
-    } catch (const std::exception& e) {
+    } catch(const std::exception& e) {
         LOG_ERR("Error processing ID claim response frame: %s", e.what());
     }
 }
@@ -542,11 +544,7 @@ void CdmpNetworkService::StorePendingIdClaim(const CdmpIdClaimRequestMessage& cl
     if(slot == nullptr)
         slot = &*std::ranges::min_element(pending_id_claims_, {}, &PendingIdClaim::claimed_at_ms);
 
-    *slot = {
-        .device_id = claim.claiming_device_id,
-        .uid = claim.uid,
-        .claimed_at_ms = k_uptime_get()
-    };
+    *slot = { .device_id = claim.claiming_device_id, .uid = claim.uid, .claimed_at_ms = k_uptime_get() };
 }
 
 void CdmpNetworkService::ExpirePendingIdClaims() {
@@ -564,7 +562,8 @@ void CdmpNetworkService::ExpirePendingIdClaims() {
 
 std::optional<uint8_t> CdmpNetworkService::FindDeviceIdByUid(uint32_t uid) const {
     auto it = std::ranges::find_if(network_devices_, [uid](const auto& entry) {
-        return entry.second->GetUniqueIdentifier() == uid; });
+        return entry.second->GetUniqueIdentifier() == uid;
+    });
 
     return it != network_devices_.end() ? std::optional<uint8_t>(it->first) : std::nullopt;
 }
@@ -577,8 +576,7 @@ bool CdmpNetworkService::IsPeerDeviceId(uint8_t device_id) const {
 
 void CdmpNetworkService::UpdateDeviceFromDiscovery(const CdmpDiscoveryResponseMessage& discovery) {
     if(!IsPeerDeviceId(discovery.device_id)) {
-        LOG_WRN("Discovery response for device ID %d from UID 0x%08X ignored",
-            discovery.device_id, discovery.uid);
+        LOG_WRN("Discovery response for device ID %d from UID 0x%08X ignored", discovery.device_id, discovery.uid);
         return;
     }
 
@@ -797,17 +795,13 @@ void CdmpNetworkService::SetAutoDiscovery(bool enabled) {
 
 WorkQueueTaskResult CdmpNetworkService::ProcessPeriodicValidation(CdmpNetworkService* instance) {
     if(!instance->is_validation_task_running_) {
-        return {
-            .reschedule = false
-        };
+        return { .reschedule = false };
     }
 
     instance->ProcessPeriodicTasks();
 
-    return {
-        .reschedule = instance->is_validation_task_running_,
-        .delay = K_MSEC(CdmpConstants::NETWORK_VALIDATION_INTERVAL_MS)
-    };
+    return { .reschedule = instance->is_validation_task_running_,
+        .delay = K_MSEC(CdmpConstants::NETWORK_VALIDATION_INTERVAL_MS) };
 }
 
 void CdmpNetworkService::ProcessPeriodicTasks() {
@@ -865,11 +859,11 @@ void CdmpNetworkService::UpdateStaggeredMessageDelay() {
             lowest_id_on_network = std::min(lowest_id_on_network, id);
     }
 
-    device_->SetStaggeredMessageDelay(CdmpHelpers::CalculateStaggeredMessageTimeOffset(
-        GetAllDeviceIds(), device_->GetDeviceId()));
+    device_->SetStaggeredMessageDelay(
+        CdmpHelpers::CalculateStaggeredMessageTimeOffset(GetAllDeviceIds(), device_->GetDeviceId())
+    );
     for(const auto& [id, device] : network_devices_)
-        device->SetStaggeredMessageDelay(CdmpHelpers::CalculateStaggeredMessageTimeOffset(
-            GetAllDeviceIds(), id));
+        device->SetStaggeredMessageDelay(CdmpHelpers::CalculateStaggeredMessageTimeOffset(GetAllDeviceIds(), id));
 }
 
 uint8_t CdmpNetworkService::GetLowestAvailableId(uint8_t after) {
@@ -890,9 +884,10 @@ void CdmpNetworkService::PrintNetworkStatus() const {
     LOG_INF("Network Status: %zu devices total", network_devices_.size());
 
     for(const auto& [device_id, device] : network_devices_) {
-        LOG_INF("  Device %d: Features=0x%04X, Status=%d, UID=0x%08X",
-            device_id, device->GetFeatures(),
-            std::to_underlying(device->GetStatus()), device->GetUniqueIdentifier());
+        LOG_INF(
+            "  Device %d: Features=0x%04X, Status=%d, UID=0x%08X", device_id, device->GetFeatures(),
+            std::to_underlying(device->GetStatus()), device->GetUniqueIdentifier()
+        );
     }
 }
 

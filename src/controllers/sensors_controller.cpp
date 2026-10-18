@@ -5,8 +5,8 @@
 #include <utility>
 #include <vector>
 
-#include <zephyr/logging/log.h>
 #include <eerie_memory.hpp>
+#include <zephyr/logging/log.h>
 
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -16,18 +16,18 @@
 #include "subsys/random/rng.h"
 
 #ifdef CONFIG_EERIE_LEAP_ASSETS
-#include "subsys/assets/asset_kind.h"
-#include "subsys/assets/asset_store.h"
-#include "subsys/assets/assets_manager.h"
-#include "subsys/assets/script_asset_provider.h"
-#include "utilities/string/path_helpers.h"
+    #include "subsys/assets/asset_kind.h"
+    #include "subsys/assets/asset_store.h"
+    #include "subsys/assets/assets_manager.h"
+    #include "subsys/assets/script_asset_provider.h"
+    #include "utilities/string/path_helpers.h"
 #endif
 
-#include "domain/sensor_domain/models/sensor.h"
-#include "domain/sensor_domain/models/sensor_type.h"
-#include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/sensor_domain/models/reading_source.h"
 #include "domain/sensor_domain/models/reading_status.h"
+#include "domain/sensor_domain/models/sensor.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
+#include "domain/sensor_domain/models/sensor_type.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 
 #include "sensors_controller.h"
@@ -54,8 +54,8 @@ constexpr const char* SENSOR_SCRIPTS_DIRECTORY = "scripts/sensors";
 // Whether the sensors configuration of @p manager has a sensor, enabled or not, that uses the script
 // at @p path. Holds the manager weakly, since the registry may outlive the controller. Runs on the
 // configuration work queue.
-eerie_leap::subsys::assets::AssetsManager::Referrer MakeSensorScriptReferrer(
-    const std::shared_ptr<SensorsConfigurationManager>& manager) {
+eerie_leap::subsys::assets::AssetsManager::Referrer
+MakeSensorScriptReferrer(const std::shared_ptr<SensorsConfigurationManager>& manager) {
 
     return [weak_manager = std::weak_ptr<SensorsConfigurationManager>(manager)](std::string_view path) -> bool {
         const auto sensors_manager = weak_manager.lock();
@@ -69,7 +69,8 @@ eerie_leap::subsys::assets::AssetsManager::Referrer MakeSensorScriptReferrer(
 
             return std::ranges::any_of(*sensors, [path](const std::shared_ptr<Sensor>& sensor) {
                 return eerie_leap::utilities::string::PathHelpers::IsSameEntryIgnoringCase(
-                    path, sensor->configuration.script_path);
+                    path, sensor->configuration.script_path
+                );
             });
         } catch(const std::exception& e) {
             // Unknown is answered as referenced: a script that might be in use is not deleted.
@@ -94,18 +95,19 @@ SensorsController::SensorsController(
     std::shared_ptr<IAdcManager> adc_manager,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     std::shared_ptr<IFsService> sd_fs_service,
-    std::shared_ptr<AssetsManager> assets_manager)
-    : fs_service_(std::move(fs_service)),
-      config_work_queue_thread_(std::move(config_work_queue_thread)),
-      configuration_service_(std::move(configuration_service)),
-      time_service_(std::move(time_service)),
-      sensor_readings_frame_(std::move(sensor_readings_frame)),
-      canbus_service_(std::move(canbus_service)),
-      gpio_(std::move(gpio)),
-      adc_manager_(std::move(adc_manager)),
-      adc_configuration_manager_(std::move(adc_configuration_manager)),
-      sd_fs_service_(std::move(sd_fs_service)),
-      assets_manager_(std::move(assets_manager)) {}
+    std::shared_ptr<AssetsManager> assets_manager
+) :
+    fs_service_(std::move(fs_service)),
+    config_work_queue_thread_(std::move(config_work_queue_thread)),
+    configuration_service_(std::move(configuration_service)),
+    time_service_(std::move(time_service)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)),
+    canbus_service_(std::move(canbus_service)),
+    gpio_(std::move(gpio)),
+    adc_manager_(std::move(adc_manager)),
+    adc_configuration_manager_(std::move(adc_configuration_manager)),
+    sd_fs_service_(std::move(sd_fs_service)),
+    assets_manager_(std::move(assets_manager)) {}
 
 SensorsController::~SensorsController() {
     // First, so that no request reaches the scripts, or the configuration, of a controller on its way out.
@@ -121,43 +123,35 @@ SensorsController::~SensorsController() {
 
 int SensorsController::Initialize(const ConfigurationSetup& setup_test_configuration) {
     auto cbor_sensors_config_service = std::make_unique<config_services::CborConfigurationService<CborSensorsConfig>>(
-        SENSORS_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_);
+        SENSORS_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
+    );
 
     // A client's CAN sensors are checked against the CAN bus configuration in use.
     SensorsConfigurationManager::CanbusConfigurationProvider canbus_configuration_provider = nullptr;
     if(canbus_service_ != nullptr)
-        canbus_configuration_provider = [canbus_service = canbus_service_] { return canbus_service->GetConfiguration(); };
+        canbus_configuration_provider = [canbus_service = canbus_service_] {
+            return canbus_service->GetConfiguration();
+        };
 
     sensors_configuration_manager_ = std::make_shared<SensorsConfigurationManager>(
-        std::move(cbor_sensors_config_service),
-        sd_fs_service_,
-        gpio_ != nullptr ? gpio_->GetChannelCount() : 0,
-        adc_manager_ != nullptr ? adc_manager_->GetChannelCount() : 0,
-        std::move(canbus_configuration_provider));
+        std::move(cbor_sensors_config_service), sd_fs_service_, gpio_ != nullptr ? gpio_->GetChannelCount() : 0,
+        adc_manager_ != nullptr ? adc_manager_->GetChannelCount() : 0, std::move(canbus_configuration_provider)
+    );
 
     if(configuration_service_ != nullptr)
         configuration_service_->RegisterCborConfigurationManager(
-            ConfigurationService::Type::Sensors, sensors_configuration_manager_);
+            ConfigurationService::Type::Sensors, sensors_configuration_manager_
+        );
 
-    isr_sensor_reader_factory_ = std::make_shared<IsrSensorReaderFactory>(
-        time_service_,
-        gpio_);
+    isr_sensor_reader_factory_ = std::make_shared<IsrSensorReaderFactory>(time_service_, gpio_);
 
     // Polled sensors need no ADC unless they are PHYSICAL_ANALOG; the factory checks per sensor.
-    sensor_reader_factory_ = std::make_shared<SensorReaderFactory>(
-        time_service_,
-        gpio_,
-        adc_manager_);
+    sensor_reader_factory_ = std::make_shared<SensorReaderFactory>(time_service_, gpio_, adc_manager_);
 
     sensors_processing_service_ = std::make_shared<SensorsProcessingService>(
-        sensors_configuration_manager_,
-        sensor_readings_frame_,
-        time_service_,
-        isr_sensor_reader_factory_,
-        sensor_reader_factory_,
-        adc_configuration_manager_,
-        canbus_service_,
-        sd_fs_service_);
+        sensors_configuration_manager_, sensor_readings_frame_, time_service_, isr_sensor_reader_factory_,
+        sensor_reader_factory_, adc_configuration_manager_, canbus_service_, sd_fs_service_
+    );
     if(!sensors_processing_service_->Initialize()) {
         LOG_ERR("Failed to initialize the sensors processing service.");
         return -1;
@@ -171,7 +165,9 @@ int SensorsController::Initialize(const ConfigurationSetup& setup_test_configura
         [](SensorsController* controller) {
             controller->RestartProcessing();
             return WorkQueueTaskResult{};
-        }, this);
+        },
+        this
+    );
 
     // Registered last so the test configuration above does not trigger a restart. The handler runs on
     // the configuration work queue while the SMP apply job holds its lock, so the restart is queued behind it.
@@ -206,11 +202,9 @@ void SensorsController::RegisterAssets() {
         assets_manager_->AddReferrer(this, MakeSensorScriptReferrer(sensors_configuration_manager_));
 
         is_assets_registered_ = assets_manager_->Register(MakeScriptProvider(
-            AssetKind::SENSOR_SCRIPTS,
-            "sensor_scripts",
-            std::move(store),
-            CONFIG_EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE,
-            assets_manager_));
+            AssetKind::SENSOR_SCRIPTS, "sensor_scripts", std::move(store), CONFIG_EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE,
+            assets_manager_
+        ));
 
         if(!is_assets_registered_)
             assets_manager_->RemoveReferrers(this);

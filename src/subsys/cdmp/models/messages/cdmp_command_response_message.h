@@ -1,19 +1,19 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "subsys/cdmp/utilities/constants.h"
 #include "subsys/cdmp/utilities/enums.h"
 
 namespace eerie_leap::subsys::cdmp::models {
 
-using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
-using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
 using eerie_leap::subsys::cdmp::utilities::CdmpHealthStatus;
+using eerie_leap::subsys::cdmp::utilities::CdmpResultCode;
+using eerie_leap::subsys::cdmp::utilities::CdmpServiceCommandCode;
 
 // (Base + 3)
 struct CdmpCommandResponseMessage {
@@ -35,11 +35,8 @@ struct CdmpCommandResponseMessage {
     }
 
     std::vector<uint8_t> ToCanFrame() const {
-        std::vector<uint8_t> frame_data = {
-            source_device_id,
-            command_code,
-            transaction_id,
-            std::to_underlying(result_code)};
+        std::vector<uint8_t> frame_data = { source_device_id, command_code, transaction_id,
+            std::to_underlying(result_code) };
         frame_data.insert(frame_data.end(), data.begin(), data.end());
 
         return frame_data;
@@ -62,16 +59,15 @@ struct CdmpCommandResponseStatusMessage : public CdmpCommandResponseMessage {
         CdmpResultCode result_code,
         CdmpDeviceStatus status,
         uint8_t protocol_version,
-        CdmpHealthStatus health_status) : CdmpCommandResponseMessage() {
+        CdmpHealthStatus health_status
+    ) :
+        CdmpCommandResponseMessage() {
 
         this->source_device_id = source_device_id;
         this->command_code = std::to_underlying(CdmpServiceCommandCode::STATUS_REQUEST);
         this->transaction_id = transaction_id;
         this->result_code = result_code;
-        this->data = {
-            std::to_underlying(status),
-            protocol_version,
-            std::to_underlying(health_status)};
+        this->data = { std::to_underlying(status), protocol_version, std::to_underlying(health_status) };
     }
 };
 

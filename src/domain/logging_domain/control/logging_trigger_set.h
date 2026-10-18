@@ -16,10 +16,10 @@
 
 namespace eerie_leap::domain::logging_domain::control {
 
+using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::subsys::event_bus::EventBinding;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 
 // The configured logging triggers, each subscribed to the value its binding names. A trigger acts on
 // changes of that value read as a bool: 0 -> 1 requests a start and 1 -> 0 a stop. The first value it
@@ -41,8 +41,8 @@ class LoggingTriggerSet {
 public:
     // How a trigger takes the first value it reads, from unknown.
     enum class FirstValue : uint8_t {
-        OneStarts,    // at boot (L3): 1 starts logging, 0 asserts nothing
-        IsBaseline,   // after a configuration update (L9): only the baseline; a later 0 -> 1 starts
+        OneStarts,  // at boot (L3): 1 starts logging, 0 asserts nothing
+        IsBaseline, // after a configuration update (L9): only the baseline; a later 0 -> 1 starts
     };
 
     // Whether the selector of a binding names something this unit has, such as a sensor. A false
@@ -60,7 +60,8 @@ public:
         std::shared_ptr<ILoggingControl> logging_control,
         std::span<const LoggingTrigger> triggers,
         SelectorResolver is_selector_known = nullptr,
-        FirstValue first_value = FirstValue::OneStarts);
+        FirstValue first_value = FirstValue::OneStarts
+    );
 
     // Detaches the guard, waiting for a handler in progress, then unsubscribes: a delivery the bus
     // already took becomes a no-op. Not from inside a trigger's handler.

@@ -56,4 +56,4 @@ AdcStats AdcSimulator::GetStats() const {
     return stats_;
 }
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc

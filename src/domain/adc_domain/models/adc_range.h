@@ -11,10 +11,8 @@ struct AdcRange {
     float sensor_max_v = 0.0F;
 
     [[nodiscard]] static constexpr AdcRange Default() {
-        return {
-            .adc_max_v = CONFIG_EERIE_LEAP_ADC_VOLTAGE_MAX_MV / 1000.0F,
-            .sensor_max_v = CONFIG_EERIE_LEAP_SENSOR_VOLTAGE_MAX_MV / 1000.0F
-        };
+        return { .adc_max_v = CONFIG_EERIE_LEAP_ADC_VOLTAGE_MAX_MV / 1000.0F,
+            .sensor_max_v = CONFIG_EERIE_LEAP_SENSOR_VOLTAGE_MAX_MV / 1000.0F };
     }
 
     [[nodiscard]] constexpr float ToSensorVolts(float adc_v) const noexcept {

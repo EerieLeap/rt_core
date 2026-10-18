@@ -3,9 +3,9 @@
 #include "logging_control_test_support.h"
 
 #if !defined(CONFIG_LOG_MODE_MINIMAL)
-#include <zephyr/logging/log_backend.h>
-#include <zephyr/logging/log_core.h>
-#include <zephyr/logging/log_msg.h>
+    #include <zephyr/logging/log_backend.h>
+    #include <zephyr/logging/log_core.h>
+    #include <zephyr/logging/log_msg.h>
 #endif
 
 namespace logging_control_test {
@@ -14,8 +14,12 @@ namespace {
 
 class SpinGuard {
 public:
-    explicit SpinGuard(k_spinlock& lock) : lock_(lock), key_(k_spin_lock(&lock)) {}
-    ~SpinGuard() { k_spin_unlock(&lock_, key_); }
+    explicit SpinGuard(k_spinlock& lock) :
+        lock_(lock),
+        key_(k_spin_lock(&lock)) {}
+    ~SpinGuard() {
+        k_spin_unlock(&lock_, key_);
+    }
 
     SpinGuard(const SpinGuard&) = delete;
     SpinGuard& operator=(const SpinGuard&) = delete;
@@ -74,7 +78,8 @@ void ProcessLogMessage(const log_backend* const backend, log_msg_generic* messag
         return;
 
     logging_control_test::LogCounter::Get().Add(
-        log_source_name_get(Z_LOG_LOCAL_DOMAIN_ID, static_cast<uint32_t>(source_id)));
+        log_source_name_get(Z_LOG_LOCAL_DOMAIN_ID, static_cast<uint32_t>(source_id))
+    );
 }
 
 void DropLogMessages(const log_backend* const backend, uint32_t count) {

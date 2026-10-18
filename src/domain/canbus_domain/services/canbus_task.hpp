@@ -3,18 +3,18 @@
 #include <memory>
 #include <zephyr/kernel.h>
 
-#include "subsys/canbus/canbus_proxy.hpp"
 #include "domain/canbus_domain/models/can_message_configuration.h"
-#include "domain/canbus_domain/utilities/can_frame_builder.h"
 #include "domain/canbus_domain/processors/i_can_frame_processor.h"
+#include "domain/canbus_domain/utilities/can_frame_builder.h"
+#include "subsys/canbus/canbus_proxy.hpp"
 
 namespace eerie_leap::domain::canbus_domain::services {
 
+using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
+using eerie_leap::domain::canbus_domain::processors::ICanFrameProcessor;
+using eerie_leap::domain::canbus_domain::utilities::CanFrameBuilder;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::canbus::CanId;
-using eerie_leap::domain::canbus_domain::models::CanMessageConfiguration;
-using eerie_leap::domain::canbus_domain::utilities::CanFrameBuilder;
-using eerie_leap::domain::canbus_domain::processors::ICanFrameProcessor;
 
 struct CanbusTask {
     k_timeout_t send_interval_ms;

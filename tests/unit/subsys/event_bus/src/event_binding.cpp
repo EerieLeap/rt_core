@@ -19,9 +19,9 @@ using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
 using eerie_leap::subsys::event_bus::IsSelectorValue;
 using eerie_leap::subsys::event_bus::IsValidEventChannelId;
+using eerie_leap::subsys::event_bus::k_last_event_channel_id;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
-using eerie_leap::subsys::event_bus::k_last_event_channel_id;
 using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::utilities::type::ConfigValue;
 
@@ -31,15 +31,15 @@ namespace {
 ConfigValue NonSelectors(size_t index) {
     switch(index) {
         case 0:
-            return ConfigValue { };
+            return ConfigValue{};
         case 1:
-            return ConfigValue { 1.5 };
+            return ConfigValue{ 1.5 };
         case 2:
-            return ConfigValue { std::pmr::vector<int> { 1, 2 } };
+            return ConfigValue{ std::pmr::vector<int>{ 1, 2 } };
         case 3:
-            return ConfigValue { std::pmr::vector<std::pmr::string> { "a" } };
+            return ConfigValue{ std::pmr::vector<std::pmr::string>{ "a" } };
         default:
-            return ConfigValue { std::pmr::unordered_map<std::pmr::string, std::pmr::string> { { "a", "b" } } };
+            return ConfigValue{ std::pmr::unordered_map<std::pmr::string, std::pmr::string>{ { "a", "b" } } };
     }
 }
 
@@ -90,16 +90,16 @@ ZTEST(event_bus_event_binding, test_a_binding_has_a_selector_only_with_a_value) 
 }
 
 ZTEST(event_bus_event_binding, test_IsSelectorValue_accepts_text_integers_and_bools) {
-    zassert_true(IsSelectorValue(ConfigValue { std::pmr::string("sensor_1") }));
-    zassert_true(IsSelectorValue(ConfigValue { 7 }));
-    zassert_true(IsSelectorValue(ConfigValue { true }));
+    zassert_true(IsSelectorValue(ConfigValue{ std::pmr::string("sensor_1") }));
+    zassert_true(IsSelectorValue(ConfigValue{ 7 }));
+    zassert_true(IsSelectorValue(ConfigValue{ true }));
 
     for(size_t i = 0; i < k_non_selector_count; ++i)
         zassert_false(IsSelectorValue(NonSelectors(i)), "Alternative %u accepted.", static_cast<unsigned>(i));
 }
 
 ZTEST(event_bus_event_binding, test_ToSelectorValue_hashes_text_as_payloads_carry_ids) {
-    auto selector = ToSelectorValue(ConfigValue { std::pmr::string("sensor_1") });
+    auto selector = ToSelectorValue(ConfigValue{ std::pmr::string("sensor_1") });
 
     zassert_true(selector.has_value());
     zassert_true(std::holds_alternative<uint32_t>(*selector));
@@ -107,12 +107,12 @@ ZTEST(event_bus_event_binding, test_ToSelectorValue_hashes_text_as_payloads_carr
 }
 
 ZTEST(event_bus_event_binding, test_ToSelectorValue_keeps_integers_and_bools) {
-    auto number = ToSelectorValue(ConfigValue { 7 });
+    auto number = ToSelectorValue(ConfigValue{ 7 });
     zassert_true(number.has_value());
     zassert_true(std::holds_alternative<int>(*number));
     zassert_equal(std::get<int>(*number), 7);
 
-    auto flag = ToSelectorValue(ConfigValue { true });
+    auto flag = ToSelectorValue(ConfigValue{ true });
     zassert_true(flag.has_value());
     zassert_true(std::holds_alternative<bool>(*flag));
     zassert_true(std::get<bool>(*flag));
@@ -120,37 +120,39 @@ ZTEST(event_bus_event_binding, test_ToSelectorValue_keeps_integers_and_bools) {
 
 ZTEST(event_bus_event_binding, test_ToSelectorValue_rejects_what_cannot_select) {
     for(size_t i = 0; i < k_non_selector_count; ++i)
-        zassert_false(ToSelectorValue(NonSelectors(i)).has_value(), "Alternative %u resolved.", static_cast<unsigned>(i));
+        zassert_false(
+            ToSelectorValue(NonSelectors(i)).has_value(), "Alternative %u resolved.", static_cast<unsigned>(i)
+        );
 }
 
 ZTEST(event_bus_event_binding, test_a_hash_selector_matches_only_the_same_uint32) {
     const uint32_t hash = StringHelpers::GetHash("sensor_1");
-    const EventData selector { hash };
+    const EventData selector{ hash };
 
-    zassert_true(SelectorMatches(selector, EventData { hash }));
-    zassert_false(SelectorMatches(selector, EventData { hash + 1 }));
-    zassert_false(SelectorMatches(selector, EventData { static_cast<int>(hash) }));
-    zassert_false(SelectorMatches(selector, EventData { std::string("sensor_1") }));
+    zassert_true(SelectorMatches(selector, EventData{ hash }));
+    zassert_false(SelectorMatches(selector, EventData{ hash + 1 }));
+    zassert_false(SelectorMatches(selector, EventData{ static_cast<int>(hash) }));
+    zassert_false(SelectorMatches(selector, EventData{ std::string("sensor_1") }));
 }
 
 ZTEST(event_bus_event_binding, test_an_integer_selector_matches_the_same_int_or_uint32) {
-    const EventData selector { 7 };
+    const EventData selector{ 7 };
 
-    zassert_true(SelectorMatches(selector, EventData { 7 }));
-    zassert_true(SelectorMatches(selector, EventData { uint32_t { 7 } }));
+    zassert_true(SelectorMatches(selector, EventData{ 7 }));
+    zassert_true(SelectorMatches(selector, EventData{ uint32_t{ 7 } }));
 
-    zassert_false(SelectorMatches(selector, EventData { 8 }));
-    zassert_false(SelectorMatches(selector, EventData { uint32_t { 8 } }));
-    zassert_false(SelectorMatches(selector, EventData { 7.0F }));
-    zassert_false(SelectorMatches(selector, EventData { true }));
+    zassert_false(SelectorMatches(selector, EventData{ 8 }));
+    zassert_false(SelectorMatches(selector, EventData{ uint32_t{ 8 } }));
+    zassert_false(SelectorMatches(selector, EventData{ 7.0F }));
+    zassert_false(SelectorMatches(selector, EventData{ true }));
 }
 
 ZTEST(event_bus_event_binding, test_a_bool_selector_matches_only_the_same_bool) {
-    const EventData selector { true };
+    const EventData selector{ true };
 
-    zassert_true(SelectorMatches(selector, EventData { true }));
+    zassert_true(SelectorMatches(selector, EventData{ true }));
 
-    zassert_false(SelectorMatches(selector, EventData { false }));
-    zassert_false(SelectorMatches(selector, EventData { 1 }));
-    zassert_false(SelectorMatches(selector, EventData { uint32_t { 1 } }));
+    zassert_false(SelectorMatches(selector, EventData{ false }));
+    zassert_false(SelectorMatches(selector, EventData{ 1 }));
+    zassert_false(SelectorMatches(selector, EventData{ uint32_t{ 1 } }));
 }

@@ -12,17 +12,19 @@ struct SensorMetadata {
     std::pmr::string unit;
     std::pmr::string description;
 
-    SensorMetadata(std::allocator_arg_t, allocator_type alloc)
-        : name(alloc), unit(alloc), description(alloc) {}
+    SensorMetadata(std::allocator_arg_t, allocator_type alloc) :
+        name(alloc),
+        unit(alloc),
+        description(alloc) {}
 
     SensorMetadata(const SensorMetadata&) = delete;
-	SensorMetadata& operator=(const SensorMetadata&) noexcept = default;
-	SensorMetadata& operator=(SensorMetadata&&) noexcept = default;
-	SensorMetadata(SensorMetadata&&) noexcept = default;
-	~SensorMetadata() = default;
+    SensorMetadata& operator=(const SensorMetadata&) noexcept = default;
+    SensorMetadata& operator=(SensorMetadata&&) noexcept = default;
+    SensorMetadata(SensorMetadata&&) noexcept = default;
+    ~SensorMetadata() = default;
 
-    SensorMetadata(SensorMetadata&& other, allocator_type alloc) noexcept
-        : name(other.name, alloc),
+    SensorMetadata(SensorMetadata&& other, allocator_type alloc) noexcept :
+        name(other.name, alloc),
         unit(other.unit, alloc),
         description(other.description, alloc) {}
 };

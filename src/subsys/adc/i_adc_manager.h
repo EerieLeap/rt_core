@@ -24,4 +24,4 @@ public:
     virtual AdcChannelHandle Resolve(int channel) = 0;
 };
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc

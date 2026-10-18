@@ -37,12 +37,12 @@ bool DecodeSensorIds(zcbor_state_t* zsd, LiveMgmtGroup::SensorIdList* list) {
 } // namespace
 
 const mgmt_handler LiveMgmtGroup::HANDLERS[] = {
-    {.mh_read = nullptr, .mh_write = Dispatch<&LiveMgmtGroup::HandleSubscribe>},
-    {.mh_read = nullptr, .mh_write = Dispatch<&LiveMgmtGroup::HandleUnsubscribe>},
+    { .mh_read = nullptr, .mh_write = Dispatch<&LiveMgmtGroup::HandleSubscribe> },
+    { .mh_read = nullptr, .mh_write = Dispatch<&LiveMgmtGroup::HandleUnsubscribe> },
 };
 
-LiveMgmtGroup::LiveMgmtGroup(std::shared_ptr<LiveDataService> live_data_service)
-    : SmpGroup(SmpGroupId::LIVE, HANDLERS, TranslateError),
+LiveMgmtGroup::LiveMgmtGroup(std::shared_ptr<LiveDataService> live_data_service) :
+    SmpGroup(SmpGroupId::LIVE, HANDLERS, TranslateError),
     live_data_service_(std::move(live_data_service)) {}
 
 LiveMgmtGroup::~LiveMgmtGroup() {
@@ -74,15 +74,19 @@ int LiveMgmtGroup::HandleSubscribe(smp_streamer* ctxt) {
         case SubscribeResult::OK: {
             const bool ok = zcbor_tstr_put_lit(zse, "period")
                 && zcbor_uint32_put(zse, LiveDataService::ClampPeriod(period_ms))
-                && zcbor_tstr_put_lit(zse, "max") && zcbor_uint32_put(zse, static_cast<uint32_t>(capacity));
+                && zcbor_tstr_put_lit(zse, "max")
+                && zcbor_uint32_put(zse, static_cast<uint32_t>(capacity));
 
             return MGMT_RETURN_CHECK(ok);
         }
 
         // The client learns how many sensors to ask for.
         case SubscribeResult::TOO_MANY: {
-            const bool ok = smp_add_cmd_err(zse, std::to_underlying(SmpGroupId::LIVE), std::to_underlying(Error::TOO_MANY))
-                && zcbor_tstr_put_lit(zse, "max") && zcbor_uint32_put(zse, static_cast<uint32_t>(capacity));
+            const bool ok = smp_add_cmd_err(
+                                zse, std::to_underlying(SmpGroupId::LIVE), std::to_underlying(Error::TOO_MANY)
+                            )
+                && zcbor_tstr_put_lit(zse, "max")
+                && zcbor_uint32_put(zse, static_cast<uint32_t>(capacity));
 
             return MGMT_RETURN_CHECK(ok);
         }

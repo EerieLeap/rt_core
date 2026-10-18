@@ -20,14 +20,16 @@ constexpr uint8_t OTHER_SOURCE_ID = 7;
 /** @brief Expects the three resends of @p change, 50, 100 and 200 ms apart. */
 void ExpectResends(Harness& harness, const RecordedFrame& change) {
     int64_t previous_ms = change.received_ms;
-    for(int backoff : {50, 100, 200}) {
+    for(int backoff : { 50, 100, 200 }) {
         auto resend = harness.bus.Wait(STATE_CHANGE, IsFrom(OWN_ID));
         zassert_true(resend.has_value(), "Resent after %d ms", backoff);
         zassert_true(resend->data == change.data, "A resend carries the same version and data");
 
         const int64_t gap = resend->received_ms - previous_ms;
-        zassert_true(gap >= backoff - TIMING_TOLERANCE_BELOW_MS && gap <= backoff + TIMING_TOLERANCE_ABOVE_MS,
-            "Resent %lld ms after the previous frame, expected %d", static_cast<long long>(gap), backoff);
+        zassert_true(
+            gap >= backoff - TIMING_TOLERANCE_BELOW_MS && gap <= backoff + TIMING_TOLERANCE_ABOVE_MS,
+            "Resent %lld ms after the previous frame, expected %d", static_cast<long long>(gap), backoff
+        );
         previous_ms = resend->received_ms;
     }
 }
@@ -61,7 +63,7 @@ ZTEST_SUITE(cdmp_state_sync, NULL, CdmpStateSetup, CdmpStateBefore, CdmpStateAft
 ZTEST_F(cdmp_state_sync, test_online_announces_records_and_requests_a_sync) {
     Harness& harness = *fixture->harness;
     // Set before the start, so it waits for the first ONLINE.
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01, 0x02}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01, 0x02 }));
 
     harness.BringOnline();
 
@@ -70,15 +72,19 @@ ZTEST_F(cdmp_state_sync, test_online_announces_records_and_requests_a_sync) {
     zassert_equal(notification->source_device_id, OWN_ID);
     zassert_equal(notification->version, 1, "The first change of the unit is version 1");
     zassert_equal(notification->state_type, TYPE_A);
-    zassert_true(notification->data == CdmpStateData(Bytes{0x01, 0x02}));
+    zassert_true(notification->data == CdmpStateData(Bytes{ 0x01, 0x02 }));
 
-    zassert_true(harness.bus.Wait(COMMAND, IsSyncRequestTo(CdmpDevice::DEVICE_ID_BROADCAST)).has_value(),
-        "and asks every other unit for theirs");
+    zassert_true(
+        harness.bus.Wait(COMMAND, IsSyncRequestTo(CdmpDevice::DEVICE_ID_BROADCAST)).has_value(),
+        "and asks every other unit for theirs"
+    );
 
     auto heartbeat = harness.bus.Wait(HEARTBEAT, IsFrom(OWN_ID));
     zassert_true(heartbeat.has_value());
-    zassert_equal(CdmpHeartbeatMessage::FromCanFrame(heartbeat->data).state_digest,
-        Digest({{TYPE_A, 1, {0x01, 0x02}}}), "The heartbeat carries the digest of the unit's records");
+    zassert_equal(
+        CdmpHeartbeatMessage::FromCanFrame(heartbeat->data).state_digest, Digest({ { TYPE_A, 1, { 0x01, 0x02 } } }),
+        "The heartbeat carries the digest of the unit's records"
+    );
 }
 
 ZTEST_F(cdmp_state_sync, test_acknowledgement_stops_retransmission) {
@@ -86,7 +92,7 @@ ZTEST_F(cdmp_state_sync, test_acknowledgement_stops_retransmission) {
     harness.BringOnline();
     harness.Settle();
 
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
 
     auto notification = harness.WaitForNotification();
     zassert_true(notification.has_value());
@@ -100,7 +106,7 @@ ZTEST_F(cdmp_state_sync, test_unacknowledged_change_is_resent_three_times) {
     harness.BringOnline();
     harness.Settle();
 
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
 
     auto first = harness.bus.Wait(STATE_CHANGE, IsFrom(OWN_ID));
     zassert_true(first.has_value());
@@ -115,7 +121,7 @@ ZTEST_F(cdmp_state_sync, test_acknowledgement_of_another_change_does_not_stop_re
     harness.BringOnline();
     harness.Settle();
 
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     auto notification = harness.WaitForNotification();
     zassert_true(notification.has_value());
     const uint8_t version = notification->version;
@@ -142,20 +148,20 @@ ZTEST_F(cdmp_state_sync, test_newer_change_replaces_the_resends_of_the_previous_
     harness.BringOnline();
     harness.Settle();
 
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     auto first = harness.WaitForNotification();
     zassert_true(first.has_value());
     auto resend = harness.WaitForNotification();
     zassert_true(resend.has_value());
     zassert_equal(resend->version, first->version, "The first change was resent once");
 
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x02}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x02 }));
 
     auto change = harness.bus.Wait(STATE_CHANGE, IsFrom(OWN_ID));
     zassert_true(change.has_value());
     const auto message = CdmpStateChangeMessage::FromCanFrame(change->data);
     zassert_equal(message.version, first->version + 1, "The next frame carries the newer change");
-    zassert_true(message.data == CdmpStateData(Bytes{0x02}));
+    zassert_true(message.data == CdmpStateData(Bytes{ 0x02 }));
 
     // Three resends again, timed from the newer change.
     ExpectResends(harness, change.value());
@@ -165,13 +171,13 @@ ZTEST_F(cdmp_state_sync, test_newer_change_replaces_the_resends_of_the_previous_
 
 ZTEST_F(cdmp_state_sync, test_unicast_sync_request_replays_records_and_answers) {
     Harness& harness = *fixture->harness;
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
-    zassert_true(harness.State()->SetLocalState(TYPE_B, Bytes{0x02}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
+    zassert_true(harness.State()->SetLocalState(TYPE_B, Bytes{ 0x02 }));
     harness.State()->ClearLocalState(TYPE_B);
-    zassert_true(harness.State()->SetLocalState(TYPE_B + 1, Bytes{0x03}));
+    zassert_true(harness.State()->SetLocalState(TYPE_B + 1, Bytes{ 0x03 }));
 
     harness.BringOnline();
-    for(uint8_t version : {1, 3, 4}) {
+    for(uint8_t version : { 1, 3, 4 }) {
         auto notification = harness.WaitForNotification();
         zassert_true(notification.has_value());
         zassert_equal(notification->version, version);
@@ -183,7 +189,7 @@ ZTEST_F(cdmp_state_sync, test_unicast_sync_request_replays_records_and_answers) 
     harness.SendAsPeer(COMMAND, SyncRequestFrame(OWN_ID, 0x42));
 
     std::vector<uint32_t> replay_sequences;
-    for(uint8_t state_type : {TYPE_A, static_cast<uint8_t>(TYPE_B + 1)}) {
+    for(uint8_t state_type : { TYPE_A, static_cast<uint8_t>(TYPE_B + 1) }) {
         auto frame = harness.bus.Wait(STATE_CHANGE, IsFrom(OWN_ID));
         zassert_true(frame.has_value(), "The unit replays every record it holds");
 
@@ -209,7 +215,7 @@ ZTEST_F(cdmp_state_sync, test_unicast_sync_request_replays_records_and_answers) 
 
 ZTEST_F(cdmp_state_sync, test_broadcast_sync_request_replays_records_without_answer) {
     Harness& harness = *fixture->harness;
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
 
     harness.BringOnline();
     auto announcement = harness.WaitForNotification();
@@ -225,8 +231,10 @@ ZTEST_F(cdmp_state_sync, test_broadcast_sync_request_replays_records_without_ans
     zassert_equal(notification->state_type, TYPE_A);
     zassert_equal(notification->version, 1);
 
-    zassert_false(harness.bus.Wait(COMMAND_RESPONSE, IsFrom(OWN_ID), NO_FRAME_TIMEOUT_MS).has_value(),
-        "A broadcast request gets no response");
+    zassert_false(
+        harness.bus.Wait(COMMAND_RESPONSE, IsFrom(OWN_ID), NO_FRAME_TIMEOUT_MS).has_value(),
+        "A broadcast request gets no response"
+    );
 }
 
 ZTEST_F(cdmp_state_sync, test_peer_record_is_acknowledged_and_applied) {
@@ -234,7 +242,7 @@ ZTEST_F(cdmp_state_sync, test_peer_record_is_acknowledged_and_applied) {
     harness.BringOnline();
     harness.Settle();
 
-    harness.SendAsPeer(STATE_CHANGE, NotificationFrame(PEER_ID, 7, TYPE_A, {0x05}));
+    harness.SendAsPeer(STATE_CHANGE, NotificationFrame(PEER_ID, 7, TYPE_A, { 0x05 }));
 
     auto frame = harness.bus.Wait(STATE_CHANGE_RESPONSE, IsFrom(OWN_ID));
     zassert_true(frame.has_value(), "The unit acknowledges the peer's notification");
@@ -245,7 +253,7 @@ ZTEST_F(cdmp_state_sync, test_peer_record_is_acknowledged_and_applied) {
     std::array<CdmpRemoteState, 4> states{};
     zassert_equal(harness.State()->GetRemoteStates(TYPE_A, states), 1);
     zassert_equal(states[0].device_id, PEER_ID);
-    zassert_true(states[0].data == CdmpStateData(Bytes{0x05}));
+    zassert_true(states[0].data == CdmpStateData(Bytes{ 0x05 }));
 }
 
 ZTEST_F(cdmp_state_sync, test_own_frames_are_ignored) {
@@ -256,12 +264,14 @@ ZTEST_F(cdmp_state_sync, test_own_frames_are_ignored) {
     // The loopback controller hands the unit its own notification and each of its resends. Both the
     // own-ID check and the device table, which never holds the unit's own ID, reject them; this
     // covers the rule on a real controller, not one of the two checks.
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     zassert_true(harness.WaitForNotification().has_value());
     zassert_true(harness.WaitForNotification().has_value());
 
-    zassert_false(harness.bus.Wait(STATE_CHANGE_RESPONSE, IsFrom(OWN_ID), NO_FRAME_TIMEOUT_MS).has_value(),
-        "The unit does not acknowledge its own notifications");
+    zassert_false(
+        harness.bus.Wait(STATE_CHANGE_RESPONSE, IsFrom(OWN_ID), NO_FRAME_TIMEOUT_MS).has_value(),
+        "The unit does not acknowledge its own notifications"
+    );
 
     std::array<CdmpRemoteState, 4> states{};
     zassert_equal(harness.State()->GetRemoteStates(TYPE_A, states), 0, "Nor keep a copy of them");
@@ -269,7 +279,7 @@ ZTEST_F(cdmp_state_sync, test_own_frames_are_ignored) {
 
 ZTEST_F(cdmp_state_sync, test_records_survive_a_restart) {
     Harness& harness = *fixture->harness;
-    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{0x01}));
+    zassert_true(harness.State()->SetLocalState(TYPE_A, Bytes{ 0x01 }));
     harness.BringOnline();
     zassert_true(harness.WaitForNotification().has_value());
     harness.SendAsPeer(STATE_CHANGE_RESPONSE, AcknowledgementFrame(PEER_ID, OWN_ID, 1));
@@ -277,12 +287,12 @@ ZTEST_F(cdmp_state_sync, test_records_survive_a_restart) {
 
     zassert_true(harness.unit->Stop());
     // Set while stopped: announced on the next ONLINE.
-    zassert_true(harness.State()->SetLocalState(TYPE_B, Bytes{0x02}));
+    zassert_true(harness.State()->SetLocalState(TYPE_B, Bytes{ 0x02 }));
     harness.bus.Clear();
 
     harness.BringOnline();
 
-    for(uint8_t state_type : {TYPE_A, TYPE_B}) {
+    for(uint8_t state_type : { TYPE_A, TYPE_B }) {
         auto notification = harness.WaitForNotification();
         zassert_true(notification.has_value(), "The records outlive the stop");
         zassert_equal(notification->state_type, state_type);

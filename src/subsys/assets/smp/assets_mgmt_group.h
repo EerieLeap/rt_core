@@ -18,15 +18,15 @@
 #include "subsys/assets/asset_store.h"
 #include "subsys/assets/assets_manager.h"
 #include "subsys/smp/smp_group.h"
-#include "subsys/threading/work_queue_thread.h"
 #include "subsys/threading/work_queue_task.h"
+#include "subsys/threading/work_queue_thread.h"
 
 namespace eerie_leap::subsys::assets::smp {
 
 using eerie_leap::subsys::smp::SmpGroup;
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::threading::WorkQueueTask;
 using eerie_leap::subsys::threading::WorkQueueTaskResult;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 /**
  * @brief SMP `assets` group: lists the asset kinds a unit serves, and lists, downloads, uploads and
@@ -196,7 +196,7 @@ private:
     Job* job_ = nullptr;
     k_sem job_done_{};
     // Set while the group is destroyed: the idle task is not armed again after its last cancel.
-    std::atomic<bool> is_stopping_{false};
+    std::atomic<bool> is_stopping_{ false };
 
     // Chunks pass through it on their way between a file and a response; as large as a response.
     std::pmr::vector<uint8_t> transfer_buffer_;
@@ -222,19 +222,44 @@ private:
     int ExecuteWrite(smp_streamer* ctxt);
     int ExecuteDelete(smp_streamer* ctxt);
 
-    int WriteFirstChunk(smp_streamer* ctxt, uint32_t kind, std::string_view name, uint32_t length, uint32_t crc,
-        bool has_token, uint32_t token, std::span<const uint8_t> chunk);
-    int WriteNextChunk(smp_streamer* ctxt, uint32_t kind, std::string_view name, uint32_t offset, bool has_token,
-        uint32_t token, std::span<const uint8_t> chunk);
+    int WriteFirstChunk(
+        smp_streamer* ctxt,
+        uint32_t kind,
+        std::string_view name,
+        uint32_t length,
+        uint32_t crc,
+        bool has_token,
+        uint32_t token,
+        std::span<const uint8_t> chunk
+    );
+    int WriteNextChunk(
+        smp_streamer* ctxt,
+        uint32_t kind,
+        std::string_view name,
+        uint32_t offset,
+        bool has_token,
+        uint32_t token,
+        std::span<const uint8_t> chunk
+    );
     /**
      * @brief Appends the chunk that comes next to the open upload, and stores the file when it is the
      *        last. The upload is aborted whenever this fails, or throws.
      */
-    int AcceptChunk(smp_streamer* ctxt, const std::shared_ptr<const AssetProvider>& provider, uint32_t offset,
-        std::span<const uint8_t> chunk, uint32_t chunk_crc);
+    int AcceptChunk(
+        smp_streamer* ctxt,
+        const std::shared_ptr<const AssetProvider>& provider,
+        uint32_t offset,
+        std::span<const uint8_t> chunk,
+        uint32_t chunk_crc
+    );
     /** @brief Checks and stores the upload that has all its data; ends it either way. */
-    int FinishUpload(smp_streamer* ctxt, const AssetProvider& provider, uint32_t offset, size_t chunk_length,
-        uint32_t chunk_crc);
+    int FinishUpload(
+        smp_streamer* ctxt,
+        const AssetProvider& provider,
+        uint32_t offset,
+        size_t chunk_length,
+        uint32_t chunk_crc
+    );
     static int RespondToWrite(smp_streamer* ctxt, size_t offset, uint32_t token);
 
     /** @param extra_key Sent with @p extra_value next to the error, unless empty. */
@@ -248,8 +273,12 @@ private:
      * @return OK, or UNKNOWN_KIND, DENIED, BAD_NAME or UNAVAILABLE, in that order. @p provider is
      *         set whenever the kind is known.
      */
-    Error CheckTarget(uint32_t kind, std::string_view name, AssetAccess access,
-        std::shared_ptr<const AssetProvider>& provider) const;
+    Error CheckTarget(
+        uint32_t kind,
+        std::string_view name,
+        AssetAccess access,
+        std::shared_ptr<const AssetProvider>& provider
+    ) const;
 
     /**
      * @brief Whether the open read session serves @p name through @p provider, exactly as spelled:
@@ -268,8 +297,8 @@ private:
      * @param use_checkpoint Start the CRC from the checkpoint of this file, when there is one.
      * @throws Whatever the provider's is_in_use throws, with no session open.
      */
-    Error OpenReadSession(const std::shared_ptr<const AssetProvider>& provider, std::string_view name,
-        bool use_checkpoint);
+    Error
+    OpenReadSession(const std::shared_ptr<const AssetProvider>& provider, std::string_view name, bool use_checkpoint);
     /** @brief Reads [crc_end, @p offset) of the open file into the running CRC. */
     Error ExtendReadCrc(size_t offset);
     /** @brief Closes the read session, if open, and keeps its CRC as the checkpoint. Never throws. */
@@ -282,17 +311,36 @@ private:
     /** @brief Whether the upload is the one @p token, @p kind and @p name name. */
     bool IsUploadOf(uint32_t kind, std::string_view name, bool has_token, uint32_t token) const;
     /** @brief Whether a first chunk is the open upload's own, sent again. */
-    bool IsFirstChunkRepeat(uint32_t kind, std::string_view name, size_t length, uint32_t crc, size_t chunk_length,
-        uint32_t chunk_crc) const;
+    bool IsFirstChunkRepeat(
+        uint32_t kind,
+        std::string_view name,
+        size_t length,
+        uint32_t crc,
+        size_t chunk_length,
+        uint32_t chunk_crc
+    ) const;
     /**
      * @brief Whether a first chunk, sent without a token, is the file of one chunk that was stored
      *        last, sent again in time, and the file is there still.
      */
-    bool IsStoredFirstChunkRepeat(const AssetProvider& provider, std::string_view name, size_t length, uint32_t crc,
-        size_t chunk_length, uint32_t chunk_crc) const;
+    bool IsStoredFirstChunkRepeat(
+        const AssetProvider& provider,
+        std::string_view name,
+        size_t length,
+        uint32_t crc,
+        size_t chunk_length,
+        uint32_t chunk_crc
+    ) const;
     /** @brief Whether a chunk is the last chunk of the upload that was stored last, sent again in time. */
-    bool IsLastChunkRepeat(uint32_t kind, std::string_view name, bool has_token, uint32_t token, uint32_t offset,
-        size_t chunk_length, uint32_t chunk_crc) const;
+    bool IsLastChunkRepeat(
+        uint32_t kind,
+        std::string_view name,
+        bool has_token,
+        uint32_t token,
+        uint32_t offset,
+        size_t chunk_length,
+        uint32_t chunk_crc
+    ) const;
     /** @brief Forgets the upload stored last if it may be of the file of @p kind and @p name (ASCII case ignored). */
     void InvalidateLastCommit(AssetKind kind, std::string_view name);
     /** @brief Deletes the staged file of the open upload, if any, and forgets the upload. */
@@ -317,7 +365,8 @@ public:
      */
     AssetsMgmtGroup(
         std::shared_ptr<AssetsManager> assets_manager,
-        std::shared_ptr<WorkQueueThread> config_work_queue_thread);
+        std::shared_ptr<WorkQueueThread> config_work_queue_thread
+    );
     ~AssetsMgmtGroup();
 
     /**

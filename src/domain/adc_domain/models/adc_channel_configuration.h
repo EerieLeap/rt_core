@@ -12,4 +12,4 @@ struct AdcChannelConfiguration {
     std::shared_ptr<AdcCalibrator> calibrator = nullptr;
 };
 
-}  // namespace eerie_leap::domain::adc_domain::models
+} // namespace eerie_leap::domain::adc_domain::models

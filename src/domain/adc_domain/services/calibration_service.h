@@ -18,15 +18,15 @@ namespace eerie_leap::domain::adc_domain::services {
 
 namespace threading = eerie_leap::subsys::threading;
 
-using threading::IService;
-using threading::WorkQueueThread;
-using threading::WorkQueueTaskResult;
 using eerie_leap::subsys::adc::AdcChannelHandle;
 using eerie_leap::subsys::adc::AdcError;
 using eerie_leap::subsys::adc::AdcSample;
 using eerie_leap::subsys::adc::AdcSampleRequest;
 using eerie_leap::subsys::adc::IAdcManager;
 using eerie_leap::subsys::time::ITimeService;
+using threading::IService;
+using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
 // Samples one ADC channel on its own thread, every CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS
 // with CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLES_COUNT conversions, while the service that normally
@@ -35,10 +35,10 @@ using eerie_leap::subsys::time::ITimeService;
 class CalibrationService {
 public:
     struct Result {
-        float adc_volts = 0.0F;      // ADC-pin volts, uncalibrated.
-        float sensor_volts = 0.0F;   // The same through the default range, no calibration applied.
+        float adc_volts = 0.0F;    // ADC-pin volts, uncalibrated.
+        float sensor_volts = 0.0F; // The same through the default range, no calibration applied.
         std::chrono::system_clock::time_point timestamp;
-        uint32_t sequence = 0;       // Increases with every result of the service.
+        uint32_t sequence = 0; // Increases with every result of the service.
         AdcError error = AdcError::NONE;
     };
 
@@ -81,7 +81,8 @@ public:
         std::shared_ptr<ITimeService> time_service,
         std::shared_ptr<IAdcManager> adc_manager,
         // Paused while a job runs; null when nothing shares the ADC.
-        std::shared_ptr<IService> service_to_pause);
+        std::shared_ptr<IService> service_to_pause
+    );
 
     ~CalibrationService();
 

@@ -19,8 +19,8 @@ public:
     // alive until the result is encoded.
     eerie_memory::pmr_unique_ptr<CborLoggingControlConfig> Serialize(const LoggingControlConfiguration& configuration);
     // Copies what it keeps, so the result does not refer to @p config, and validates the result.
-    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration> Deserialize(
-        std::pmr::memory_resource* mr, const CborLoggingControlConfig& config);
+    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration>
+    Deserialize(std::pmr::memory_resource* mr, const CborLoggingControlConfig& config);
 };
 
 } // namespace eerie_leap::domain::logging_domain::control::configuration::parsers

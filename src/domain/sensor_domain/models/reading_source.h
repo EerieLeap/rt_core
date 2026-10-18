@@ -10,6 +10,6 @@ enum class ReadingSource : uint8_t {
     PROCESSING,
 };
 
-}
+} // namespace eerie_leap::domain::sensor_domain::models
 
 // namespace eerie_leap::domain::sensor_domain::models

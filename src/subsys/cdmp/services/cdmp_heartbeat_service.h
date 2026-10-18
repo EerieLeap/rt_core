@@ -1,7 +1,7 @@
 #pragma once
 
-#include <span>
 #include <optional>
+#include <span>
 
 #include <zephyr/kernel.h>
 
@@ -13,8 +13,8 @@ namespace eerie_leap::subsys::cdmp::services {
 
 namespace threading = eerie_leap::subsys::threading;
 
-using threading::WorkQueueThread;
 using threading::WorkQueueTaskResult;
+using threading::WorkQueueThread;
 
 class CdmpHeartbeatService final : public CdmpCanbusServiceBase {
 private:
@@ -49,13 +49,16 @@ public:
         std::shared_ptr<CdmpCanIdManager> can_id_manager,
         std::shared_ptr<CdmpDevice> device,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
-        std::shared_ptr<CdmpNetworkService> network_service);
+        std::shared_ptr<CdmpNetworkService> network_service
+    );
 
     ~CdmpHeartbeatService();
 
     // Heartbeat management
     void SetHeartbeatEnabled(bool enabled);
-    bool IsHeartbeatEnabled() const { return heartbeat_enabled_; }
+    bool IsHeartbeatEnabled() const {
+        return heartbeat_enabled_;
+    }
 
     // Diagnostics
     void PrintHeartbeatStatus() const;

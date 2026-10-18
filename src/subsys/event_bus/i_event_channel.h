@@ -33,8 +33,8 @@ public:
 
     // Subscribes without naming the channel's enums, so a binding held as configuration can
     // resolve to a subscription at runtime. Both enums are uint32-backed by concept.
-    virtual AnySubscription SubscribeErased(
-        uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) = 0;
+    virtual AnySubscription
+    SubscribeErased(uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) = 0;
 
     virtual void PublishErasedAsync(uint32_t event_type, uint32_t source_id, ErasedPayload payload) = 0;
 

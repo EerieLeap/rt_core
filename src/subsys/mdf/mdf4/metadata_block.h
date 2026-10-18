@@ -14,7 +14,8 @@ using eerie_leap::subsys::mdf::MdfProperty;
 
 class MetadataBlock : public TextBlockBase {
 public:
-    MetadataBlock(): TextBlockBase("MD") {}
+    MetadataBlock() :
+        TextBlockBase("MD") {}
     virtual ~MetadataBlock() = default;
 
     /** Escapes & < > " ' and replaces the control characters XML 1.0 forbids (all of C0 but tab, LF, CR) with U+FFFD. */

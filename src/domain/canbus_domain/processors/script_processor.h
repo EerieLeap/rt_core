@@ -2,9 +2,9 @@
 
 #include <string>
 
+#include "domain/canbus_domain/processors/i_can_frame_processor.h"
 #include "domain/canbus_domain/services/canbus_service.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/canbus_domain/processors/i_can_frame_processor.h"
 
 namespace eerie_leap::domain::canbus_domain::processors {
 
@@ -33,13 +33,10 @@ private:
     std::string function_name_;
 
 public:
-    ScriptProcessor(
-        std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-        std::string function_name);
+    ScriptProcessor(std::shared_ptr<SensorReadingsFrame> sensor_readings_frame, std::string function_name);
 
-    std::vector<uint8_t> Process(
-        const CanMessageConfiguration& message_configuration,
-        std::span<const uint8_t> can_frame_data) override;
+    std::vector<uint8_t>
+    Process(const CanMessageConfiguration& message_configuration, std::span<const uint8_t> can_frame_data) override;
 };
 
 } // namespace eerie_leap::domain::canbus_domain::processors

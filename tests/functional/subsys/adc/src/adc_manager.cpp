@@ -4,11 +4,11 @@
 #include <vector>
 #include <zephyr/ztest.h>
 
-#include "subsys/device_tree/dt_adc.h"
 #include "subsys/adc/adc_emulator.h"
 #include "subsys/adc/adc_factory.hpp"
 #include "subsys/adc/adc_manager.h"
 #include "subsys/adc/adc_simulator.h"
+#include "subsys/device_tree/dt_adc.h"
 
 #include "emulator_support.h"
 
@@ -24,10 +24,8 @@ std::optional<std::vector<AdcDTInfo>> no_dt_adcs;
 std::shared_ptr<AdcManager> MakeEmulatorManager() {
     ResetEmulator();
 
-    std::vector<std::shared_ptr<IAdc>> adcs {
-        std::make_shared<AdcEmulator>(DtAdc::Get().value().at(0)),
-        std::make_shared<AdcEmulator>(DtAdc::Get().value().at(1))
-    };
+    std::vector<std::shared_ptr<IAdc>> adcs{ std::make_shared<AdcEmulator>(DtAdc::Get().value().at(0)),
+        std::make_shared<AdcEmulator>(DtAdc::Get().value().at(1)) };
 
     return std::make_shared<AdcManager>(std::move(adcs));
 }
@@ -39,7 +37,7 @@ AdcEmulator& EmulatorAt(const AdcManager& manager, int index) {
 float SampleOne(const AdcChannelHandle& handle, uint16_t samples = 10) {
     const uint8_t channels[1] = { handle.local_channel };
     AdcSample results[1];
-    AdcSampleRequest request { .channels = channels, .results = results, .samples = samples };
+    AdcSampleRequest request{ .channels = channels, .results = results, .samples = samples };
 
     handle.adc->Sample(request);
     zassert_equal(results[0].error, AdcError::NONE, "local channel %u", handle.local_channel);
@@ -201,7 +199,9 @@ ZTEST(adc_factory, test_Create_uses_the_device_tree_when_available) {
 }
 
 ZTEST(adc_factory, test_Create_falls_back_to_the_simulator) {
-    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& { return no_dt_adcs; });
+    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& {
+        return no_dt_adcs;
+    });
     auto manager = factory.Create();
 
     zassert_not_null(manager.get());

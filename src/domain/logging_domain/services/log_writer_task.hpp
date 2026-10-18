@@ -1,20 +1,20 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <memory>
 #include <string>
-#include <chrono>
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 
-#include "subsys/canbus/can_frame.h"
-#include "subsys/time/i_time_service.h"
-#include "domain/sensor_domain/models/sensor_limits.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
-#include "domain/sensor_domain/models/sensor_reading.h"
 #include "domain/logging_domain/loggers/i_logger.h"
+#include "domain/sensor_domain/models/sensor_limits.h"
+#include "domain/sensor_domain/models/sensor_reading.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/canbus/can_frame.h"
 #include "subsys/fs/services/fs_service_stream_buf.h"
+#include "subsys/time/i_time_service.h"
 
 #include "log_writer_stats.h"
 
@@ -22,18 +22,18 @@ namespace eerie_leap::domain::logging_domain::services {
 
 using eerie_leap::subsys::fs::services::FsServiceStreamBuf;
 
+using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::sensor_domain::models::SensorLimits;
+using eerie_leap::domain::sensor_domain::models::SensorReading;
+using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::subsys::time::ITimeService;
-using eerie_leap::domain::sensor_domain::models::SensorLimits;
-using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
-using eerie_leap::domain::sensor_domain::models::SensorReading;
-using eerie_leap::domain::logging_domain::loggers::ILogger;
 
 struct LogWriterTask {
     std::shared_ptr<ITimeService> time_service;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
     std::shared_ptr<ILogger<SensorReading>> logger;
-    FsServiceStreamBuf* stream_buf = nullptr;   // Owned by the service; valid while the task is scheduled.
+    FsServiceStreamBuf* stream_buf = nullptr; // Owned by the service; valid while the task is scheduled.
 
     // Cleared by Stop() before it cancels, so a tick that is running then schedules no other.
     atomic_t is_running = ATOMIC_INIT(0);
@@ -41,7 +41,7 @@ struct LogWriterTask {
     // Absolute deadlines in system ticks, so neither the tick's own duration nor the kernel's
     // rounding of a relative timeout adds to the period.
     int64_t interval_ticks = 0;
-    int64_t burst_interval_ticks = 0;   // Next deadline after a drain that filled the raw buffers.
+    int64_t burst_interval_ticks = 0; // Next deadline after a drain that filled the raw buffers.
     int64_t next_deadline = 0;
 
     // 0 never rotates. Set at the end of the tick that reached it, acted on at the start of the next.

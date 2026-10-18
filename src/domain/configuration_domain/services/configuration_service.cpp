@@ -19,7 +19,9 @@ private:
     std::shared_ptr<const ConfigurationStoredHandler> handler_;
 
 public:
-    StoredHandlerSlot() { k_mutex_init(&mutex_); }
+    StoredHandlerSlot() {
+        k_mutex_init(&mutex_);
+    }
 
     void Set(ConfigurationStoredHandler handler) {
         std::shared_ptr<const ConfigurationStoredHandler> slot;
@@ -42,14 +44,16 @@ public:
     }
 };
 
-ConfigurationService::ConfigurationService() : stored_handler_slot_(std::make_shared<StoredHandlerSlot>()) {}
+ConfigurationService::ConfigurationService() :
+    stored_handler_slot_(std::make_shared<StoredHandlerSlot>()) {}
 
 ConfigurationService::~ConfigurationService() = default;
 
 bool ConfigurationService::ApplyCborConfiguration(
     Type type,
     std::span<const uint8_t> cbor_data,
-    std::span<char> reason) {
+    std::span<char> reason
+) {
 
     if(!cbor_configuration_managers_.contains(type))
         return false;
@@ -73,15 +77,19 @@ StoredCborInfo ConfigurationService::GetCborConfigurationInfo(Type type) const {
 void ConfigurationService::RegisterCborConfigurationManager(
     Type type,
     std::shared_ptr<ICborConfigurationManager> cbor_configuration_manager,
-    size_t max_cbor_size) {
+    size_t max_cbor_size
+) {
 
     const auto [it, is_inserted] = cbor_configuration_managers_.try_emplace(
-        type, Registration{.manager = std::move(cbor_configuration_manager), .max_cbor_size = max_cbor_size});
+        type, Registration{ .manager = std::move(cbor_configuration_manager), .max_cbor_size = max_cbor_size }
+    );
 
     // The first manager of a type; a refused second one is not wired. The handler holds the slot, not
     // the service, so a manager that outlives the service reports into a live object.
     if(is_inserted && it->second.manager != nullptr)
-        it->second.manager->SetStoredHandler([slot = stored_handler_slot_, type] { slot->Notify(type); });
+        it->second.manager->SetStoredHandler([slot = stored_handler_slot_, type] {
+            slot->Notify(type);
+        });
 }
 
 void ConfigurationService::RegisterConfigurationStoredHandler(ConfigurationStoredHandler handler) {

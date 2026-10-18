@@ -119,7 +119,7 @@ ZTEST(mdf_blocks, test_BlockHeaderLayout) {
 }
 
 ZTEST(mdf_blocks, test_BlockRejectsIdThatIsNotTwoCharacters) {
-    for(const auto& id : {std::string(""), std::string("X"), std::string("XXX")}) {
+    for(const auto& id : { std::string(""), std::string("X"), std::string("XXX") }) {
         bool threw = false;
         try {
             TestBlock block(id);
@@ -135,13 +135,14 @@ ZTEST(mdf_blocks, test_TextBlockPadsAndZeroTerminates) {
     const struct {
         size_t text_size;
         size_t padded_size;
-    } cases[] = {{0, 8}, {1, 8}, {7, 8}, {8, 16}, {9, 16}, {15, 16}, {16, 24}};
+    } cases[] = { { 0, 8 }, { 1, 8 }, { 7, 8 }, { 8, 16 }, { 9, 16 }, { 15, 16 }, { 16, 24 } };
 
     for(const auto& test_case : cases) {
         auto block = MakeTextBlock(std::string(test_case.text_size, 'a'));
 
-        zassert_equal(block->GetBlockSize(), BLOCK_HEADER_SIZE + test_case.padded_size,
-            "text of %zu bytes", test_case.text_size);
+        zassert_equal(
+            block->GetBlockSize(), BLOCK_HEADER_SIZE + test_case.padded_size, "text of %zu bytes", test_case.text_size
+        );
 
         const auto data = Serialize(*block);
         zassert_equal(BlockId(data), std::string("##TX"));
@@ -169,7 +170,7 @@ ZTEST(mdf_blocks, test_MetadataBlockWrapsContentInXml) {
 
 ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
     MetadataBlock block;
-    const std::array<MdfProperty, 1> properties{{{"vendor & model", "Acme <X>"}}};
+    const std::array<MdfProperty, 1> properties{ { { "vendor & model", "Acme <X>" } } };
     block.SetComment("CN", "Coolant \"inlet\" <probe> & 'spare'", properties);
 
     auto data = Serialize(block);
@@ -178,17 +179,23 @@ ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
 
     zassert_true(text.starts_with("<CNcomment>"), "readers match the root element at the start: %s", text.c_str());
     zassert_true(text.ends_with("</CNcomment>"), "%s", text.c_str());
-    zassert_not_equal(text.find("<TX>Coolant &quot;inlet&quot; &lt;probe&gt; &amp; &apos;spare&apos;</TX>"), std::string::npos,
-        "a description with markup characters must not break the XML: %s", text.c_str());
-    zassert_not_equal(text.find("<common_properties><e name=\"vendor &amp; model\">Acme &lt;X&gt;</e></common_properties>"), std::string::npos,
-        "property names and values must be escaped too: %s", text.c_str());
+    zassert_not_equal(
+        text.find("<TX>Coolant &quot;inlet&quot; &lt;probe&gt; &amp; &apos;spare&apos;</TX>"), std::string::npos,
+        "a description with markup characters must not break the XML: %s", text.c_str()
+    );
+    zassert_not_equal(
+        text.find("<common_properties><e name=\"vendor &amp; model\">Acme &lt;X&gt;</e></common_properties>"),
+        std::string::npos, "property names and values must be escaped too: %s", text.c_str()
+    );
 
     block.SetComment("CG", "plain");
     data = Serialize(block);
     text = AsText(data, BLOCK_HEADER_SIZE, block.GetBlockSize() - BLOCK_HEADER_SIZE);
     text = text.substr(0, text.find('\0'));
-    zassert_equal(text, std::string("<CGcomment><TX>plain</TX></CGcomment>"),
-        "without properties there must be no <common_properties> element: %s", text.c_str());
+    zassert_equal(
+        text, std::string("<CGcomment><TX>plain</TX></CGcomment>"),
+        "without properties there must be no <common_properties> element: %s", text.c_str()
+    );
 
     // Sensor names and descriptions are free text: a NUL would cut the comment short and the
     // other C0 controls are not well-formed XML even as character references.
@@ -203,8 +210,16 @@ ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
     data = Serialize(block);
     text = AsText(data, BLOCK_HEADER_SIZE, block.GetBlockSize() - BLOCK_HEADER_SIZE);
     text = text.substr(0, text.find('\0'));
-    zassert_equal(text, std::string("<CNcomment><TX>a\tb\nc\rd\xEF\xBF\xBD" "e\xEF\xBF\xBD" "f\xEF\xBF\xBD" "g</TX></CNcomment>"),
-        "tab, LF and CR pass, every other control becomes U+FFFD and the comment stays closed: %s", text.c_str());
+    zassert_equal(
+        text,
+        std::string(
+            "<CNcomment><TX>a\tb\nc\rd\xEF\xBF\xBD"
+            "e\xEF\xBF\xBD"
+            "f\xEF\xBF\xBD"
+            "g</TX></CNcomment>"
+        ),
+        "tab, LF and CR pass, every other control becomes U+FFFD and the comment stays closed: %s", text.c_str()
+    );
 }
 
 ZTEST(mdf_blocks, test_HeaderBlockLayout) {
@@ -237,8 +252,10 @@ ZTEST(mdf_blocks, test_HeaderBlockChainsDataGroups) {
     // The first data group is linked from the header, the rest chain off it.
     auto children = block.GetChildren();
     zassert_equal(children.back(), std::static_pointer_cast<eerie_leap::subsys::mdf::ISerializableBlock>(first));
-    zassert_equal(first->GetNext(), std::static_pointer_cast<eerie_leap::subsys::mdf::ISerializableBlock>(second),
-        "the second data group is the first one's dg_dg_next");
+    zassert_equal(
+        first->GetNext(), std::static_pointer_cast<eerie_leap::subsys::mdf::ISerializableBlock>(second),
+        "the second data group is the first one's dg_dg_next"
+    );
 }
 
 ZTEST(mdf_blocks, test_FileHistoryBlockLayout) {
@@ -258,8 +275,10 @@ ZTEST(mdf_blocks, test_FileHistoryBlockLayout) {
     const auto comment_data = Serialize(*comment);
     const auto text = AsText(comment_data, BLOCK_HEADER_SIZE, comment->GetBlockSize() - BLOCK_HEADER_SIZE);
     zassert_not_equal(text.find("<FHcomment>"), std::string::npos, "%s", text.c_str());
-    zassert_not_equal(text.find("<tool_id>none</tool_id>"), std::string::npos,
-        "a file history that was never told its tool keeps the placeholder: %s", text.c_str());
+    zassert_not_equal(
+        text.find("<tool_id>none</tool_id>"), std::string::npos,
+        "a file history that was never told its tool keeps the placeholder: %s", text.c_str()
+    );
     zassert_not_equal(text.find("<tool_vendor>Eerie Leap</tool_vendor>"), std::string::npos, "%s", text.c_str());
     zassert_not_equal(text.find("<tool_version>0.0.0</tool_version>"), std::string::npos, "%s", text.c_str());
 }
@@ -278,10 +297,10 @@ ZTEST(mdf_blocks, test_DataGroupBlockLayout) {
 }
 
 ZTEST(mdf_blocks, test_DataGroupBlockValidatesRecordIdSize) {
-    for(uint8_t size : {0, 1, 2, 4, 8})
+    for(uint8_t size : { 0, 1, 2, 4, 8 })
         zassert_equal(DataGroupBlock(size).GetRecordIdSizeBytes(), size);
 
-    for(uint8_t size : {3, 5, 6, 7, 9, 255}) {
+    for(uint8_t size : { 3, 5, 6, 7, 9, 255 }) {
         bool threw = false;
         try {
             DataGroupBlock block(size);
@@ -314,7 +333,15 @@ ZTEST(mdf_blocks, test_DataBlockSeparatesLengthFromSerializedSize) {
 
 ZTEST(mdf_blocks, test_ChannelGroupRecordIdData) {
     const auto none = ChannelGroupBlock(0, 0).GetRecordIdData();
-    zassert_true(std::ranges::all_of(none, [](uint8_t byte) { return byte == 0; }), "a group without record IDs has none");
+    zassert_true(
+        std::ranges::all_of(
+            none,
+            [](uint8_t byte) {
+                return byte == 0;
+            }
+        ),
+        "a group without record IDs has none"
+    );
 
     const auto one = ChannelGroupBlock(1, 0xAB).GetRecordIdData();
     zassert_equal(one[0], 0xAB);
@@ -339,7 +366,7 @@ ZTEST(mdf_blocks, test_ChannelGroupRejectsRecordIdThatDoesNotFit) {
     const struct {
         uint8_t size;
         uint64_t record_id;
-    } cases[] = {{0, 1}, {1, 256}, {2, 65536}, {4, 0x100000000ULL}};
+    } cases[] = { { 0, 1 }, { 1, 256 }, { 2, 65536 }, { 4, 0x100000000ULL } };
 
     for(const auto& test_case : cases) {
         bool threw = false;
@@ -348,8 +375,10 @@ ZTEST(mdf_blocks, test_ChannelGroupRejectsRecordIdThatDoesNotFit) {
         } catch(const std::runtime_error&) {
             threw = true;
         }
-        zassert_true(threw, "record id %llu should not fit into %u bytes",
-            static_cast<unsigned long long>(test_case.record_id), test_case.size);
+        zassert_true(
+            threw, "record id %llu should not fit into %u bytes", static_cast<unsigned long long>(test_case.record_id),
+            test_case.size
+        );
     }
 
     // The largest value that still fits is accepted.
@@ -361,11 +390,14 @@ ZTEST(mdf_blocks, test_ChannelGroupAccumulatesChannelOffsets) {
     ChannelGroupBlock group(1, 1);
 
     auto first = std::make_shared<ChannelBlock>(
-        ChannelBlock::Type::Master, ChannelBlock::SyncType::Time, ChannelBlock::DataType::FloatLe, 32);
+        ChannelBlock::Type::Master, ChannelBlock::SyncType::Time, ChannelBlock::DataType::FloatLe, 32
+    );
     auto second = std::make_shared<ChannelBlock>(
-        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::UnsignedIntegerLe, 64);
+        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::UnsignedIntegerLe, 64
+    );
     auto third = std::make_shared<ChannelBlock>(
-        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::SignedIntegerLe, 32);
+        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::SignedIntegerLe, 32
+    );
 
     group.AddChannel(first);
     group.AddChannel(second);
@@ -386,7 +418,8 @@ ZTEST(mdf_blocks, test_ChannelGroupAccumulatesChannelOffsets) {
 ZTEST(mdf_blocks, test_ChannelGroupRejectsChannelWithoutBitCount) {
     ChannelGroupBlock group(1, 1);
     auto channel = std::make_shared<ChannelBlock>(
-        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::ByteArray, 0);
+        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::ByteArray, 0
+    );
 
     bool threw = false;
     try {
@@ -445,8 +478,11 @@ ZTEST(mdf_blocks, test_VlsdChannelGroupReportsTotalValueSize) {
 
 ZTEST(mdf_blocks, test_ChannelGroupInvalidationBytes) {
     ChannelGroupBlock group(1, 1);
-    group.AddChannel(std::make_shared<ChannelBlock>(
-        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32));
+    group.AddChannel(
+        std::make_shared<ChannelBlock>(
+            ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
+        )
+    );
     zassert_equal(group.GetInvalidationBytes(), 0, "a group has no invalidation bytes until they are set");
 
     group.SetInvalidationBytes(1);
@@ -461,18 +497,27 @@ ZTEST(mdf_blocks, test_ChannelGroupInvalidationBytes) {
     // A VLSD group's cg_inval_bytes is the high half of its total value size.
     ChannelGroupBlock vlsd_group(1, 2);
     vlsd_group.SetFlags(std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel));
-    zassert_true(Throws<std::runtime_error>([&] { vlsd_group.SetInvalidationBytes(1); }),
-        "a VLSD group must refuse invalidation bytes its serialization would drop");
+    zassert_true(
+        Throws<std::runtime_error>([&] {
+            vlsd_group.SetInvalidationBytes(1);
+        }),
+        "a VLSD group must refuse invalidation bytes its serialization would drop"
+    );
     zassert_equal(vlsd_group.GetInvalidationBytes(), 0);
 
-    zassert_true(Throws<std::runtime_error>([&] { group.SetFlags(std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel)); }),
-        "a group with invalidation bytes must not turn into a VLSD group");
+    zassert_true(
+        Throws<std::runtime_error>([&] {
+            group.SetFlags(std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel));
+        }),
+        "a group with invalidation bytes must not turn into a VLSD group"
+    );
     zassert_equal(group.GetFlags(), 0, "the refused flags are not set");
 }
 
 ZTEST(mdf_blocks, test_ChannelBlockInvalidationBit) {
     ChannelBlock channel(
-        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32);
+        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
+    );
     channel.SetFlags(std::to_underlying(ChannelBlock::Flag::BusEvent));
 
     const auto base = BaseSizeForLinks(8);
@@ -484,15 +529,18 @@ ZTEST(mdf_blocks, test_ChannelBlockInvalidationBit) {
     zassert_equal(channel.GetInvalidationBitPosition(), 5);
 
     const auto data = Serialize(channel);
-    zassert_equal(Read<uint32_t>(data, base + 12),
+    zassert_equal(
+        Read<uint32_t>(data, base + 12),
         std::to_underlying(ChannelBlock::Flag::BusEvent) | std::to_underlying(ChannelBlock::Flag::InvalidValid),
-        "cn_flags gains InvalidValid and keeps the flags set before");
+        "cn_flags gains InvalidValid and keeps the flags set before"
+    );
     zassert_equal(Read<uint32_t>(data, base + 16), 5, "cn_inval_bit_pos");
 }
 
 ZTEST(mdf_blocks, test_ChannelBlockLayout) {
     ChannelBlock channel(
-        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32);
+        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
+    );
 
     zassert_equal(channel.GetBlockSize(), BaseSizeForLinks(8) + 72, "cn_data is 72 bytes of REAL and integers");
 
@@ -523,16 +571,20 @@ ZTEST(mdf_blocks, test_ChannelBlockRoundsBitCountUpToWholeBytes) {
         uint32_t bit_count;
         uint8_t bit_offset;
         uint32_t expected_bytes;
-    } cases[] = {{1, 0, 1}, {7, 0, 1}, {8, 0, 1}, {9, 0, 2}, {12, 0, 2}, {29, 2, 4}, {32, 0, 4}, {80, 0, 10}};
+    } cases[] = { { 1, 0, 1 }, { 7, 0, 1 }, { 8, 0, 1 }, { 9, 0, 2 }, { 12, 0, 2 }, { 29, 2, 4 }, { 32, 0, 4 },
+        { 80, 0, 10 } };
 
     for(const auto& test_case : cases) {
         ChannelBlock channel(
-            ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync,
-            ChannelBlock::DataType::UnsignedIntegerLe, test_case.bit_count);
+            ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::UnsignedIntegerLe,
+            test_case.bit_count
+        );
         channel.SetOffsetBits(test_case.bit_offset);
 
-        zassert_equal(channel.GetDataSizeBytes(), test_case.expected_bytes,
-            "%u bits at bit offset %u", test_case.bit_count, test_case.bit_offset);
+        zassert_equal(
+            channel.GetDataSizeBytes(), test_case.expected_bytes, "%u bits at bit offset %u", test_case.bit_count,
+            test_case.bit_offset
+        );
         zassert_equal(channel.GetBitCount(), test_case.bit_count);
     }
 }
@@ -540,7 +592,8 @@ ZTEST(mdf_blocks, test_ChannelBlockRoundsBitCountUpToWholeBytes) {
 ZTEST(mdf_blocks, test_ChannelBlockAppendsToTheEndOfTheChain) {
     auto make = []() {
         return std::make_shared<ChannelBlock>(
-            ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32);
+            ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
+        );
     };
 
     auto first = make();
@@ -604,7 +657,10 @@ ZTEST(mdf_blocks, test_DataGroupRejectsANullChannelGroup) {
     DataGroupBlock block(1);
     block.AddChannelGroup(std::make_shared<ChannelGroupBlock>(1, 1));
 
-    zassert_true(Throws<std::invalid_argument>([&] { block.AddChannelGroup(nullptr); }),
-        "a null group would reset the tail and drop the chain on the next add");
+    zassert_true(
+        Throws<std::invalid_argument>([&] {
+            block.AddChannelGroup(nullptr);
+        }),
+        "a null group would reset the tail and drop the chain on the next add"
+    );
 }
-

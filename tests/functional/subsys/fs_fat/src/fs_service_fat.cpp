@@ -45,7 +45,7 @@ std::string ReadText(std::string_view relative_path) {
     if(!fs_service->ReadFile(relative_path, buffer.data(), buffer.size(), read_size))
         return {};
 
-    return {buffer.data(), read_size};
+    return { buffer.data(), read_size };
 }
 
 // Entries come in the file system's order, so they are looked up by name.
@@ -139,8 +139,10 @@ ZTEST(fs_service_fat, test_ListDirectory_a_file_is_ENOTDIR) {
     std::vector<DirectoryEntry> entries;
     size_t count = 0;
 
-    zassert_equal(fs_service->ListDirectory("oil.lua", 0, 10, entries, count), -ENOTDIR,
-        "FAT reports a file as a missing directory, which the service tells apart");
+    zassert_equal(
+        fs_service->ListDirectory("oil.lua", 0, 10, entries, count), -ENOTDIR,
+        "FAT reports a file as a missing directory, which the service tells apart"
+    );
 }
 
 ZTEST(fs_service_fat, test_ListDirectory_missing_directory_is_ENOENT) {
@@ -220,12 +222,12 @@ ZTEST(fs_service_fat, test_Rename_rejects_the_same_file_in_any_case) {
     zassert_true(WriteText("scripts/Oil.lua", "abc"));
 
     for(const char* to : {
-        "scripts/Oil.lua",
-        "scripts/oil.lua",
-        "SCRIPTS/OIL.LUA",
-        "scripts//Oil.lua",
-        "scripts/./Oil.lua",
-    }) {
+            "scripts/Oil.lua",
+            "scripts/oil.lua",
+            "SCRIPTS/OIL.LUA",
+            "scripts//Oil.lua",
+            "scripts/./Oil.lua",
+        }) {
         zassert_equal(fs_service->Rename("scripts/Oil.lua", to), -EINVAL, "Renamed onto %s", to);
         zassert_equal(fs_service->Rename(to, "scripts/Oil.lua"), -EINVAL, "Renamed from %s", to);
         zassert_str_equal(ReadText("scripts/Oil.lua").c_str(), "abc");
@@ -249,20 +251,20 @@ ZTEST(fs_service_fat, test_Rename_rejects_names_outside_the_plain_alphabet) {
     zassert_true(WriteText("scripts/oil.lua", "abc"));
 
     for(const char* spelling : {
-        "scripts\\oil.lua",
-        "scripts/oil.lua.",
-        "scripts/oil.lua..",
-        "scripts/oil.lua ",
-        "scripts/oil.lua. .",
-        "scripts./oil.lua",
-        "scripts /oil.lua",
-        "scripts/oil.lua\001x",
-        "scripts/oil v2.lua",
-        "scripts/oil~1.lua",
-        "scripts/oil.lua:x",
-        "scripts/oil*.lua",
-        "scripts/oil\303\251.lua",
-    }) {
+            "scripts\\oil.lua",
+            "scripts/oil.lua.",
+            "scripts/oil.lua..",
+            "scripts/oil.lua ",
+            "scripts/oil.lua. .",
+            "scripts./oil.lua",
+            "scripts /oil.lua",
+            "scripts/oil.lua\001x",
+            "scripts/oil v2.lua",
+            "scripts/oil~1.lua",
+            "scripts/oil.lua:x",
+            "scripts/oil*.lua",
+            "scripts/oil\303\251.lua",
+        }) {
         zassert_equal(fs_service->Rename("scripts/oil.lua", spelling), -EINVAL, "Renamed onto \"%s\"", spelling);
         zassert_equal(fs_service->Rename(spelling, "scripts/oil.lua"), -EINVAL, "Renamed from \"%s\"", spelling);
         zassert_str_equal(ReadText("scripts/oil.lua").c_str(), "abc");

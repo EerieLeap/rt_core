@@ -7,8 +7,8 @@
 #include "utilities/string/string_helpers.h"
 
 #include "erased_payload_view.h"
-#include "event_channel_registry.h"
 #include "event_binding_subscription.h"
+#include "event_channel_registry.h"
 
 namespace eerie_leap::subsys::event_bus {
 
@@ -16,13 +16,13 @@ using eerie_leap::utilities::string::StringHelpers;
 
 std::optional<EventData> ToSelectorValue(const ConfigValue& value) {
     if(const auto* text = std::get_if<std::pmr::string>(&value))
-        return EventData { StringHelpers::GetHash(*text) };
+        return EventData{ StringHelpers::GetHash(*text) };
 
     if(const auto* number = std::get_if<int>(&value))
-        return EventData { *number };
+        return EventData{ *number };
 
     if(const auto* flag = std::get_if<bool>(&value))
-        return EventData { *flag };
+        return EventData{ *flag };
 
     return std::nullopt;
 }
@@ -71,12 +71,12 @@ AnySubscription SubscribeEventBinding(const EventBinding& binding, EventBindingH
     }
 
     return channel->SubscribeErased(
-        binding.event_type,
-        std::move(filter),
+        binding.event_type, std::move(filter),
         [payload_key = binding.payload_key, handler = std::move(handler)](const ErasedPayloadView& view) {
             if(const auto* value = view.Find(payload_key))
                 handler(*value);
-        });
+        }
+    );
 }
 
 } // namespace eerie_leap::subsys::event_bus

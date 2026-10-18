@@ -6,13 +6,16 @@
 namespace eerie_leap::subsys::expression_engine {
 
 ExpressionEvaluator::ExpressionEvaluator(
-    std::pmr::memory_resource* resource, std::string_view expression, ee::Program program)
-        : expression_(expression, resource),
-        program_(std::move(program)),
-        input_index_(program_.VariableIndex(k_input_name)) { }
+    std::pmr::memory_resource* resource,
+    std::string_view expression,
+    ee::Program program
+) :
+    expression_(expression, resource),
+    program_(std::move(program)),
+    input_index_(program_.VariableIndex(k_input_name)) {}
 
-std::expected<ExpressionEvaluator, CompileError> ExpressionEvaluator::Create(
-    std::string_view expression, std::pmr::memory_resource* resource) noexcept {
+std::expected<ExpressionEvaluator, CompileError>
+ExpressionEvaluator::Create(std::string_view expression, std::pmr::memory_resource* resource) noexcept {
 
     auto program = ee::Compile(expression, resource, k_limits);
     if(!program)
@@ -22,8 +25,8 @@ std::expected<ExpressionEvaluator, CompileError> ExpressionEvaluator::Create(
 }
 
 std::string ExpressionEvaluator::Describe(const CompileError& error) {
-    return "Invalid expression: " + std::string(ee::Describe(error.code))
-        + " at " + std::to_string(static_cast<unsigned>(error.position)) + ".";
+    return "Invalid expression: " + std::string(ee::Describe(error.code)) + " at "
+        + std::to_string(static_cast<unsigned>(error.position)) + ".";
 }
 
 bool ExpressionEvaluator::BindVariable(std::string_view name, const float* value) noexcept {

@@ -12,13 +12,15 @@ using namespace eerie_leap::utilities::memory;
 LOG_MODULE_REGISTER(lua);
 
 #ifdef CONFIG_EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB
-static constexpr size_t k_default_memory_limit = static_cast<size_t>(CONFIG_EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB) * 1024U;
+static constexpr size_t k_default_memory_limit = static_cast<size_t>(CONFIG_EERIE_LEAP_LUA_SCRIPT_MEMORY_LIMIT_KB)
+    * 1024U;
 #else
 static constexpr size_t k_default_memory_limit = 0;
 #endif
 
-LuaScript::LuaScript(lua_State* state, std::unique_ptr<Context> context)
-    : state_(state), context_(std::move(context)) {
+LuaScript::LuaScript(lua_State* state, std::unique_ptr<Context> context) :
+    state_(state),
+    context_(std::move(context)) {
 
     if(state_ == nullptr) {
         LOG_ERR("Failed to create Lua state.");
@@ -87,14 +89,14 @@ int LuaScript::LoadChunk(std::span<const uint8_t> script, const char* name) {
 
     // A fresh environment that falls back to the globals for reads: the libraries and the
     // registered functions are visible, the script's own globals stay private to it.
-    lua_newtable(state_);                           // chunk, env
-    lua_newtable(state_);                           // chunk, env, mt
-    lua_pushglobaltable(state_);                    // chunk, env, mt, _G
-    lua_setfield(state_, -2, "__index");            // chunk, env, mt
-    lua_setmetatable(state_, -2);                   // chunk, env
-    lua_pushvalue(state_, -1);                      // chunk, env, env
-    const int environment_ref = luaL_ref(state_, LUA_REGISTRYINDEX);   // chunk, env
-    lua_setupvalue(state_, -2, 1);                  // chunk  (the chunk's _ENV is the first upvalue)
+    lua_newtable(state_);                                            // chunk, env
+    lua_newtable(state_);                                            // chunk, env, mt
+    lua_pushglobaltable(state_);                                     // chunk, env, mt, _G
+    lua_setfield(state_, -2, "__index");                             // chunk, env, mt
+    lua_setmetatable(state_, -2);                                    // chunk, env
+    lua_pushvalue(state_, -1);                                       // chunk, env, env
+    const int environment_ref = luaL_ref(state_, LUA_REGISTRYINDEX); // chunk, env
+    lua_setupvalue(state_, -2, 1);                                   // chunk  (the chunk's _ENV is the first upvalue)
 
     if(lua_pcall(state_, 0, 0, 0) != LUA_OK) {
         LOG_ERR("Error executing script %s: %s", name, lua_tostring(state_, -1));
@@ -110,15 +112,15 @@ int LuaScript::FindFunction(int environment_ref, const char* name) {
     if(state_ == nullptr || environment_ref == kNoRef)
         return kNoRef;
 
-    lua_rawgeti(state_, LUA_REGISTRYINDEX, environment_ref);   // env
-    lua_getfield(state_, -1, name);                            // env, value
+    lua_rawgeti(state_, LUA_REGISTRYINDEX, environment_ref); // env
+    lua_getfield(state_, -1, name);                          // env, value
 
     if(!lua_isfunction(state_, -1)) {
         lua_pop(state_, 2);
         return kNoRef;
     }
 
-    const int function_ref = luaL_ref(state_, LUA_REGISTRYINDEX);   // env
+    const int function_ref = luaL_ref(state_, LUA_REGISTRYINDEX); // env
     lua_pop(state_, 1);
 
     return function_ref;
@@ -155,8 +157,10 @@ size_t LuaScript::GetMemoryUsed() const {
 }
 
 void LuaScript::LogMemoryUsage() const {
-    LOG_INF("Lua state memory usage: %zu bytes (peak %zu, limit %zu)",
-        GetMemoryUsed(), context_->budget.peak, context_->budget.limit);
+    LOG_INF(
+        "Lua state memory usage: %zu bytes (peak %zu, limit %zu)", GetMemoryUsed(), context_->budget.peak,
+        context_->budget.limit
+    );
 }
 
 void* LuaScript::ExtMemoryAllocator(void* ud, void* ptr, size_t osize, size_t nsize) {
@@ -190,9 +194,8 @@ void* LuaScript::ExtMemoryAllocator(void* ud, void* ptr, size_t osize, size_t ns
 
     void* new_ptr = nullptr;
     try {
-        new_ptr = ptr == nullptr
-            ? allocator.allocate(nsize)
-            : allocator.reallocate(static_cast<uint8_t*>(ptr), old_size, nsize);
+        new_ptr = ptr == nullptr ? allocator.allocate(nsize)
+                                 : allocator.reallocate(static_cast<uint8_t*>(ptr), old_size, nsize);
     } catch(const std::bad_alloc&) {
         new_ptr = nullptr;
     }
@@ -238,7 +241,7 @@ void LuaScript::OpenLuaStdLibs(lua_State* L) {
     /* "require" functions from 'loadedlibs' and set results to global table */
     for(lib = lua_std_libs_; lib->func; lib++) {
         luaL_requiref(L, lib->name, lib->func, 1);
-        lua_pop(L, 1);  /* remove lib */
+        lua_pop(L, 1); /* remove lib */
     }
 }
 
@@ -247,24 +250,20 @@ void LuaScript::OpenLuaStdLibs(lua_State* L) {
 // replace the base library's print.
 const luaL_Reg LuaScript::lua_std_libs_[] = {
 #ifdef CONFIG_LUA_LIB_BASE
-    {LUA_GNAME, luaopen_base},
+    { LUA_GNAME, luaopen_base },
 #endif
     // {LUA_LOADLIBNAME, luaopen_package},
     // {LUA_COLIBNAME, luaopen_coroutine},
-    {LUA_TABLIBNAME, luaopen_table},
+    { LUA_TABLIBNAME, luaopen_table },
     // {LUA_IOLIBNAME, luaopen_io},
     // {LUA_OSLIBNAME, luaopen_os},
-    {LUA_STRLIBNAME, luaopen_string},
-    {LUA_MATHLIBNAME, luaopen_math},
-    {LUA_UTF8LIBNAME, luaopen_utf8},
+    { LUA_STRLIBNAME, luaopen_string }, { LUA_MATHLIBNAME, luaopen_math }, { LUA_UTF8LIBNAME, luaopen_utf8 },
     // {LUA_DBLIBNAME, luaopen_debug},
-    {NULL, NULL} // Array end marker
+    { NULL, NULL } // Array end marker
 };
 
 const luaL_Reg LuaScript::static_global_functions_[] = {
-    {"sleep_ms", sleep_ms_func},
-    {"print", print_func},
-    {NULL, NULL} // Array end marker
+    { "sleep_ms", sleep_ms_func }, { "print", print_func }, { NULL, NULL } // Array end marker
 };
 
 } // namespace eerie_leap::subsys::lua_script

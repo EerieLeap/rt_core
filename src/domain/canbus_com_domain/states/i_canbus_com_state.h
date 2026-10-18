@@ -27,7 +27,6 @@ public:
 
 /** @brief A state type that encodes a record and decodes one from its data bytes. */
 template<typename T>
-concept CanbusComState = std::derived_from<T, ICanbusComState>
-    && eerie_leap::utilities::concepts::SpanConstructible<T>;
+concept CanbusComState = std::derived_from<T, ICanbusComState> && eerie_leap::utilities::concepts::SpanConstructible<T>;
 
 } // namespace eerie_leap::domain::canbus_com_domain::states

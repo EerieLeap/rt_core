@@ -23,7 +23,7 @@ uint64_t CanSignalCodec::SignalMask(uint32_t size_bits) {
     return size_bits >= MAX_SIGNAL_SIZE_BITS ? UINT64_MAX : (1ULL << size_bits) - 1ULL;
 }
 
-template <typename TBitHandler>
+template<typename TBitHandler>
 void CanSignalCodec::ForEachSignalBit(const CanSignalConfiguration& signal, TBitHandler&& handler) {
     if(signal.byte_order == CanSignalByteOrder::LITTLE_ENDIAN_INTEL) {
         for(uint32_t i = 0; i < signal.size_bits; ++i)
@@ -84,7 +84,8 @@ bool CanSignalCodec::Encode(const CanSignalConfiguration& signal, float value, s
     if(signal.factor == 0.0F || !std::isfinite(value))
         return false;
 
-    const double scaled = (static_cast<double>(value) - static_cast<double>(signal.offset)) / static_cast<double>(signal.factor);
+    const double scaled = (static_cast<double>(value) - static_cast<double>(signal.offset))
+        / static_cast<double>(signal.factor);
     const uint64_t mask = SignalMask(signal.size_bits);
 
     // Saturate in double space, the limits are chosen to stay castable to the target integer type.

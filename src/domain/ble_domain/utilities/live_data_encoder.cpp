@@ -7,7 +7,11 @@
 namespace eerie_leap::domain::ble_domain::utilities {
 
 size_t LiveDataEncoder::Encode(
-    uint8_t sequence, uint32_t time_ms, std::span<const std::optional<float>> values, std::span<uint8_t> out) {
+    uint8_t sequence,
+    uint32_t time_ms,
+    std::span<const std::optional<float>> values,
+    std::span<uint8_t> out
+) {
 
     if(values.size() > MAX_VALUES || out.size() < GetMaxSize(values.size()))
         return 0;

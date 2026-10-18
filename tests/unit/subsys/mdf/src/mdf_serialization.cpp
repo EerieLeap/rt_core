@@ -36,10 +36,10 @@ std::shared_ptr<TestBlock> MakeBlock(const std::string& id, uint64_t payload_siz
 ZTEST_SUITE(mdf_serialization, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(mdf_serialization, test_ResolveAddressLaysBlocksOutInDepthFirstOrder) {
-    auto root = MakeBlock("RT", 8);      // 32 bytes
-    auto first = MakeBlock("AA", 16);    // 40 bytes
-    auto second = MakeBlock("BB", 0);    // 24 bytes
-    auto nested = MakeBlock("CC", 0);    // 24 bytes
+    auto root = MakeBlock("RT", 8);   // 32 bytes
+    auto first = MakeBlock("AA", 16); // 40 bytes
+    auto second = MakeBlock("BB", 0); // 24 bytes
+    auto nested = MakeBlock("CC", 0); // 24 bytes
 
     first->AddChild(nested);
     root->AddChild(first);
@@ -91,10 +91,13 @@ ZTEST(mdf_serialization, test_NextChainIsLaidOutAfterTheChildren) {
     const auto end = root->ResolveAddress(0);
     zassert_equal(end, 6 * BLOCK_HEADER_SIZE);
 
-    const std::vector<std::shared_ptr<TestBlock>> expected_order{root, first, first_child, second, second_child, third};
+    const std::vector<std::shared_ptr<TestBlock>> expected_order{ root, first, first_child, second, second_child,
+        third };
     for(size_t i = 0; i < expected_order.size(); i++) {
-        zassert_equal(expected_order[i]->GetAddress(), i * BLOCK_HEADER_SIZE,
-            "block %s is not at position %zu", expected_order[i]->GetId().c_str(), i);
+        zassert_equal(
+            expected_order[i]->GetAddress(), i * BLOCK_HEADER_SIZE, "block %s is not at position %zu",
+            expected_order[i]->GetId().c_str(), i
+        );
     }
 
     auto stream = MakeStream();
@@ -102,8 +105,10 @@ ZTEST(mdf_serialization, test_NextChainIsLaidOutAfterTheChildren) {
 
     const auto data = stream.str();
     for(const auto& block : expected_order) {
-        zassert_equal(BlockId(AsBytes(data), block->GetAddress()), "##" + block->GetId(),
-            "block %s is not at its resolved address", block->GetId().c_str());
+        zassert_equal(
+            BlockId(AsBytes(data), block->GetAddress()), "##" + block->GetId(),
+            "block %s is not at its resolved address", block->GetId().c_str()
+        );
     }
 
     root->Reset();
@@ -159,10 +164,12 @@ ZTEST(mdf_serialization, test_WriteToStreamPlacesEveryBlockAtItsResolvedAddress)
     zassert_equal(bytes_written, data.size(), "the reported size must match what reached the stream");
     zassert_equal(data.size(), 4 * BLOCK_HEADER_SIZE, "the shared block is written exactly once");
 
-    for(const auto& block : {root, first, shared, second}) {
+    for(const auto& block : { root, first, shared, second }) {
         zassert_true(block->IsSerialized(), "block %s was not written", block->GetId().c_str());
-        zassert_equal(BlockId(AsBytes(data), block->GetAddress()), "##" + block->GetId(),
-            "block %s is not at its resolved address", block->GetId().c_str());
+        zassert_equal(
+            BlockId(AsBytes(data), block->GetAddress()), "##" + block->GetId(),
+            "block %s is not at its resolved address", block->GetId().c_str()
+        );
     }
 }
 
@@ -275,10 +282,14 @@ ZTEST(mdf_serialization, test_RewriteToStreamPatchesInPlace) {
 
     const auto data = stream.str();
     zassert_equal(data.size(), bytes_written + records.size(), "patching must not grow the stream");
-    zassert_equal(Read<uint64_t>(AsBytes(data), data_block->GetAddress() + BLOCK_LENGTH_OFFSET),
-        BLOCK_HEADER_SIZE + records.size());
-    zassert_mem_equal(data.data() + data.size() - records.size(), records.data(), records.size(),
-        "the appended records must stay untouched");
+    zassert_equal(
+        Read<uint64_t>(AsBytes(data), data_block->GetAddress() + BLOCK_LENGTH_OFFSET),
+        BLOCK_HEADER_SIZE + records.size()
+    );
+    zassert_mem_equal(
+        data.data() + data.size() - records.size(), records.data(), records.size(),
+        "the appended records must stay untouched"
+    );
 }
 
 ZTEST(mdf_serialization, test_RewriteToStreamThrowsWhenTheStreamCannotSeek) {
@@ -342,8 +353,11 @@ ZTEST(mdf_serialization, test_BlockLinksSerializeAddresses) {
     links.SetLink(TestLink::First, first);
 
     const auto buffer = links.Serialize();
-    zassert_equal(Read<uint64_t>({buffer.get(), static_cast<size_t>(links.GetLinksSizeBytes())}, 0), 256);
-    zassert_equal(Read<uint64_t>({buffer.get(), static_cast<size_t>(links.GetLinksSizeBytes())}, LINK_SIZE), 0, "unset links stay null");
+    zassert_equal(Read<uint64_t>({ buffer.get(), static_cast<size_t>(links.GetLinksSizeBytes()) }, 0), 256);
+    zassert_equal(
+        Read<uint64_t>({ buffer.get(), static_cast<size_t>(links.GetLinksSizeBytes()) }, LINK_SIZE), 0,
+        "unset links stay null"
+    );
 }
 
 ZTEST(mdf_serialization, test_BlockLinksRejectUnresolvedAddresses) {

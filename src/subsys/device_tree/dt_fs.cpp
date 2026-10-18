@@ -2,7 +2,7 @@
 
 #include <zephyr/logging/log.h>
 #ifdef CONFIG_SDMMC_SUBSYS
-#include <zephyr/sd/sd.h>
+    #include <zephyr/sd/sd.h>
 #endif
 
 #include "dt_logger.h"
@@ -31,10 +31,10 @@ void DtFs::InitInternalFs() {
 void DtFs::InitSdFs() {
 #if DT_HAS_CHOSEN(zephyr_sdhc) && DT_HAS_ALIAS(sdfs0) && CONFIG_SDMMC_SUBSYS
     fs_mount_t* sd_fs_mp = &FS_FSTAB_ENTRY(SD_FS_NODE);
-    sd_fs_mp->storage_dev = (void *)SD_DEV;
+    sd_fs_mp->storage_dev = (void*)SD_DEV;
 
     int ret = sdhc_get_host_props(SD_DEV, &sd_host_props_);
-    if (ret) {
+    if(ret) {
         LOG_ERR("SDHC get host props failed with error %d", ret);
         return;
     }
@@ -43,9 +43,9 @@ void DtFs::InitSdFs() {
 
     LOG_INF("SD File System initialized.");
 
-	const char* disk_names[] = {DT_FOREACH_CHILD_SEP(SDHC_NODE, SDHC_DISK_NAME, (,))};
-	if(sizeof(disk_names) > 0)
-		sd_disk_name_ = disk_names[0];
+    const char* disk_names[] = { DT_FOREACH_CHILD_SEP(SDHC_NODE, SDHC_DISK_NAME, (,))};
+    if(sizeof(disk_names) > 0)
+        sd_disk_name_ = disk_names[0];
 #endif
 }
 
@@ -55,53 +55,53 @@ void DtFs::InitSdFs() {
  * identification to data mode
  */
 int DtFs::SdmmcRequestRca(const device* dev) {
-	struct sdhc_command cmd;
-	int ret;
+    struct sdhc_command cmd;
+    int ret;
 
-	cmd.opcode = SD_SEND_RELATIVE_ADDR;
-	cmd.arg = 0;
-	cmd.response_type = SD_RSP_TYPE_R6;
-	cmd.retries = CONFIG_SD_CMD_RETRIES;
-	cmd.timeout_ms = CONFIG_SD_CMD_TIMEOUT;
-	/* Issue CMD3 until card responds with nonzero RCA */
-	do {
-		ret = sdhc_request(dev, &cmd, NULL);
-		if(ret) {
-			LOG_DBG("SDHC CMD3 failed");
-			return ret;
-		}
+    cmd.opcode = SD_SEND_RELATIVE_ADDR;
+    cmd.arg = 0;
+    cmd.response_type = SD_RSP_TYPE_R6;
+    cmd.retries = CONFIG_SD_CMD_RETRIES;
+    cmd.timeout_ms = CONFIG_SD_CMD_TIMEOUT;
+    /* Issue CMD3 until card responds with nonzero RCA */
+    do {
+        ret = sdhc_request(dev, &cmd, NULL);
+        if(ret) {
+            LOG_DBG("SDHC CMD3 failed");
+            return ret;
+        }
 
-		/* Card RCA is in upper 16 bits of response */
-		sd_relative_addr_ = ((cmd.response[0U] & 0xFFFF0000) >> 16U);
-	} while (sd_relative_addr_ == 0U);
+        /* Card RCA is in upper 16 bits of response */
+        sd_relative_addr_ = ((cmd.response[0U] & 0xFFFF0000) >> 16U);
+    } while(sd_relative_addr_ == 0U);
 
-	LOG_DBG("SDHC Card relative addr: %d", sd_relative_addr_);
-	return 0;
+    LOG_DBG("SDHC Card relative addr: %d", sd_relative_addr_);
+    return 0;
 }
 
 bool DtFs::SdmmcReadStatus(const device* dev) {
-	struct sdhc_command cmd;
-	int ret;
+    struct sdhc_command cmd;
+    int ret;
 
-	cmd.opcode = SD_SEND_STATUS;
-	cmd.arg = 0;
-	if (!sd_host_props_.is_spi) {
+    cmd.opcode = SD_SEND_STATUS;
+    cmd.arg = 0;
+    if(!sd_host_props_.is_spi) {
         if(sd_relative_addr_ == 0U) {
             ret = SdmmcRequestRca(dev);
             if(ret)
                 return false;
         }
 
-		cmd.arg = (sd_relative_addr_ << 16U);
-	}
-	cmd.response_type = (SD_RSP_TYPE_R1 | SD_SPI_RSP_TYPE_R2);
-	cmd.retries = CONFIG_SD_CMD_RETRIES;
-	cmd.timeout_ms = CONFIG_SD_CMD_TIMEOUT;
+        cmd.arg = (sd_relative_addr_ << 16U);
+    }
+    cmd.response_type = (SD_RSP_TYPE_R1 | SD_SPI_RSP_TYPE_R2);
+    cmd.retries = CONFIG_SD_CMD_RETRIES;
+    cmd.timeout_ms = CONFIG_SD_CMD_TIMEOUT;
 
-	ret = sdhc_request(dev, &cmd, NULL);
-	if (ret) {
-		return false;
-	}
+    ret = sdhc_request(dev, &cmd, NULL);
+    if(ret) {
+        return false;
+    }
 
     return true;
 }

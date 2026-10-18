@@ -21,7 +21,7 @@ using eerie_leap::domain::sensor_domain::runtime::SensorRuntime;
 using eerie_leap::domain::sensor_domain::sensor_readers::ISensorReader;
 
 struct RateGroupEntry {
-    const SensorRuntime* runtime;   // Owned by the generation the group belongs to.
+    const SensorRuntime* runtime; // Owned by the generation the group belongs to.
     std::unique_ptr<ISensorReader> reader;
 };
 
@@ -29,9 +29,9 @@ struct RateGroupEntry {
 // runs. A reader sees each field whole, not the fields of one tick together.
 struct RateGroupStats {
     atomic_t ticks = ATOMIC_INIT(0);
-    atomic_t overruns = ATOMIC_INIT(0);     // Deadlines skipped because a tick ran past them.
-    atomic_t last_us = ATOMIC_INIT(0);      // Duration of the latest tick.
-    atomic_t max_us = ATOMIC_INIT(0);       // Longest tick since the group was built.
+    atomic_t overruns = ATOMIC_INIT(0); // Deadlines skipped because a tick ran past them.
+    atomic_t last_us = ATOMIC_INIT(0);  // Duration of the latest tick.
+    atomic_t max_us = ATOMIC_INIT(0);   // Longest tick since the group was built.
 
     void RecordTick(uint32_t tick_us) {
         atomic_set(&last_us, static_cast<atomic_val_t>(tick_us));
@@ -48,7 +48,7 @@ struct RateGroupStats {
 
 struct RateGroupStatsSnapshot {
     int period_ms = 0;
-    uint64_t period_us = 0;     // What the group runs at: period_ms rounded up to whole system ticks.
+    uint64_t period_us = 0; // What the group runs at: period_ms rounded up to whole system ticks.
     size_t sensors = 0;
     size_t adc_channels = 0;
     uint32_t ticks = 0;
@@ -58,13 +58,13 @@ struct RateGroupStatsSnapshot {
 };
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
-// Tick starts are taken from the 64-bit counter where there is one, so a slow group does not wrap
-// it: the 32-bit counter wraps after 17.9 s at 240 MHz and 8.9 s at 480 MHz.
-#ifdef CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
+    // Tick starts are taken from the 64-bit counter where there is one, so a slow group does not wrap
+    // it: the 32-bit counter wraps after 17.9 s at 240 MHz and 8.9 s at 480 MHz.
+    #ifdef CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
 using RateGroupCycles = uint64_t;
-#else
+    #else
 using RateGroupCycles = uint32_t;
-#endif
+    #endif
 
 // The delivered period, tick start to tick start, over one stats log interval. Processing thread only.
 struct RateGroupPeriodWindow {
@@ -110,25 +110,23 @@ struct RateGroupPeriodWindow {
 struct RateGroup {
     int period_ms = 0;
     k_ticks_t period_ticks = 0;
-    int64_t next_deadline = 0;              // Absolute, in system ticks.
+    int64_t next_deadline = 0; // Absolute, in system ticks.
     AdcSampleSet adc_samples;
-    std::vector<RateGroupEntry> entries;    // Processing order.
+    std::vector<RateGroupEntry> entries; // Processing order.
     RateGroupStats stats;
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
     RateGroupPeriodWindow period_window;
 #endif
 
     [[nodiscard]] RateGroupStatsSnapshot GetStatsSnapshot() const {
-        return {
-            .period_ms = period_ms,
+        return { .period_ms = period_ms,
             .period_us = k_ticks_to_us_floor64(static_cast<uint64_t>(period_ticks)),
             .sensors = entries.size(),
             .adc_channels = adc_samples.GetChannelCount(),
             .ticks = static_cast<uint32_t>(atomic_get(&stats.ticks)),
             .overruns = static_cast<uint32_t>(atomic_get(&stats.overruns)),
             .last_us = static_cast<uint32_t>(atomic_get(&stats.last_us)),
-            .max_us = static_cast<uint32_t>(atomic_get(&stats.max_us))
-        };
+            .max_us = static_cast<uint32_t>(atomic_get(&stats.max_us)) };
     }
 };
 

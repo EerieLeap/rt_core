@@ -7,26 +7,26 @@
 #include <string_view>
 #include <vector>
 
-#include <zephyr/kernel.h>
+#include <eerie_memory.hpp>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/can.h>
+#include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
-#include "subsys/canbus/can_frame.h"
-#include "subsys/canbus/can_id.h"
-#include "subsys/canbus/canbus_proxy.hpp"
-#include "subsys/threading/work_queue_thread.h"
 #include "configuration/cbor/cbor_canbus_config/cbor_canbus_config.h"
 #include "domain/canbus_domain/configuration/canbus_configuration_manager.h"
-#include "domain/canbus_domain/models/canbus_configuration.h"
 #include "domain/canbus_domain/models/can_channel_configuration.h"
 #include "domain/canbus_domain/models/can_message_configuration.h"
+#include "domain/canbus_domain/models/canbus_configuration.h"
 #include "domain/canbus_domain/services/canbus_service.h"
 #include "domain/sensor_domain/isr_sensor_readers/can_frame_router.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 #include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "subsys/canbus/can_frame.h"
+#include "subsys/canbus/can_id.h"
+#include "subsys/canbus/canbus_proxy.hpp"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "processing_test_support.h"
 
@@ -37,10 +37,10 @@ using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::models::sources;
 using namespace eerie_leap::domain::sensor_domain::runtime;
 
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::canbus_domain::configuration::CanbusConfigurationManager;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::domain::sensor_domain::isr_sensor_readers::CanFrameRouter;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 using namespace processing_test_support;
 
@@ -64,7 +64,7 @@ void SwitchToLoopbackMode() {
 }
 
 void SendFrame(const CanbusProxy& canbus, uint32_t frame_id, uint8_t first_byte) {
-    const std::array<uint8_t, 8> data { first_byte };
+    const std::array<uint8_t, 8> data{ first_byte };
 
     zassert_ok(canbus->SendFrame(CanId::Standard(frame_id), data, K_MSEC(100)));
 }
@@ -122,7 +122,8 @@ CanbusConfiguration MakeCanbusConfiguration(bool is_second_message_enabled) {
 
 std::shared_ptr<CanbusConfigurationManager> MakeCanbusConfigurationManager(std::shared_ptr<FsService> fs_service) {
     auto manager = std::make_shared<CanbusConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr);
+        std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr
+    );
     zassert_true(manager->Update(MakeCanbusConfiguration(false)), "The CAN configuration is valid");
 
     return manager;
@@ -148,22 +149,27 @@ ZTEST(disabled_can_message_routes, test_a_signal_on_a_disabled_message_gets_no_r
 
     // Routes are resolved from the configuration alone; without a controller none of them listens.
     auto canbus_service = std::make_shared<CanbusService>(
-        [](uint8_t) -> const device* { return nullptr; },
-        canbus_configuration_manager);
+        [](uint8_t) -> const device* {
+            return nullptr;
+        },
+        canbus_configuration_manager
+    );
 
-    const std::vector<std::shared_ptr<Sensor>> sensors {
+    const std::vector<std::shared_ptr<Sensor>> sensors{
         MakeCanSensor("on_enabled", SensorType::CANBUS_ANALOG, kEnabledFrameId),
         MakeCanSensor("on_disabled", SensorType::CANBUS_ANALOG, kDisabledFrameId),
     };
 
     auto frame = std::make_shared<SensorReadingsFrame>();
-    const auto generation = SensorPipelineBuilder(nullptr, frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    const auto generation = SensorPipelineBuilder(nullptr, frame)
+                                .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
     auto work_queue_thread = std::make_shared<WorkQueueThread>("can_router_test", 4096, 6);
     zassert_true(work_queue_thread->Initialize());
 
-    CanFrameRouter router(MakeTimeService(), work_queue_thread, canbus_service, [](const SensorRuntime&, SensorReading&) {});
+    CanFrameRouter router(
+        MakeTimeService(), work_queue_thread, canbus_service, [](const SensorRuntime&, SensorReading&) {}
+    );
 
     zassert_equal(router.Attach(*generation), 0);
     zassert_equal(router.GetRouteCount(), 1, "Only the signal of the enabled message is routed");
@@ -181,14 +187,17 @@ ZTEST(disabled_can_message_routes, test_a_frame_of_a_disabled_message_gives_its_
     auto canbus_configuration_manager = MakeCanbusConfigurationManager(fs_service);
 
     auto canbus_service = std::make_shared<CanbusService>(
-        [](uint8_t bus_channel) { return bus_channel == kBus ? LoopbackDevice() : nullptr; },
-        canbus_configuration_manager);
+        [](uint8_t bus_channel) {
+            return bus_channel == kBus ? LoopbackDevice() : nullptr;
+        },
+        canbus_configuration_manager
+    );
 
     const auto canbus = canbus_service->GetCanbus(kBus);
     zassert_not_null(canbus.get(), "The channel is open");
     SwitchToLoopbackMode();
 
-    const std::vector<std::shared_ptr<Sensor>> sensors {
+    const std::vector<std::shared_ptr<Sensor>> sensors{
         MakeCanSensor("on_enabled", SensorType::CANBUS_ANALOG, kEnabledFrameId),
         MakeCanSensor("on_disabled", SensorType::CANBUS_ANALOG, kDisabledFrameId),
         MakeCanSensor("raw_on_disabled", SensorType::CANBUS_RAW, kDisabledFrameId),
@@ -197,20 +206,17 @@ ZTEST(disabled_can_message_routes, test_a_frame_of_a_disabled_message_gives_its_
     // Stored without the check a client's apply makes, as when the message is disabled after the
     // sensors were configured.
     auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 0, 0);
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 0, 0
+    );
     zassert_true(sensors_configuration_manager->Update(sensors), "The sensors configuration is valid");
 
     auto time_service = MakeTimeService();
     auto frame = std::make_shared<SensorReadingsFrame>();
 
     auto processing_service = std::make_shared<SensorsProcessingService>(
-        sensors_configuration_manager,
-        frame,
-        time_service,
-        nullptr,
-        std::make_shared<SensorReaderFactory>(time_service, nullptr, nullptr),
-        nullptr,
-        canbus_service);
+        sensors_configuration_manager, frame, time_service, nullptr,
+        std::make_shared<SensorReaderFactory>(time_service, nullptr, nullptr), nullptr, canbus_service
+    );
     zassert_true(processing_service->Initialize());
     zassert_true(processing_service->Start());
 
@@ -224,8 +230,10 @@ ZTEST(disabled_can_message_routes, test_a_frame_of_a_disabled_message_gives_its_
     zassert_true(WaitForValue(*frame, "on_enabled", 2.0F));
 
     CanFrame raw_frame;
-    zassert_true(frame->TryGetCanFrame(sensors[2]->id_hash, raw_frame),
-        "A raw sensor on the disabled message's frame ID still gets the frame");
+    zassert_true(
+        frame->TryGetCanFrame(sensors[2]->id_hash, raw_frame),
+        "A raw sensor on the disabled message's frame ID still gets the frame"
+    );
     zassert_true(raw_frame.data.size() > 0);
     zassert_equal(raw_frame.data[0], 7);
 

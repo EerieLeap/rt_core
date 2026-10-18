@@ -23,7 +23,9 @@ struct Receiver {
     std::array<uint8_t, 1024> buffer{};
     SmpCanReassembler reassembler;
 
-    explicit Receiver(SmpCanFrameFormat format = {}) { reassembler.Attach(buffer, format); }
+    explicit Receiver(SmpCanFrameFormat format = {}) {
+        reassembler.Attach(buffer, format);
+    }
 
     Result Feed(const std::vector<Frame>& frames, int64_t now_ms = 0) {
         Result result = Result::IGNORED;
@@ -34,8 +36,7 @@ struct Receiver {
     }
 
     bool Holds(const std::vector<uint8_t>& packet) const {
-        return reassembler.GetLength() == packet.size()
-            && std::equal(packet.begin(), packet.end(), buffer.begin());
+        return reassembler.GetLength() == packet.size() && std::equal(packet.begin(), packet.end(), buffer.begin());
     }
 };
 
@@ -86,8 +87,9 @@ ZTEST(smp_can_reassembler, test_sequence_gap_drops_the_packet) {
     zassert_equal(receiver.reassembler.Accept(frames[0], 0), Result::IN_PROGRESS);
     zassert_equal(receiver.reassembler.Accept(frames[1], 0), Result::IN_PROGRESS);
     zassert_equal(receiver.reassembler.Accept(frames[2], 0), Result::DROPPED);
-    zassert_equal(receiver.reassembler.Accept(frames[3], 0), Result::IGNORED,
-        "The rest of a dropped packet is ignored");
+    zassert_equal(
+        receiver.reassembler.Accept(frames[3], 0), Result::IGNORED, "The rest of a dropped packet is ignored"
+    );
 }
 
 ZTEST(smp_can_reassembler, test_start_frame_restarts_the_packet) {
@@ -126,8 +128,10 @@ ZTEST(smp_can_reassembler, test_packet_larger_than_the_buffer_is_dropped) {
     auto frames = MakeFrames(MakePacket(100));
 
     zassert_equal(reassembler.Accept(frames[0], 0), Result::IN_PROGRESS);
-    zassert_equal(reassembler.Accept(frames[1], 0), Result::DROPPED,
-        "Dropped as soon as the header announces more than the buffer holds");
+    zassert_equal(
+        reassembler.Accept(frames[1], 0), Result::DROPPED,
+        "Dropped as soon as the header announces more than the buffer holds"
+    );
 }
 
 ZTEST(smp_can_reassembler, test_short_intermediate_frame_is_dropped) {
@@ -156,8 +160,10 @@ ZTEST(smp_can_reassembler, test_empty_and_oversize_frames_are_rejected) {
 
     zassert_equal(receiver.reassembler.Accept({}, 0), Result::IGNORED);
     zassert_equal(receiver.reassembler.Accept(oversize, 0), Result::IGNORED);
-    zassert_equal(receiver.reassembler.Accept(Frame{SmpCanFrameFormat::START_FLAG}, 0), Result::DROPPED,
-        "A start frame must carry data");
+    zassert_equal(
+        receiver.reassembler.Accept(Frame{ SmpCanFrameFormat::START_FLAG }, 0), Result::DROPPED,
+        "A start frame must carry data"
+    );
 }
 
 ZTEST(smp_can_reassembler, test_silent_source_times_out) {
@@ -168,8 +174,10 @@ ZTEST(smp_can_reassembler, test_silent_source_times_out) {
 
     zassert_false(receiver.reassembler.IsExpired(1000 + TIMEOUT_MS));
     zassert_true(receiver.reassembler.IsExpired(1000 + TIMEOUT_MS + 1));
-    zassert_equal(receiver.reassembler.Accept(frames[1], 1000 + TIMEOUT_MS + 1), Result::IGNORED,
-        "A frame after the timeout does not continue the stale packet");
+    zassert_equal(
+        receiver.reassembler.Accept(frames[1], 1000 + TIMEOUT_MS + 1), Result::IGNORED,
+        "A frame after the timeout does not continue the stale packet"
+    );
 }
 
 ZTEST(smp_can_reassembler, test_each_frame_extends_the_timeout) {
@@ -230,8 +238,10 @@ ZTEST(smp_can_reassembler, test_classic_frames_do_not_continue_a_can_fd_packet) 
     receiver.reassembler.Accept(fd_frames[0], 0);
     classic_frames[1][0] = fd_frames[1][0];
 
-    zassert_equal(receiver.reassembler.Accept(classic_frames[1], 0), Result::DROPPED,
-        "A short intermediate frame breaks the CAN FD format");
+    zassert_equal(
+        receiver.reassembler.Accept(classic_frames[1], 0), Result::DROPPED,
+        "A short intermediate frame breaks the CAN FD format"
+    );
 }
 
 ZTEST(smp_can_reassembler, test_can_fd_frame_on_a_classic_receiver_is_rejected) {

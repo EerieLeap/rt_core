@@ -90,7 +90,9 @@ ZTEST(cbor_size_builder, test_AddSize) {
 
 ZTEST(cbor_size_builder, test_AddOptional_pointer) {
     uint64_t value = 0x10000;
-    auto size_func = [](uint64_t item) { return CborSizeCalc::SizeOfUint(item); };
+    auto size_func = [](uint64_t item) {
+        return CborSizeCalc::SizeOfUint(item);
+    };
 
     CborSizeBuilder builder;
     builder.AddOptional(&value, size_func).AddOptional(static_cast<const uint64_t*>(nullptr), size_func);
@@ -100,7 +102,9 @@ ZTEST(cbor_size_builder, test_AddOptional_pointer) {
 
 ZTEST(cbor_size_builder, test_AddOptional_flag) {
     uint64_t value = 0x10000;
-    auto size_func = [](uint64_t item) { return CborSizeCalc::SizeOfUint(item); };
+    auto size_func = [](uint64_t item) {
+        return CborSizeCalc::SizeOfUint(item);
+    };
 
     CborSizeBuilder builder;
     builder.AddOptional(true, value, size_func).AddOptional(false, value, size_func);
@@ -137,10 +141,8 @@ ZTEST(cbor_size_builder, test_matches_calculator_for_composite_structure) {
 
     size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart()
         + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kId))
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kUnit))
-        + CborSizeCalc::SizeOfUint(1000)
-        + CborSizeCalc::SizeOfFloat(0.5F)
-        + CborSizeCalc::SizeOfBool(true);
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kUnit)) + CborSizeCalc::SizeOfUint(1000)
+        + CborSizeCalc::SizeOfFloat(0.5F) + CborSizeCalc::SizeOfBool(true);
 
     CborSizeBuilder builder;
     builder.AddIndefiniteArrayStart()

@@ -33,12 +33,10 @@ struct CdmpStateChangeResponseMessage {
         if(frame_data.size() < FRAME_SIZE)
             return std::nullopt;
 
-        return CdmpStateChangeResponseMessage{
-            .responding_device_id = frame_data[0],
+        return CdmpStateChangeResponseMessage{ .responding_device_id = frame_data[0],
             .source_device_id = frame_data[1],
             .version = frame_data[2],
-            .result_code = static_cast<CdmpResultCode>(frame_data[3])
-        };
+            .result_code = static_cast<CdmpResultCode>(frame_data[3]) };
     }
 
     /** @throws std::invalid_argument for a frame shorter than 4 bytes. */
@@ -51,11 +49,7 @@ struct CdmpStateChangeResponseMessage {
     }
 
     std::array<uint8_t, FRAME_SIZE> ToCanFrame() const {
-        return {
-            responding_device_id,
-            source_device_id,
-            version,
-            std::to_underlying(result_code)};
+        return { responding_device_id, source_device_id, version, std::to_underlying(result_code) };
     }
 };
 

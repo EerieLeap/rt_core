@@ -1,16 +1,16 @@
 #include <exception>
 #include <span>
 #include <stdexcept>
-#include <vector>
 #include <utility>
+#include <vector>
 
+#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/bluetooth/bluetooth.h>
 
+#include "domain/system_domain/models/product_info.h"
 #include "subsys/bluetooth/ble.h"
 #include "subsys/bluetooth/utilities/bt_data_builder.hpp"
-#include "domain/system_domain/models/product_info.h"
 
 #include "ble_service.h"
 
@@ -28,18 +28,21 @@ bool BleService::is_initialized_ = false;
 BleService::BleService(
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::shared_ptr<ISmpForwarder> smp_forwarder)
-        : sensors_processing_service_(std::move(sensors_processing_service)),
-        sensor_readings_frame_(std::move(sensor_readings_frame)),
-        smp_forwarder_(std::move(smp_forwarder)) {}
+    std::shared_ptr<ISmpForwarder> smp_forwarder
+) :
+    sensors_processing_service_(std::move(sensors_processing_service)),
+    sensor_readings_frame_(std::move(sensor_readings_frame)),
+    smp_forwarder_(std::move(smp_forwarder)) {}
 
 BleService& BleService::Create(
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::shared_ptr<ISmpForwarder> smp_forwarder) {
+    std::shared_ptr<ISmpForwarder> smp_forwarder
+) {
 
     instance_.reset(new BleService(
-        std::move(sensors_processing_service), std::move(sensor_readings_frame), std::move(smp_forwarder)));
+        std::move(sensors_processing_service), std::move(sensor_readings_frame), std::move(smp_forwarder)
+    ));
 
     return *instance_;
 }
@@ -80,7 +83,8 @@ bool BleService::InitializeAccessPoint() {
         access_point_service_ = std::make_shared<AccessPointService>();
         smp_router_ = std::make_shared<SmpBleRouter>(access_point_service_->GetSmpNotifier(), smp_forwarder_);
         live_data_service_ = std::make_shared<LiveDataService>(
-            access_point_service_->GetLiveNotifier(), sensor_readings_frame_);
+            access_point_service_->GetLiveNotifier(), sensor_readings_frame_
+        );
         live_mgmt_group_ = std::make_unique<LiveMgmtGroup>(live_data_service_);
         live_mgmt_group_->Register();
     } catch(const std::exception& e) {
@@ -92,12 +96,23 @@ bool BleService::InitializeAccessPoint() {
         return false;
 
     const auto info = SmpBleRouter::GetInfo();
-    access_point_service_->Initialize({
-            .on_smp_write = [router = smp_router_](std::span<const uint8_t> data) { router->OnReceive(data); },
-            .on_smp_sent = [router = smp_router_]() { router->OnNotificationSent(); },
-            .on_live_sent = [live = live_data_service_]() { live->OnNotificationSent(); },
+    access_point_service_->Initialize(
+        {
+            .on_smp_write =
+                [router = smp_router_](std::span<const uint8_t> data) {
+                    router->OnReceive(data);
+                },
+            .on_smp_sent =
+                [router = smp_router_]() {
+                    router->OnNotificationSent();
+                },
+            .on_live_sent =
+                [live = live_data_service_]() {
+                    live->OnNotificationSent();
+                },
         },
-        info);
+        info
+    );
 
     Ble::RegisterDisconnectedHandler([router = smp_router_, live = live_data_service_](bt_conn* /*conn*/) {
         router->OnDisconnected();
@@ -182,12 +197,16 @@ std::vector<uint8_t> BleService::GetManufacturerData() {
     // Product features (2 bytes, little-endian)
     constexpr uint16_t product_features_le = sys_cpu_to_le16(ProductInfo::features);
     const auto* product_features_ptr = reinterpret_cast<const uint8_t*>(&product_features_le);
-    manufacturer_data.insert(manufacturer_data.end(), product_features_ptr, product_features_ptr + sizeof(product_features_le));
+    manufacturer_data.insert(
+        manufacturer_data.end(), product_features_ptr, product_features_ptr + sizeof(product_features_le)
+    );
 
     // Product revision (1 byte)
     constexpr uint8_t product_revision_le = ProductInfo::revision;
     const auto* product_revision_ptr = &product_revision_le;
-    manufacturer_data.insert(manufacturer_data.end(), product_revision_ptr, product_revision_ptr + sizeof(product_revision_le));
+    manufacturer_data.insert(
+        manufacturer_data.end(), product_revision_ptr, product_revision_ptr + sizeof(product_revision_le)
+    );
 
     return manufacturer_data;
 }

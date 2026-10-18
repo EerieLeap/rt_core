@@ -4,17 +4,18 @@
 
 #include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "domain/sensor_domain/models/sources/canbus_source.h"
+#include "utilities/memory/memory_resource_manager.h"
 
-using eerie_leap::utilities::memory::Mrm;
 using eerie_leap::domain::sensor_domain::models::sources::CanbusSource;
+using eerie_leap::utilities::memory::Mrm;
 
 ZTEST_SUITE(canbus_source, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-constexpr std::string_view FORMAT_ERROR = "Connection string must be bus_channel/frame_id or bus_channel/frame_id/signal_name.";
+constexpr std::string_view FORMAT_ERROR =
+    "Connection string must be bus_channel/frame_id or bus_channel/frame_id/signal_name.";
 constexpr std::string_view BUS_ERROR = "Connection string bus channel must be a number from 0 to 255.";
 constexpr std::string_view FRAME_ERROR = "Connection string frame ID must be a number from 0 to 0x1FFFFFFF.";
 
@@ -75,7 +76,9 @@ ZTEST(canbus_source, test_parse_says_what_is_wrong) {
     for(const auto& test_case : cases) {
         const auto parts = CanbusSource::Parse(test_case.text);
         zassert_false(parts.has_value(), "Accepted '%s'", test_case.text);
-        zassert_true(std::string_view(parts.error()) == test_case.error, "'%s' gave: %s", test_case.text, parts.error());
+        zassert_true(
+            std::string_view(parts.error()) == test_case.error, "'%s' gave: %s", test_case.text, parts.error()
+        );
     }
 }
 

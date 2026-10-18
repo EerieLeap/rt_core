@@ -4,8 +4,8 @@
 #include <span>
 #include <vector>
 
-#include "i_adc_manager.h"
 #include "i_adc.h"
+#include "i_adc_manager.h"
 
 namespace eerie_leap::subsys::adc {
 
@@ -25,4 +25,4 @@ public:
     AdcChannelHandle Resolve(int channel) override;
 };
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc

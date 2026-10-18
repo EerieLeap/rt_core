@@ -41,7 +41,9 @@ struct Fixture {
 
         manager = std::make_shared<LoggingControlConfigurationManager>(
             std::make_unique<CborConfigurationService<CborLoggingControlConfig>>(
-                "logging_control_config", fs_service, TestConfigQueue()));
+                "logging_control_config", fs_service, TestConfigQueue()
+            )
+        );
         service->RegisterCborConfigurationManager(Type::LoggingControl, manager);
     }
 
@@ -56,11 +58,15 @@ struct Fixture {
         }
 
         stop = std::make_unique<ConfigurationUpdateLoggingStop>(
-            service,
-            TestConfigQueue(),
-            has_control ? std::static_pointer_cast<eerie_leap::domain::logging_domain::control::ILoggingControl>(control) : nullptr,
-            has_sender ? std::static_pointer_cast<eerie_leap::domain::logging_domain::control::ILoggingCommandSender>(sender) : nullptr,
-            std::move(on_update));
+            service, TestConfigQueue(),
+            has_control
+                ? std::static_pointer_cast<eerie_leap::domain::logging_domain::control::ILoggingControl>(control)
+                : nullptr,
+            has_sender
+                ? std::static_pointer_cast<eerie_leap::domain::logging_domain::control::ILoggingCommandSender>(sender)
+                : nullptr,
+            std::move(on_update)
+        );
         zassert_true(stop->Initialize(), "The update stop did not initialize.");
     }
 
@@ -71,11 +77,13 @@ struct Fixture {
     }
 
     // A configuration update, stored on the calling thread.
-    void Store(std::initializer_list<std::string_view> sensor_ids = {"a"}) {
+    void Store(std::initializer_list<std::string_view> sensor_ids = { "a" }) {
         zassert_true(manager->Update(TriggersOn(sensor_ids)), "The configuration was not stored.");
     }
 
-    bool Flush() const { return FlushQueue(*TestConfigQueue()); }
+    bool Flush() const {
+        return FlushQueue(*TestConfigQueue());
+    }
 };
 
 Fixture*& Current() {
@@ -164,7 +172,7 @@ ZTEST(configuration_update_logging_stop, test_AnSmpApplyStops) {
 ZTEST(configuration_update_logging_stop, test_ARejectedApplyStopsNothing) {
     F().Start();
 
-    const std::vector<uint8_t> malformed = {0xFF, 0x01, 0x02};
+    const std::vector<uint8_t> malformed = { 0xFF, 0x01, 0x02 };
     zassert_false(F().service->ApplyCborConfiguration(Type::LoggingControl, malformed));
     zassert_true(F().Flush());
 
@@ -175,7 +183,7 @@ ZTEST(configuration_update_logging_stop, test_ARejectedApplyStopsNothing) {
 ZTEST(configuration_update_logging_stop, test_UpdateOwnSettingStopsNothing) {
     F().Start();
 
-    zassert_true(F().manager->UpdateOwnSetting(TriggersOn({"a"})));
+    zassert_true(F().manager->UpdateOwnSetting(TriggersOn({ "a" })));
     zassert_true(F().Flush());
 
     zassert_equal(F().control->Requests().size(), 0U, "A unit's own setting is not an update");
@@ -186,7 +194,7 @@ ZTEST(configuration_update_logging_stop, test_UpdateOwnSettingStopsNothing) {
 ZTEST(configuration_update_logging_stop, test_StoresBeforeTheBroadcastRunsSendOneStop) {
     F().Start();
 
-    HeldStore held(F().manager, {{"a"}, {"b"}});
+    HeldStore held(F().manager, { { "a" }, { "b" } });
     zassert_true(held.WaitUntilStored());
     zassert_true(held.AllStored());
 
@@ -214,8 +222,10 @@ ZTEST(configuration_update_logging_stop, test_AnUpdateHandlerThatThrowsStillStop
     F().Build(true, true, false);
     // Replaces the stop with one whose handler throws.
     F().stop = std::make_unique<ConfigurationUpdateLoggingStop>(
-        F().service, TestConfigQueue(), F().control, F().sender,
-        [](Type) { throw std::runtime_error("The handler failed."); });
+        F().service, TestConfigQueue(), F().control, F().sender, [](Type) {
+            throw std::runtime_error("The handler failed.");
+        }
+    );
     zassert_true(F().stop->Initialize());
     zassert_true(F().stop->Start());
 
@@ -251,7 +261,9 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
     F().control->HoldRequests();
 
     // The store runs on the queue, inside the report, which the control holds in RequestStop(kAllUnits).
-    TestConfigQueue()->Run([manager = F().manager] { (void)manager->Update(TriggersOn({"a"})); });
+    TestConfigQueue()->Run([manager = F().manager] {
+        (void)manager->Update(TriggersOn({ "a" }));
+    });
     zassert_true(F().control->WaitUntilHeld(), "The report is inside the control");
 
     struct Destruction {
@@ -269,8 +281,9 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
         k_sem_give(&destruction->done);
     });
 
-    zassert_not_equal(k_sem_take(&destruction->done, Ms(k_no_wait_ms)), 0,
-        "The destructor must wait for the report in progress");
+    zassert_not_equal(
+        k_sem_take(&destruction->done, Ms(k_no_wait_ms)), 0, "The destructor must wait for the report in progress"
+    );
 
     F().control->Release();
     zassert_equal(k_sem_take(&destruction->done, Ms(k_wait_ms)), 0, "and returns once it is done");
@@ -287,7 +300,7 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
 ZTEST(configuration_update_logging_stop, test_DestroyingWithABroadcastPendingSendsNothing) {
     F().Start();
 
-    HeldStore held(F().manager, {{"a"}});
+    HeldStore held(F().manager, { { "a" } });
     zassert_true(held.WaitUntilStored());
     zassert_equal(F().control->Requests().size(), 1U);
 
@@ -317,7 +330,9 @@ ZTEST(configuration_update_logging_stop, test_ANullServiceOrQueueIsRefused) {
 }
 
 ZTEST(configuration_update_logging_stop, test_StartBeforeInitializeFailsAndStartIsOnce) {
-    F().stop = std::make_unique<ConfigurationUpdateLoggingStop>(F().service, TestConfigQueue(), F().control, F().sender);
+    F().stop = std::make_unique<ConfigurationUpdateLoggingStop>(
+        F().service, TestConfigQueue(), F().control, F().sender
+    );
 
     zassert_false(F().stop->Start(), "Start() needs Initialize()");
     zassert_false(F().stop->IsStarted());

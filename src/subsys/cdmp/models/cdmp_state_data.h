@@ -33,9 +33,15 @@ public:
         size_ = static_cast<uint8_t>(data.size());
     }
 
-    [[nodiscard]] std::span<const uint8_t> GetData() const { return {bytes_.data(), size_}; }
-    [[nodiscard]] size_t GetSize() const { return size_; }
-    [[nodiscard]] bool IsEmpty() const { return size_ == 0; }
+    [[nodiscard]] std::span<const uint8_t> GetData() const {
+        return { bytes_.data(), size_ };
+    }
+    [[nodiscard]] size_t GetSize() const {
+        return size_;
+    }
+    [[nodiscard]] bool IsEmpty() const {
+        return size_ == 0;
+    }
 
     bool operator==(const CdmpStateData& other) const {
         return std::ranges::equal(GetData(), other.GetData());

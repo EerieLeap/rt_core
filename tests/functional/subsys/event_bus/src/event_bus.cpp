@@ -55,18 +55,20 @@ constexpr int DISPATCH_TIMEOUT_MS = 1000;
 // Both constructors are protected, mirroring how applications specialize them.
 class TestChannel : public EventChannel<TestEventType, TestPayloadType> {
 public:
-    explicit TestChannel(std::string name, size_t max_queued_events = 64)
-        : EventChannel(std::move(name), max_queued_events) {}
+    explicit TestChannel(std::string name, size_t max_queued_events = 64) :
+        EventChannel(std::move(name), max_queued_events) {}
 };
 
 class OtherChannel : public EventChannel<OtherEventType, OtherPayloadType> {
 public:
-    explicit OtherChannel(std::string name) : EventChannel(std::move(name), 16) {}
+    explicit OtherChannel(std::string name) :
+        EventChannel(std::move(name), 16) {}
 };
 
 class TestEventBus : public EventBus {
 public:
-    explicit TestEventBus(std::string name) : EventBus(std::move(name), STACK_SIZE) {}
+    explicit TestEventBus(std::string name) :
+        EventBus(std::move(name), STACK_SIZE) {}
 };
 
 // Declaration order matters: the bus is destroyed first, so ~EventBus detaches a
@@ -75,8 +77,9 @@ struct BusWithChannel {
     TestChannel channel;
     TestEventBus bus;
 
-    explicit BusWithChannel(const std::string& name, size_t capacity = 64)
-        : channel(name + "_ch", capacity), bus(name) {
+    explicit BusWithChannel(const std::string& name, size_t capacity = 64) :
+        channel(name + "_ch", capacity),
+        bus(name) {
 
         bus.RegisterChannel(channel);
     }
@@ -86,7 +89,9 @@ struct BusWithChannel {
 // queued until the test drains them by hand.
 class ManualBus : public IEventBus {
 public:
-    void Wake() override { ++wake_calls; }
+    void Wake() override {
+        ++wake_calls;
+    }
 
     int wake_calls = 0;
 };
@@ -100,7 +105,9 @@ std::string CurrentThreadName() {
 struct SourceFilter {
     uint32_t source_id;
 
-    bool operator()(const TestEvent& event) const { return event.source_id == source_id; }
+    bool operator()(const TestEvent& event) const {
+        return event.source_id == source_id;
+    }
 };
 
 constexpr uint32_t k_test_source = 0x7E57;
@@ -112,7 +119,9 @@ struct DispatchProbe {
     std::vector<int> values;
     std::string handler_thread_name;
 
-    DispatchProbe() { k_sem_init(&delivered, 0, K_SEM_MAX_LIMIT); }
+    DispatchProbe() {
+        k_sem_init(&delivered, 0, K_SEM_MAX_LIMIT);
+    }
 
     void Record(const TestEvent& event) {
         handler_thread_name = CurrentThreadName();
@@ -121,16 +130,16 @@ struct DispatchProbe {
         k_sem_give(&delivered);
     }
 
-    bool WaitForDelivery() { return k_sem_take(&delivered, K_MSEC(DISPATCH_TIMEOUT_MS)) == 0; }
-    [[nodiscard]] size_t Count() const { return values.size(); }
+    bool WaitForDelivery() {
+        return k_sem_take(&delivered, K_MSEC(DISPATCH_TIMEOUT_MS)) == 0;
+    }
+    [[nodiscard]] size_t Count() const {
+        return values.size();
+    }
 };
 
 TestEvent MakeEvent(TestEventType type, int value = 0, uint32_t source_id = k_test_source) {
-    return TestEvent {
-        .source_id = source_id,
-        .type = type,
-        .payload = {{TestPayloadType::Value, value}}
-    };
+    return TestEvent{ .source_id = source_id, .type = type, .payload = { { TestPayloadType::Value, value } } };
 }
 
 } // namespace
@@ -165,7 +174,9 @@ ZTEST(event_bus, test_Publish_delivers_the_event_on_the_calling_thread) {
     BusWithChannel fixture("eb_publish");
     DispatchProbe probe;
 
-    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(handle.has_value());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 42));
@@ -180,8 +191,12 @@ ZTEST(event_bus, test_Publish_reaches_every_subscriber_of_the_event_type) {
     DispatchProbe first;
     DispatchProbe second;
 
-    auto first_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&first](const TestEvent& event) { first.Record(event); });
-    auto second_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&second](const TestEvent& event) { second.Record(event); });
+    auto first_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&first](const TestEvent& event) {
+        first.Record(event);
+    });
+    auto second_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&second](const TestEvent& event) {
+        second.Record(event);
+    });
     zassert_true(first_handle.has_value());
     zassert_true(second_handle.has_value());
 
@@ -196,8 +211,12 @@ ZTEST(event_bus, test_Publish_ignores_subscribers_of_another_event_type) {
     DispatchProbe alpha;
     DispatchProbe beta;
 
-    auto alpha_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&alpha](const TestEvent& event) { alpha.Record(event); });
-    auto beta_handle = fixture.channel.Subscribe(TestEventType::Beta, [&beta](const TestEvent& event) { beta.Record(event); });
+    auto alpha_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&alpha](const TestEvent& event) {
+        alpha.Record(event);
+    });
+    auto beta_handle = fixture.channel.Subscribe(TestEventType::Beta, [&beta](const TestEvent& event) {
+        beta.Record(event);
+    });
     zassert_true(alpha_handle.has_value());
     zassert_true(beta_handle.has_value());
 
@@ -212,9 +231,10 @@ ZTEST(event_bus, test_Publish_skips_subscribers_whose_filter_rejects_the_event) 
     DispatchProbe probe;
 
     auto handle = fixture.channel.Subscribe(
-        TestEventType::Alpha,
-        SourceFilter{k_source_one},
-        [&probe](const TestEvent& event) { probe.Record(event); });
+        TestEventType::Alpha, SourceFilter{ k_source_one }, [&probe](const TestEvent& event) {
+            probe.Record(event);
+        }
+    );
     zassert_true(handle.has_value());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1, k_source_two));
@@ -237,7 +257,9 @@ ZTEST(event_bus, test_Unsubscribe_stops_the_delivery_and_invalidates_the_handle)
     BusWithChannel fixture("eb_unsubscribe");
     DispatchProbe probe;
 
-    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(handle.has_value());
 
     zassert_true(fixture.channel.Unsubscribe(handle.value()));
@@ -253,8 +275,12 @@ ZTEST(event_bus, test_Unsubscribe_keeps_the_remaining_subscribers_of_the_event_t
     DispatchProbe removed;
     DispatchProbe kept;
 
-    auto removed_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&removed](const TestEvent& event) { removed.Record(event); });
-    auto kept_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&kept](const TestEvent& event) { kept.Record(event); });
+    auto removed_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&removed](const TestEvent& event) {
+        removed.Record(event);
+    });
+    auto kept_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&kept](const TestEvent& event) {
+        kept.Record(event);
+    });
     zassert_true(removed_handle.has_value());
     zassert_true(kept_handle.has_value());
 
@@ -305,7 +331,9 @@ ZTEST(event_bus, test_a_subscriber_may_unsubscribe_itself_during_dispatch) {
     zassert_true(subscription.has_value());
     self_handle.emplace(std::move(*subscription));
 
-    auto peer_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&peer_probe](const TestEvent& event) { peer_probe.Record(event); });
+    auto peer_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&peer_probe](const TestEvent& event) {
+        peer_probe.Record(event);
+    });
     zassert_true(peer_handle.has_value());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1));
@@ -335,7 +363,9 @@ ZTEST(event_bus, test_a_subscriber_removed_during_dispatch_still_receives_the_in
     });
     zassert_true(first_handle.has_value());
 
-    auto subscription = fixture.channel.Subscribe(TestEventType::Alpha, [&removed_probe](const TestEvent& event) { removed_probe.Record(event); });
+    auto subscription = fixture.channel.Subscribe(TestEventType::Alpha, [&removed_probe](const TestEvent& event) {
+        removed_probe.Record(event);
+    });
     zassert_true(subscription.has_value());
     removed_handle.emplace(std::move(*subscription));
 
@@ -359,7 +389,9 @@ ZTEST(event_bus, test_a_subscriber_added_during_dispatch_starts_at_the_next_even
         if(!late_handles.empty())
             return;
 
-        auto late = fixture.channel.Subscribe(TestEventType::Alpha, [&late_probe](const TestEvent& event) { late_probe.Record(event); });
+        auto late = fixture.channel.Subscribe(TestEventType::Alpha, [&late_probe](const TestEvent& event) {
+            late_probe.Record(event);
+        });
         if(late)
             late_handles.push_back(std::move(*late));
     });
@@ -383,7 +415,9 @@ ZTEST(event_bus, test_a_throwing_subscriber_does_not_escape_Publish) {
     auto throwing_handle = fixture.channel.Subscribe(TestEventType::Alpha, [](const TestEvent&) {
         throw std::runtime_error("subscriber failed");
     });
-    auto probe_handle = fixture.channel.Subscribe(TestEventType::Beta, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto probe_handle = fixture.channel.Subscribe(TestEventType::Beta, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(throwing_handle.has_value());
     zassert_true(probe_handle.has_value());
 
@@ -402,9 +436,10 @@ ZTEST(event_bus, test_a_scoped_subscription_unsubscribes_when_it_is_destroyed) {
 
     {
         AnySubscription subscription = CreateScopedSubscription(
-            fixture.channel,
-            TestEventType::Alpha,
-            [&probe](const TestEvent& event) { probe.Record(event); });
+            fixture.channel, TestEventType::Alpha, [&probe](const TestEvent& event) {
+                probe.Record(event);
+            }
+        );
         zassert_not_null(subscription.get());
 
         fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1));
@@ -425,7 +460,9 @@ ZTEST(event_bus, test_an_unregistered_channel_accepts_subscribers_but_swallows_p
 
     // Subscribing has to keep working, so a domain can hand out a channel the
     // composition root may never wire up.
-    auto handle = channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto handle = channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(handle.has_value());
 
     channel.Publish(MakeEvent(TestEventType::Alpha, 1));
@@ -479,8 +516,14 @@ ZTEST(event_bus, test_channels_sharing_a_bus_stay_isolated) {
     DispatchProbe test_probe;
     int other_calls = 0;
 
-    auto test_handle = test_channel.Subscribe(TestEventType::Alpha, [&test_probe](const TestEvent& event) { test_probe.Record(event); });
-    auto other_handle = other_channel.Subscribe(OtherEventType::Signal, [&other_calls](const OtherChannel::EventMessage&) { ++other_calls; });
+    auto test_handle = test_channel.Subscribe(TestEventType::Alpha, [&test_probe](const TestEvent& event) {
+        test_probe.Record(event);
+    });
+    auto other_handle = other_channel.Subscribe(
+        OtherEventType::Signal, [&other_calls](const OtherChannel::EventMessage&) {
+            ++other_calls;
+        }
+    );
     zassert_true(test_handle.has_value());
     zassert_true(other_handle.has_value());
 
@@ -511,7 +554,9 @@ ZTEST(event_bus, test_the_queue_drops_the_oldest_event_when_it_overflows) {
     // Registering by hand keeps the events queued: nothing drains a ManualBus.
     channel.OnRegistered(&manual_bus);
 
-    auto handle = channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto handle = channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(handle.has_value());
 
     for(int i = 0; i < published; ++i)
@@ -519,7 +564,8 @@ ZTEST(event_bus, test_the_queue_drops_the_oldest_event_when_it_overflows) {
 
     zassert_equal(manual_bus.wake_calls, published, "every publication must wake the bus");
 
-    while(channel.DrainOne()) { }
+    while(channel.DrainOne()) {
+    }
 
     // Sheds the oldest rather than the newest, so the last `capacity` events survive.
     zassert_equal(probe.Count(), capacity);
@@ -549,7 +595,9 @@ ZTEST(event_bus, test_PublishAsync_delivers_the_event_on_the_bus_thread) {
     BusWithChannel fixture("eb_async");
     DispatchProbe probe;
 
-    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(handle.has_value());
 
     fixture.channel.PublishAsync(MakeEvent(TestEventType::Alpha, 99));
@@ -564,7 +612,9 @@ ZTEST(event_bus, test_PublishAsync_preserves_the_publication_order) {
     BusWithChannel fixture("eb_async_order");
     DispatchProbe probe;
 
-    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto handle = fixture.channel.Subscribe(TestEventType::Alpha, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(handle.has_value());
 
     constexpr int event_count = 5;
@@ -585,10 +635,13 @@ ZTEST(event_bus, test_PublishAsync_applies_the_filters) {
     DispatchProbe accepted;
 
     auto filtered_handle = fixture.channel.Subscribe(
-        TestEventType::Alpha,
-        SourceFilter{k_source_one},
-        [&probe](const TestEvent& event) { probe.Record(event); });
-    auto accepted_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&accepted](const TestEvent& event) { accepted.Record(event); });
+        TestEventType::Alpha, SourceFilter{ k_source_one }, [&probe](const TestEvent& event) {
+            probe.Record(event);
+        }
+    );
+    auto accepted_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&accepted](const TestEvent& event) {
+        accepted.Record(event);
+    });
     zassert_true(filtered_handle.has_value());
     zassert_true(accepted_handle.has_value());
 
@@ -603,8 +656,12 @@ ZTEST(event_bus, test_PublishAsync_stops_delivering_to_an_unsubscribed_handler) 
     DispatchProbe removed;
     DispatchProbe kept;
 
-    auto removed_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&removed](const TestEvent& event) { removed.Record(event); });
-    auto kept_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&kept](const TestEvent& event) { kept.Record(event); });
+    auto removed_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&removed](const TestEvent& event) {
+        removed.Record(event);
+    });
+    auto kept_handle = fixture.channel.Subscribe(TestEventType::Alpha, [&kept](const TestEvent& event) {
+        kept.Record(event);
+    });
     zassert_true(removed_handle.has_value());
     zassert_true(kept_handle.has_value());
 
@@ -623,7 +680,9 @@ ZTEST(event_bus, test_a_throwing_subscriber_does_not_stop_the_async_dispatch_loo
     auto throwing_handle = fixture.channel.Subscribe(TestEventType::Alpha, [](const TestEvent&) {
         throw std::runtime_error("subscriber failed");
     });
-    auto probe_handle = fixture.channel.Subscribe(TestEventType::Beta, [&probe](const TestEvent& event) { probe.Record(event); });
+    auto probe_handle = fixture.channel.Subscribe(TestEventType::Beta, [&probe](const TestEvent& event) {
+        probe.Record(event);
+    });
     zassert_true(throwing_handle.has_value());
     zassert_true(probe_handle.has_value());
 
@@ -639,11 +698,11 @@ ZTEST(event_bus, test_SubscribeErased_delivers_the_payload_by_raw_key) {
     std::optional<int> observed;
 
     AnySubscription subscription = fixture.channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha), { },
-        [&observed](const ErasedPayloadView& payload) {
+        static_cast<uint32_t>(TestEventType::Alpha), {}, [&observed](const ErasedPayloadView& payload) {
             if(const auto* value = payload.Find(static_cast<uint32_t>(TestPayloadType::Value)))
                 observed = std::get<int>(*value);
-        });
+        }
+    );
     zassert_not_null(subscription.get());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 7));
@@ -658,11 +717,11 @@ ZTEST(event_bus, test_SubscribeErased_reports_an_absent_key_as_null) {
     bool found_absent_key = true;
 
     AnySubscription subscription = fixture.channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha), { },
-        [&calls, &found_absent_key](const ErasedPayloadView& payload) {
+        static_cast<uint32_t>(TestEventType::Alpha), {}, [&calls, &found_absent_key](const ErasedPayloadView& payload) {
             ++calls;
             found_absent_key = payload.Find(static_cast<uint32_t>(TestPayloadType::Label)) != nullptr;
-        });
+        }
+    );
     zassert_not_null(subscription.get());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 7));
@@ -676,8 +735,10 @@ ZTEST(event_bus, test_SubscribeErased_honours_the_event_type) {
     int calls = 0;
 
     AnySubscription subscription = fixture.channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha), { },
-        [&calls](const ErasedPayloadView&) { ++calls; });
+        static_cast<uint32_t>(TestEventType::Alpha), {}, [&calls](const ErasedPayloadView&) {
+            ++calls;
+        }
+    );
     zassert_not_null(subscription.get());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Beta, 1));
@@ -695,8 +756,10 @@ ZTEST(event_bus, test_an_erased_subscription_unsubscribes_when_destroyed) {
 
     {
         AnySubscription subscription = fixture.channel.SubscribeErased(
-            static_cast<uint32_t>(TestEventType::Alpha), { },
-            [&calls](const ErasedPayloadView&) { ++calls; });
+            static_cast<uint32_t>(TestEventType::Alpha), {}, [&calls](const ErasedPayloadView&) {
+                ++calls;
+            }
+        );
         zassert_not_null(subscription.get());
 
         fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1));
@@ -715,11 +778,11 @@ ZTEST(event_bus, test_SubscribeErased_works_through_the_channel_interface) {
     std::optional<int> observed;
 
     AnySubscription subscription = channel.SubscribeErased(
-        static_cast<uint32_t>(TestEventType::Alpha), { },
-        [&observed](const ErasedPayloadView& payload) {
+        static_cast<uint32_t>(TestEventType::Alpha), {}, [&observed](const ErasedPayloadView& payload) {
             if(const auto* value = payload.Find(static_cast<uint32_t>(TestPayloadType::Value)))
                 observed = std::get<int>(*value);
-        });
+        }
+    );
     zassert_not_null(subscription.get());
 
     fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 42));

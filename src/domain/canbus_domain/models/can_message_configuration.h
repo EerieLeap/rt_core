@@ -1,12 +1,12 @@
 #pragma once
 
-#include <memory_resource>
 #include <cstdint>
-#include <string>
+#include <memory_resource>
 #include <optional>
+#include <string>
 
-#include "subsys/lua_script/lua_script.h"
 #include "can_signal_configuration.h"
+#include "subsys/lua_script/lua_script.h"
 
 namespace eerie_leap::domain::canbus_domain::models {
 
@@ -26,19 +26,19 @@ struct CanMessageConfiguration {
 
     std::shared_ptr<LuaScript> lua_script = nullptr;
 
-    CanMessageConfiguration(std::allocator_arg_t, allocator_type alloc)
-        : script_path(alloc),
+    CanMessageConfiguration(std::allocator_arg_t, allocator_type alloc) :
+        script_path(alloc),
         name(alloc),
         signal_configurations(alloc) {}
 
     CanMessageConfiguration(const CanMessageConfiguration&) = delete;
-	CanMessageConfiguration& operator=(const CanMessageConfiguration&) noexcept = default;
-	CanMessageConfiguration& operator=(CanMessageConfiguration&&) noexcept = default;
-	CanMessageConfiguration(CanMessageConfiguration&&) noexcept = default;
-	~CanMessageConfiguration() = default;
+    CanMessageConfiguration& operator=(const CanMessageConfiguration&) noexcept = default;
+    CanMessageConfiguration& operator=(CanMessageConfiguration&&) noexcept = default;
+    CanMessageConfiguration(CanMessageConfiguration&&) noexcept = default;
+    ~CanMessageConfiguration() = default;
 
-    CanMessageConfiguration(CanMessageConfiguration&& other, allocator_type alloc)
-        : frame_id(other.frame_id),
+    CanMessageConfiguration(CanMessageConfiguration&& other, allocator_type alloc) :
+        frame_id(other.frame_id),
         is_enabled(other.is_enabled),
         send_interval_ms(other.send_interval_ms),
         script_path(std::move(other.script_path), alloc),

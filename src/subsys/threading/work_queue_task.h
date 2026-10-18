@@ -1,9 +1,9 @@
 #pragma once
 
-#include <map>
-#include <vector>
 #include <functional>
+#include <map>
 #include <memory>
+#include <vector>
 
 #include <zephyr/kernel.h>
 
@@ -23,8 +23,9 @@ public:
     // an object containing that field
     k_work_delayable work;
 
-    WorkQueueTaskBase(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler)
-        : work_q_(work_q), sync_(sync) {
+    WorkQueueTaskBase(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler) :
+        work_q_(work_q),
+        sync_(sync) {
 
         k_work_init_delayable(&work, handler);
     }
@@ -52,8 +53,12 @@ public:
     }
 
     // Lets the dispatcher keep a periodic task running when one iteration throws.
-    const WorkQueueTaskResult& GetLastResult() const { return last_result_; }
-    void SetLastResult(const WorkQueueTaskResult& result) { last_result_ = result; }
+    const WorkQueueTaskResult& GetLastResult() const {
+        return last_result_;
+    }
+    void SetLastResult(const WorkQueueTaskResult& result) {
+        last_result_ = result;
+    }
 
     virtual WorkQueueTaskResult Execute() = 0;
 };
@@ -70,13 +75,9 @@ private:
     Handler user_handler_;
 
 public:
-    WorkQueueTask(
-        k_work_q* work_q,
-        k_work_sync* sync,
-        k_work_handler_t handler,
-        const Handler& user_handler)
-            : WorkQueueTaskBase(work_q, sync, handler),
-            user_handler_(user_handler) {}
+    WorkQueueTask(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler, const Handler& user_handler) :
+        WorkQueueTaskBase(work_q, sync, handler),
+        user_handler_(user_handler) {}
 
     WorkQueueTask(const WorkQueueTask&) = delete;
     WorkQueueTask(WorkQueueTask&&) = default;
@@ -113,7 +114,6 @@ private:
     std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks_;
 
 public:
-
     WorkQueueRunnerTask(
         k_work_q* work_q,
         k_work_sync* sync,
@@ -121,19 +121,18 @@ public:
         const Handler& user_handler,
         k_mutex* runner_tasks_mutex,
         std::map<void*, std::unique_ptr<WorkQueueRunnerTask>>& runner_tasks,
-        std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks)
-            : WorkQueueTaskBase(work_q, sync, handler),
-            runner_tasks_mutex_(runner_tasks_mutex),
-            user_handler_(user_handler),
-            runner_tasks_(runner_tasks),
-            completed_tasks_(completed_tasks) {}
+        std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks
+    ) :
+        WorkQueueTaskBase(work_q, sync, handler),
+        runner_tasks_mutex_(runner_tasks_mutex),
+        user_handler_(user_handler),
+        runner_tasks_(runner_tasks),
+        completed_tasks_(completed_tasks) {}
 
     WorkQueueTaskResult Execute() override {
         user_handler_();
 
-        return {
-            .reschedule = false
-        };
+        return { .reschedule = false };
     }
 
     std::map<void*, std::unique_ptr<WorkQueueRunnerTask>>& GetRunnerTasks() {

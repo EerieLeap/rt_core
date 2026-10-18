@@ -8,29 +8,29 @@
 #include <memory>
 #include <vector>
 
+#include <eerie_memory.hpp>
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
-#include <eerie_memory.hpp>
 
-#include "utilities/memory/memory_resource_manager.h"
-#include "subsys/time/rtc_provider.h"
-#include "subsys/time/boot_elapsed_time_provider.h"
-#include "subsys/time/time_service.h"
-#include "subsys/threading/work_queue_thread.h"
-#include "subsys/gpio/gpio_simulator.h"
-#include "subsys/canbus/can_frame.h"
-#include "subsys/expression_engine/expression_evaluator.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
-#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "domain/sensor_domain/processors/expression_processor.h"
+#include "domain/sensor_domain/processors/reading_pipeline.hpp"
+#include "domain/sensor_domain/processors/script_processor.h"
+#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_physical_indicator.h"
 #include "domain/sensor_domain/sensor_readers/sensor_reader_virtual_analog.h"
-#include "domain/sensor_domain/sensor_readers/sensor_reader_factory.h"
 #include "domain/sensor_domain/services/adc_sample_set.h"
-#include "domain/sensor_domain/processors/expression_processor.h"
-#include "domain/sensor_domain/processors/script_processor.h"
-#include "domain/sensor_domain/processors/reading_pipeline.hpp"
-#include "domain/sensor_domain/runtime/sensor_pipeline_builder.h"
+#include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
+#include "subsys/canbus/can_frame.h"
+#include "subsys/expression_engine/expression_evaluator.h"
+#include "subsys/gpio/gpio_simulator.h"
+#include "subsys/threading/work_queue_thread.h"
+#include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
+#include "subsys/time/time_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "allocation_counter.h"
 #include "processing_test_support.h"
@@ -61,10 +61,10 @@ struct Pipeline {
     std::shared_ptr<SensorReadingsFrame> frame;
     std::shared_ptr<GpioSimulator> gpio;
     std::shared_ptr<AdcEmulator> adc;
-    std::vector<std::shared_ptr<Sensor>> sensors;          // indicator, virtual, raw CAN, dependent, analog
+    std::vector<std::shared_ptr<Sensor>> sensors; // indicator, virtual, raw CAN, dependent, analog
     std::shared_ptr<SensorGeneration> generation;
-    std::unique_ptr<AdcSampleSet> adc_samples;             // The analog sensor's rate group.
-    std::vector<std::unique_ptr<ISensorReader>> readers;   // indicator, virtual, analog
+    std::unique_ptr<AdcSampleSet> adc_samples;           // The analog sensor's rate group.
+    std::vector<std::unique_ptr<ISensorReader>> readers; // indicator, virtual, analog
     std::vector<const SensorRuntime*> reader_runtimes;
     std::shared_ptr<std::vector<std::shared_ptr<IReadingProcessor>>> processors;
     std::shared_ptr<ReadingPipeline> pipeline;
@@ -77,7 +77,8 @@ Pipeline MakePipeline() {
     Pipeline pipeline;
 
     auto time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     pipeline.time_service = time_service;
 
     pipeline.frame = std::make_shared<SensorReadingsFrame>();
@@ -113,24 +114,29 @@ Pipeline MakePipeline() {
 
     pipeline.sensors = { indicator, derived, raw, dependent, analog };
     // Lays out the slots and binds "indicator" in the derived expression to its value slot.
-    pipeline.generation = SensorPipelineBuilder(nullptr, pipeline.frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(pipeline.sensors));
+    pipeline.generation = SensorPipelineBuilder(nullptr, pipeline.frame)
+                              .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(pipeline.sensors));
     pipeline.generation->adc_configuration = processing_test_support::MakeAdcConfiguration(
-        adc_manager->GetChannelCount(), 16, processing_test_support::MakeCalibrator({ {0.0F, 0.0F}, {5.0F, 5.0F} }));
+        adc_manager->GetChannelCount(), 16, processing_test_support::MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
+    );
 
-    pipeline.readers.push_back(std::make_unique<SensorReaderPhysicalIndicator>(time_service, pipeline.generation->runtimes[0], pipeline.gpio));
+    pipeline.readers.push_back(
+        std::make_unique<SensorReaderPhysicalIndicator>(time_service, pipeline.generation->runtimes[0], pipeline.gpio)
+    );
     pipeline.reader_runtimes.push_back(&pipeline.generation->runtimes[0]);
-    pipeline.readers.push_back(std::make_unique<SensorReaderVirtualAnalog>(time_service, pipeline.generation->runtimes[1]));
+    pipeline.readers.push_back(
+        std::make_unique<SensorReaderVirtualAnalog>(time_service, pipeline.generation->runtimes[1])
+    );
     pipeline.reader_runtimes.push_back(&pipeline.generation->runtimes[1]);
 
     // Built the way a rate group builds it: the reader reserves its slot, the set is sealed after.
     pipeline.adc_samples = std::make_unique<AdcSampleSet>();
-    RateGroupBuildContext context {
-        .adc_samples = *pipeline.adc_samples,
-        .adc_configuration = pipeline.generation->adc_configuration.get()
-    };
+    RateGroupBuildContext context{ .adc_samples = *pipeline.adc_samples,
+        .adc_configuration = pipeline.generation->adc_configuration.get() };
     const SensorRuntime* analog_runtime = pipeline.generation->Find(analog->id_hash);
-    pipeline.readers.push_back(SensorReaderFactory(time_service, nullptr, adc_manager).Create(*analog_runtime, context));
+    pipeline.readers.push_back(
+        SensorReaderFactory(time_service, nullptr, adc_manager).Create(*analog_runtime, context)
+    );
     pipeline.reader_runtimes.push_back(analog_runtime);
     pipeline.adc_samples->Seal();
 
@@ -191,7 +197,9 @@ ZTEST(allocation_free_pipeline, test_counting_allocator_is_in_use) {
     const size_t before = GetAllocationCount();
     auto block = std::make_unique<uint8_t[]>(32);
 
-    zassert_equal(GetAllocationCount() - before, 1, "The replaced operator new must count, or the test below proves nothing");
+    zassert_equal(
+        GetAllocationCount() - before, 1, "The replaced operator new must count, or the test below proves nothing"
+    );
 }
 
 ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
@@ -214,23 +222,29 @@ ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
         RunConsumers(pipeline);
     }
 
-    zassert_equal(GetAllocationCount() - allocations_before, 0,
-        "%zu allocations during 100 steady-state samples", GetAllocationCount() - allocations_before);
+    zassert_equal(
+        GetAllocationCount() - allocations_before, 0, "%zu allocations during 100 steady-state samples",
+        GetAllocationCount() - allocations_before
+    );
 
     // And the pipeline still produced the right results while being counted (the simulator's level is random).
     const float indicator = pipeline.frame->TryGetReadingValue("indicator").value();
     zassert_true(indicator == 0.0F || indicator == 1.0F);
     zassert_equal(pipeline.frame->TryGetReadingValue("derived").value(), indicator * 2.0F + 1.0F);
-    zassert_equal(pipeline.frame->TryGetReadingValue("dependent").value(), indicator + indicator * 2.0F + 1.0F,
-        "The dependent sensor was evaluated after the indicator, with the derived value of this pass");
-    zassert_equal(pipeline.frame->GetDroppedRawCanFrameCount(), 0, "The log writer path drained the raw queue every sample");
+    zassert_equal(
+        pipeline.frame->TryGetReadingValue("dependent").value(), indicator + indicator * 2.0F + 1.0F,
+        "The dependent sensor was evaluated after the indicator, with the derived value of this pass"
+    );
+    zassert_equal(
+        pipeline.frame->GetDroppedRawCanFrameCount(), 0, "The log writer path drained the raw queue every sample"
+    );
 
     // One conversion request per tick, and the analog value came from the ADC through the calibrator.
     zassert_equal(pipeline.adc->GetStats().requests - adc_requests_before, 100);
     const auto analog = pipeline.frame->TryGetReading("analog").value();
     zassert_equal(analog.status, ReadingStatus::PROCESSED);
-    const float expected_volts = pipeline.generation->adc_configuration->channel_configurations->at(0)->calibrator
-        ->InterpolateToCalibratedRange(1.0F);
+    const float expected_volts = pipeline.generation->adc_configuration->channel_configurations->at(0)
+                                     ->calibrator->InterpolateToCalibratedRange(1.0F);
     zassert_within(analog.voltage.value(), expected_volts, 0.01F);
     zassert_within(analog.value.value(), analog.voltage.value() * 20.0F, 1e-3F);
 
@@ -248,7 +262,7 @@ ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) 
     auto a = events::MakeSensor("alloc_a");
     auto b = events::MakeSensor("alloc_b");
     auto sentinel = events::MakeSensor("alloc_sentinel");
-    const std::vector<std::shared_ptr<Sensor>> sensors { a, b, sentinel };
+    const std::vector<std::shared_ptr<Sensor>> sensors{ a, b, sentinel };
 
     auto frame = std::make_shared<SensorReadingsFrame>();
     frame->Configure(sensors);
@@ -281,7 +295,9 @@ ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) 
         // b goes out for the first time here, so the window also holds one miss: Accepts() and the
         // cache's Store().
         const bool is_delivered = i == 0
-            ? events::Round(*publisher, *frame, { { a.get(), value }, { b.get(), 100.0F } }, *sentinel, *sentinel_recorder)
+            ? events::Round(
+                  *publisher, *frame, { { a.get(), value }, { b.get(), 100.0F } }, *sentinel, *sentinel_recorder
+              )
             : events::Round(*publisher, *frame, { { a.get(), value } }, *sentinel, *sentinel_recorder);
 
         delivered_rounds += is_delivered ? 1 : 0;
@@ -342,13 +358,14 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     constexpr size_t k_rounds = 10;
 
     auto work_queue_thread = std::make_shared<WorkQueueThread>(
-        "conditioning_alloc",
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY);
+        "conditioning_alloc", CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY
+    );
     zassert_true(work_queue_thread->Initialize());
 
     auto time_service = std::make_shared<TimeService>(
-        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>());
+        std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
+    );
     auto frame = std::make_shared<SensorReadingsFrame>();
 
     auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_button");
@@ -361,9 +378,9 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     probe->configuration.type = SensorType::VIRTUAL_ANALOG;
     probe->configuration.expression = "cond_alloc_button";
 
-    const std::vector<std::shared_ptr<Sensor>> sensors { button, probe };
-    auto generation = SensorPipelineBuilder(nullptr, frame).Build(
-        std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    const std::vector<std::shared_ptr<Sensor>> sensors{ button, probe };
+    auto generation = SensorPipelineBuilder(nullptr, frame)
+                          .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
     zassert_not_null(generation->runtimes[0].conditioner.get());
 
     auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
@@ -386,9 +403,9 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     feed.Run(work_queue, 0.0F);
     k_msleep(kSettleMs);
 
-    std::array<float, k_rounds> held {};
-    std::array<float, k_rounds> pressed {};
-    std::array<float, k_rounds> released {};
+    std::array<float, k_rounds> held{};
+    std::array<float, k_rounds> pressed{};
+    std::array<float, k_rounds> released{};
 
     const size_t allocations_before = GetAllocationCount();
 

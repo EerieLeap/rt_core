@@ -27,12 +27,12 @@ private:
     static constexpr std::string_view k_input_name = "x";
 
     // The configuration work queue has a small stack; Compile() needs ~1 kB per nesting level.
-    static constexpr ee::Limits k_limits { .max_nesting = 8 };
+    static constexpr ee::Limits k_limits{ .max_nesting = 8 };
 
     std::pmr::string expression_;
     ee::Program program_;
     std::optional<size_t> input_index_;
-    std::array<const float*, ee::limits::kMaxVariables> bindings_ { };
+    std::array<const float*, ee::limits::kMaxVariables> bindings_{};
 
     ExpressionEvaluator(std::pmr::memory_resource* resource, std::string_view expression, ee::Program program);
 
@@ -43,25 +43,34 @@ public:
     ExpressionEvaluator& operator=(const ExpressionEvaluator&) = delete;
 
     // Stores the text and the program on @p resource.
-    static std::expected<ExpressionEvaluator, CompileError> Create(
-        std::string_view expression, std::pmr::memory_resource* resource) noexcept;
+    static std::expected<ExpressionEvaluator, CompileError>
+    Create(std::string_view expression, std::pmr::memory_resource* resource) noexcept;
 
     // "Invalid expression: <what> at <position>", for validation messages.
     static std::string Describe(const CompileError& error);
 
-    const std::pmr::string& GetExpression() const noexcept { return expression_; }
+    const std::pmr::string& GetExpression() const noexcept {
+        return expression_;
+    }
 
     // Every variable the expression reads, in program order, including x.
-    auto GetAllVariableNames() const noexcept { return program_.VariableNames(); }
+    auto GetAllVariableNames() const noexcept {
+        return program_.VariableNames();
+    }
 
     // The sensor IDs the expression reads, in program order; x is excluded.
     auto GetVariableNames() const noexcept {
-        return program_.VariableNames()
-            | std::views::filter([](std::string_view name) { return name != k_input_name; });
+        return program_.VariableNames() | std::views::filter([](std::string_view name) {
+            return name != k_input_name;
+        });
     }
 
-    size_t GetVariableCount() const noexcept { return program_.VariableCount(); }
-    bool UsesInput() const noexcept { return input_index_.has_value(); }
+    size_t GetVariableCount() const noexcept {
+        return program_.VariableCount();
+    }
+    bool UsesInput() const noexcept {
+        return input_index_.has_value();
+    }
 
     // Reads @p value on every evaluation; the address must stay valid while the evaluator is used.
     // False for a name the expression does not read, for x, or for a null address.

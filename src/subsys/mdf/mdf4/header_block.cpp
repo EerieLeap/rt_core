@@ -5,7 +5,8 @@
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
-HeaderBlock::HeaderBlock(): BlockBase("HD") {
+HeaderBlock::HeaderBlock() :
+    BlockBase("HD") {
     start_time_ns_ = 0;
     tz_offset_min_ = 0;
     dst_offset_min_ = 0;
@@ -36,7 +37,9 @@ std::shared_ptr<FileHistoryBlock> HeaderBlock::GetFileHistory() const {
 
 void HeaderBlock::AddFileHistory(std::shared_ptr<FileHistoryBlock> file_history) {
     if(links_.GetLink(LinkType::FileHistoryFirst)) {
-        auto linked_file_history = std::dynamic_pointer_cast<FileHistoryBlock>(links_.GetLink(LinkType::FileHistoryFirst));
+        auto linked_file_history = std::dynamic_pointer_cast<FileHistoryBlock>(
+            links_.GetLink(LinkType::FileHistoryFirst)
+        );
         linked_file_history->LinkBlock(std::move(file_history));
     }
 }
@@ -86,6 +89,5 @@ std::unique_ptr<uint8_t[]> HeaderBlock::Serialize() const {
 
     return buffer;
 }
-
 
 } // namespace eerie_leap::subsys::mdf::mdf4

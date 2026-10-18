@@ -11,10 +11,10 @@
 #include <zephyr/mgmt/mcumgr/transport/smp.h>
 
 #include "subsys/bluetooth/i_ble_notifier.h"
-#include "subsys/smp/smp_header.h"
-#include "subsys/smp/smp_packet.h"
 #include "subsys/smp/i_smp_forwarder.h"
 #include "subsys/smp/i_smp_response_sink.h"
+#include "subsys/smp/smp_header.h"
+#include "subsys/smp/smp_packet.h"
 
 namespace eerie_leap::subsys::smp::ble {
 
@@ -110,9 +110,13 @@ public:
     static std::array<uint8_t, INFO_SIZE> GetInfo();
 
     /** @brief Received packets dropped: malformed, oversized, not a request, no buffer or not forwardable. */
-    [[nodiscard]] uint32_t GetRxDroppedCount() const { return rx_dropped_; }
+    [[nodiscard]] uint32_t GetRxDroppedCount() const {
+        return rx_dropped_;
+    }
     /** @brief Responses dropped before being fully notified. */
-    [[nodiscard]] uint32_t GetTxDroppedCount() const { return tx_dropped_; }
+    [[nodiscard]] uint32_t GetTxDroppedCount() const {
+        return tx_dropped_;
+    }
 };
 
 } // namespace eerie_leap::subsys::smp::ble

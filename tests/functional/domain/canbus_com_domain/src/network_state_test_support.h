@@ -35,12 +35,12 @@ using namespace eerie_leap::domain::canbus_com_domain::state_bridge;
 using namespace eerie_leap::domain::canbus_com_domain::states;
 using namespace eerie_leap::domain::logging_domain::event_bus;
 
+using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
 using eerie_leap::subsys::event_bus::EventBus;
 using eerie_leap::subsys::event_bus::EventChannel;
 using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 
 using Bytes = std::vector<uint8_t>;
 using LoggingExporter = NetworkStateExporter<LoggingNetworkState>;
@@ -60,7 +60,8 @@ inline CanbusComStateData Data(const Bytes& bytes) {
 /** @brief A bus for logging_events, which drops every publish until a bus registers it. */
 class BridgeTestBus : public EventBus {
 public:
-    BridgeTestBus() : EventBus("bridge_test_bus", 4096) {
+    BridgeTestBus() :
+        EventBus("bridge_test_bus", 4096) {
         zassert_ok(RegisterChannel(LoggingEventsChannel::GetInstance()));
     }
 
@@ -73,15 +74,10 @@ public:
 };
 
 /** @brief Publishes a status as the log writer does: asynchronously, the reason only while inactive. */
-inline void PublishStatus(
-    bool is_active,
-    std::optional<LoggingStatusReason> reason = std::nullopt,
-    uint32_t source_id = 0) {
+inline void
+PublishStatus(bool is_active, std::optional<LoggingStatusReason> reason = std::nullopt, uint32_t source_id = 0) {
 
-    LoggingEventsChannel::EventMessage event {
-        .source_id = source_id,
-        .type = LoggingEventType::StatusUpdated
-    };
+    LoggingEventsChannel::EventMessage event{ .source_id = source_id, .type = LoggingEventType::StatusUpdated };
 
     event.payload.insert_or_assign(LoggingPayloadType::IsActive, is_active);
     if(reason.has_value())
@@ -120,12 +116,12 @@ private:
     AnySubscription subscription_;
 
 public:
-    explicit StatusProbe(LoggingChannel& channel = LoggingEventsChannel::GetInstance()) : channel_(channel) {
+    explicit StatusProbe(LoggingChannel& channel = LoggingEventsChannel::GetInstance()) :
+        channel_(channel) {
         subscription_ = CreateScopedSubscription(
-            channel_,
-            LoggingEventType::StatusUpdated,
+            channel_, LoggingEventType::StatusUpdated,
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
-                StatusEvent status{.source_id = event.source_id};
+                StatusEvent status{ .source_id = event.source_id };
 
                 if(auto it = event.payload.find(LoggingPayloadType::IsActive); it != event.payload.end()) {
                     if(const auto* value = std::get_if<bool>(&it->second))
@@ -143,7 +139,8 @@ public:
                 }
 
                 k_sem_give(&inbox->received);
-            });
+            }
+        );
 
         zassert_not_null(subscription_.get(), "The probe subscribes to %s", channel_.GetName());
     }
@@ -165,10 +162,7 @@ public:
      * a fence event arrives before it.
      */
     void Flush() {
-        channel_.PublishAsync({
-            .source_id = FENCE_SOURCE_ID,
-            .type = LoggingEventType::StatusUpdated
-        });
+        channel_.PublishAsync({ .source_id = FENCE_SOURCE_ID, .type = LoggingEventType::StatusUpdated });
 
         while(true) {
             auto event = WaitForEvent();
@@ -219,7 +213,7 @@ private:
         {
             ScopedMutex guard(lock_);
             is_accepted = !(can_refuse && is_refusing_);
-            local_changes_.push_back({.state_type = state_type, .data = data, .is_accepted = is_accepted});
+            local_changes_.push_back({ .state_type = state_type, .data = data, .is_accepted = is_accepted });
         }
 
         k_sem_give(&changed_);
@@ -255,7 +249,7 @@ public:
         {
             ScopedMutex guard(lock_);
             handler_id = next_handler_id_++;
-            handlers_.emplace(handler_id, HandlerEntry{.state_type = state_type, .handler = handler});
+            handlers_.emplace(handler_id, HandlerEntry{ .state_type = state_type, .handler = handler });
         }
 
         handler(state_type);
@@ -278,24 +272,28 @@ public:
                 break;
 
             if(key.first == state_type)
-                records[count++] = {.device_id = key.second, .data = data};
+                records[count++] = { .device_id = key.second, .data = data };
         }
 
         return count;
     }
 
     /** @brief Sets another unit's record, without telling the handlers. */
-    void SetRemoteState(uint8_t device_id, const Bytes& data, CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS) {
+    void SetRemoteState(
+        uint8_t device_id,
+        const Bytes& data,
+        CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS
+    ) {
         ScopedMutex guard(lock_);
 
-        remote_states_.insert_or_assign({state_type, device_id}, Data(data));
+        remote_states_.insert_or_assign({ state_type, device_id }, Data(data));
     }
 
     /** @brief Removes another unit's record, without telling the handlers. */
     void RemoveRemoteState(uint8_t device_id, CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS) {
         ScopedMutex guard(lock_);
 
-        remote_states_.erase({state_type, device_id});
+        remote_states_.erase({ state_type, device_id });
     }
 
     /** @brief Calls the handlers of @p state_type, as a change of its records does. */

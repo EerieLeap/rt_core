@@ -3,13 +3,13 @@
 #include <string>
 #include <string_view>
 
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "domain/canbus_domain/configuration/parsers/canbus_configuration_validator.h"
 #include "domain/canbus_domain/models/can_channel_configuration.h"
 #include "domain/canbus_domain/models/can_message_configuration.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 #include "script_card.h"
 
@@ -24,11 +24,8 @@ ZTEST_SUITE(canbus_configuration_validator, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-CanbusConfiguration MakeConfiguration(
-    CanbusType type,
-    bool is_extended_id,
-    uint32_t frame_id,
-    uint32_t bitrate = 500000) {
+CanbusConfiguration
+MakeConfiguration(CanbusType type, bool is_extended_id, uint32_t frame_id, uint32_t bitrate = 500000) {
 
     CanbusConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
 
@@ -78,7 +75,8 @@ CanbusConfiguration MakeConfigurationWithSignalUnit(std::string_view unit) {
     signal.SetName("sensor_0");
     signal.unit = unit;
     configuration.channel_configurations.at(0).message_configurations.front()->signal_configurations.emplace_back(
-        std::move(signal));
+        std::move(signal)
+    );
 
     return configuration;
 }
@@ -99,13 +97,17 @@ ZTEST(canbus_configuration_validator, test_extended_id_on_canfd_is_valid) {
 }
 
 ZTEST(canbus_configuration_validator, test_frame_id_wider_than_standard_is_rejected) {
-    zassert_false(Validates(MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x18FF1234)),
-        "A 29-bit frame id must be rejected when the channel is not extended");
+    zassert_false(
+        Validates(MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x18FF1234)),
+        "A 29-bit frame id must be rejected when the channel is not extended"
+    );
 }
 
 ZTEST(canbus_configuration_validator, test_frame_id_wider_than_extended_is_rejected) {
-    zassert_false(Validates(MakeConfiguration(CanbusType::CLASSICAL_CAN, true, 0x20000000)),
-        "A frame id beyond 29 bits must be rejected");
+    zassert_false(
+        Validates(MakeConfiguration(CanbusType::CLASSICAL_CAN, true, 0x20000000)),
+        "A frame id beyond 29 bits must be rejected"
+    );
 }
 
 ZTEST(canbus_configuration_validator, test_unsupported_bitrate_is_rejected) {
@@ -113,10 +115,12 @@ ZTEST(canbus_configuration_validator, test_unsupported_bitrate_is_rejected) {
 }
 
 ZTEST(canbus_configuration_validator, test_none_sentinel_and_unknown_canbus_types_are_invalid) {
-    for(auto type : { CanbusType::NONE, CanbusType::COUNT,
-                      static_cast<CanbusType>(200), static_cast<CanbusType>(UINT8_MAX) })
-        zassert_false(Validates(MakeConfiguration(type, false, 0x123)),
-            "Accepted invalid CAN bus type %u.", static_cast<unsigned>(type));
+    for(auto type :
+        { CanbusType::NONE, CanbusType::COUNT, static_cast<CanbusType>(200), static_cast<CanbusType>(UINT8_MAX) })
+        zassert_false(
+            Validates(MakeConfiguration(type, false, 0x123)), "Accepted invalid CAN bus type %u.",
+            static_cast<unsigned>(type)
+        );
 }
 
 ZTEST(canbus_configuration_validator, test_default_com_configuration_is_valid) {
@@ -156,12 +160,12 @@ ZTEST(canbus_configuration_validator, test_smp_base_must_be_extended_with_clear_
 ZTEST(canbus_configuration_validator, test_smp_bus_share_must_be_a_percentage) {
     auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
 
-    for(uint8_t share : {0, 101, UINT8_MAX}) {
+    for(uint8_t share : { 0, 101, UINT8_MAX }) {
         configuration.com_configuration.smp_bus_share_percent = share;
         zassert_false(Validates(configuration), "Accepted bus share %u %%.", static_cast<unsigned>(share));
     }
 
-    for(uint8_t share : {1, 100}) {
+    for(uint8_t share : { 1, 100 }) {
         configuration.com_configuration.smp_bus_share_percent = share;
         zassert_true(Validates(configuration), "Rejected bus share %u %%.", static_cast<unsigned>(share));
     }
@@ -184,13 +188,17 @@ ZTEST(canbus_configuration_validator, test_messages_give_frame_ids_in_hex) {
     message.frame_id = 0x18FFAB12;
 
     message.signal_configurations.front().factor = 0.0F;
-    zassert_str_equal(RejectionOf(configuration).c_str(),
-        "Invalid CAN Signal configuration. Channel: 0, Frame ID: 0x18FFAB12, Signal: sensor_0. Factor cannot be zero.");
+    zassert_str_equal(
+        RejectionOf(configuration).c_str(),
+        "Invalid CAN Signal configuration. Channel: 0, Frame ID: 0x18FFAB12, Signal: sensor_0. Factor cannot be zero."
+    );
 
     message.signal_configurations.front().factor = 1.0F;
     message.send_interval_ms = 0;
-    zassert_str_equal(RejectionOf(configuration).c_str(),
-        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x18FFAB12. Invalid send interval.");
+    zassert_str_equal(
+        RejectionOf(configuration).c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x18FFAB12. Invalid send interval."
+    );
 }
 
 // Disabling a message keeps it validated, so switching it back on is a one-field change that cannot fail.
@@ -207,18 +215,24 @@ ZTEST(canbus_configuration_validator, test_a_disabled_message_is_validated_like_
     message.is_enabled = false;
 
     message.send_interval_ms = 0;
-    zassert_str_equal(RejectionOf(configuration).c_str(),
-        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Invalid send interval.");
+    zassert_str_equal(
+        RejectionOf(configuration).c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Invalid send interval."
+    );
 
     message.send_interval_ms = 100;
     message.name = "1_FRAME";
-    zassert_str_equal(RejectionOf(configuration).c_str(),
-        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Name must start with a letter or an underscore.");
+    zassert_str_equal(
+        RejectionOf(configuration).c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Name must start with a letter or an underscore."
+    );
 
     message.name = "EL_FRAME_0";
     message.signal_configurations.front().factor = 0.0F;
-    zassert_str_equal(RejectionOf(configuration).c_str(),
-        "Invalid CAN Signal configuration. Channel: 0, Frame ID: 0x123, Signal: sensor_0. Factor cannot be zero.");
+    zassert_str_equal(
+        RejectionOf(configuration).c_str(),
+        "Invalid CAN Signal configuration. Channel: 0, Frame ID: 0x123, Signal: sensor_0. Factor cannot be zero."
+    );
 
     message.signal_configurations.front().factor = 1.0F;
     message.frame_id = 0x18FF1234;
@@ -226,7 +240,7 @@ ZTEST(canbus_configuration_validator, test_a_disabled_message_is_validated_like_
 }
 
 ZTEST(canbus_configuration_validator, test_a_disabled_message_cannot_share_a_frame_id) {
-    for(const bool is_first_disabled : {true, false}) {
+    for(const bool is_first_disabled : { true, false }) {
         auto configuration = MakeConfiguration(CanbusType::CLASSICAL_CAN, false, 0x123);
         auto& messages = configuration.channel_configurations.at(0).message_configurations;
 
@@ -239,8 +253,11 @@ ZTEST(canbus_configuration_validator, test_a_disabled_message_cannot_share_a_fra
         // Either copy may be the disabled one; enabling it later must not create a duplicate.
         messages.at(is_first_disabled ? 0 : 1)->is_enabled = false;
 
-        zassert_str_equal(RejectionOf(configuration).c_str(),
-            "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. CAN channel cannot contain duplicate Frame IDs.");
+        zassert_str_equal(
+            RejectionOf(configuration).c_str(),
+            "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. CAN channel cannot contain duplicate Frame "
+            "IDs."
+        );
     }
 }
 
@@ -268,8 +285,10 @@ ZTEST(canbus_configuration_validator, test_a_script_path_must_exist_on_a_mounted
 
     zassert_true(ScriptRejectionOn(card, "scripts/frame.lua").empty());
     zassert_true(ScriptRejectionOn(card, "").empty(), "A message without a script needs no file");
-    zassert_str_equal(ScriptRejectionOn(card, "scripts/missing.lua").c_str(),
-        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Invalid script path.");
+    zassert_str_equal(
+        ScriptRejectionOn(card, "scripts/missing.lua").c_str(),
+        "Invalid CAN Frame configuration. Channel: 0, Frame ID: 0x123. Invalid script path."
+    );
 }
 
 ZTEST(canbus_configuration_validator, test_a_script_path_is_not_checked_while_no_card_is_mounted) {

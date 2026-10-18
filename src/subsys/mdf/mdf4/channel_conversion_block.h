@@ -4,8 +4,8 @@
 #include <memory>
 #include <string>
 
-#include "subsys/mdf/utilities/block_links.h"
 #include "block_base.h"
+#include "subsys/mdf/utilities/block_links.h"
 #include "text_block.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {
@@ -82,19 +82,19 @@ public:
         BitfieldToText = 11
     };
 
-    enum class Flag: uint16_t {
+    enum class Flag : uint16_t {
         Default = 0x00,
-        PrecisionValid = 0x0001,    // Precision is used.
-        RangeValid = 0x0002,        // Range is used.
-        StatusString = 0x0004,      // Status string flag.
+        PrecisionValid = 0x0001, // Precision is used.
+        RangeValid = 0x0002,     // Range is used.
+        StatusString = 0x0004,   // Status string flag.
     };
 
 private:
-    enum class LinkType: int {
+    enum class LinkType : int {
         TextName = 0,
         TextUnit,
         MetadataComment,
-        ChannelConversionInverse    // Inverse channel conversion
+        ChannelConversionInverse // Inverse channel conversion
     };
 
     static constexpr int FIXED_LINK_COUNT = 4;
@@ -102,14 +102,14 @@ private:
     utilities::BlockLinks<LinkType, FIXED_LINK_COUNT> links_;
     // BlockLink references_[reference_count_]; // 8 bytes * reference_count_, reference parameters
 
-    ConversionType conversion_type_;    // 1 bytes, conversion type
-    uint8_t precision_;                 // 1 bytes, precision
-    uint16_t flags_;                    // 2 bytes, flags
+    ConversionType conversion_type_; // 1 bytes, conversion type
+    uint8_t precision_;              // 1 bytes, precision
+    uint16_t flags_;                 // 2 bytes, flags
     // uint16_t reference_count_;       // 2 bytes, derived from the extra links
     // uint16_t value_count_;           // 2 bytes, derived from values_
-    double min_physical_value_;         // 8 bytes, minimum physical value
-    double max_physical_value_;         // 8 bytes, maximum physical value
-    std::vector<double> values_;        // 8 bytes * value_count_, value parameters
+    double min_physical_value_;  // 8 bytes, minimum physical value
+    double max_physical_value_;  // 8 bytes, maximum physical value
+    std::vector<double> values_; // 8 bytes * value_count_, value parameters
 
 public:
     explicit ChannelConversionBlock(ConversionType conversion_type);
@@ -119,7 +119,9 @@ public:
 
     [[nodiscard]] uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
-    [[nodiscard]] const IBlockLinks* GetBlockLinks() const override { return &links_; }
+    [[nodiscard]] const IBlockLinks* GetBlockLinks() const override {
+        return &links_;
+    }
     std::shared_ptr<ISerializableBlock> GetNext() const override {
         return nullptr;
     }

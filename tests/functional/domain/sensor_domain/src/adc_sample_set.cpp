@@ -3,8 +3,8 @@
 
 #include <zephyr/ztest.h>
 
-#include "subsys/adc/adc_types.h"
 #include "domain/sensor_domain/services/adc_sample_set.h"
+#include "subsys/adc/adc_types.h"
 
 #include "processing_test_support.h"
 

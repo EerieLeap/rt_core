@@ -1,15 +1,15 @@
 #pragma once
 
-#include "subsys/fs/services/i_fs_service.h"
 #include "domain/canbus_domain/models/canbus_configuration.h"
 #include "domain/sensor_domain/models/sensor.h"
+#include "subsys/fs/services/i_fs_service.h"
 
 namespace eerie_leap::domain::sensor_domain::configuration::parsers {
 
-using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::domain::canbus_domain::models::CanbusConfiguration;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::sensor_domain::models::SensorConfiguration;
+using eerie_leap::subsys::fs::services::IFsService;
 
 class SensorValidator {
 private:
@@ -24,17 +24,24 @@ private:
         const std::vector<std::shared_ptr<Sensor>>& sensors,
         IFsService* sd_fs_service,
         uint32_t gpio_channel_count,
-        uint32_t adc_channel_count);
+        uint32_t adc_channel_count
+    );
     static void ValidateType(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateChannel(
         std::string_view sensor_id,
         const SensorConfiguration& sensor_configuration,
         uint32_t gpio_channel_count,
-        uint32_t adc_channel_count);
+        uint32_t adc_channel_count
+    );
     static void ValidateConnectionString(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
-    static void ValidateScriptPath(std::string_view sensor_id, const SensorConfiguration& sensor_configuration, IFsService* sd_fs_service);
+    static void ValidateScriptPath(
+        std::string_view sensor_id,
+        const SensorConfiguration& sensor_configuration,
+        IFsService* sd_fs_service
+    );
     static void ValidateSamplingRateMs(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
-    static void ValidateInterpolationMethod(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
+    static void
+    ValidateInterpolationMethod(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateCalibrationTable(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateConditioning(std::string_view sensor_id, const SensorConfiguration& sensor_configuration);
     static void ValidateExpression(const Sensor& sensor, const std::vector<std::shared_ptr<Sensor>>& sensors);
@@ -45,7 +52,12 @@ public:
     /// The longest indicator debounce, 60 s.
     static constexpr uint32_t MAX_DEBOUNCE_MS = 60000;
 
-    static void Validate(const std::vector<std::shared_ptr<Sensor>>& sensors, IFsService* sd_fs_service, uint32_t gpio_channel_count, uint32_t adc_channel_count);
+    static void Validate(
+        const std::vector<std::shared_ptr<Sensor>>& sensors,
+        IFsService* sd_fs_service,
+        uint32_t gpio_channel_count,
+        uint32_t adc_channel_count
+    );
 
     /**
      * @brief Checks the CAN sensors against a CAN bus configuration: each one's bus must be configured,
@@ -55,7 +67,8 @@ public:
      */
     static void ValidateCanbusSources(
         const std::vector<std::shared_ptr<Sensor>>& sensors,
-        const CanbusConfiguration& canbus_configuration);
+        const CanbusConfiguration& canbus_configuration
+    );
 };
 
 } // namespace eerie_leap::domain::sensor_domain::configuration::parsers

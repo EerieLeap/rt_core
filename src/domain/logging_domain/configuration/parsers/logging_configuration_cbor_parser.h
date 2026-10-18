@@ -14,7 +14,8 @@ public:
     LoggingConfigurationCborParser() = default;
 
     eerie_memory::pmr_unique_ptr<CborLoggingConfig> Serialize(const LoggingConfiguration& logging_configuration);
-    eerie_memory::pmr_unique_ptr<LoggingConfiguration> Deserialize(std::pmr::memory_resource* mr, const CborLoggingConfig& logging_config);
+    eerie_memory::pmr_unique_ptr<LoggingConfiguration>
+    Deserialize(std::pmr::memory_resource* mr, const CborLoggingConfig& logging_config);
 };
 
 } // namespace eerie_leap::domain::logging_domain::configuration::parsers

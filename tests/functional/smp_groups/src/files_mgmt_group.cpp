@@ -9,15 +9,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
-#include "subsys/threading/work_queue_thread.h"
 #include "domain/system_domain/smp/files_mgmt_group.h"
+#include "subsys/threading/work_queue_thread.h"
 
 #include "smp_groups_test_support.h"
 
 using namespace smp_groups_test;
 
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::domain::system_domain::smp::FilesMgmtGroup;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 using Command = FilesMgmtGroup::Command;
 using Error = FilesMgmtGroup::Error;
@@ -32,16 +32,18 @@ constexpr int WORK_QUEUE_STACK_SIZE = 16384;
 
 void AssertError(const Response& response, Error error) {
     zassert_equal(response.error_group.value_or(0), std::to_underlying(SmpGroupId::FILES));
-    zassert_equal(response.error.value_or(0), std::to_underlying(error),
-        "Expected error %u, got %u", std::to_underlying(error), response.error.value_or(0));
+    zassert_equal(
+        response.error.value_or(0), std::to_underlying(error), "Expected error %u, got %u", std::to_underlying(error),
+        response.error.value_or(0)
+    );
 }
 
 DirectoryEntry File(std::string name, size_t size) {
-    return {.name = std::move(name), .size = size, .is_directory = false};
+    return { .name = std::move(name), .size = size, .is_directory = false };
 }
 
 DirectoryEntry Folder(std::string name) {
-    return {.name = std::move(name), .size = 0, .is_directory = true};
+    return { .name = std::move(name), .size = 0, .is_directory = true };
 }
 
 // "script_<index>_" padded with 'x' to the length.
@@ -102,11 +104,13 @@ public:
             pages++;
 
             for(size_t i = 0; i < response.entries.size(); i++) {
-                listed.push_back({
-                    .name = response.entry_texts[i].at("name"),
-                    .size = response.entries[i].at("size"),
-                    .type = response.entries[i].at("type"),
-                });
+                listed.push_back(
+                    {
+                        .name = response.entry_texts[i].at("name"),
+                        .size = response.entries[i].at("size"),
+                        .type = response.entries[i].at("type"),
+                    }
+                );
             }
 
             if(response.entries.empty() || listed.size() >= response.Value("total"))
@@ -145,7 +149,7 @@ ZTEST_SUITE(smp_files_group, NULL, FilesGroupSetup, FilesGroupBefore, FilesGroup
 
 ZTEST_F(smp_files_group, test_list_reports_names_sizes_and_types) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("oil.lua", 120), Folder("lib"), File("boost_control.lua", 2048)};
+    harness.card->directories["scripts"] = { File("oil.lua", 120), Folder("lib"), File("boost_control.lua", 2048) };
 
     auto response = harness.List("scripts");
 
@@ -166,7 +170,7 @@ ZTEST_F(smp_files_group, test_list_reports_names_sizes_and_types) {
 
 ZTEST_F(smp_files_group, test_empty_request_lists_the_root) {
     Harness& harness = *fixture->harness;
-    harness.card->directories[""] = {Folder("scripts"), Folder("logs")};
+    harness.card->directories[""] = { Folder("scripts"), Folder("logs") };
 
     auto without_body = harness.client.Read(SmpGroupId::FILES, LIST, {});
 
@@ -219,7 +223,7 @@ ZTEST_F(smp_files_group, test_long_names_fit_the_response) {
 
 ZTEST_F(smp_files_group, test_offset_resumes_the_listing) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("a.lua", 1), File("b.lua", 2), File("c.lua", 3)};
+    harness.card->directories["scripts"] = { File("a.lua", 1), File("b.lua", 2), File("c.lua", 3) };
 
     auto response = harness.List("scripts", 1);
 
@@ -233,7 +237,7 @@ ZTEST_F(smp_files_group, test_offset_resumes_the_listing) {
 
 ZTEST_F(smp_files_group, test_offset_past_the_end_lists_nothing) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("a.lua", 1), File("b.lua", 2), File("c.lua", 3)};
+    harness.card->directories["scripts"] = { File("a.lua", 1), File("b.lua", 2), File("c.lua", 3) };
 
     auto response = harness.List("scripts", 10);
 
@@ -264,7 +268,7 @@ ZTEST_F(smp_files_group, test_without_an_sd_service_is_no_card) {
 
 ZTEST_F(smp_files_group, test_an_unmounted_card_is_no_card) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("a.lua", 1)};
+    harness.card->directories["scripts"] = { File("a.lua", 1) };
     harness.card->available = false;
 
     AssertError(harness.List("scripts"), Error::NO_CARD);
@@ -279,14 +283,14 @@ ZTEST_F(smp_files_group, test_an_unmounted_card_is_no_card) {
 
 ZTEST_F(smp_files_group, test_missing_directory_is_not_found) {
     Harness& harness = *fixture->harness;
-    harness.card->directories[""] = {File("oil.lua", 1)};
+    harness.card->directories[""] = { File("oil.lua", 1) };
 
     AssertError(harness.List("scripts"), Error::NOT_FOUND);
 }
 
 ZTEST_F(smp_files_group, test_bad_path_is_bad_path) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("a.lua", 1)};
+    harness.card->directories["scripts"] = { File("a.lua", 1) };
 
     AssertError(harness.List("/scripts"), Error::BAD_PATH);
     AssertError(harness.List(".."), Error::BAD_PATH);
@@ -305,7 +309,7 @@ ZTEST_F(smp_files_group, test_bad_path_is_bad_path) {
 
 ZTEST_F(smp_files_group, test_read_error_is_io_error) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("a.lua", 1)};
+    harness.card->directories["scripts"] = { File("a.lua", 1) };
     harness.card->error = -EIO;
 
     AssertError(harness.List("scripts"), Error::IO_ERROR);
@@ -313,7 +317,7 @@ ZTEST_F(smp_files_group, test_read_error_is_io_error) {
 
 ZTEST_F(smp_files_group, test_a_listing_that_cannot_be_stored_is_no_memory) {
     Harness& harness = *fixture->harness;
-    harness.card->directories["scripts"] = {File("a.lua", 1)};
+    harness.card->directories["scripts"] = { File("a.lua", 1) };
 
     harness.card->throws_bad_alloc = true;
     AssertError(harness.List("scripts"), Error::NO_MEMORY);

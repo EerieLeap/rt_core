@@ -1,10 +1,10 @@
 #ifdef CONFIG_ADC_EMUL
 
-#include <zephyr/logging/log.h>
-#include <zephyr/drivers/adc/adc_emul.h>
-#include <zephyr/random/random.h>
+    #include <zephyr/drivers/adc/adc_emul.h>
+    #include <zephyr/logging/log.h>
+    #include <zephyr/random/random.h>
 
-#include "adc_emulator.h"
+    #include "adc_emulator.h"
 
 namespace eerie_leap::subsys::adc {
 
@@ -40,6 +40,6 @@ void AdcEmulator::OverrideCapabilities(const AdcCapabilities& capabilities) {
     capabilities_ = capabilities;
 }
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc
 
 #endif // CONFIG_ADC_EMUL

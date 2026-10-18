@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "subsys/mdf/utilities/i_block_links.h"
 #include "i_serializable_block.h"
+#include "subsys/mdf/utilities/i_block_links.h"
 
 namespace eerie_leap::subsys::mdf {
 

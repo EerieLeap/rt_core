@@ -6,21 +6,21 @@
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
 
+#include "domain/canbus_domain/services/canbus_service.h"
+#include "domain/sensor_domain/runtime/sensor_runtime.h"
 #include "subsys/canbus/can_frame.h"
 #include "subsys/canbus/canbus_proxy.hpp"
 #include "subsys/threading/work_queue_thread.h"
 #include "subsys/time/i_time_service.h"
-#include "domain/canbus_domain/services/canbus_service.h"
-#include "domain/sensor_domain/runtime/sensor_runtime.h"
 
 #include "can_route_table.h"
 #include "i_isr_sensor_reader.h"
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
 
+using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::threading::WorkQueueThread;
-using eerie_leap::domain::canbus_domain::services::CanbusService;
 
 // Feeds the CAN sensors of a generation: one bus handler per route (bus, frame ID), one pending
 // frame per route, one work item for the whole router.
@@ -50,7 +50,7 @@ private:
     ProcessSensorCallback process_sensor_callback_;
 
     CanRouteTable table_;
-    std::vector<RouteState> states_;   // Parallel to the table's routes; fixed after Attach().
+    std::vector<RouteState> states_; // Parallel to the table's routes; fixed after Attach().
 
     PendingWork pending_work_{};
     k_work_sync work_sync_{};
@@ -65,7 +65,8 @@ public:
         std::shared_ptr<ITimeService> time_service,
         std::shared_ptr<WorkQueueThread> work_queue_thread,
         std::shared_ptr<CanbusService> canbus_service,
-        ProcessSensorCallback process_sensor_callback);
+        ProcessSensorCallback process_sensor_callback
+    );
     ~CanFrameRouter();
 
     CanFrameRouter(const CanFrameRouter&) = delete;
@@ -80,7 +81,9 @@ public:
     /** @brief Removes the bus handlers and waits for a running dispatch; nothing refers to the generation afterwards. */
     void Detach();
 
-    [[nodiscard]] size_t GetRouteCount() const { return table_.GetRoutes().size(); }
+    [[nodiscard]] size_t GetRouteCount() const {
+        return table_.GetRoutes().size();
+    }
 };
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

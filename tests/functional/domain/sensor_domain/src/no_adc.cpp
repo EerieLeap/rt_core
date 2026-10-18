@@ -18,10 +18,14 @@ ZTEST(no_adc, test_Start_runs_without_an_adc_and_skips_analog_sensors) {
     auto fs_service = MakeFormattedFsService();
 
     // A configuration written for a unit with an ADC, so the analog sensor passes validation.
-    auto rig = MakeProcessingRig(fs_service, nullptr, nullptr, {
-        MakeAnalogSensor("analog", 0, 20),
-        MakeVirtualSensor("virtual", "40 + 2", 20),
-    }, 4);
+    auto rig = MakeProcessingRig(
+        fs_service, nullptr, nullptr,
+        {
+            MakeAnalogSensor("analog", 0, 20),
+            MakeVirtualSensor("virtual", "40 + 2", 20),
+        },
+        4
+    );
 
     zassert_true(rig.processing_service->Start());
     zassert_true(rig.processing_service->IsRunning());

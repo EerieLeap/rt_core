@@ -72,9 +72,9 @@ ZTEST(cdmp_can_id_manager, test_receive_ids_share_one_filter_at_an_aligned_base)
     zassert_equal(filter.mask, 0x7F8);
     zassert_false(filter.is_extended);
 
-    for(const auto& id : {
-        manager.GetHeartbeatCanId(), manager.GetCommandRequestCanId(), manager.GetCommandResponseCanId(),
-        manager.GetStateChangeRequestCanId(), manager.GetStateChangeResponseCanId()}) {
+    for(const auto& id :
+        { manager.GetHeartbeatCanId(), manager.GetCommandRequestCanId(), manager.GetCommandResponseCanId(),
+            manager.GetStateChangeRequestCanId(), manager.GetStateChangeResponseCanId() }) {
 
         zassert_true(manager.GetReceiveFilter(id) == filter, "0x%03X shares the block filter", id.id);
         zassert_true(filter.Matches(id));
@@ -87,7 +87,7 @@ ZTEST(cdmp_can_id_manager, test_receive_ids_share_one_filter_at_an_aligned_base)
 ZTEST(cdmp_can_id_manager, test_receive_ids_use_exact_filters_at_an_unaligned_base) {
     CdmpCanIdManager manager(0x604);
 
-    for(const auto& id : {manager.GetManagementCanId(), manager.GetStateChangeResponseCanId()}) {
+    for(const auto& id : { manager.GetManagementCanId(), manager.GetStateChangeResponseCanId() }) {
         const auto filter = manager.GetReceiveFilter(id);
         zassert_true(filter.IsExact(), "An aligned block would reach below the base");
         zassert_equal(filter.id, id.id);

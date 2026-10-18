@@ -8,7 +8,8 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 using namespace eerie_leap::utilities::string;
 
-TextBlockBase::TextBlockBase(const std::string& id): BlockBase(id) {}
+TextBlockBase::TextBlockBase(const std::string& id) :
+    BlockBase(id) {}
 
 size_t TextBlockBase::GetPaddedTextSize() const {
     return text_.size() + (8 - text_.size() % 8);
@@ -29,6 +30,5 @@ std::unique_ptr<uint8_t[]> TextBlockBase::Serialize() const {
 
     return buffer;
 }
-
 
 } // namespace eerie_leap::subsys::mdf::mdf4

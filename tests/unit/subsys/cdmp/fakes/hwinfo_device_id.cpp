@@ -11,7 +11,7 @@
 
 namespace {
 
-std::atomic<bool> device_id_available{true};
+std::atomic<bool> device_id_available{ true };
 
 } // namespace
 
@@ -22,7 +22,7 @@ void SetFakeHwinfoDeviceIdAvailable(bool available) {
 // Linked only on a board without a hwinfo driver (the QEMU boards), where Zephyr's weak
 // implementation answers -ENOSYS: a fixed id lets CdmpUid::Generate() take its hardware branch.
 extern "C" ssize_t z_impl_hwinfo_get_device_id(uint8_t* buffer, size_t length) {
-    static constexpr std::array<uint8_t, 8> kDeviceId = {0x45, 0x4C, 0x51, 0x45, 0x4D, 0x55, 0x00, 0x01};
+    static constexpr std::array<uint8_t, 8> kDeviceId = { 0x45, 0x4C, 0x51, 0x45, 0x4D, 0x55, 0x00, 0x01 };
 
     if(!device_id_available.load())
         return -ENOSYS;

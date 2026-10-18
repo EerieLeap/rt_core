@@ -8,7 +8,8 @@ namespace eerie_leap::subsys::adc {
 
 LOG_MODULE_REGISTER(adc_manager);
 
-AdcManager::AdcManager(std::vector<std::shared_ptr<IAdc>> adcs) : adcs_(std::move(adcs)) {
+AdcManager::AdcManager(std::vector<std::shared_ptr<IAdc>> adcs) :
+    adcs_(std::move(adcs)) {
     for(const auto& adc : adcs_)
         if(adc == nullptr)
             throw std::invalid_argument("ADC cannot be null.");
@@ -58,4 +59,4 @@ AdcChannelHandle AdcManager::Resolve(int channel) {
     throw std::invalid_argument("ADC channel out of range.");
 }
 
-}  // namespace eerie_leap::subsys::adc
+} // namespace eerie_leap::subsys::adc

@@ -1,8 +1,8 @@
-#include <zephyr/ztest.h>
 #include <eerie_memory.hpp>
+#include <zephyr/ztest.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "domain/system_domain/configuration/parsers/system_configuration_cbor_parser.h"
+#include "utilities/memory/memory_resource_manager.h"
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
@@ -20,7 +20,8 @@ SystemConfiguration system_configuration_parser_GetTestConfiguration() {
 
 void system_configuration_parser_CompareSystemConfigurations(
     SystemConfiguration& system_configuration,
-    SystemConfiguration& deserialized_system_configuration) {
+    SystemConfiguration& deserialized_system_configuration
+) {
 
     zassert_equal(deserialized_system_configuration.device_id, system_configuration.device_id);
     zassert_equal(deserialized_system_configuration.build_number, system_configuration.build_number);
@@ -32,7 +33,9 @@ ZTEST(system_configuration_parser, test_CborSerializeDeserialize) {
     auto system_configuration = system_configuration_parser_GetTestConfiguration();
 
     auto serialized_system_configuration = system_configuration_cbor_parser.Serialize(system_configuration);
-    auto deserialized_system_configuration = system_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_system_configuration.get());
+    auto deserialized_system_configuration = system_configuration_cbor_parser.Deserialize(
+        Mrm::GetDefaultPmr(), *serialized_system_configuration.get()
+    );
 
     system_configuration_parser_CompareSystemConfigurations(system_configuration, *deserialized_system_configuration);
 }

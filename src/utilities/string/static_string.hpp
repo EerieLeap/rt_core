@@ -29,12 +29,18 @@ public:
     }
 
     [[nodiscard]] std::string_view ToString() const noexcept {
-        return {data_.data(), size_};
+        return { data_.data(), size_ };
     }
 
-    [[nodiscard]] size_t Size() const noexcept { return size_; }
-    [[nodiscard]] bool Empty() const noexcept { return size_ == 0; }
-    static constexpr size_t Capacity() noexcept { return N; }
+    [[nodiscard]] size_t Size() const noexcept {
+        return size_;
+    }
+    [[nodiscard]] bool Empty() const noexcept {
+        return size_ == 0;
+    }
+    static constexpr size_t Capacity() noexcept {
+        return N;
+    }
 
     void Clear() noexcept {
         data_[0] = '\0';
@@ -72,8 +78,12 @@ public:
         return true;
     }
 
-    void operator+=(std::string_view str) noexcept { Append(str); }
-    void operator+=(char c) noexcept { Append(c); }
+    void operator+=(std::string_view str) noexcept {
+        Append(str);
+    }
+    void operator+=(char c) noexcept {
+        Append(c);
+    }
 
     [[nodiscard]] char operator[](size_t index) const noexcept {
         assert(index < size_);

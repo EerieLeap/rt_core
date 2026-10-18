@@ -20,11 +20,11 @@ struct SmpHeader {
     static constexpr size_t SIZE = 8;
 
     SmpOperation operation = SmpOperation::READ;
-    uint8_t version = 0;    ///< 0 for SMP v1, 1 for SMP v2.
+    uint8_t version = 0; ///< 0 for SMP v1, 1 for SMP v2.
     uint8_t flags = 0;
-    uint16_t length = 0;    ///< Length of the CBOR body that follows the header.
+    uint16_t length = 0; ///< Length of the CBOR body that follows the header.
     uint16_t group = 0;
-    uint8_t sequence = 0;   ///< Echoed in the response.
+    uint8_t sequence = 0; ///< Echoed in the response.
     uint8_t command_id = 0;
 
     /** @brief Decodes the header at the start of @p data; std::nullopt if it is too short. */
@@ -32,7 +32,7 @@ struct SmpHeader {
         if(data.size() < SIZE)
             return std::nullopt;
 
-        return SmpHeader {
+        return SmpHeader{
             .operation = static_cast<SmpOperation>(data[0] & 0x07),
             .version = static_cast<uint8_t>((data[0] >> 3) & 0x03),
             .flags = data[1],
@@ -56,7 +56,9 @@ struct SmpHeader {
     }
 
     /** @brief Header plus body length. */
-    [[nodiscard]] constexpr size_t GetPacketSize() const { return SIZE + length; }
+    [[nodiscard]] constexpr size_t GetPacketSize() const {
+        return SIZE + length;
+    }
 
     /** @brief True for READ and WRITE. */
     [[nodiscard]] constexpr bool IsRequest() const {

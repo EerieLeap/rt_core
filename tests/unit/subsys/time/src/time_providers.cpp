@@ -38,8 +38,11 @@ void AssertSubMillisecondResolution() {
     const auto after = time_provider.GetTime();
 
     const auto elapsed_us = duration_cast<microseconds>(after - before).count();
-    zassert_true(elapsed_us >= 200 && elapsed_us < 1000,
-        "a 250 us wait must read as 200..999 us, not whole milliseconds (got %lld us)", static_cast<long long>(elapsed_us));
+    zassert_true(
+        elapsed_us >= 200 && elapsed_us < 1000,
+        "a 250 us wait must read as 200..999 us, not whole milliseconds (got %lld us)",
+        static_cast<long long>(elapsed_us)
+    );
 #else
     ztest_test_skip();
 #endif
@@ -74,7 +77,7 @@ ZTEST(boot_elapsed_time_provider, test_GetTime_is_monotonic) {
     BootElapsedTimeProvider time_provider;
 
     auto previous = time_provider.GetTime();
-    for (int i = 0; i < 16; ++i) {
+    for(int i = 0; i < 16; ++i) {
         auto current = time_provider.GetTime();
 
         zassert_true(current >= previous, "time went backwards at iteration %d", i);
@@ -122,7 +125,7 @@ ZTEST(rtc_provider, test_GetTime_is_monotonic) {
     RtcProvider rtc_provider;
 
     auto previous = rtc_provider.GetTime();
-    for (int i = 0; i < 16; ++i) {
+    for(int i = 0; i < 16; ++i) {
         auto current = rtc_provider.GetTime();
 
         zassert_true(current >= previous, "time went backwards at iteration %d", i);

@@ -98,7 +98,7 @@ void AssetsManager::AddReferrer(const void* owner, Referrer referrer) {
 
     ScopedMutex lock(mutex_);
 
-    referrers_.push_back({owner, std::move(shared)});
+    referrers_.push_back({ owner, std::move(shared) });
 }
 
 void AssetsManager::RemoveReferrers(const void* owner) noexcept {
@@ -125,7 +125,9 @@ void AssetsManager::RemoveReferrers(const void* owner) noexcept {
         }
     }
 
-    std::erase_if(referrers_, [owner](const ReferrerEntry& entry) { return entry.owner == owner; });
+    std::erase_if(referrers_, [owner](const ReferrerEntry& entry) {
+        return entry.owner == owner;
+    });
 }
 
 bool AssetsManager::IsReferenced(std::string_view path) const {

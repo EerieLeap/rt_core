@@ -2,11 +2,11 @@
 #include <cerrno>
 #include <stdexcept>
 
-#include <zephyr/logging/log.h>
-#include <zephyr/net_buf.h>
-#include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
 #include <mgmt/mcumgr/transport/smp_internal.h>
 #include <zcbor_encode.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/mgmt/mcumgr/mgmt/mgmt_defines.h>
+#include <zephyr/net_buf.h>
 
 #include "smp_ble_router.h"
 
@@ -34,8 +34,9 @@ constexpr size_t MAX_PACKET_SIZE = CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE;
 
 std::atomic<SmpBleRouter*> SmpBleRouter::instance_ = nullptr;
 
-SmpBleRouter::SmpBleRouter(std::shared_ptr<IBleNotifier> notifier, std::shared_ptr<ISmpForwarder> forwarder)
-    : notifier_(std::move(notifier)), forwarder_(std::move(forwarder)) {
+SmpBleRouter::SmpBleRouter(std::shared_ptr<IBleNotifier> notifier, std::shared_ptr<ISmpForwarder> forwarder) :
+    notifier_(std::move(notifier)),
+    forwarder_(std::move(forwarder)) {
 
     SmpBleRouter* expected = nullptr;
     if(!instance_.compare_exchange_strong(expected, this))
@@ -154,7 +155,7 @@ void SmpBleRouter::Dispatch(uint8_t route, SmpPacket packet) {
             return;
         }
 
-        UserData(*packet) = {.route = route, .generation = generation_.load()};
+        UserData(*packet) = { .route = route, .generation = generation_.load() };
         smp_rx_req(&smp_transport_, packet.release());
         return;
     }
@@ -170,10 +171,9 @@ void SmpBleRouter::Dispatch(uint8_t route, SmpPacket packet) {
 }
 
 void SmpBleRouter::Reject(uint8_t route, SmpPacket packet) {
-    SmpHeader header = *SmpHeader::Parse({packet->data, packet->len});
-    header.operation = header.operation == SmpOperation::READ
-        ? SmpOperation::READ_RESPONSE
-        : SmpOperation::WRITE_RESPONSE;
+    SmpHeader header = *SmpHeader::Parse({ packet->data, packet->len });
+    header.operation = header.operation == SmpOperation::READ ? SmpOperation::READ_RESPONSE
+                                                              : SmpOperation::WRITE_RESPONSE;
     header.flags = 0;
 
     // The request is no longer needed, so its buffer carries the answer.
@@ -184,7 +184,8 @@ void SmpBleRouter::Reject(uint8_t route, SmpPacket packet) {
     zcbor_new_encode_state(zse, ZCBOR_ARRAY_SIZE(zse), body, net_buf_tailroom(packet.get()) - SmpHeader::SIZE, 1);
 
     const bool ok = zcbor_map_start_encode(zse, 1)
-        && zcbor_tstr_put_lit(zse, "rc") && zcbor_int32_put(zse, MGMT_ERR_ENOENT)
+        && zcbor_tstr_put_lit(zse, "rc")
+        && zcbor_int32_put(zse, MGMT_ERR_ENOENT)
         && zcbor_map_end_encode(zse, 1);
 
     if(!ok) {
@@ -234,7 +235,7 @@ int SmpBleRouter::Output(net_buf* packet) {
 }
 
 void SmpBleRouter::EnqueueTx(uint8_t route, uint8_t generation, SmpPacket packet) {
-    UserData(*packet) = {.route = route, .generation = generation};
+    UserData(*packet) = { .route = route, .generation = generation };
     k_fifo_put(&tx_queue_, packet.release());
 
     // Keeps a pending retry delay; OnNotificationSent() cuts it short.
@@ -271,7 +272,7 @@ void SmpBleRouter::ProcessTx() {
         std::span<const uint8_t> fragment;
 
         if(tx_offset_ == 0) {
-            const size_t size = std::min({max_size, tx_first_fragment_.size(), total});
+            const size_t size = std::min({ max_size, tx_first_fragment_.size(), total });
             tx_first_fragment_[0] = user_data.route;
             std::copy_n(tx_packet_->data, size - 1, tx_first_fragment_.begin() + 1);
             fragment = std::span(tx_first_fragment_.data(), size);

@@ -34,12 +34,10 @@ struct CdmpStateChangeMessage {
         if(frame_data.size() < HEADER_SIZE || frame_data.size() > MAX_FRAME_SIZE)
             return std::nullopt;
 
-        return CdmpStateChangeMessage{
-            .source_device_id = frame_data[0],
+        return CdmpStateChangeMessage{ .source_device_id = frame_data[0],
             .version = frame_data[1],
             .state_type = frame_data[2],
-            .data = CdmpStateData(frame_data.subspan(HEADER_SIZE))
-        };
+            .data = CdmpStateData(frame_data.subspan(HEADER_SIZE)) };
     }
 
     /** @throws std::invalid_argument for a frame shorter than 3 or longer than 8 bytes. */

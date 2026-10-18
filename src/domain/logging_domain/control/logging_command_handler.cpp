@@ -18,10 +18,11 @@ LOG_MODULE_REGISTER(logging_command_handler_logger);
 
 LoggingCommandHandler::LoggingCommandHandler(
     std::shared_ptr<CanbusComService> canbus_com_service,
-    std::shared_ptr<ILoggingControl> logging_control)
-        : canbus_com_service_(std::move(canbus_com_service)),
-        logging_control_(std::move(logging_control)),
-        guard_(std::make_shared<DispatchGuard>(this)) {
+    std::shared_ptr<ILoggingControl> logging_control
+) :
+    canbus_com_service_(std::move(canbus_com_service)),
+    logging_control_(std::move(logging_control)),
+    guard_(std::make_shared<DispatchGuard>(this)) {
 
     if(canbus_com_service_ == nullptr || logging_control_ == nullptr)
         throw std::invalid_argument("The logging command handler needs the COM service and a logging control.");
@@ -45,7 +46,8 @@ LoggingCommandHandler::LoggingCommandHandler(
 
             // False only while the handler is being destroyed.
             return is_accepted;
-        });
+        }
+    );
 }
 
 LoggingCommandHandler::~LoggingCommandHandler() {

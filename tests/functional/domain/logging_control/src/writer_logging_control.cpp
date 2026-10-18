@@ -35,9 +35,9 @@ ZTEST(writer_logging_control, test_AllUnitsAreThisWriterAndABroadcast) {
     f.control->RequestStart(kAllUnits);
     f.control->RequestStop(kAllUnits);
 
-    zassert_true(f.local->Kinds() == Kinds({Kind::Start, Kind::Stop}), "The writer follows");
-    zassert_true(f.network->Kinds() == Kinds({Kind::Start, Kind::Stop}), "and so do the other units");
-    zassert_true(f.network->Targets() == Targets({kAllUnits, kAllUnits}), "as one request for all");
+    zassert_true(f.local->Kinds() == Kinds({ Kind::Start, Kind::Stop }), "The writer follows");
+    zassert_true(f.network->Kinds() == Kinds({ Kind::Start, Kind::Stop }), "and so do the other units");
+    zassert_true(f.network->Targets() == Targets({ kAllUnits, kAllUnits }), "as one request for all");
 }
 
 ZTEST(writer_logging_control, test_ThisUnitsOwnUidIsTheWriterOnly) {
@@ -46,7 +46,7 @@ ZTEST(writer_logging_control, test_ThisUnitsOwnUidIsTheWriterOnly) {
     f.control->RequestStart(kOwnUid);
     f.control->RequestStop(kOwnUid);
 
-    zassert_true(f.local->Kinds() == Kinds({Kind::Start, Kind::Stop}));
+    zassert_true(f.local->Kinds() == Kinds({ Kind::Start, Kind::Stop }));
     zassert_equal(f.network->Requests().size(), 0U, "Nothing goes out for this unit alone");
 }
 
@@ -57,8 +57,8 @@ ZTEST(writer_logging_control, test_AnotherUidIsTheNetworkOnly) {
     f.control->RequestStop(kOtherUid);
 
     zassert_equal(f.local->Requests().size(), 0U, "The writer is not asked");
-    zassert_true(f.network->Kinds() == Kinds({Kind::Start, Kind::Stop}));
-    zassert_true(f.network->Targets() == Targets({kOtherUid, kOtherUid}), "with the target kept");
+    zassert_true(f.network->Kinds() == Kinds({ Kind::Start, Kind::Stop }));
+    zassert_true(f.network->Targets() == Targets({ kOtherUid, kOtherUid }), "with the target kept");
 }
 
 ZTEST(writer_logging_control, test_AReceivedStopStopsTheWriterAndDropsTheNetworksStarts) {
@@ -66,8 +66,8 @@ ZTEST(writer_logging_control, test_AReceivedStopStopsTheWriterAndDropsTheNetwork
 
     zassert_true(f.control->HandleLoggingCommand(false));
 
-    zassert_true(f.local->Kinds() == Kinds({Kind::Stop}));
-    zassert_true(f.network->Kinds() == Kinds({Kind::Stop}), "The network half drops its wanted starts");
+    zassert_true(f.local->Kinds() == Kinds({ Kind::Stop }));
+    zassert_true(f.network->Kinds() == Kinds({ Kind::Stop }), "The network half drops its wanted starts");
 }
 
 ZTEST(writer_logging_control, test_AReceivedStartIsTheWritersOnly) {
@@ -75,7 +75,7 @@ ZTEST(writer_logging_control, test_AReceivedStartIsTheWritersOnly) {
 
     zassert_true(f.control->HandleLoggingCommand(true));
 
-    zassert_true(f.local->Kinds() == Kinds({Kind::Start}));
+    zassert_true(f.local->Kinds() == Kinds({ Kind::Start }));
     zassert_equal(f.network->Requests().size(), 0U);
 }
 
@@ -87,7 +87,7 @@ ZTEST(writer_logging_control, test_WithoutANetworkOnlyTheWriterIsServed) {
     control.RequestStart(kOtherUid);
     zassert_true(control.HandleLoggingCommand(false));
 
-    zassert_true(local->Kinds() == Kinds({Kind::Start, Kind::Stop}), "A request for another unit is dropped");
+    zassert_true(local->Kinds() == Kinds({ Kind::Start, Kind::Stop }), "A request for another unit is dropped");
 }
 
 ZTEST(writer_logging_control, test_IsActiveIsTheWriters) {

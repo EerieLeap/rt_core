@@ -5,17 +5,17 @@
 // here, because this is the role without a log writer in the way.
 #ifndef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
-#include <memory>
-#include <optional>
-#include <vector>
+    #include <memory>
+    #include <optional>
+    #include <vector>
 
-#include <zephyr/ztest.h>
+    #include <zephyr/ztest.h>
 
-#include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
-#include "domain/logging_domain/control/remote_logging_control.h"
-#include "domain/logging_domain/event_bus/logging_event_type.h"
-#include "domain/logging_domain/event_bus/logging_payload_type.h"
-#include "domain/system_domain/models/product_feature.h"
+    #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
+    #include "domain/logging_domain/control/remote_logging_control.h"
+    #include "domain/logging_domain/event_bus/logging_event_type.h"
+    #include "domain/logging_domain/event_bus/logging_payload_type.h"
+    #include "domain/system_domain/models/product_feature.h"
 
 using namespace logging_controller_test;
 
@@ -35,8 +35,8 @@ struct Fixture {
     Peer peer;
     std::unique_ptr<LoggingController> controller;
 
-    Fixture()
-        : rig({{"switch"}, {"a"}, {"b"}, {"ab"}, {"known"}, {"off", false}}, true),
+    Fixture() :
+        rig({ { "switch" }, { "a" }, { "b" }, { "ab" }, { "known" }, { "off", false } }, true),
         peer(harness) {
 
         harness.BringOnline();
@@ -115,12 +115,18 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
     const auto control = F().controller->GetControl();
     zassert_not_null(dynamic_cast<RemoteLoggingControl*>(control.get()), "The remote role's control");
     zassert_not_null(F().controller->GetLoggingControlConfigurationManager().get());
-    zassert_true(configuration_service->IsRegistered(ConfigurationService::Type::LoggingControl),
-        "The triggers' configuration is registered");
-    zassert_false(configuration_service->IsRegistered(ConfigurationService::Type::Logging),
-        "and a unit without a log writer has no logging configuration");
-    zassert_false(configuration_service->GetCborConfiguration(ConfigurationService::Type::LoggingControl).empty(),
-        "The default configuration is stored");
+    zassert_true(
+        configuration_service->IsRegistered(ConfigurationService::Type::LoggingControl),
+        "The triggers' configuration is registered"
+    );
+    zassert_false(
+        configuration_service->IsRegistered(ConfigurationService::Type::Logging),
+        "and a unit without a log writer has no logging configuration"
+    );
+    zassert_false(
+        configuration_service->GetCborConfiguration(ConfigurationService::Type::LoggingControl).empty(),
+        "The default configuration is stored"
+    );
 
     // The sender is wired to the COM service.
     control->RequestStart(kAllUnits);
@@ -128,8 +134,13 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
 
     // The importer is wired into the control.
     zassert_false(control->IsActive());
-    F().peer.ShareStatus({0x01});
-    zassert_true(WaitUntil([&control] { return control->IsActive(); }), "The shared status reaches the control");
+    F().peer.ShareStatus({ 0x01 });
+    zassert_true(
+        WaitUntil([&control] {
+            return control->IsActive();
+        }),
+        "The shared status reaches the control"
+    );
 }
 
 // A unit without a log writer never sends the LOGGING feature, so senders skip it.
@@ -150,7 +161,7 @@ ZTEST(logging_controller_remote, test_AWantedStartIsSentAgainWhenALoggingUnitApp
     zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
     // A logging unit appears, idle.
-    F().peer.ShareStatus({0x00, 0x00});
+    F().peer.ShareStatus({ 0x00, 0x00 });
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "so the start that nobody received is sent again");
 }
 
@@ -163,10 +174,10 @@ ZTEST(logging_controller_remote, test_AQuickRestartOfTheLoggingUnitIsReasserted)
     F().controller->GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "The start goes out");
 
-    F().peer.ShareStatus({0x01});
+    F().peer.ShareStatus({ 0x01 });
 
-    F().peer.Restart({{LOGGING_STATUS_CODE, 1, {0x00, 0x00}}}, true);
-    F().peer.ShareStatus({0x00, 0x00});
+    F().peer.Restart({ { LOGGING_STATUS_CODE, 1, { 0x00, 0x00 } } }, true);
+    F().peer.ShareStatus({ 0x00, 0x00 });
     const auto again = F().peer.WaitForCommandTo(PEER_ID);
     zassert_true(IsStart(again), "The restarted unit lost the start: it is sent again, to that unit alone");
     zassert_false(F().peer.WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "once");
@@ -199,8 +210,10 @@ ZTEST(logging_controller_remote, test_AFailedInitializeLeavesNothingBehind) {
     zassert_equal(controller.Initialize(), -1);
     zassert_is_null(controller.GetControl().get());
     zassert_is_null(controller.GetLoggingControlConfigurationManager().get());
-    zassert_false(configuration_service->IsRegistered(ConfigurationService::Type::LoggingControl),
-        "A controller that did not initialize registers nothing");
+    zassert_false(
+        configuration_service->IsRegistered(ConfigurationService::Type::LoggingControl),
+        "A controller that did not initialize registers nothing"
+    );
 
     F().controller.reset();
 }
@@ -226,7 +239,7 @@ ZTEST(logging_controller_remote, test_AStoredConfigurationRebuildsTheTriggersAnd
 
 ZTEST(logging_controller_remote, test_TheSetupHookConfiguresTheFirstTriggers) {
     const uint32_t generation = SensorSubscriptionGeneration();
-    F().Start(StoresTriggersOn({"a"}));
+    F().Start(StoresTriggersOn({ "a" }));
 
     PublishSensorValue("a", 1.0F);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "The hook's trigger starts logging");
@@ -238,10 +251,10 @@ ZTEST(logging_controller_remote, test_TheSetupHookConfiguresTheFirstTriggers) {
 }
 
 ZTEST(logging_controller_remote, test_AStoredConfigurationReplacesTheTriggers) {
-    F().Start(StoresTriggersOn({"a"}));
+    F().Start(StoresTriggersOn({ "a" }));
 
     const auto manager = F().controller->GetLoggingControlConfigurationManager();
-    zassert_true(manager->Update(TriggersOn({"b"})), "The new triggers are stored");
+    zassert_true(manager->Update(TriggersOn({ "b" })), "The new triggers are stored");
     zassert_true(Flush(), "The rebuild ran");
 
     PublishSensorValue("a", 1.0F);
@@ -259,10 +272,12 @@ ZTEST(logging_controller_remote, test_StoresCoalesceIntoOneRebuildOnTheQueue) {
     const auto manager = F().controller->GetLoggingControlConfigurationManager();
     const uint32_t generation = SensorSubscriptionGeneration();
 
-    HeldStore store(manager, {{"a"}, {"b"}});
+    HeldStore store(manager, { { "a" }, { "b" } });
     zassert_true(store.WaitUntilStored(), "Both stores are done");
     zassert_true(store.AllStored());
-    zassert_equal(SensorSubscriptionGeneration(), generation, "The rebuild is pending behind the stores, not run by them");
+    zassert_equal(
+        SensorSubscriptionGeneration(), generation, "The rebuild is pending behind the stores, not run by them"
+    );
 
     store.Release();
     zassert_true(Flush(), "The rebuild ran");
@@ -309,8 +324,10 @@ ZTEST(logging_controller_remote, test_TriggersAreCheckedAgainstTheSensors) {
     auto parts = F().MakeParts();
     parts.has_sensors_manager = false;
     zassert_equal(F().Build(std::move(parts)).Initialize(), 0);
-    zassert_equal(F().controller->GetLoggingControlConfigurationManager()->Get()->triggers.size(), 5U,
-        "The first controller's five triggers load again");
+    zassert_equal(
+        F().controller->GetLoggingControlConfigurationManager()->Get()->triggers.size(), 5U,
+        "The first controller's five triggers load again"
+    );
     zassert_logged(0, "Triggers are not checked without the sensors");
 }
 
@@ -318,7 +335,7 @@ ZTEST(logging_controller_remote, test_DestroyingDuringATriggerDispatchRequestsNo
     // Subscribed first, so it runs before the trigger in a dispatch.
     SensorsBlocker blocker(SensorEventsChannel::GetInstance(), SensorEventType::DataUpdated);
 
-    F().Start(StoresTriggersOn({"switch"}));
+    F().Start(StoresTriggersOn({ "switch" }));
 
     blocker.Arm();
     PublishSensorValue("switch", 1.0F, true);
@@ -329,8 +346,10 @@ ZTEST(logging_controller_remote, test_DestroyingDuringATriggerDispatchRequestsNo
     blocker.Release();
     zassert_true(blocker.Fence(), "The dispatch ended");
     zassert_true(Flush());
-    zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(),
-        "The trigger the dispatch had already taken requests nothing from a destroyed controller");
+    zassert_false(
+        F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(),
+        "The trigger the dispatch had already taken requests nothing from a destroyed controller"
+    );
 }
 
 ZTEST(logging_controller_remote, test_DestroyingWithARebuildPendingBuildsNothing) {
@@ -339,7 +358,7 @@ ZTEST(logging_controller_remote, test_DestroyingWithARebuildPendingBuildsNothing
     const uint32_t generation = SensorSubscriptionGeneration();
 
     // The store queues the rebuild behind itself.
-    HeldStore store(manager, {{"switch"}});
+    HeldStore store(manager, { { "switch" } });
     zassert_true(store.WaitUntilStored());
     zassert_equal(SensorSubscriptionGeneration(), generation, "The rebuild is pending");
 
@@ -353,7 +372,7 @@ ZTEST(logging_controller_remote, test_DestroyingWithARebuildPendingBuildsNothing
     zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "and nothing acts on the stored trigger");
 
     // The test's manager outlives the controller: a store reaches nothing.
-    zassert_true(manager->Update(TriggersOn({"switch"})), "A store after the destruction still works");
+    zassert_true(manager->Update(TriggersOn({ "switch" })), "A store after the destruction still works");
     zassert_true(Flush());
     zassert_equal(SensorSubscriptionGeneration(), generation, "and rebuilds nothing");
     PublishSensorValue("switch", 0.0F);
@@ -374,7 +393,7 @@ ZTEST(logging_controller_remote, test_ASwitchThatIsAlreadyOnStartsAtBoot) {
     zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value());
     F().controller.reset();
 
-    F().Start(StoresTriggersOn({"switch"}));
+    F().Start(StoresTriggersOn({ "switch" }));
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "A switch that is already on starts logging");
     zassert_true(probe.WaitForValue(1.0F), "because the boot replayed it");
 }
@@ -383,7 +402,7 @@ ZTEST(logging_controller_remote, test_ControllersComeAndGoWhileTheUnitRuns) {
     SensorProbe probe("switch");
 
     for(int round = 0; round < 3; round++) {
-        F().Start(StoresTriggersOn({"switch"}));
+        F().Start(StoresTriggersOn({ "switch" }));
 
         // The unit hears its own broadcasts on the loopback bus: each is answered before the case goes on.
         F().rig.Commit("switch", 1.0F);
@@ -397,7 +416,7 @@ ZTEST(logging_controller_remote, test_ControllersComeAndGoWhileTheUnitRuns) {
 
         // A store that rebuilds the triggers and replays, with the publisher still ticking, and the
         // controller destroyed at once: the job holds the manager, not the controller.
-        HeldStore store(F().controller->GetLoggingControlConfigurationManager(), {{"switch"}});
+        HeldStore store(F().controller->GetLoggingControlConfigurationManager(), { { "switch" } });
         store.Release();
         F().controller.reset();
 
@@ -422,8 +441,10 @@ ZTEST(logging_controller_remote, test_StoredTriggersLoadWithoutTheHook) {
         // A literal, not the controller's constant: the name is what is pinned.
         LoggingControlConfigurationManager stored(
             std::make_unique<CborConfigurationService<CborLoggingControlConfig>>(
-                "logging_control_config", F().rig.fs_service, TestConfigQueue()));
-        zassert_true(stored.Update(TriggersOn({"switch"})), "The triggers are stored");
+                "logging_control_config", F().rig.fs_service, TestConfigQueue()
+            )
+        );
+        zassert_true(stored.Update(TriggersOn({ "switch" })), "The triggers are stored");
     }
 
     F().Start();
@@ -452,7 +473,7 @@ ZTEST(logging_controller_remote, test_WithoutAWritableFileSystemThereAreNoTrigge
     F().controller->GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "Requests still go out");
 
-    zassert_false(manager->Update(TriggersOn({"switch"})), "A store fails");
+    zassert_false(manager->Update(TriggersOn({ "switch" })), "A store fails");
     zassert_true(Flush());
     zassert_equal(SensorSubscriptionGeneration(), generation, "and rebuilds nothing");
     PublishSensorValue("switch", 1.0F);
@@ -470,7 +491,7 @@ ZTEST(logging_controller_remote, test_WithoutAPublisherOrAConfigurationServiceTh
     const uint32_t generation = SensorSubscriptionGeneration();
 
     auto& controller = F().Build(std::move(parts));
-    zassert_equal(controller.Initialize(StoresTriggersOn({"switch"})), 0);
+    zassert_equal(controller.Initialize(StoresTriggersOn({ "switch" })), 0);
     zassert_true(Flush());
     zassert_equal(SensorSubscriptionGeneration(), generation + 1, "The boot set subscribed");
 
@@ -479,7 +500,7 @@ ZTEST(logging_controller_remote, test_WithoutAPublisherOrAConfigurationServiceTh
 
     // A store rebuilds the set, and there is no publisher to replay.
     const auto manager = controller.GetLoggingControlConfigurationManager();
-    zassert_true(manager->Update(TriggersOn({"b"})), "The new triggers are stored");
+    zassert_true(manager->Update(TriggersOn({ "b" })), "The new triggers are stored");
     zassert_true(Flush(), "The rebuild ran");
     PublishSensorValue("b", 1.0F);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "The rebuilt trigger acts");
@@ -518,11 +539,11 @@ ZTEST(logging_controller_remote, test_ASecondControllerOnTheSameConfigurationSer
 ZTEST(logging_controller_remote, test_TheRemoteRoleServesTheLoggingCommand) {
     F().Start();
 
-    const auto stopped = F().peer.Ask({0x00});
+    const auto stopped = F().peer.Ask({ 0x00 });
     zassert_true(stopped.has_value(), "A stop is answered");
     zassert_equal(*stopped, CdmpResultCode::SUCCESS);
 
-    const auto started = F().peer.Ask({0x01});
+    const auto started = F().peer.Ask({ 0x01 });
     zassert_true(started.has_value(), "and so is a start");
     zassert_equal(*started, CdmpResultCode::FAILURE, "which this unit cannot serve");
 
@@ -533,9 +554,11 @@ ZTEST(logging_controller_remote, test_TheHandlerGoesWithTheController) {
     F().Start();
     F().controller.reset();
 
-    const auto result = F().peer.Ask({0x00});
+    const auto result = F().peer.Ask({ 0x00 });
     zassert_true(result.has_value());
-    zassert_equal(*result, CdmpResultCode::UNSUPPORTED_COMMAND, "The command is not served once the controller is gone");
+    zassert_equal(
+        *result, CdmpResultCode::UNSUPPORTED_COMMAND, "The command is not served once the controller is gone"
+    );
 }
 
 ZTEST(logging_controller_remote, test_StartBeforeInitializeOrAfterAFailedOneFails) {
@@ -571,7 +594,7 @@ ZTEST(logging_controller_remote, test_WithoutAConfigurationServiceStartSucceedsA
 
     controller.GetControl()->RequestStart(kAllUnits);
     zassert_true(IsStart(F().peer.WaitForBroadcast()));
-    zassert_true(controller.GetLoggingControlConfigurationManager()->Update(TriggersOn({"a"})));
+    zassert_true(controller.GetLoggingControlConfigurationManager()->Update(TriggersOn({ "a" })));
     zassert_true(Flush());
     zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "A store stops no logging");
 }

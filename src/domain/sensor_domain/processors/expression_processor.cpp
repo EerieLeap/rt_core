@@ -13,8 +13,8 @@ ExpressionProcessor::ExpressionProcessor(std::shared_ptr<SensorReadingsFrame> se
     sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
 // Returns the result, or nothing after recording the failure on the reading.
-std::optional<float> ExpressionProcessor::Evaluate(
-    const SensorRuntime& runtime, std::optional<float> x, SensorReading& reading) const {
+std::optional<float>
+ExpressionProcessor::Evaluate(const SensorRuntime& runtime, std::optional<float> x, SensorReading& reading) const {
 
     // Evaluating against a sensor that has no value yet would read NaN, or 0 through a comparison.
     if(!sensor_readings_frame_->AreValuesAvailable(runtime.input_slots)) {

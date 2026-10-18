@@ -17,11 +17,11 @@ constexpr size_t DEVICE_ENTRY_SIZE = 44;
 } // namespace
 
 const mgmt_handler NetworkMgmtGroup::HANDLERS[] = {
-    {.mh_read = Dispatch<&NetworkMgmtGroup::HandleDevices>, .mh_write = nullptr},
+    { .mh_read = Dispatch<&NetworkMgmtGroup::HandleDevices>, .mh_write = nullptr },
 };
 
-NetworkMgmtGroup::NetworkMgmtGroup(std::shared_ptr<const ICdmpNetworkInfo> network_info)
-    : SmpGroup(SmpGroupId::NETWORK, HANDLERS, nullptr),
+NetworkMgmtGroup::NetworkMgmtGroup(std::shared_ptr<const ICdmpNetworkInfo> network_info) :
+    SmpGroup(SmpGroupId::NETWORK, HANDLERS, nullptr),
     network_info_(std::move(network_info)) {}
 
 NetworkMgmtGroup::~NetworkMgmtGroup() {
@@ -30,7 +30,7 @@ NetworkMgmtGroup::~NetworkMgmtGroup() {
 
 int NetworkMgmtGroup::HandleDevices(smp_streamer* ctxt) {
     uint32_t offset = 0;
-    std::array keys = {SmpMapKey("off", zcbor_uint32_decode, &offset)};
+    std::array keys = { SmpMapKey("off", zcbor_uint32_decode, &offset) };
 
     // An empty request lists from the first device.
     const zcbor_state_t* zsd = ctxt->reader->zs;
@@ -41,9 +41,12 @@ int NetworkMgmtGroup::HandleDevices(smp_streamer* ctxt) {
     const size_t total = network_info_->GetNetworkDeviceCount();
 
     zcbor_state_t* zse = ctxt->writer->zs;
-    bool ok = zcbor_tstr_put_lit(zse, "total") && zcbor_uint32_put(zse, static_cast<uint32_t>(total))
-        && zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, offset)
-        && zcbor_tstr_put_lit(zse, "devices") && zcbor_list_start_encode(zse, count);
+    bool ok = zcbor_tstr_put_lit(zse, "total")
+        && zcbor_uint32_put(zse, static_cast<uint32_t>(total))
+        && zcbor_tstr_put_lit(zse, "off")
+        && zcbor_uint32_put(zse, offset)
+        && zcbor_tstr_put_lit(zse, "devices")
+        && zcbor_list_start_encode(zse, count);
 
     for(size_t i = offset; ok && i < count; i++) {
         if(static_cast<size_t>(zse->payload_end - zse->payload) < DEVICE_ENTRY_SIZE)
@@ -51,10 +54,14 @@ int NetworkMgmtGroup::HandleDevices(smp_streamer* ctxt) {
 
         const auto& device = devices_[i];
         ok = zcbor_map_start_encode(zse, 4)
-            && zcbor_tstr_put_lit(zse, "id") && zcbor_uint32_put(zse, device.device_id)
-            && zcbor_tstr_put_lit(zse, "uid") && zcbor_uint32_put(zse, device.uid)
-            && zcbor_tstr_put_lit(zse, "features") && zcbor_uint32_put(zse, device.features)
-            && zcbor_tstr_put_lit(zse, "status") && zcbor_uint32_put(zse, std::to_underlying(device.status))
+            && zcbor_tstr_put_lit(zse, "id")
+            && zcbor_uint32_put(zse, device.device_id)
+            && zcbor_tstr_put_lit(zse, "uid")
+            && zcbor_uint32_put(zse, device.uid)
+            && zcbor_tstr_put_lit(zse, "features")
+            && zcbor_uint32_put(zse, device.features)
+            && zcbor_tstr_put_lit(zse, "status")
+            && zcbor_uint32_put(zse, std::to_underlying(device.status))
             && zcbor_map_end_encode(zse, 4);
     }
 

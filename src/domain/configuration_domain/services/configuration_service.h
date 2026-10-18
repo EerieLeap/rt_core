@@ -1,10 +1,10 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <span>
-#include <unordered_map>
 #include <streambuf>
-#include <functional>
+#include <unordered_map>
 
 #include "../utilities/i_cbor_configuration_manager.h"
 
@@ -72,7 +72,8 @@ public:
     void RegisterCborConfigurationManager(
         Type type,
         std::shared_ptr<ICborConfigurationManager> cbor_configuration_manager,
-        size_t max_cbor_size = DEFAULT_MAX_CBOR_SIZE);
+        size_t max_cbor_size = DEFAULT_MAX_CBOR_SIZE
+    );
 
     /**
      * @brief Takes the report of every successful store of a registered manager.

@@ -2,16 +2,16 @@
 // errors, and lines that wrap on whole channels. Only built in the processing_stats scenario.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS
 
-#include <array>
-#include <string>
+    #include <array>
+    #include <string>
 
-#include <zephyr/ztest.h>
+    #include <zephyr/ztest.h>
 
-#include "subsys/adc/adc_types.h"
-#include "domain/sensor_domain/services/adc_sample_set.h"
-#include "domain/sensor_domain/services/rate_group_scheduler.h"
+    #include "domain/sensor_domain/services/adc_sample_set.h"
+    #include "domain/sensor_domain/services/rate_group_scheduler.h"
+    #include "subsys/adc/adc_types.h"
 
-#include "processing_test_support.h"
+    #include "processing_test_support.h"
 
 using namespace eerie_leap::subsys::adc;
 using namespace eerie_leap::domain::sensor_domain::services;
@@ -25,8 +25,8 @@ namespace {
 // The PM board's split: global channel 0 is the only channel of the first ADC, global channels
 // 1-3 are channels 0-2 of the second.
 struct processing_stats_PmLayout {
-    FakeAdc unit_1 { 1 };
-    FakeAdc unit_2 { 3 };
+    FakeAdc unit_1{ 1 };
+    FakeAdc unit_2{ 3 };
     AdcSampleSet adc_samples;
 
     processing_stats_PmLayout() {
@@ -46,7 +46,7 @@ struct processing_stats_PmLayout {
 
 ZTEST(processing_stats, test_FormatChannels_names_channels_by_their_global_index) {
     processing_stats_PmLayout layout;
-    std::array<char, 128> line {};
+    std::array<char, 128> line{};
 
     const size_t next = RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);
 
@@ -58,7 +58,7 @@ ZTEST(processing_stats, test_FormatChannels_reports_a_failed_channel_by_errno) {
     processing_stats_PmLayout layout;
     layout.unit_2.failing_channel = 2;
     layout.adc_samples.Acquire();
-    std::array<char, 128> line {};
+    std::array<char, 128> line{};
 
     (void)RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);
 
@@ -76,7 +76,7 @@ ZTEST(processing_stats, test_FormatChannels_rounds_to_the_millivolt) {
     adc_samples.Seal();
     adc_samples.Acquire();
 
-    std::array<char, 128> line {};
+    std::array<char, 128> line{};
     (void)RateGroupScheduler::FormatChannels(adc_samples, 0, line);
 
     zassert_str_equal(line.data(), " ch0 -1.250 V ch1 0.375 V ch2 2.001 V");
@@ -86,7 +86,7 @@ ZTEST(processing_stats, test_FormatChannels_wraps_on_whole_channels) {
     processing_stats_PmLayout layout;
 
     // " ch0 0.898 V" is 12 characters: two do not fit with the terminator, one does.
-    std::array<char, 24> line {};
+    std::array<char, 24> line{};
     std::string joined;
     size_t lines = 0;
 
@@ -105,7 +105,7 @@ ZTEST(processing_stats, test_FormatChannels_wraps_on_whole_channels) {
 
 ZTEST(processing_stats, test_FormatChannels_cuts_a_channel_the_line_cannot_hold) {
     processing_stats_PmLayout layout;
-    std::array<char, 8> line {};
+    std::array<char, 8> line{};
 
     const size_t next = RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);
 

@@ -6,8 +6,8 @@
 #include <span>
 #include <streambuf>
 
-#include "subsys/mdf/mdf_value.h"
 #include "channel_group_block.h"
+#include "subsys/mdf/mdf_value.h"
 
 namespace eerie_leap::subsys::mdf::mdf4 {
 
@@ -33,13 +33,13 @@ private:
         uint8_t variant_index;
     };
 
-    std::array<uint8_t, kMaxRecordBytes> record_{};     // the record ID bytes stay in front
+    std::array<uint8_t, kMaxRecordBytes> record_{}; // the record ID bytes stay in front
     std::array<Field, kMaxFields> fields_{};
     uint8_t field_count_ = 0;
     uint16_t record_size_ = 0;
     uint16_t invalidation_offset_ = 0;
     uint8_t invalidation_bytes_ = 0;
-    uint32_t invalidation_bits_ = 0;                    // the bits the group's channels use
+    uint32_t invalidation_bits_ = 0; // the bits the group's channels use
     uint64_t bytes_written_ = 0;
     ChannelGroupBlock* channel_group_ = nullptr;
 
@@ -62,9 +62,15 @@ public:
      */
     uint64_t Write(std::streambuf& stream, std::span<const MdfValue> values, uint32_t invalid_mask = 0);
 
-    [[nodiscard]] uint16_t GetRecordSizeBytes() const { return record_size_; }
-    [[nodiscard]] uint64_t GetBytesWritten() const { return bytes_written_; }
-    [[nodiscard]] const ChannelGroupBlock* GetChannelGroup() const { return channel_group_; }
+    [[nodiscard]] uint16_t GetRecordSizeBytes() const {
+        return record_size_;
+    }
+    [[nodiscard]] uint64_t GetBytesWritten() const {
+        return bytes_written_;
+    }
+    [[nodiscard]] const ChannelGroupBlock* GetChannelGroup() const {
+        return channel_group_;
+    }
 };
 
 } // namespace eerie_leap::subsys::mdf::mdf4

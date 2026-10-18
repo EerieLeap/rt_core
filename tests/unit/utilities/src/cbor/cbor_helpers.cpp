@@ -50,10 +50,7 @@ ZTEST(cbor_helpers, test_ToStdString) {
 ZTEST(cbor_helpers, test_ToStdString_is_not_null_terminator_bound) {
     // zcbor strings are length-delimited slices of the payload, not C strings.
     static constexpr char kPayload[] = "abcdefghij";
-    zcbor_string zstr {
-        .value = reinterpret_cast<const uint8_t*>(kPayload),
-        .len = 3
-    };
+    zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(kPayload), .len = 3 };
 
     auto result = CborHelpers::ToStdString(zstr);
 
@@ -63,10 +60,7 @@ ZTEST(cbor_helpers, test_ToStdString_is_not_null_terminator_bound) {
 
 ZTEST(cbor_helpers, test_ToStdString_keeps_embedded_nul) {
     static constexpr char kPayload[] = { 'a', '\0', 'b' };
-    zcbor_string zstr {
-        .value = reinterpret_cast<const uint8_t*>(kPayload),
-        .len = sizeof(kPayload)
-    };
+    zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(kPayload), .len = sizeof(kPayload) };
 
     auto result = CborHelpers::ToStdString(zstr);
 
@@ -78,10 +72,7 @@ ZTEST(cbor_helpers, test_ToStdString_keeps_embedded_nul) {
 
 ZTEST(cbor_helpers, test_ToStdString_empty) {
     static constexpr char kPayload[] = "unused";
-    zcbor_string zstr {
-        .value = reinterpret_cast<const uint8_t*>(kPayload),
-        .len = 0
-    };
+    zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(kPayload), .len = 0 };
 
     auto result = CborHelpers::ToStdString(zstr);
 
@@ -102,10 +93,7 @@ ZTEST(cbor_helpers, test_ToPmrString) {
 
 ZTEST(cbor_helpers, test_ToPmrString_copies_payload) {
     char payload[] = "original";
-    zcbor_string zstr {
-        .value = reinterpret_cast<const uint8_t*>(payload),
-        .len = strlen(payload)
-    };
+    zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(payload), .len = strlen(payload) };
 
     auto result = CborHelpers::ToPmrString(Mrm::GetDefaultPmr(), zstr);
     payload[0] = 'X';

@@ -5,12 +5,12 @@
 
 #include <zephyr/kernel.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
 #include "configuration/services/cbor_configuration_service.h"
+#include "utilities/memory/memory_resource_manager.h"
 
-#include "domain/configuration_domain/utilities/i_configuration_manager.h"
 #include "domain/configuration_domain/utilities/cbor_configuration_manager_base.h"
+#include "domain/configuration_domain/utilities/i_configuration_manager.h"
 #include "domain/logging_domain/control/configuration/parsers/logging_control_configuration_cbor_parser.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
 
@@ -18,16 +18,16 @@ namespace eerie_leap::domain::logging_domain::control::configuration {
 
 namespace config_service = eerie_leap::configuration::services;
 
-using eerie_leap::domain::configuration_domain::utilities::IConfigurationManager;
 using eerie_leap::domain::configuration_domain::utilities::CborConfigurationManagerBase;
+using eerie_leap::domain::configuration_domain::utilities::IConfigurationManager;
 using eerie_leap::domain::logging_domain::control::configuration::parsers::LoggingControlConfigurationCborParser;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
 
 // The stored logging triggers (ConfigurationService::Type::LoggingControl). The controller creates
 // it with the file name "logging_control_config" and registers it; the default is no triggers.
-class LoggingControlConfigurationManager
-    : public CborConfigurationManagerBase<LoggingControlConfiguration, CborLoggingControlConfig>,
-      public IConfigurationManager {
+class LoggingControlConfigurationManager :
+    public CborConfigurationManagerBase<LoggingControlConfiguration, CborLoggingControlConfig>,
+    public IConfigurationManager {
 private:
     LoggingControlConfigurationCborParser cbor_parser_;
 
@@ -40,13 +40,16 @@ private:
     // Logs what the handler throws: the configuration is stored by then.
     void NotifyUpdated();
 
-    eerie_memory::pmr_unique_ptr<CborLoggingControlConfig> Serialize(const LoggingControlConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration> Deserialize(const CborLoggingControlConfig& cbor_config) override;
+    eerie_memory::pmr_unique_ptr<CborLoggingControlConfig>
+    Serialize(const LoggingControlConfiguration& configuration) override;
+    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration>
+    Deserialize(const CborLoggingControlConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:
     explicit LoggingControlConfigurationManager(
-        std::unique_ptr<config_service::CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service);
+        std::unique_ptr<config_service::CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service
+    );
 
     // Called after a configuration has been stored through Update() or ApplyCborConfiguration(), not
     // on load, on the thread that stored it (an SMP apply: the configuration work queue). Callable
