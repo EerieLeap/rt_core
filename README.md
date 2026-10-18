@@ -28,6 +28,15 @@ the tree, `scripts/format.sh --fix` reformats it and `--changed` limits either t
 [`.clang-format-ignore`](.clang-format-ignore) lists generated and vendored code. The nested
 modules carry the same config, and CI fails if the copies drift.
 
+### Linting
+
+[`.clang-tidy`](.clang-tidy) is written for clang-tidy 23 (`clang-tidy-23`, already in the dev
+container). It needs a `native_sim` compile database: build the suites with twister, then run
+`scripts/tidy.sh -p twister-out/native_sim_native`; the script takes a twister output directory and
+collects every `compile_commands.json` below it. Waive a finding only with a named check and a reason,
+`// NOLINT(check-name): reason` (also `NOLINTNEXTLINE`, `NOLINTBEGIN`/`NOLINTEND`), never a bare
+`NOLINT` or a wildcard. The nested `expression_engine` carries the same config.
+
 ## Tests
 
 ```sh
