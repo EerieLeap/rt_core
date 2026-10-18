@@ -71,7 +71,7 @@ public:
     static BleService& GetInstance();
 
     bool Initialize();
-    bool Start() const;
+    static bool Start();
 };
 
 } // namespace eerie_leap::domain::ble_domain::services

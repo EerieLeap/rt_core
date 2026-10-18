@@ -30,7 +30,7 @@ private:
     ChannelGroupBlock* last_channel_group_{ nullptr };
 
 public:
-    DataGroupBlock(uint8_t record_id_size_bytes);
+    explicit DataGroupBlock(uint8_t record_id_size_bytes);
     ~DataGroupBlock() override;
     DataGroupBlock(const DataGroupBlock&) = delete;
     DataGroupBlock& operator=(const DataGroupBlock&) = delete;

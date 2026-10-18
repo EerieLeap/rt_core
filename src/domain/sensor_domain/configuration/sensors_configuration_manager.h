@@ -67,7 +67,7 @@ public:
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;
 
-    bool Update(const std::vector<std::shared_ptr<Sensor>>& sensors);
+    bool Update(const std::vector<std::shared_ptr<Sensor>>& sensors) override;
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 
     [[nodiscard]] int GetGpioChannelCount() const {

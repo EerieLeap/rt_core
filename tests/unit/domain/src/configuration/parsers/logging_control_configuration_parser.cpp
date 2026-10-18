@@ -59,10 +59,9 @@ LoggingControlConfiguration MakeConfiguration(std::vector<LoggingTrigger> trigge
 
 // Encodes a configuration the way the manager stores it.
 Bytes Encode(const LoggingControlConfiguration& configuration) {
-    LoggingControlConfigurationCborParser parser;
     CborSerializer<CborLoggingControlConfig> serializer;
 
-    const auto cbor_config = parser.Serialize(configuration);
+    const auto cbor_config = LoggingControlConfigurationCborParser::Serialize(configuration);
     const auto bytes = serializer.Serialize(*cbor_config);
 
     return { bytes.begin(), bytes.end() };
@@ -122,8 +121,7 @@ ZTEST(logging_control_configuration_parser, test_TriggersRoundTripThroughCbor) {
     const auto decoded = Decode(bytes);
     zassert_not_null(decoded.get(), "and decode");
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded);
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *decoded);
 
     AssertSame(configuration, *restored);
     zassert_true(
@@ -138,8 +136,7 @@ ZTEST(logging_control_configuration_parser, test_AnEmptyConfigurationRoundTrips)
     const auto bytes = Encode(configuration);
     zassert_true(bytes == K_EMPTY);
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
     zassert_true(restored->triggers.empty());
 }
 
@@ -152,12 +149,10 @@ ZTEST(logging_control_configuration_parser, test_TheEncodingIsStable) {
     zassert_true(Encode(MakeConfiguration({ MakeTrigger() })) == NO_SELECTOR, "No selector is int 0");
 
     // And the same bytes read back.
-    LoggingControlConfigurationCborParser parser;
-
-    const auto text = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(TEXT_SELECTOR));
+    const auto text = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(TEXT_SELECTOR));
     AssertSame(MakeConfiguration({ with_selector }), *text);
 
-    const auto none = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(NO_SELECTOR));
+    const auto none = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(NO_SELECTOR));
     AssertSame(MakeConfiguration({ MakeTrigger() }), *none);
 }
 
@@ -165,8 +160,7 @@ ZTEST(logging_control_configuration_parser, test_AnAbsentSelectorIsIgnoredWhatev
     // has_selector false with a text value: the value is dropped.
     const Bytes bytes = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
 
     zassert_equal(restored->triggers.size(), 1);
     zassert_true(std::holds_alternative<std::monostate>(restored->triggers[0].binding.selector_value));
@@ -215,8 +209,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     const auto bytes = Encode(configuration);
     zassert_false(bytes.empty(), "The size calculator must not undercount");
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
     AssertSame(configuration, *restored);
 
     // And with negative numbers and bools, which have their own sizes.
@@ -254,10 +247,9 @@ ZTEST(logging_control_configuration_parser, test_DeserializeValidates) {
     const auto decoded = Decode(bytes);
     zassert_not_null(decoded.get(), "The bytes are the schema's");
 
-    LoggingControlConfigurationCborParser parser;
     bool is_rejected = false;
     try {
-        parser.Deserialize(Mrm::GetDefaultPmr(), *decoded);
+        LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *decoded);
     } catch(const std::invalid_argument&) {
         is_rejected = true;
     }
@@ -266,11 +258,9 @@ ZTEST(logging_control_configuration_parser, test_DeserializeValidates) {
 }
 
 ZTEST(logging_control_configuration_parser, test_SerializeValidates) {
-    LoggingControlConfigurationCborParser parser;
-
     bool is_rejected = false;
     try {
-        parser.Serialize(MakeConfiguration({ LoggingTrigger{} }));
+        LoggingControlConfigurationCborParser::Serialize(MakeConfiguration({ LoggingTrigger{} }));
     } catch(const std::invalid_argument&) {
         is_rejected = true;
     }

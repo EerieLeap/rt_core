@@ -3,6 +3,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <zephyr/kernel.h>
@@ -75,9 +76,9 @@ private:
     Handler user_handler_;
 
 public:
-    WorkQueueTask(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler, const Handler& user_handler) :
+    WorkQueueTask(k_work_q* work_q, k_work_sync* sync, k_work_handler_t handler, Handler user_handler) :
         WorkQueueTaskBase(work_q, sync, handler),
-        user_handler_(user_handler) {}
+        user_handler_(std::move(user_handler)) {}
 
     ~WorkQueueTask() override = default;
 
@@ -120,14 +121,14 @@ public:
         k_work_q* work_q,
         k_work_sync* sync,
         k_work_handler_t handler,
-        const Handler& user_handler,
+        Handler user_handler,
         k_mutex* runner_tasks_mutex,
         std::map<void*, std::unique_ptr<WorkQueueRunnerTask>>& runner_tasks,
         std::vector<std::unique_ptr<WorkQueueRunnerTask>>& completed_tasks
     ) :
         WorkQueueTaskBase(work_q, sync, handler),
         runner_tasks_mutex_(runner_tasks_mutex),
-        user_handler_(user_handler),
+        user_handler_(std::move(user_handler)),
         runner_tasks_(runner_tasks),
         completed_tasks_(completed_tasks) {}
 

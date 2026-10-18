@@ -25,7 +25,7 @@ ManagementController::ManagementController(
     sd_fs_service_(std::move(sd_fs_service))
 #ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
     ,
-    assets_manager_(std::move(assets_manager))
+    assets_manager_(assets_manager)
 #endif
 {
 }

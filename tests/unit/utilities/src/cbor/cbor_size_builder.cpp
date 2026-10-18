@@ -125,11 +125,11 @@ ZTEST(cbor_size_builder, test_Reset) {
     zassert_equal(builder.Build(), 1);
 }
 
-ZTEST(cbor_size_builder, test_implicit_size_t_conversion) {
+ZTEST(cbor_size_builder, test_explicit_size_t_conversion) {
     CborSizeBuilder builder;
     builder.AddUint(24).AddBool(true);
 
-    const size_t size = builder;
+    const auto size = static_cast<size_t>(builder);
 
     zassert_equal(size, builder.Build());
     zassert_equal(size, 3);

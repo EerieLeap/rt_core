@@ -29,6 +29,7 @@ public:
     HeapAllocator() = default;
 
     template<typename U>
+    // NOLINTNEXTLINE(google-explicit-constructor): the rebind conversion between allocator types must be implicit (allocator requirements)
     constexpr HeapAllocator(const HeapAllocator<U>& obj) noexcept {}
 
     T* allocate(size_t n, size_t align = ALIGNMENT) {

@@ -156,6 +156,7 @@ struct Readings {
             reading.source = ReadingSource::PROCESSING;
             if(values[i].has_value()) {
                 reading.status = ReadingStatus::PROCESSED;
+                // NOLINTNEXTLINE(bugprone-optional-value-conversion): the plain copy of the optional trips GCC's maybe-uninitialized
                 reading.value = *values[i];
             }
             frame->AddOrUpdateReading(reading);

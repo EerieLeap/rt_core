@@ -27,7 +27,7 @@ private:
     static bool IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatus to);
 
 public:
-    CdmpStatusMachine(CdmpDeviceStatus initial_status);
+    explicit CdmpStatusMachine(CdmpDeviceStatus initial_status);
 
     // Status management
     void SetStatus(CdmpDeviceStatus new_status, bool force = false);

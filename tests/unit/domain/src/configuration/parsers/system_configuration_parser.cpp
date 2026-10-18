@@ -28,12 +28,10 @@ static void SystemConfigurationParserCompareSystemConfigurations(
 }
 
 ZTEST(system_configuration_parser, test_CborSerializeDeserialize) {
-    SystemConfigurationCborParser system_configuration_cbor_parser;
-
     auto system_configuration = SystemConfigurationParserGetTestConfiguration();
 
-    const auto serialized_system_configuration = system_configuration_cbor_parser.Serialize(system_configuration);
-    auto deserialized_system_configuration = system_configuration_cbor_parser.Deserialize(
+    const auto serialized_system_configuration = SystemConfigurationCborParser::Serialize(system_configuration);
+    auto deserialized_system_configuration = SystemConfigurationCborParser::Deserialize(
         Mrm::GetDefaultPmr(), *serialized_system_configuration.get()
     );
 

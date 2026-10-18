@@ -10,7 +10,7 @@ struct WorkQueueLoadMetrics {
     atomic_t total_load_ms{ ATOMIC_INIT(0) };
     uint64_t last_update_ms;
 
-    WorkQueueLoadMetrics(k_work_q* work_queue) :
+    explicit WorkQueueLoadMetrics(k_work_q* work_queue) :
         work_queue(work_queue),
         last_update_ms(k_uptime_get()) {}
 

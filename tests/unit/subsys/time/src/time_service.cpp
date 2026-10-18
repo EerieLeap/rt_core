@@ -90,7 +90,7 @@ ZTEST(time_service, test_GetTimeSinceBoot_only_queries_the_boot_provider) {
 ZTEST(time_service, test_Initialize_does_not_query_the_providers) {
     const auto fixture = MakeFixture();
 
-    fixture.service->Initialize();
+    TimeService::Initialize();
 
     zassert_equal(fixture.rtc_provider->Calls(), 0);
     zassert_equal(fixture.boot_provider->Calls(), 0);

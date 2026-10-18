@@ -38,7 +38,7 @@ private:
     static WorkQueueTaskResult ProcessWorkTask(CfbTask* task);
 
 public:
-    Cfb(const device* display_dev);
+    explicit Cfb(const device* display_dev);
     ~Cfb() = default;
 
     bool Initialize();

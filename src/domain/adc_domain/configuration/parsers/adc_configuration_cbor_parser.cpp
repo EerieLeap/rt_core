@@ -39,7 +39,7 @@ static void WarnSaturatedValues(size_t channel, const AdcCalibrator& calibrator)
     }
 }
 
-PmrUniquePtr<CborAdcConfig> AdcConfigurationCborParser::Serialize(const AdcConfiguration& configuration) {
+PmrUniquePtr<CborAdcConfig> AdcConfigurationCborParser::Serialize(const AdcConfiguration& configuration) const {
     // Also guarantees every channel a calibrator with a strictly increasing table.
     AdcConfigurationValidator::Validate(configuration, channel_count_);
     auto config = make_unique_pmr<CborAdcConfig>(Mrm::GetExtPmr());
@@ -67,7 +67,7 @@ PmrUniquePtr<CborAdcConfig> AdcConfigurationCborParser::Serialize(const AdcConfi
 }
 
 PmrUniquePtr<AdcConfiguration>
-AdcConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborAdcConfig& config) {
+AdcConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborAdcConfig& config) const {
     // Before narrowing: 65537 stored would otherwise load as 1.
     AdcConfigurationValidator::ValidateSamples(config.samples);
     AdcConfigurationValidator::ValidateChannelCount(config.CborAdcChannelConfig_m.size(), channel_count_);

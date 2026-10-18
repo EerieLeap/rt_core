@@ -49,7 +49,7 @@ public:
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;
 
-    bool Update(const AdcConfiguration& configuration);
+    bool Update(const AdcConfiguration& configuration) override;
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 
     std::shared_ptr<IAdcManager> GetAdcManager() const {

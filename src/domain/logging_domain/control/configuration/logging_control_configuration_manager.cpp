@@ -83,13 +83,13 @@ bool LoggingControlConfigurationManager::ApplyCborConfiguration(
 PmrUniquePtr<CborLoggingControlConfig>
 LoggingControlConfigurationManager::Serialize(const LoggingControlConfiguration& configuration) {
 
-    return cbor_parser_.Serialize(configuration);
+    return LoggingControlConfigurationCborParser::Serialize(configuration);
 }
 
 PmrUniquePtr<LoggingControlConfiguration>
 LoggingControlConfigurationManager::Deserialize(const CborLoggingControlConfig& cbor_config) {
 
-    return cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config);
+    return LoggingControlConfigurationCborParser::Deserialize(Mrm::GetExtPmr(), cbor_config);
 }
 
 bool LoggingControlConfigurationManager::CreateDefaultConfiguration() {

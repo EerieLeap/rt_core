@@ -62,11 +62,11 @@ bool LoggingConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t
 }
 
 PmrUniquePtr<CborLoggingConfig> LoggingConfigurationManager::Serialize(const LoggingConfiguration& configuration) {
-    return cbor_parser_.Serialize(configuration);
+    return LoggingConfigurationCborParser::Serialize(configuration);
 }
 
 PmrUniquePtr<LoggingConfiguration> LoggingConfigurationManager::Deserialize(const CborLoggingConfig& cbor_config) {
-    return cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config);
+    return LoggingConfigurationCborParser::Deserialize(Mrm::GetExtPmr(), cbor_config);
 }
 
 bool LoggingConfigurationManager::CreateDefaultConfiguration() {

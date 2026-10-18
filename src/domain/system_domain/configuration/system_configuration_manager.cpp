@@ -23,7 +23,7 @@ SystemConfigurationManager::SystemConfigurationManager(
     const auto configuration = Get();
 
     LOG_INF(
-        "HW Version: %s, SW Version: %s", configuration->GetFormattedHwVersion().c_str(),
+        "HW Version: %s, SW Version: %s", SystemConfiguration::GetFormattedHwVersion().c_str(),
         configuration->GetFormattedSwVersion().c_str()
     );
     LOG_INF("Device ID: %llu", configuration->device_id);
@@ -47,11 +47,11 @@ bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
 }
 
 PmrUniquePtr<CborSystemConfig> SystemConfigurationManager::Serialize(const SystemConfiguration& configuration) {
-    return cbor_parser_.Serialize(configuration);
+    return SystemConfigurationCborParser::Serialize(configuration);
 }
 
 PmrUniquePtr<SystemConfiguration> SystemConfigurationManager::Deserialize(const CborSystemConfig& cbor_config) {
-    return cbor_parser_.Deserialize(Mrm::GetDefaultPmr(), cbor_config);
+    return SystemConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), cbor_config);
 }
 
 bool SystemConfigurationManager::CreateDefaultConfiguration() {

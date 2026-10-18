@@ -269,6 +269,7 @@ bool LoggingController::HasDependencies() const {
     // a controller built on a service that holds one would report success while every apply went to
     // a manager nothing reacts to.
     if(configuration_service_ != nullptr) {
+        // NOLINTNEXTLINE(misc-const-correctness): reassigned when CONFIG_EERIE_LEAP_DOMAIN_LOGGING is set, which this build is not
         bool is_registered = configuration_service_->IsRegistered(ConfigurationService::Type::LoggingControl);
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
         is_registered = is_registered || configuration_service_->IsRegistered(ConfigurationService::Type::Logging);

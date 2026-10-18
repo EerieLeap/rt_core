@@ -109,7 +109,7 @@ public:
         return size_;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return size_;
     }
 

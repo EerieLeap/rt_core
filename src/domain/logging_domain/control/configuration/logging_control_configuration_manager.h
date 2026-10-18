@@ -29,8 +29,6 @@ class LoggingControlConfigurationManager :
     public CborConfigurationManagerBase<LoggingControlConfiguration, CborLoggingControlConfig>,
     public IConfigurationManager {
 private:
-    LoggingControlConfigurationCborParser cbor_parser_;
-
     // The controller sets and clears the handler while a store on another thread may be calling it.
     // A store copies the pointer under the lock and calls it outside, so a cleared handler finishes
     // the call it started on its own reference, and a call allocates nothing.
@@ -59,7 +57,7 @@ public:
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;
 
-    bool Update(const LoggingControlConfiguration& configuration);
+    bool Update(const LoggingControlConfiguration& configuration) override;
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 };
 

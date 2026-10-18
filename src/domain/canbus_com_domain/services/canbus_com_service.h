@@ -87,7 +87,7 @@ public:
     using DeviceEventHandler = CdmpNetworkService::DeviceEventHandler;
     using HeartbeatHandler = CdmpNetworkService::HeartbeatHandler;
 
-    CanbusComService(std::shared_ptr<CanbusService> canbus_service);
+    explicit CanbusComService(std::shared_ptr<CanbusService> canbus_service);
     ~CanbusComService() override;
 
     CanbusComService(const CanbusComService&) = delete;

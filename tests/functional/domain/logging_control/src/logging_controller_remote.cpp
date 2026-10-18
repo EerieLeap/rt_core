@@ -43,7 +43,7 @@ struct Fixture {
         harness.Settle();
     }
 
-    Parts MakeParts() {
+    Parts MakeParts() const {
         Parts parts;
         parts.com = harness.com;
 
@@ -313,7 +313,7 @@ ZTEST(logging_controller_remote, test_TriggersAreCheckedAgainstTheSensors) {
     configuration.triggers.push_back(std::move(status));
 
     LogCounter::Get().Watch("logging_trigger_set_logger");
-    F().Start([&configuration](std::shared_ptr<LoggingControlConfigurationManager> manager) {
+    F().Start([&configuration](const std::shared_ptr<LoggingControlConfigurationManager>& manager) {
         zassert_true(manager->Update(configuration), "The triggers are stored");
     });
     ZASSERT_LOGGED(2, "A trigger on a missing sensor and one on a disabled sensor are logged, the rest are not");

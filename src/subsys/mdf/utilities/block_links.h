@@ -72,7 +72,7 @@ public:
         return std::exchange(links_[static_cast<size_t>(INDEX)], nullptr);
     }
 
-    const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
+    std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
         std::vector<std::shared_ptr<ISerializableBlock>> links;
         links.reserve(links_.size());
         for(const auto& link : links_)

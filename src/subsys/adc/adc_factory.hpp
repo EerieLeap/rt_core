@@ -25,10 +25,11 @@ private:
     DtAdcProvider dt_adc_provider_;
 
 public:
-    AdcFactory(DtAdcProvider dt_adc_provider) :
+    explicit AdcFactory(DtAdcProvider dt_adc_provider) :
         dt_adc_provider_(std::move(dt_adc_provider)) {}
 
     // One device per device-tree ADC: emulated, then real; a simulator when there is none.
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static): reads dt_adc_provider_ when CONFIG_ADC or CONFIG_ADC_EMUL is set, which this build is not
     std::shared_ptr<IAdcManager> Create() {
         std::vector<std::shared_ptr<IAdc>> adcs;
 

@@ -13,7 +13,7 @@ private:
     T error_ = 0;
 
 public:
-    EmaFilter(T value) :
+    explicit EmaFilter(T value) :
         filter_(value),
         error_(0) {}
 

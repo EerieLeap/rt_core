@@ -85,7 +85,7 @@ private:
     void Dispatch(const EventMessage& event);
 
 protected:
-    EventChannel(std::string name, size_t max_queued_events = DEFAULT_MAX_QUEUED_EVENTS);
+    explicit EventChannel(std::string name, size_t max_queued_events = DEFAULT_MAX_QUEUED_EVENTS);
 
 public:
     ~EventChannel() override = default;
@@ -160,11 +160,11 @@ template<
 AnySubscription CreateScopedSubscription(
     ChannelType& channel,
     typename ChannelType::EventTypeEnum type,
-    FilterType filter,
+    const FilterType& filter,
     EventHandler<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum> handler
 ) {
 
-    auto subscription = channel.Subscribe(type, std::move(filter), std::move(handler));
+    auto subscription = channel.Subscribe(type, filter, std::move(handler));
     if(!subscription)
         return nullptr;
 

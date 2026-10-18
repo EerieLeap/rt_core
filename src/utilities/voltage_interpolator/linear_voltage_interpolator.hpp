@@ -57,11 +57,11 @@ public:
         return y0 + ratio * (y1 - y0);
     }
 
-    const std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
+    std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
         return calibration_table_;
     }
 
-    const InterpolationMethod GetInterpolationMethod() const override {
+    InterpolationMethod GetInterpolationMethod() const override {
         return INTERPOLATION_METHOD;
     }
 };

@@ -33,7 +33,7 @@ struct SystemConfiguration {
         device_id(other.device_id),
         build_number(other.build_number) {}
 
-    std::string GetFormattedHwVersion() const {
+    static std::string GetFormattedHwVersion() {
         const uint8_t hw_version_major = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR;
         const uint8_t hw_version_minor = CONFIG_EERIE_LEAP_HW_VERSION_MINOR;
         const uint16_t hw_version_patch = CONFIG_EERIE_LEAP_HW_VERSION_PATCH;

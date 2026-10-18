@@ -27,7 +27,7 @@ int BleController::Initialize() {
 }
 
 int BleController::Start() {
-    return ble_service_->Start() ? 0 : -1;
+    return BleService::Start() ? 0 : -1;
 }
 
 } // namespace eerie_leap::controllers

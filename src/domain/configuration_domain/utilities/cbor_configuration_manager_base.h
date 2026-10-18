@@ -251,8 +251,9 @@ public:
         return CurrentConfiguration();
     }
 
-    // A configuration update: reports to the stored handler (SetStoredHandler()).
-    bool Update(const TConfiguration& configuration) {
+    // A configuration update: reports to the stored handler (SetStoredHandler()). Virtual, like
+    // ApplyCborConfiguration(), so a manager adds its updated handler by overriding it.
+    virtual bool Update(const TConfiguration& configuration) {
         if(!Store(configuration))
             return false;
 

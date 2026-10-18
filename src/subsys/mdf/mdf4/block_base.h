@@ -24,7 +24,7 @@ protected:
     // uint64_t link_count_;                // 8 bytes, Number of links
 
 public:
-    explicit BlockBase(const std::string& id);
+    explicit BlockBase(std::string id);
     ~BlockBase() override = default;
 
     std::string GetId() const override;

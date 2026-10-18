@@ -124,7 +124,7 @@ bool BleService::InitializeAccessPoint() {
     return true;
 }
 
-bool BleService::Start() const {
+bool BleService::Start() {
     if(!is_initialized)
         return false;
 

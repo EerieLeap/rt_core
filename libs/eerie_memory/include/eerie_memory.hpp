@@ -27,7 +27,7 @@ private:
     // size_t alignment_;
 
 public:
-    PmrDeleter(std::pmr::memory_resource* mr = std::pmr::get_default_resource()) :
+    explicit PmrDeleter(std::pmr::memory_resource* mr = std::pmr::get_default_resource()) :
         mr_(mr) {}
 
     PmrDeleter(PmrDeleter const&) noexcept = default;
@@ -38,12 +38,13 @@ public:
 
     template<class U>
         requires std::convertible_to<U*, T*>
+    // NOLINTNEXTLINE(google-explicit-constructor): the converting deleter must be implicit so unique_ptr<Derived> converts to unique_ptr<Base>
     PmrDeleter(const PmrDeleter<U>& other) noexcept :
         mr_(other.GetMemoryResource()) {}
 
     template<class U>
         requires std::convertible_to<U*, T*>
-    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved): the deleter only holds a raw pointer, moving it is copying it
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved, google-explicit-constructor): the deleter only holds a raw pointer, moving it is copying it; the converting deleter must be implicit so unique_ptr<Derived> converts to unique_ptr<Base>
     PmrDeleter(PmrDeleter<U>&& other) noexcept :
         mr_(other.GetMemoryResource()) {}
 
