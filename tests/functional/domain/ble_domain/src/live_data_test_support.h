@@ -156,7 +156,7 @@ struct Readings {
             reading.source = ReadingSource::PROCESSING;
             if(values[i].has_value()) {
                 reading.status = ReadingStatus::PROCESSED;
-                reading.value = values[i];
+                reading.value = *values[i];
             }
             frame->AddOrUpdateReading(reading);
         }
