@@ -1,0 +1,33 @@
+name: Format
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: format-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true # only for comparing the nested modules' configs
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # The same version the sources are formatted with; majors differ in wrapping.
+      - run: pip install clang-format==23.1.1
+
+      - run: scripts/format.sh
+
+      - name: Nested modules use the same style
+        run: |
+          for module in modules/expression_engine modules/zephyr_lua; do
+              cmp .clang-format "$module/.clang-format"
+          done
