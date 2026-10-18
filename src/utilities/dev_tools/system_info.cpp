@@ -20,7 +20,7 @@ void SystemInfo::PrintThreadInfo(int cpu) {
 }
 
 static const char* stack_info_thread_name_filter = nullptr;
-[[maybe_unused]] static void PrintStackInfoCallback(const thread_analyzer_info* info) {
+[[maybe_unused]] static void PrintStackInfoCallback(thread_analyzer_info* info) {
     if(stack_info_thread_name_filter != nullptr && strcmp(stack_info_thread_name_filter, info->name) != 0) {
         return;
     }
@@ -76,7 +76,7 @@ void SystemInfo::PrintStackInfo(int cpu, const char* thread_name) {
 }
 
 static const char* cpu_info_thread_name_filter = nullptr;
-[[maybe_unused]] static void PrintCpuInfoCallback(const thread_analyzer_info* info) {
+[[maybe_unused]] static void PrintCpuInfoCallback(thread_analyzer_info* info) {
     if(cpu_info_thread_name_filter != nullptr && strcmp(cpu_info_thread_name_filter, info->name) != 0)
         return;
 

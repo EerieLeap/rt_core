@@ -85,12 +85,16 @@ public:
      * @throws std::runtime_error if the transport refuses the handler.
      */
     explicit NetworkStateImporter(std::shared_ptr<INetworkStateTransport> transport) :
-        transport_(std::move(transport)),
-        handler_id_(
-            transport_->RegisterStateHandler(TDescriptor::STATE_TYPE, [this](CanbusComStateType /*state_type*/) {
+        transport_(std::move(transport)) {
+
+        // In the body, not the initializer list: the handler may run on the CDMP work queue as soon as it
+        // is registered, so every member it touches has to be constructed by then.
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): see above.
+        handler_id_ = transport_->RegisterStateHandler(
+            TDescriptor::STATE_TYPE, [this](CanbusComStateType /*state_type*/) {
                 OnStatesChanged();
-            })
-        ) {
+            }
+        );
 
         if(handler_id_ < 0)
             throw std::runtime_error("Network state importer failed to register its state handler");
