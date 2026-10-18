@@ -16,8 +16,7 @@ private:
 public:
     SubscriptionHandle(size_t id, EventTypeEnum type) :
         id_(id),
-        event_type_(type),
-    {}
+        event_type_(type) {}
 
     SubscriptionHandle(const SubscriptionHandle&) = delete;
     SubscriptionHandle& operator=(const SubscriptionHandle&) = delete;

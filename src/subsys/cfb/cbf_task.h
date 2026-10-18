@@ -14,8 +14,7 @@ struct CfbTask {
     std::function<void()> animation_handler;
     uint32_t frame_rate;
 
-    CfbTask() :
-    {}
+    CfbTask() {}
 };
 
 } // namespace eerie_leap::subsys::cfb

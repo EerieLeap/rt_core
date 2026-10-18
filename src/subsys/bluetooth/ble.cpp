@@ -178,7 +178,7 @@ void Recycled() {
     Ble::StartAdvertising();
 }
 
-void ParamertersUpdated(const bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
+void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
     const double connection_interval_ms = interval * 1.25;
     const uint16_t supervision_timeout_ms = timeout * 10;
 
@@ -190,7 +190,7 @@ void ParamertersUpdated(const bt_conn* conn, uint16_t interval, uint16_t latency
 
 // NOTE: Any logging from this callback will cause a crash,
 // thus it's disabled.
-void DataLengthUpdated(const bt_conn* conn, const bt_conn_le_data_len_info* info) {
+void DataLengthUpdated(bt_conn* conn, bt_conn_le_data_len_info* info) {
     const uint16_t tx_len = info->tx_max_len;
     const uint16_t tx_time = info->tx_max_time;
     const uint16_t rx_len = info->rx_max_len;

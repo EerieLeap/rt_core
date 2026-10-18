@@ -32,9 +32,7 @@ constexpr uint32_t MAX_INVALIDATION_BITS = INVALIDATION_BYTES * 8;
 } // namespace
 
 Mdf4File::Mdf4File(Mdf4FileOptions options) :
-    options_(options),
-    ,
-{
+    options_(options) {
 
     const auto id_size = options_.record_id_size_bytes;
     if(id_size != 1 && id_size != 2 && id_size != 4 && id_size != 8)

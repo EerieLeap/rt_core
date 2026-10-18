@@ -94,7 +94,7 @@ inline Bytes MakeEchoRequest(std::string_view text, uint8_t sequence) {
 }
 
 inline bool Contains(const Bytes& data, const Bytes& part) {
-    return std::ranges::search(data, , part, ) != data.end();
+    return !std::ranges::search(data, part).empty();
 }
 
 inline bool IsEchoResponse(const std::optional<Bytes>& packet, std::string_view text, uint8_t sequence) {

@@ -198,7 +198,7 @@ struct StateFixture {
             const CanFilter filter = can_id_manager->GetReceiveFilter(
                 CanId::Standard(can_id_manager->GetBaseCanId() + offset)
             );
-            if(std::ranges::find(filters, , filter) == filters.end())
+            if(std::ranges::find(filters, filter) == filters.end())
                 filters.push_back(filter);
         }
 
@@ -206,7 +206,7 @@ struct StateFixture {
             const int handler_id = (*canbus)->RegisterFrameReceivedHandler(
                 filter, [this, recorded_offsets](const CanFrame& frame) {
                     const uint32_t offset = frame.id - can_id_manager->GetBaseCanId();
-                    if(std::ranges::find(recorded_offsets, , offset) != recorded_offsets.end())
+                    if(std::ranges::find(recorded_offsets, offset) != recorded_offsets.end())
                         bus_frames.Add(offset, frame);
                 }
             );

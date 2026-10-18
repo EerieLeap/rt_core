@@ -8,9 +8,7 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 FileHistoryBlock::FileHistoryBlock() :
     BlockBase("FH"),
-    ,
-    dst_offset_min_(0),
-{
+    dst_offset_min_(0) {
 
     time_flags_ = 0;
 

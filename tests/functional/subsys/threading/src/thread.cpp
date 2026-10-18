@@ -25,9 +25,7 @@ private:
     atomic_t exits_{ ATOMIC_INIT(0) };
 
 public:
-    BlockingWorker() :
-        ,
-    {
+    BlockingWorker() {
         k_sem_init(&entered_, 0, K_SEM_MAX_LIMIT);
         k_sem_init(&resume_, 0, K_SEM_MAX_LIMIT);
     }
@@ -63,9 +61,7 @@ private:
 
 public:
     explicit SleepingWorker(int sleep_ms) :
-        sleep_ms_(sleep_ms),
-        ,
-    {}
+        sleep_ms_(sleep_ms) {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);
@@ -89,8 +85,7 @@ private:
 
 public:
     explicit ThrowingWorker(bool throw_std_exception) :
-        throw_std_exception_(throw_std_exception),
-    {}
+        throw_std_exception_(throw_std_exception) {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);

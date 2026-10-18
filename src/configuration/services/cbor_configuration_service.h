@@ -258,7 +258,8 @@ public:
         task_load_.instance = this;
         k_work_init(&task_load_.work, WorkTaskLoad);
 
-        const auto funcs = cbor::CborTraitRegistry::Get<T>();
+        // Fails fast when T has no registered CBOR traits.
+        static_cast<void>(cbor::CborTraitRegistry::Get<T>());
 
         if(!fs_service_->Exists(configuration_dir_))
             fs_service_->CreateDirectory(configuration_dir_);

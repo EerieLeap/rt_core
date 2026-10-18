@@ -209,7 +209,7 @@ void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
     std::vector<bool> reached(count);
     std::vector<size_t> pending;
     for(size_t i = 0; i < count; i++) {
-        std::ranges::fill(reached, , false);
+        std::ranges::fill(reached, false);
         pending.assign(direct[i].begin(), direct[i].end());
 
         while(!pending.empty()) {

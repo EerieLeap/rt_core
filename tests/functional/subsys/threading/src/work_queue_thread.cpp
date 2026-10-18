@@ -23,7 +23,6 @@ struct TaskProbe {
     int reschedules;
 
     explicit TaskProbe(int reschedules = 0) :
-        ,
         reschedules(reschedules) {
         k_sem_init(&finished, 0, K_SEM_MAX_LIMIT);
     }

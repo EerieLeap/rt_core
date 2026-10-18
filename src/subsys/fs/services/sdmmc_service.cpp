@@ -20,9 +20,7 @@ using eerie_leap::subsys::threading::ScopedMutex;
 
 SdmmcService::SdmmcService(fs_mount_t* mountpoint, const char* disk_name) :
     FsService(mountpoint),
-    disk_name_(disk_name),
-    ,
-{
+    disk_name_(disk_name) {
 
     k_sem_init(&sd_monitor_stop_sem_, 0, 1);
     k_mutex_init(&handler_mutex_);

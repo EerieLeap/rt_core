@@ -191,7 +191,7 @@ void LoggingTriggerSet::OnConfigurationUpdated(const SelectorResolver& is_select
                 is_known[i] = is_selector_known(triggers_[i]->binding);
         } catch(...) {
             // Withdraws nothing, but the baselines below are set all the same.
-            std::ranges::fill(is_known, , true);
+            std::ranges::fill(is_known, true);
             resolver_failure = std::current_exception();
         }
     }

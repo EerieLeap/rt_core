@@ -159,9 +159,11 @@ private:
     }
 
     std::optional<SensorSlot> FindSlotLocked(uint32_t sensor_id_hash) const {
-        const auto it = std::ranges::lower_bound(index_, , sensor_id_hash, [](const IndexEntry& entry, uint32_t hash) {
-            return entry.sensor_id_hash < hash;
-        });
+        const auto it = std::lower_bound(
+            index_.begin(), index_.end(), sensor_id_hash, [](const IndexEntry& entry, uint32_t hash) {
+                return entry.sensor_id_hash < hash;
+            }
+        );
 
         if(it == index_.end() || it->sensor_id_hash != sensor_id_hash)
             return std::nullopt;
@@ -182,7 +184,7 @@ private:
             slot.is_updated = false;
         }
 
-        std::ranges::fill(values_, , kNoValue);
+        std::ranges::fill(values_, kNoValue);
 
         for(auto& can_frame : can_frames_)
             can_frame = CanFrame{};
@@ -247,7 +249,7 @@ public:
                 slots_[i].can_frame_index = static_cast<uint16_t>(can_frame_count++);
         }
 
-        std::ranges::sort(index_, , [](const IndexEntry& a, const IndexEntry& b) {
+        std::ranges::sort(index_, [](const IndexEntry& a, const IndexEntry& b) {
             return a.sensor_id_hash < b.sensor_id_hash;
         });
 

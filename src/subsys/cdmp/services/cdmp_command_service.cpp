@@ -21,8 +21,6 @@ CdmpCommandService::CdmpCommandService(
     std::shared_ptr<WorkQueueThread> work_queue_thread
 ) :
     CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
-    ,
-    ,
     work_queue_thread_(std::move(work_queue_thread)) {
 
     k_mutex_init(&command_handlers_mutex_);

@@ -86,7 +86,7 @@ public:
                 return table.back().value;
         }
 
-        const auto it = std::ranges::upper_bound(table, , voltage, [](float val, const CalibrationData& d) {
+        const auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
             return val < d.voltage;
         });
 

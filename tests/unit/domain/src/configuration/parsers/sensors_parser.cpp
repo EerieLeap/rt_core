@@ -318,7 +318,7 @@ size_t OffsetAfterTstr(std::span<const uint8_t> bytes, std::string_view text) {
     encoded.push_back(static_cast<uint8_t>(0x60 + text.size()));
     encoded.insert(encoded.end(), text.begin(), text.end());
 
-    const auto found = std::ranges::search(bytes, , encoded, );
+    const auto found = std::search(bytes.begin(), bytes.end(), encoded.begin(), encoded.end());
     zassert_true(found != bytes.end(), "%s is not encoded", std::string(text).c_str());
 
     return static_cast<size_t>(found - bytes.begin()) + encoded.size();

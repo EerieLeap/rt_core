@@ -1096,7 +1096,7 @@ inline std::vector<uint8_t> ReadTheLogFile(FsService& fs_service) {
 }
 
 inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view text) {
-    return std::ranges::search(content, , text, ) != content.end();
+    return !std::ranges::search(content, text).empty();
 }
 
 // The log files of the data directory: one per session.

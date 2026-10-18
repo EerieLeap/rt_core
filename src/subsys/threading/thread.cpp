@@ -15,10 +15,7 @@ Thread::Thread(
     std::pmr::memory_resource* resource
 ) :
     ThreadBase(std::move(name), stack_size, priority, is_cooperative, resource),
-    instance_(instance),
-    ,
-    ,
-{}
+    instance_(instance) {}
 
 Thread::~Thread() {
     Join();

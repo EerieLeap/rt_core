@@ -44,7 +44,7 @@ void EventChannel<TEventType, TPayloadType>::OnRegistered(IEventBus* bus) {
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 template<EventFilter<TEventType, TPayloadType> FilterType>
 std::expected<SubscriptionHandle<TEventType>, std::string>
-EventChannel<TEventType, TPayloadType>::Subscribe(TEventType type, FilterType filter, EventHandler<TEventType, TPayloadType> handler) {
+EventChannel<TEventType, TPayloadType>::Subscribe(TEventType type, const FilterType& filter, EventHandler<TEventType, TPayloadType> handler) {
     ScopedMutex guard(subscribers_mutex_);
 
     try {

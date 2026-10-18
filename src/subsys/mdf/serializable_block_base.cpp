@@ -6,9 +6,7 @@
 
 namespace eerie_leap::subsys::mdf {
 
-SerializableBlockBase::SerializableBlockBase() :
-    ,
-{}
+SerializableBlockBase::SerializableBlockBase() = default;
 
 uint64_t SerializableBlockBase::GetSerializedSize() const {
     return GetBlockSize();

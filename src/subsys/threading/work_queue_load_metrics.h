@@ -12,8 +12,6 @@ struct WorkQueueLoadMetrics {
 
     WorkQueueLoadMetrics(k_work_q* work_queue) :
         work_queue(work_queue),
-        ,
-        ,
         last_update_ms(k_uptime_get()) {}
 
     void OnWorkComplete(uint32_t execution_time_ms) {

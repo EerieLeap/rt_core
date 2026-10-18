@@ -34,7 +34,7 @@ public:
         }
 
         // Binary search for the correct interval
-        auto upper = std::ranges::lower_bound(table, , voltage, [](const CalibrationData& data, float v) {
+        auto upper = std::lower_bound(table.begin(), table.end(), voltage, [](const CalibrationData& data, float v) {
             return data.voltage < v;
         });
 

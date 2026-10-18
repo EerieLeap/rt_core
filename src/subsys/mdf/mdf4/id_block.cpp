@@ -12,8 +12,7 @@ using namespace eerie_leap::utilities::string;
 
 IdBlock::IdBlock() :
     version_str_("4.10"),
-    program_id_("EL"),
-{
+    program_id_("EL") {
 
     standard_flags_ = 0;
     custom_flags_ = 0;

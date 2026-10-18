@@ -189,7 +189,7 @@ inline bool IsUnfinalized(const std::vector<uint8_t>& content) {
 }
 
 inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view text) {
-    return std::ranges::search(content, , text, ) != content.end();
+    return !std::ranges::search(content, text).empty();
 }
 
 // A property of the header comment, as the logger writes LoggerMetadata.

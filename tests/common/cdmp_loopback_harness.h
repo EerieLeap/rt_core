@@ -242,7 +242,7 @@ protected:
         std::vector<CanFilter> filters;
         for(uint32_t offset = MANAGEMENT; offset <= STATE_CHANGE_RESPONSE; offset++) {
             const CanFilter filter = ids.GetReceiveFilter(CanId::Standard(ids.GetBaseCanId() + offset));
-            if(std::ranges::find(filters, , filter) == filters.end())
+            if(std::ranges::find(filters, filter) == filters.end())
                 filters.push_back(filter);
         }
 

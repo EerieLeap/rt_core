@@ -13,8 +13,7 @@ namespace eerie_leap::subsys::fs::services {
 using namespace eerie_leap::utilities::string;
 
 FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode) :
-    fs_service_(fs_service),
-{
+    fs_service_(fs_service) {
 
     if(!fs_service_)
         throw std::invalid_argument("fs_service cannot be null");
