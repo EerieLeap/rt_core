@@ -11,6 +11,9 @@ using eerie_leap::subsys::threading::Thread;
 namespace {
 
 constexpr int STACK_SIZE = 8192;
+// A thread that throws needs room for the unwinder: DWARF unwinding takes 6.5 to 9 KB on riscv64, malta,
+// aarch64 and Xtensa, which leaves STACK_SIZE no margin.
+constexpr int THROWING_STACK_SIZE = 16384;
 constexpr int OVERSIZED_STACK_SIZE = 4 * 1024 * 1024;
 constexpr int PRIORITY = 5;
 constexpr int SYNC_TIMEOUT_MS = 500;
@@ -352,7 +355,7 @@ ZTEST(thread, test_threads_run_independently_of_each_other) {
 
 ZTEST(thread, test_Start_survives_a_std_exception_thrown_from_the_entry_point) {
     ThrowingWorker worker(true);
-    Thread thread("throws_std_exception", &worker, STACK_SIZE, PRIORITY);
+    Thread thread("throws_std_exception", &worker, THROWING_STACK_SIZE, PRIORITY);
 
     thread.Initialize();
     thread.Start();
@@ -364,7 +367,7 @@ ZTEST(thread, test_Start_survives_a_std_exception_thrown_from_the_entry_point) {
 
 ZTEST(thread, test_Start_survives_a_non_std_exception_thrown_from_the_entry_point) {
     ThrowingWorker worker(false);
-    Thread thread("throws_non_std_exception", &worker, STACK_SIZE, PRIORITY);
+    Thread thread("throws_non_std_exception", &worker, THROWING_STACK_SIZE, PRIORITY);
 
     thread.Initialize();
     thread.Start();
@@ -376,7 +379,7 @@ ZTEST(thread, test_Start_survives_a_non_std_exception_thrown_from_the_entry_poin
 
 ZTEST(thread, test_Start_can_be_repeated_after_the_entry_point_threw) {
     ThrowingWorker worker(true);
-    Thread thread("restarted_after_throw", &worker, STACK_SIZE, PRIORITY);
+    Thread thread("restarted_after_throw", &worker, THROWING_STACK_SIZE, PRIORITY);
 
     thread.Initialize();
 
