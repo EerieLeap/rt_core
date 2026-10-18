@@ -34,7 +34,7 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 
 ZTEST_SUITE(sensors_parser, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -97,56 +97,51 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     return sensors;
 }
 
-void sensors_parser_CompareSensors(
+static void sensors_parser_CompareSensors(
     std::vector<std::shared_ptr<Sensor>>& sensors,
     std::vector<std::shared_ptr<Sensor>>& deserialized_sensors
 ) {
 
     zassert_equal(deserialized_sensors.size(), sensors.size());
 
-    for(size_t i = 0; i < sensors.size(); ++i) {
+    for(auto& sensor : sensors) {
         std::shared_ptr<Sensor> deserialized_sensor = nullptr;
-        for(size_t j = 0; j < deserialized_sensors.size(); ++j) {
-            if(strcmp(deserialized_sensors[j]->id.c_str(), sensors[i]->id.c_str()) == 0) {
-                deserialized_sensor = deserialized_sensors[j];
+        for(auto& j : deserialized_sensors) {
+            if(strcmp(j->id.c_str(), sensor->id.c_str()) == 0) {
+                deserialized_sensor = j;
                 break;
             }
         }
         zassert_true(deserialized_sensor != nullptr);
 
-        zassert_equal(deserialized_sensor->is_enabled, sensors[i]->is_enabled, "%s", sensors[i]->id.c_str());
+        zassert_equal(deserialized_sensor->is_enabled, sensor->is_enabled, "%s", sensor->id.c_str());
 
-        zassert_true(deserialized_sensor->metadata.name == sensors[i]->metadata.name);
-        zassert_true(deserialized_sensor->metadata.unit == sensors[i]->metadata.unit);
-        zassert_true(deserialized_sensor->metadata.description == sensors[i]->metadata.description);
+        zassert_true(deserialized_sensor->metadata.name == sensor->metadata.name);
+        zassert_true(deserialized_sensor->metadata.unit == sensor->metadata.unit);
+        zassert_true(deserialized_sensor->metadata.description == sensor->metadata.description);
 
-        zassert_true(deserialized_sensor->configuration.type == sensors[i]->configuration.type);
-        if(deserialized_sensor->configuration.channel.has_value() && sensors[i]->configuration.channel.has_value()) {
-            zassert_true(
-                deserialized_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value()
-            );
+        zassert_true(deserialized_sensor->configuration.type == sensor->configuration.type);
+        if(deserialized_sensor->configuration.channel.has_value() && sensor->configuration.channel.has_value()) {
+            zassert_true(deserialized_sensor->configuration.channel.value() == sensor->configuration.channel.value());
         } else {
             zassert_true(
-                !deserialized_sensor->configuration.channel.has_value()
-                && !sensors[i]->configuration.channel.has_value()
+                !deserialized_sensor->configuration.channel.has_value() && !sensor->configuration.channel.has_value()
             );
         }
-        zassert_true(deserialized_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
+        zassert_true(deserialized_sensor->configuration.sampling_rate_ms == sensor->configuration.sampling_rate_ms);
         zassert_true(
-            deserialized_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method
+            deserialized_sensor->configuration.interpolation_method == sensor->configuration.interpolation_method
         );
         zassert_true(
             deserialized_sensor->configuration.calibration_table.size()
-            == sensors[i]->configuration.calibration_table.size()
+            == sensor->configuration.calibration_table.size()
         );
-        zassert_true(deserialized_sensor->configuration.expression == sensors[i]->configuration.expression);
+        zassert_true(deserialized_sensor->configuration.expression == sensor->configuration.expression);
         zassert_equal(
-            deserialized_sensor->configuration.debounce_ms, sensors[i]->configuration.debounce_ms, "%s",
-            sensors[i]->id.c_str()
+            deserialized_sensor->configuration.debounce_ms, sensor->configuration.debounce_ms, "%s", sensor->id.c_str()
         );
         zassert_equal(
-            deserialized_sensor->configuration.input_mode, sensors[i]->configuration.input_mode, "%s",
-            sensors[i]->id.c_str()
+            deserialized_sensor->configuration.input_mode, sensor->configuration.input_mode, "%s", sensor->id.c_str()
         );
     }
 }
@@ -323,7 +318,7 @@ size_t OffsetAfterTstr(std::span<const uint8_t> bytes, std::string_view text) {
     encoded.push_back(static_cast<uint8_t>(0x60 + text.size()));
     encoded.insert(encoded.end(), text.begin(), text.end());
 
-    const auto found = std::search(bytes.begin(), bytes.end(), encoded.begin(), encoded.end());
+    const auto found = std::ranges::search(bytes, , encoded, );
     zassert_true(found != bytes.end(), "%s is not encoded", std::string(text).c_str());
 
     return static_cast<size_t>(found - bytes.begin()) + encoded.size();

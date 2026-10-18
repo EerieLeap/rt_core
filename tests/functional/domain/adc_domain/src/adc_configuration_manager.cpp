@@ -94,7 +94,7 @@ void ExpectSameCalibrator(const AdcCalibrator& expected, const AdcCalibrator& ac
 
 ZTEST_SUITE(adc_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
-AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_count = kDtChannelCount) {
+static AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_count = kDtChannelCount) {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -120,7 +120,7 @@ AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_coun
     return adc_configuration;
 }
 
-void adc_configuration_manager_ExpectTestConfiguration(
+static void adc_configuration_manager_ExpectTestConfiguration(
     const std::shared_ptr<AdcConfiguration>& configuration,
     int channel_count
 ) {

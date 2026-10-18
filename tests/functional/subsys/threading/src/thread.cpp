@@ -21,13 +21,13 @@ class BlockingWorker : public IThread {
 private:
     k_sem entered_;
     k_sem resume_;
-    atomic_t entries_;
-    atomic_t exits_;
+    atomic_t entries_{ ATOMIC_INIT(0) };
+    atomic_t exits_{ ATOMIC_INIT(0) };
 
 public:
     BlockingWorker() :
-        entries_(ATOMIC_INIT(0)),
-        exits_(ATOMIC_INIT(0)) {
+        ,
+    {
         k_sem_init(&entered_, 0, K_SEM_MAX_LIMIT);
         k_sem_init(&resume_, 0, K_SEM_MAX_LIMIT);
     }
@@ -58,14 +58,14 @@ public:
 class SleepingWorker : public IThread {
 private:
     int sleep_ms_;
-    atomic_t entries_;
-    atomic_t finished_;
+    atomic_t entries_{ ATOMIC_INIT(0) };
+    atomic_t finished_{ ATOMIC_INIT(0) };
 
 public:
     explicit SleepingWorker(int sleep_ms) :
         sleep_ms_(sleep_ms),
-        entries_(ATOMIC_INIT(0)),
-        finished_(ATOMIC_INIT(0)) {}
+        ,
+    {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);
@@ -85,12 +85,12 @@ public:
 class ThrowingWorker : public IThread {
 private:
     bool throw_std_exception_;
-    atomic_t entries_;
+    atomic_t entries_{ ATOMIC_INIT(0) };
 
 public:
     explicit ThrowingWorker(bool throw_std_exception) :
         throw_std_exception_(throw_std_exception),
-        entries_(ATOMIC_INIT(0)) {}
+    {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);

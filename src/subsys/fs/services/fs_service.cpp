@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <utility>
 
 #include <zephyr/fs/fs.h>
 #include <zephyr/logging/log.h>
@@ -104,7 +105,7 @@ bool FsService::WriteFile(std::string_view relative_path, const void* data_p, si
         return false;
     }
 
-    if(static_cast<size_t>(written) != data_size) {
+    if(std::cmp_not_equal(written, data_size)) {
         LOG_ERR("fs_write stored %d of %d bytes.", static_cast<int>(written), static_cast<int>(data_size));
         return false;
     }

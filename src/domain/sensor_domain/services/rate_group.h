@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <zephyr/kernel.h>
@@ -35,7 +36,7 @@ struct RateGroupStats {
 
     void RecordTick(uint32_t tick_us) {
         atomic_set(&last_us, static_cast<atomic_val_t>(tick_us));
-        if(tick_us > static_cast<uint32_t>(atomic_get(&max_us)))
+        if(std::cmp_greater(tick_us, atomic_get(&max_us)))
             atomic_set(&max_us, static_cast<atomic_val_t>(tick_us));
 
         atomic_inc(&ticks);

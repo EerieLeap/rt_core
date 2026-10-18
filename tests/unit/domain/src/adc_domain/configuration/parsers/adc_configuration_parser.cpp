@@ -54,7 +54,7 @@ void ExpectReasonContains(const std::string& reason, std::string_view expected) 
 
 } // namespace
 
-AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t channel_count = kChannelCount) {
+static AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t channel_count = kChannelCount) {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples_1{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr_1 = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -95,7 +95,7 @@ AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t channel_co
     return adc_configuration;
 }
 
-void adc_configuration_parser_CompareCalibrators(
+static void adc_configuration_parser_CompareCalibrators(
     const AdcCalibrator& calibrator,
     const AdcCalibrator& deserialized_calibrator
 ) {
@@ -111,7 +111,7 @@ void adc_configuration_parser_CompareCalibrators(
     }
 }
 
-void adc_configuration_parser_CompareAdcConfigurations(
+static void adc_configuration_parser_CompareAdcConfigurations(
     const AdcConfiguration& adc_configuration,
     const AdcConfiguration& deserialized_adc_configuration
 ) {

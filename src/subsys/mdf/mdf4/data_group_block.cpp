@@ -10,9 +10,9 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 DataGroupBlock::DataGroupBlock(uint8_t record_id_size_bytes) :
     BlockBase("DG"),
     record_id_size_bytes_(record_id_size_bytes),
-    last_channel_group_(nullptr) {
+{
 
-    if(std::set<uint8_t>{ 0, 1, 2, 4, 8 }.count(record_id_size_bytes_) == 0)
+    if(!std::set<uint8_t>{ 0, 1, 2, 4, 8 }.contains(record_id_size_bytes_))
         throw std::runtime_error("Invalid record ID size bytes");
 
     links_.SetLink(LinkType::Data, std::make_shared<DataBlock>());

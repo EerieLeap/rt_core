@@ -24,9 +24,9 @@ private:
     std::unique_ptr<Thread> thread_;
 
     const char* disk_name_;
-    atomic_t sd_card_present_;
+    atomic_t sd_card_present_{ ATOMIC_INIT(0) };
     k_sem sd_monitor_stop_sem_;
-    atomic_t monitor_running_;
+    atomic_t monitor_running_{ ATOMIC_INIT(0) };
 
     mutable k_mutex handler_mutex_;
     std::function<bool()> is_sd_card_present_handler_;

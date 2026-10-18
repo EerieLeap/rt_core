@@ -234,7 +234,7 @@ ZTEST(disabled_can_message_routes, test_a_frame_of_a_disabled_message_gives_its_
         frame->TryGetCanFrame(sensors[2]->id_hash, raw_frame),
         "A raw sensor on the disabled message's frame ID still gets the frame"
     );
-    zassert_true(raw_frame.data.size() > 0);
+    zassert_true(!raw_frame.data.empty());
     zassert_equal(raw_frame.data[0], 7);
 
     zassert_false(frame->TryGetReading("on_disabled").has_value(), "The signal of the disabled message got a reading");

@@ -56,12 +56,12 @@ private:
 
         explicit Record(std::shared_ptr<INetworkStateTransport> record_transport) :
             transport(std::move(record_transport)),
-            current(TDescriptor::Initial()) {
+            current(TDescriptor::Initial()),
+            is_shared(transport->SetLocalState(current)) {
 
             k_mutex_init(&lock);
 
             // Before the exporter subscribes, so that no event's record is replaced by the initial one.
-            is_shared = transport->SetLocalState(current);
         }
 
         void Update(const EventMessage& event) {
@@ -101,17 +101,17 @@ public:
      * @throws std::runtime_error if the channel refuses the subscription; the record is withdrawn.
      */
     explicit NetworkStateExporter(std::shared_ptr<INetworkStateTransport> transport) :
-        record_(std::make_shared<Record>(std::move(transport))) {
-
-        subscription_ = CreateScopedSubscription(
-            Channel::GetInstance(), TDescriptor::EVENT_TYPE,
+        record_(std::make_shared<Record>(std::move(transport))),
+        subscription_(CreateScopedSubscription(
+            Channel::GetInstance(),
+            TDescriptor::EVENT_TYPE,
             [](const EventMessage& event) {
                 return event.source_id != IMPORTED_EVENT_SOURCE_ID;
             },
             [record = record_](const EventMessage& event) {
                 record->Update(event);
             }
-        );
+        )) {
 
         if(subscription_ == nullptr) {
             record_->Withdraw();

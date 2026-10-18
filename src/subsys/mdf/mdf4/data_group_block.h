@@ -27,7 +27,7 @@ private:
     // uint8_t reserved_1_[7];          // 7 bytes, Reserved
 
     // Where the next channel group is linked; owned by the chain.
-    ChannelGroupBlock* last_channel_group_;
+    ChannelGroupBlock* last_channel_group_{ nullptr };
 
 public:
     DataGroupBlock(uint8_t record_id_size_bytes);

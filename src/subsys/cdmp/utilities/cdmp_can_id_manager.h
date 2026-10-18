@@ -111,7 +111,7 @@ public:
      */
     CanFilter GetReceiveFilter(const CanId& can_id) const {
         if(base_can_id_ % RECEIVE_BLOCK_SIZE != 0)
-            return CanFilter(can_id);
+            return { can_id };
 
         return CanFilter::Masked(CanId::Standard(base_can_id_), CAN_STD_ID_MASK & ~(RECEIVE_BLOCK_SIZE - 1));
     }

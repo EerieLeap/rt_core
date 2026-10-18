@@ -230,7 +230,7 @@ ZTEST(mdf_file, test_OutputMatchesTheGoldenFile) {
     const auto file_bytes = file.str();
 
 #ifdef CONFIG_ARCH_POSIX
-    const std::string_view dump_dir = CONFIG_MDF_TEST_DUMP_DIR;
+    const std::string_view dump_dir;
     if(!dump_dir.empty()) {
         const std::string path = std::string(dump_dir) + "/golden_file.mf4";
         std::ofstream dump(path, std::ios::binary | std::ios::trunc);
@@ -1675,7 +1675,7 @@ ZTEST(mdf_file, test_MetadataSettersAreRefusedAfterTheHeader) {
 // Writes a complete file to the host file system for an asammdf round trip; enabled per run with
 // CONFIG_MDF_TEST_DUMP_DIR (native_sim links the host libc, so std::ofstream reaches the host).
 ZTEST(mdf_file, test_DumpFileForAsammdf) {
-    const std::string_view dump_dir = CONFIG_MDF_TEST_DUMP_DIR;
+    const std::string_view dump_dir;
     if(dump_dir.empty())
         ztest_test_skip();
 

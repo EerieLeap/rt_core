@@ -166,7 +166,7 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
 
     return [logging_configuration_manager = std::move(logging_configuration_manager),
                sensors_configuration_manager = std::move(sensors_configuration_manager), tool_id = std::move(tool_id),
-               device_id_provider = std::move(device_id_provider)]() -> std::shared_ptr<ILogger<SensorReading>> {
+               device_id_provider = std::move(device_id_provider)] -> std::shared_ptr<ILogger<SensorReading>> {
         const auto sensors = sensors_configuration_manager->Get();
         const auto logging_configuration = logging_configuration_manager->Get();
 
@@ -412,7 +412,7 @@ void LogWriterSupervisor::RestartIfRunning() {
 }
 
 void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessage& event) {
-    const auto active = event.payload.find(LoggingPayloadType::IsActive);
+    const auto* const active = event.payload.find(LoggingPayloadType::IsActive);
     if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
         return;
 
@@ -422,7 +422,7 @@ void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessa
         return;
 
     auto reason = LoggingStatusReason::Stopped;
-    const auto reason_entry = event.payload.find(LoggingPayloadType::Reason);
+    const auto* const reason_entry = event.payload.find(LoggingPayloadType::Reason);
     if(reason_entry != event.payload.end() && std::holds_alternative<uint32_t>(reason_entry->second))
         reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason_entry->second));
 

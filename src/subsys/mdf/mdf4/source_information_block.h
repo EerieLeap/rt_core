@@ -49,7 +49,7 @@ private:
 
     SourceType source_type_; // 1 bytes, Source type
     BusType bus_type_;       // 1 bytes, Bus type
-    uint8_t flags_;          // 1 bytes, Flags
+    uint8_t flags_{ 0 };     // 1 bytes, Flags
     // uint8_t reserved_1_[5];      // 5 bytes, Reserved
 
 public:
@@ -69,8 +69,8 @@ public:
             links_.GetLink(LinkType::MetadataComment) };
     }
 
-    void SetName(std::shared_ptr<TextBlock> name);
-    void SetPath(std::shared_ptr<TextBlock> path);
+    void SetName(const std::shared_ptr<TextBlock>& name);
+    void SetPath(const std::shared_ptr<TextBlock>& path);
 };
 
 } // namespace eerie_leap::subsys::mdf::mdf4

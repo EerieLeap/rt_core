@@ -277,7 +277,7 @@ int AssetWriter::Flush() {
 
     if(rc < 0) {
         error_ = static_cast<int>(rc);
-    } else if(static_cast<size_t>(rc) != buffered_) {
+    } else if(std::cmp_not_equal(rc, buffered_)) {
         // FAT reports a full volume as a short write, with no error.
         LOG_WRN("Staged write stopped short: %d of %d bytes.", static_cast<int>(rc), static_cast<int>(buffered_));
         error_ = -ENOSPC;

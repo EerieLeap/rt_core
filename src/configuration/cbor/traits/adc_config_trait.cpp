@@ -6,7 +6,7 @@
 
 namespace eerie_leap::configuration::cbor::traits {
 
-struct CborAdcConfigTraitRegistrar {
+static struct CborAdcConfigTraitRegistrar {
     CborAdcConfigTraitRegistrar() {
         CborTraitRegistry::Register<CborAdcConfig>(
             cbor_encode_CborAdcConfig, cbor_decode_CborAdcConfig, cbor_get_size_CborAdcConfig

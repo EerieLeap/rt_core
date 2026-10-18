@@ -47,7 +47,8 @@ std::shared_ptr<Sensor> MakeUserSensor(std::string_view id) {
 }
 
 // A runtime whose script is loaded into @p host, the way SensorPipelineBuilder does it.
-SensorRuntime MakeScriptedRuntime(std::shared_ptr<LuaScript> host, std::string_view id, std::string_view script) {
+SensorRuntime
+MakeScriptedRuntime(const std::shared_ptr<LuaScript>& host, std::string_view id, std::string_view script) {
     SensorRuntime runtime;
     runtime.sensor = MakeUserSensor(id);
     runtime.script.host = host;

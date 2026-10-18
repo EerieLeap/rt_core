@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(processing_service_logger);
 SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::shared_ptr<ITimeService> time_service,
+    const std::shared_ptr<ITimeService>& time_service,
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,

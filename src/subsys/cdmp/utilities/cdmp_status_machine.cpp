@@ -42,7 +42,7 @@ int CdmpStatusMachine::RegisterStatusChangeHandler(StatusChangeCallback callback
     }
     const int new_id = max_id + 1;
 
-    status_change_callbacks_[new_id] = callback;
+    status_change_callbacks_[new_id] = std::move(callback);
     return new_id;
 }
 

@@ -30,7 +30,7 @@ pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
 ) {
 
     // NOTE: UpdateConnectionString() must be called before validation
-    for(auto& sensor : sensors)
+    for(const auto& sensor : sensors)
         sensor->configuration.UpdateConnectionString();
     SensorValidator::Validate(sensors, sd_fs_service_.get(), gpio_channel_count, adc_channel_count);
 

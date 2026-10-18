@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "subsys/device_tree/adc_dt_info.h"
@@ -25,7 +26,7 @@ private:
 
 public:
     AdcFactory(DtAdcProvider dt_adc_provider) :
-        dt_adc_provider_(dt_adc_provider) {}
+        dt_adc_provider_(std::move(dt_adc_provider)) {}
 
     // One device per device-tree ADC: emulated, then real; a simulator when there is none.
     std::shared_ptr<IAdcManager> Create() {

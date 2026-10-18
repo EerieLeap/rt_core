@@ -74,7 +74,7 @@ ZTEST(cubic_spline_voltage_interpolator, test_constructor_rejects_null_table) {
 }
 
 ZTEST(cubic_spline_voltage_interpolator, test_constructor_rejects_table_with_fewer_than_two_points) {
-    for(const auto table : { MakeTable({}), MakeTable({ { 0.0F, 0.0F } }) }) {
+    for(const auto& table : { MakeTable({}), MakeTable({ { 0.0F, 0.0F } }) }) {
         bool threw = false;
         try {
             const CubicSplineVoltageInterpolator interpolator(table);

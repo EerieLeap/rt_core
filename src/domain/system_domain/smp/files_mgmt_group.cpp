@@ -147,8 +147,8 @@ bool FilesMgmtGroup::IsBadPath(std::string_view directory) {
     // path short.
     return directory.size() > MAX_DIR_LENGTH
         || directory.starts_with('/')
-        || directory.find('\\') != std::string_view::npos
-        || directory.find('\0') != std::string_view::npos;
+        || directory.contains('\\')
+        || directory.contains('\0');
 }
 
 void FilesMgmtGroup::ReleasePage() {

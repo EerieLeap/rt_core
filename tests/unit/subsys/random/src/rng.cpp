@@ -82,7 +82,7 @@ size_t FindUnwrittenByte(bool secure) {
             written[i] = written[i] || buffer.payload()[i] != GUARD;
     }
 
-    auto first_unwritten = std::find(written.begin(), written.end(), false);
+    auto* first_unwritten = std::ranges::find(written, , false);
 
     return static_cast<size_t>(std::distance(written.begin(), first_unwritten));
 }

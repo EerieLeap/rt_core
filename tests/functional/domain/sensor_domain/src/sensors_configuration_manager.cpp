@@ -43,7 +43,7 @@ using namespace eerie_leap::subsys::expression_engine;
 
 ZTEST_SUITE(sensors_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -126,36 +126,34 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
     zassert_equal(saved_sensors->size(), sensors.size());
 
-    for(size_t i = 0; i < sensors.size(); ++i) {
+    for(auto& sensor : sensors) {
         std::shared_ptr<Sensor> saved_sensor = nullptr;
-        for(size_t j = 0; j < saved_sensors->size(); ++j) {
-            if(strcmp(saved_sensors->at(j)->id.c_str(), sensors[i]->id.c_str()) == 0) {
-                saved_sensor = saved_sensors->at(j);
+        for(auto& j : *saved_sensors) {
+            if(strcmp(j->id.c_str(), sensor->id.c_str()) == 0) {
+                saved_sensor = j;
                 break;
             }
         }
         zassert_true(saved_sensor != nullptr);
 
-        zassert_true(saved_sensor->metadata.name == sensors[i]->metadata.name);
-        zassert_true(saved_sensor->metadata.unit == sensors[i]->metadata.unit);
-        zassert_true(saved_sensor->metadata.description == sensors[i]->metadata.description);
+        zassert_true(saved_sensor->metadata.name == sensor->metadata.name);
+        zassert_true(saved_sensor->metadata.unit == sensor->metadata.unit);
+        zassert_true(saved_sensor->metadata.description == sensor->metadata.description);
 
-        zassert_true(saved_sensor->configuration.type == sensors[i]->configuration.type);
-        if(saved_sensor->configuration.channel.has_value() && sensors[i]->configuration.channel.has_value()) {
-            zassert_true(saved_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value());
+        zassert_true(saved_sensor->configuration.type == sensor->configuration.type);
+        if(saved_sensor->configuration.channel.has_value() && sensor->configuration.channel.has_value()) {
+            zassert_true(saved_sensor->configuration.channel.value() == sensor->configuration.channel.value());
         } else {
             zassert_true(
-                !saved_sensor->configuration.channel.has_value() && !sensors[i]->configuration.channel.has_value()
+                !saved_sensor->configuration.channel.has_value() && !sensor->configuration.channel.has_value()
             );
         }
-        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensor->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.interpolation_method == sensor->configuration.interpolation_method);
         zassert_true(
-            saved_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method
+            saved_sensor->configuration.calibration_table.size() == sensor->configuration.calibration_table.size()
         );
-        zassert_true(
-            saved_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size()
-        );
-        zassert_true(saved_sensor->configuration.expression == sensors[i]->configuration.expression);
+        zassert_true(saved_sensor->configuration.expression == sensor->configuration.expression);
     }
 }
 
@@ -190,38 +188,36 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
     zassert_equal(saved_sensors->size(), sensors.size());
 
-    for(size_t i = 0; i < sensors.size(); ++i) {
+    for(auto& sensor : sensors) {
         std::shared_ptr<Sensor> saved_sensor = nullptr;
-        for(size_t j = 0; j < saved_sensors->size(); ++j) {
-            if(strcmp(saved_sensors->at(j)->id.c_str(), sensors[i]->id.c_str()) == 0) {
-                saved_sensor = saved_sensors->at(j);
+        for(auto& j : *saved_sensors) {
+            if(strcmp(j->id.c_str(), sensor->id.c_str()) == 0) {
+                saved_sensor = j;
                 break;
             }
         }
         zassert_true(saved_sensor != nullptr);
 
-        zassert_equal(saved_sensor->is_enabled, sensors[i]->is_enabled, "%s", sensors[i]->id.c_str());
+        zassert_equal(saved_sensor->is_enabled, sensor->is_enabled, "%s", sensor->id.c_str());
 
-        zassert_true(saved_sensor->metadata.name == sensors[i]->metadata.name);
-        zassert_true(saved_sensor->metadata.unit == sensors[i]->metadata.unit);
-        zassert_true(saved_sensor->metadata.description == sensors[i]->metadata.description);
+        zassert_true(saved_sensor->metadata.name == sensor->metadata.name);
+        zassert_true(saved_sensor->metadata.unit == sensor->metadata.unit);
+        zassert_true(saved_sensor->metadata.description == sensor->metadata.description);
 
-        zassert_true(saved_sensor->configuration.type == sensors[i]->configuration.type);
-        if(saved_sensor->configuration.channel.has_value() && sensors[i]->configuration.channel.has_value()) {
-            zassert_true(saved_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value());
+        zassert_true(saved_sensor->configuration.type == sensor->configuration.type);
+        if(saved_sensor->configuration.channel.has_value() && sensor->configuration.channel.has_value()) {
+            zassert_true(saved_sensor->configuration.channel.value() == sensor->configuration.channel.value());
         } else {
             zassert_true(
-                !saved_sensor->configuration.channel.has_value() && !sensors[i]->configuration.channel.has_value()
+                !saved_sensor->configuration.channel.has_value() && !sensor->configuration.channel.has_value()
             );
         }
-        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensor->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.interpolation_method == sensor->configuration.interpolation_method);
         zassert_true(
-            saved_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method
+            saved_sensor->configuration.calibration_table.size() == sensor->configuration.calibration_table.size()
         );
-        zassert_true(
-            saved_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size()
-        );
-        zassert_true(saved_sensor->configuration.expression == sensors[i]->configuration.expression);
+        zassert_true(saved_sensor->configuration.expression == sensor->configuration.expression);
     }
 }
 
@@ -280,7 +276,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
     const std::vector<std::shared_ptr<Sensor>> sensors{ sensor_1, sensor_2, sensor_3 };
 
-    for(const auto sensor : sensors)
+    for(const auto& sensor : sensors)
         sensors_configuration_manager->Update({ sensor });
 }
 
@@ -339,7 +335,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
     const std::vector<std::shared_ptr<Sensor>> sensors{ sensor_1, sensor_2, sensor_3 };
 
-    for(const auto sensor : sensors)
+    for(const auto& sensor : sensors)
         zassert_false(
             sensors_configuration_manager->Update({ sensor }), "Invalid sensor configuration update expected to fail."
         );

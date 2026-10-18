@@ -65,7 +65,7 @@ void CdmpHeartbeatService::RegisterCanHandlers() {
     }
 
     canbus_handler_id_ = RegisterReceiveHandler(can_id_manager_->GetHeartbeatCanId(), [this](const CanFrame& frame) {
-        work_queue_thread_->Run([this, frame]() {
+        work_queue_thread_->Run([this, frame] {
             ProcessFrame(frame.data);
         });
     });

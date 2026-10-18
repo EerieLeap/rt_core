@@ -12,7 +12,7 @@ std::unordered_map<uint8_t, const device*> DtCanbus::canbus_devs_;
 
 void DtCanbus::Initialize() {
 #if defined(CAN0_NODE)
-    auto can0_dev = DEVICE_DT_GET(CAN0_NODE);
+    const auto* can0_dev = DEVICE_DT_GET(CAN0_NODE);
     canbus_devs_.emplace(0, can0_dev);
     LOG_INF("CAN0 initialized.");
 #endif

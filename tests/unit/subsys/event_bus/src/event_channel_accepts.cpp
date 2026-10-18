@@ -55,7 +55,7 @@ TestEvent MakeEvent(TestEventType type, uint32_t value, uint32_t source_id = k_s
 }
 
 bool ValueIs(const TestEvent& event, uint32_t expected) {
-    auto it = event.payload.find(TestPayloadType::Value);
+    const auto* it = event.payload.find(TestPayloadType::Value);
 
     return it != event.payload.end()
         && std::holds_alternative<uint32_t>(it->second)

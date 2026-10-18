@@ -64,7 +64,7 @@ using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensors_reader, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 5.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -136,7 +136,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     return sensors;
 }
 
-AdcConfiguration sensors_reader_GetTestConfiguration() {
+static AdcConfiguration sensors_reader_GetTestConfiguration() {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -171,7 +171,7 @@ struct sensors_reader_HelperInstances {
     std::shared_ptr<std::vector<std::shared_ptr<ISensorReader>>> sensor_readers;
 };
 
-sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
+static sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
     const auto time_provider = std::make_shared<BootElapsedTimeProvider>();
     const auto rtc_provider = std::make_shared<RtcProvider>();
     const auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
@@ -198,8 +198,7 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
     SensorReaderFactory sensor_reader_factory(time_service, gpio, adc_manager);
 
     const auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
-    for(size_t i = 0; i < generation->runtimes.size(); i++) {
-        const auto& runtime = generation->runtimes[i];
+    for(const auto& runtime : generation->runtimes) {
         std::shared_ptr<ISensorReader> sensor_reader;
 
         if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
@@ -243,8 +242,8 @@ ZTEST(sensors_reader, test_Read) {
     helper.adc_samples->Acquire();
     const TickContext tick{ helper.time_service->GetCurrentTime() };
 
-    for(size_t i = 0; i < sensor_readers->size(); i++)
-        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
+    for(auto& i : *sensor_readers)
+        sensor_readings_frame->AddOrUpdateReading(i->Read(tick));
 
     for(const auto& sensor_name : sensor_names) {
         const auto sensor_hash = StringHelpers::GetHash(sensor_name);
@@ -257,7 +256,7 @@ ZTEST(sensors_reader, test_Read) {
     zassert_equal(reading_2.status, ReadingStatus::INTERPOLATED);
     zassert_true(reading_2.value.has_value());
     zassert_true(reading_2.timestamp.has_value());
-    zassert_between_inclusive(reading_2.value.value(), 0.0f, 200.0f);
+    zassert_between_inclusive(reading_2.value.value(), 0.0F, 200.0F);
 
     auto reading_1_opt = sensor_readings_frame->TryGetReading("sensor_1");
     zassert_true(reading_1_opt.has_value());
@@ -265,7 +264,7 @@ ZTEST(sensors_reader, test_Read) {
     zassert_equal(reading_1.status, ReadingStatus::INTERPOLATED);
     zassert_true(reading_1.value.has_value());
     zassert_true(reading_1.timestamp.has_value());
-    zassert_between_inclusive(reading_1.value.value(), 0.0f, 5.0f);
+    zassert_between_inclusive(reading_1.value.value(), 0.0F, 5.0F);
 
     auto reading_3_opt = sensor_readings_frame->TryGetReading("sensor_3");
     zassert_true(reading_3_opt.has_value());
@@ -401,7 +400,7 @@ struct sensors_reader_AnalogReader {
     std::unique_ptr<ISensorReader> reader;
 };
 
-sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(std::shared_ptr<AdcCalibrator> calibrator) {
+sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(const std::shared_ptr<AdcCalibrator>& calibrator) {
     sensors_reader_AnalogReader fixture;
 
     fixture.time_service = processing_test_support::MakeTimeService();

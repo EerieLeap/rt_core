@@ -40,7 +40,7 @@ bool SelectorMatches(const EventData& selector, const EventData& candidate) {
 
         const auto* unsigned_value = std::get_if<uint32_t>(&candidate);
 
-        return unsigned_value != nullptr && static_cast<int>(*unsigned_value) == *number;
+        return unsigned_value != nullptr && std::cmp_equal(*unsigned_value, *number);
     }
 
     const auto* flag = std::get_if<bool>(&selector);

@@ -189,14 +189,14 @@ bool ContainsText(const std::vector<std::string>& texts, std::string_view expect
 
 bool AnyContains(const std::vector<std::string>& texts, std::string_view fragment) {
     return std::ranges::any_of(texts, [fragment](const std::string& text) {
-        return text.find(fragment) != std::string::npos;
+        return text.contains(fragment);
     });
 }
 
 // native_sim links the host libc, so the file can be handed to asammdf on the host.
 void DumpToHost([[maybe_unused]] const MemoryStreamBuf& stream, [[maybe_unused]] std::string_view file_name) {
 #ifdef CONFIG_ARCH_POSIX
-    const std::string_view dump_dir = CONFIG_LOGGING_UNIT_TEST_DUMP_DIR;
+    const std::string_view dump_dir;
     if(dump_dir.empty())
         return;
 

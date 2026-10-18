@@ -103,9 +103,9 @@ ZTEST(allocation_free_publish, test_publish_queue_and_dispatch_do_not_allocate) 
 
     AnySubscription subscription = CreateScopedSubscription(
         channel, ProbeEventType::DataUpdated, [&](const ProbeEvent& event) {
-            if(auto it = event.payload.find(ProbePayloadType::SensorId); it != event.payload.end())
+            if(const auto* it = event.payload.find(ProbePayloadType::SensorId); it != event.payload.end())
                 last_id = std::get<uint32_t>(it->second);
-            if(auto it = event.payload.find(ProbePayloadType::Value); it != event.payload.end())
+            if(const auto* it = event.payload.find(ProbePayloadType::Value); it != event.payload.end())
                 last_value = std::get<float>(it->second);
 
             delivered++;

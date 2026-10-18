@@ -11,7 +11,7 @@ using namespace eerie_leap::domain::logging_domain::configuration::parsers;
 
 ZTEST_SUITE(logging_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
-LoggingConfiguration logging_configuration_parser_GetTestConfiguration() {
+static LoggingConfiguration logging_configuration_parser_GetTestConfiguration() {
     LoggingConfiguration logging_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     logging_configuration.logging_interval_ms = 1000;
     logging_configuration.max_log_size_mb = 1;
@@ -26,7 +26,7 @@ LoggingConfiguration logging_configuration_parser_GetTestConfiguration() {
     return logging_configuration;
 }
 
-void logging_configuration_parser_CompareLoggingConfigurations(
+static void logging_configuration_parser_CompareLoggingConfigurations(
     const LoggingConfiguration& logging_configuration,
     LoggingConfiguration& deserialized_logging_configuration
 ) {

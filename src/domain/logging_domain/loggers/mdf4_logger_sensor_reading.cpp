@@ -269,7 +269,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     std::span<const std::shared_ptr<Sensor>> sensors,
     const LoggerMetadata& metadata
 ) :
-    stream_(nullptr) {
+{
 
     // A disabled sensor never has a reading, so it gets no channel whatever its logging configuration says.
     auto find_enabled = [&configuration](const Sensor& sensor) -> const SensorLoggingConfiguration* {

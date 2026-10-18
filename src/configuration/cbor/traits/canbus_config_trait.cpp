@@ -6,7 +6,7 @@
 
 namespace eerie_leap::configuration::cbor::traits {
 
-struct CborCanbusConfigTraitRegistrar {
+static struct CborCanbusConfigTraitRegistrar {
     CborCanbusConfigTraitRegistrar() {
         CborTraitRegistry::Register<CborCanbusConfig>(
             cbor_encode_CborCanbusConfig, cbor_decode_CborCanbusConfig, cbor_get_size_CborCanbusConfig

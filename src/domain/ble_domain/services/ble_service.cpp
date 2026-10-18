@@ -68,10 +68,10 @@ bool BleService::Initialize() {
     ConfigureAdvertisingData();
     ConfigureScanResponseData();
 
-    Ble::RegisterPairingStartedHandler([this]() {
+    Ble::RegisterPairingStartedHandler([this] {
         PairingStarted();
     });
-    Ble::RegisterPairingFinishedHandler([this]() {
+    Ble::RegisterPairingFinishedHandler([this] {
         PairingFinished();
     });
 
@@ -103,11 +103,11 @@ bool BleService::InitializeAccessPoint() {
                     router->OnReceive(data);
                 },
             .on_smp_sent =
-                [router = smp_router_]() {
+                [router = smp_router_] {
                     router->OnNotificationSent();
                 },
             .on_live_sent =
-                [live = live_data_service_]() {
+                [live = live_data_service_] {
                     live->OnNotificationSent();
                 },
         },

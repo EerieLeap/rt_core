@@ -25,7 +25,7 @@ using namespace eerie_leap::domain::sensor_domain::utilities;
 
 ZTEST_SUITE(sensor_readings_frame, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensor_readings_frame_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> sensor_readings_frame_GetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 

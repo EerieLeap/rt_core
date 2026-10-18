@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 
+#include <utility>
+
 #include "subsys/threading/scoped_mutex.h"
 
 #include "cdmp_command_service.h"
@@ -19,8 +21,8 @@ CdmpCommandService::CdmpCommandService(
     std::shared_ptr<WorkQueueThread> work_queue_thread
 ) :
     CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
-    canbus_handler_id_(-1),
-    canbus_response_handler_id_(-1),
+    ,
+    ,
     work_queue_thread_(std::move(work_queue_thread)) {
 
     k_mutex_init(&command_handlers_mutex_);
@@ -62,7 +64,7 @@ void CdmpCommandService::RegisterCanHandlers() {
 
     canbus_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetCommandRequestCanId(), [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() {
+            work_queue_thread_->Run([this, frame] {
                 ProcessRequestFrame(frame.data);
             });
         }
@@ -70,7 +72,7 @@ void CdmpCommandService::RegisterCanHandlers() {
 
     canbus_response_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetCommandResponseCanId(), [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() {
+            work_queue_thread_->Run([this, frame] {
                 ProcessResponseFrame(frame.data);
             });
         }
@@ -254,7 +256,7 @@ void CdmpCommandService::RegisterUserCommandHandler(uint8_t command_code, Comman
     if(!IsValidUserCommandCode(command_code))
         throw std::runtime_error("Invalid user command code");
 
-    RegisterCommandHandler(command_code, handler);
+    RegisterCommandHandler(command_code, std::move(handler));
 }
 
 void CdmpCommandService::RegisterServiceCommandHandler(
@@ -306,7 +308,7 @@ uint8_t CdmpCommandService::SendCommand(
             throw std::runtime_error("Command code 0 is not allowed");
 
         const uint8_t transaction_id = transaction_service_->StartTransaction(
-            target_device_id, command_code, CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS, callback
+            target_device_id, command_code, CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS, std::move(callback)
         );
 
         CdmpCommandRequestMessage command{ .target_device_id = target_device_id,
@@ -334,7 +336,7 @@ uint8_t CdmpCommandService::SendCommand(
     CdmpTransactionCallback callback
 ) {
 
-    return SendCommand(target_device_id, std::to_underlying(command_code), data, callback);
+    return SendCommand(target_device_id, std::to_underlying(command_code), data, std::move(callback));
 }
 
 bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {

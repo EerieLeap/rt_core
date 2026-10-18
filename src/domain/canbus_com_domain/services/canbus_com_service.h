@@ -156,7 +156,7 @@ public:
     // which returns whether it accepted the LOGGING command, as this overload takes it, and leaves
     // the outcome to the shared status.
     template<concepts::SpanConstructible TRequest>
-    void SetCommandHandler(CanbusComCommandCode command_code, CommandDataRequestCallback<TRequest> callback) {
+    void SetCommandHandler(CanbusComCommandCode command_code, const CommandDataRequestCallback<TRequest>& callback) {
         if(!cdmp_service_)
             return;
 
@@ -193,7 +193,7 @@ public:
 
     void SendCommand(
         ICanbusComCommand& command,
-        CommandAckCallback callback = nullptr,
+        const CommandAckCallback& callback = nullptr,
         uint8_t device_id = CdmpConstants::COMMAND_BROADCAST_ID
     );
 

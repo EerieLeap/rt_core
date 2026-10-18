@@ -468,7 +468,7 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
 }
 
 void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMessage& event) {
-    const auto active = event.payload.find(LoggingPayloadType::IsActive);
+    const auto* const active = event.payload.find(LoggingPayloadType::IsActive);
     if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
         return;
 
@@ -477,7 +477,7 @@ void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMess
 
     auto reason = LoggingStatusReason::Stopped;
     if(!is_active) {
-        const auto reason_entry = event.payload.find(LoggingPayloadType::Reason);
+        const auto* const reason_entry = event.payload.find(LoggingPayloadType::Reason);
         if(reason_entry != event.payload.end() && std::holds_alternative<uint32_t>(reason_entry->second))
             reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason_entry->second));
     }

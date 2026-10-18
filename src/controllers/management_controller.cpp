@@ -15,7 +15,7 @@ ManagementController::ManagementController(
     uint32_t build_number,
     std::optional<SensorCapabilities> sensor_capabilities,
     std::shared_ptr<const IFsService> sd_fs_service,
-    [[maybe_unused]] std::shared_ptr<AssetsManager> assets_manager
+    [[maybe_unused]] const std::shared_ptr<AssetsManager>& assets_manager
 ) :
     configuration_service_(std::move(configuration_service)),
     config_work_queue_thread_(std::move(config_work_queue_thread)),

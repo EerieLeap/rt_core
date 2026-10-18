@@ -23,7 +23,7 @@ constexpr uint32_t FRAME_TIME_NS = SmpCanFrameFormat().GetFrameTimeNs(BITRATE);
 constexpr uint32_t FRAMES_PER_SECOND = 781;
 
 SmpCanPacer MakePacer() {
-    return SmpCanPacer(FRAME_TIME_NS, SHARE, BURST);
+    return { FRAME_TIME_NS, SHARE, BURST };
 }
 
 uint32_t SendAvailable(SmpCanPacer& pacer) {

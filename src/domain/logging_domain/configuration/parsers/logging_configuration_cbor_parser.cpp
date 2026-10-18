@@ -19,7 +19,7 @@ pmr_unique_ptr<CborLoggingConfig> LoggingConfigurationCborParser::Serialize(cons
     logging_config->logging_interval_ms = configuration.logging_interval_ms;
     logging_config->max_log_size_mb = configuration.max_log_size_mb;
 
-    for(auto& [sensor_id, sensor_configuration] : configuration.sensor_configurations) {
+    for(const auto& [sensor_id, sensor_configuration] : configuration.sensor_configurations) {
         CborSensorLoggingConfig sensor_logging_config{ .sensor_id_hash = sensor_id,
             .is_enabled = sensor_configuration.is_enabled,
             .log_raw_value = sensor_configuration.log_raw_value,

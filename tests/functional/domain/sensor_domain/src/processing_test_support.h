@@ -119,7 +119,7 @@ public:
                 last_channels[i] = channel;
 
             request.results[i] = {};
-            if(channel == failing_channel) {
+            if(std::cmp_equal(channel, failing_channel)) {
                 request.results[i].error = AdcError::DRIVER;
                 request.results[i].errno_value = -5;
             } else {
@@ -190,7 +190,7 @@ MakeCalibrator(std::initializer_list<CalibrationData> table, AdcRange range = Ad
 // One calibrator shared by every channel, as a hand-made configuration rather than one the
 // manager padded.
 inline std::shared_ptr<AdcConfiguration>
-MakeAdcConfiguration(size_t channel_count, uint16_t samples, std::shared_ptr<AdcCalibrator> calibrator) {
+MakeAdcConfiguration(size_t channel_count, uint16_t samples, const std::shared_ptr<AdcCalibrator>& calibrator) {
 
     auto channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>();
     for(size_t i = 0; i < channel_count; i++)
@@ -251,7 +251,7 @@ inline ProcessingRig MakeProcessingRig(
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     int adc_channel_count,
-    std::shared_ptr<IGpio> gpio = nullptr
+    const std::shared_ptr<IGpio>& gpio = nullptr
 ) {
 
     ProcessingRig rig;

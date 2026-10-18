@@ -108,7 +108,7 @@ public:
 
     template<EventFilter<TEventType, TPayloadType> FilterType = AcceptAllFilter<TEventType, TPayloadType>>
     std::expected<SubscriptionHandle<TEventType>, std::string>
-    Subscribe(TEventType type, FilterType filter, EventHandler<TEventType, TPayloadType> handler);
+    Subscribe(TEventType type, const FilterType& filter, EventHandler<TEventType, TPayloadType> handler);
 
     std::expected<SubscriptionHandle<TEventType>, std::string>
     Subscribe(TEventType type, EventHandler<TEventType, TPayloadType> handler) {

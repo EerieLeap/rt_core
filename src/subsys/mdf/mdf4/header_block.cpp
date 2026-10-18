@@ -6,10 +6,11 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 HeaderBlock::HeaderBlock() :
-    BlockBase("HD") {
-    start_time_ns_ = 0;
-    tz_offset_min_ = 0;
-    dst_offset_min_ = 0;
+    BlockBase("HD"),
+    ,
+    dst_offset_min_(0),
+{
+
     time_flags_ = 0;
     time_class_ = 0;
     flags_ = 0;

@@ -18,7 +18,7 @@ using namespace eerie_leap::domain::canbus_domain::configuration::parsers;
 
 ZTEST_SUITE(canbus_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
-CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
+static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     CanbusConfiguration canbus_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     CanChannelConfiguration channel_configuration_0(std::allocator_arg, Mrm::GetDefaultPmr());
     channel_configuration_0.type = CanbusType::CLASSICAL_CAN;
@@ -123,7 +123,7 @@ CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     return canbus_configuration;
 }
 
-void canbus_configuration_parser_CompareCanbusConfigurations(
+static void canbus_configuration_parser_CompareCanbusConfigurations(
     CanbusConfiguration& canbus_configuration,
     CanbusConfiguration& deserialized_configuration
 ) {

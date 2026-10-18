@@ -69,7 +69,7 @@ struct Fixture {
             if(signal == nullptr)
                 return nullptr;
 
-            return std::shared_ptr<const CanSignalConfiguration>(message, signal);
+            return { message, signal };
         };
     }
 };

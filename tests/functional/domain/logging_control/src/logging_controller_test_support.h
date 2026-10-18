@@ -246,7 +246,7 @@ inline LoggingController::ConfigurationSetup StoresTriggersOn(std::initializer_l
     for(const auto sensor_id : sensor_ids)
         ids.emplace_back(sensor_id);
 
-    return [ids = std::move(ids)](std::shared_ptr<LoggingControlConfigurationManager> manager) {
+    return [ids = std::move(ids)](const std::shared_ptr<LoggingControlConfigurationManager>& manager) {
         LoggingControlConfiguration configuration(
             std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr()
         );
@@ -1016,12 +1016,12 @@ public:
         subscription_ = CreateScopedSubscription(
             LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
-                const auto active = event.payload.find(LoggingPayloadType::IsActive);
+                const auto* const active = event.payload.find(LoggingPayloadType::IsActive);
                 if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
                     return;
 
                 Entry entry{ .is_active = std::get<bool>(active->second) };
-                const auto reason = event.payload.find(LoggingPayloadType::Reason);
+                const auto* const reason = event.payload.find(LoggingPayloadType::Reason);
                 if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
                     entry.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
 
@@ -1096,7 +1096,7 @@ inline std::vector<uint8_t> ReadTheLogFile(FsService& fs_service) {
 }
 
 inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view text) {
-    return std::search(content.begin(), content.end(), text.begin(), text.end()) != content.end();
+    return std::ranges::search(content, , text, ) != content.end();
 }
 
 // The log files of the data directory: one per session.

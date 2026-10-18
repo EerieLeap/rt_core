@@ -68,12 +68,12 @@ public:
         subscription_ = CreateScopedSubscription(
             LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
-                const auto active = event.payload.find(LoggingPayloadType::IsActive);
+                const auto* const active = event.payload.find(LoggingPayloadType::IsActive);
                 if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
                     return;
 
                 Entry entry{ .is_active = std::get<bool>(active->second) };
-                const auto reason = event.payload.find(LoggingPayloadType::Reason);
+                const auto* const reason = event.payload.find(LoggingPayloadType::Reason);
                 if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
                     entry.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
 

@@ -4,6 +4,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include <utility>
+
 #include "cfb.h"
 #include "cfb_fonts.h"
 
@@ -205,7 +207,7 @@ bool Cfb::Clear(bool clear_display) {
 }
 
 void Cfb::SetAnimationHandler(std::function<void()> handler, uint32_t frame_rate) {
-    work_queue_task_.value().GetUserdata()->animation_handler = handler;
+    work_queue_task_.value().GetUserdata()->animation_handler = std::move(handler);
     work_queue_task_.value().GetUserdata()->frame_rate = frame_rate;
 }
 

@@ -101,7 +101,7 @@ ZTEST(time_helpers, test_ToUint64_keeps_sub_millisecond_precision) {
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_invokes_the_callable) {
     int calls = 0;
 
-    TimeHelpers::MeasureExecutionTimeUs([&calls]() {
+    TimeHelpers::MeasureExecutionTimeUs([&calls] {
         ++calls;
     });
 
@@ -109,30 +109,30 @@ ZTEST(time_helpers, test_MeasureExecutionTimeUs_invokes_the_callable) {
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_returns_non_negative_duration) {
-    const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {});
+    const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([] {});
 
-    zassert_true(elapsed_us >= 0.0f, "measured %f us", (double)elapsed_us);
+    zassert_true(elapsed_us >= 0.0F, "measured %f us", (double)elapsed_us);
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_measures_busy_work) {
-    const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([]() {
+    const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([] {
         k_busy_wait(5000);
     });
 
     // Emulated targets are noisy, so only the order of magnitude is checked.
-    zassert_true(elapsed_us > 0.0f, "measured %f us", (double)elapsed_us);
-    zassert_true(elapsed_us < 5000000.0f, "measured %f us", (double)elapsed_us);
+    zassert_true(elapsed_us > 0.0F, "measured %f us", (double)elapsed_us);
+    zassert_true(elapsed_us < 5000000.0F, "measured %f us", (double)elapsed_us);
 }
 
 ZTEST(time_helpers, test_MeasureExecutionTimeUs_can_be_called_repeatedly) {
     for(int i = 0; i < 3; ++i) {
         int calls = 0;
 
-        const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([&calls]() {
+        const auto elapsed_us = TimeHelpers::MeasureExecutionTimeUs([&calls] {
             ++calls;
         });
 
         zassert_equal(calls, 1, "iteration %d", i);
-        zassert_true(elapsed_us >= 0.0f, "iteration %d measured %f us", i, (double)elapsed_us);
+        zassert_true(elapsed_us >= 0.0F, "iteration %d measured %f us", i, (double)elapsed_us);
     }
 }

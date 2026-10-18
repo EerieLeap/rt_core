@@ -10,10 +10,11 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 using namespace eerie_leap::utilities::string;
 
-IdBlock::IdBlock() {
-    version_str_ = "4.10";
-    program_id_ = "EL";
-    version_num_ = VERSION_NUMBER;
+IdBlock::IdBlock() :
+    version_str_("4.10"),
+    program_id_("EL"),
+{
+
     standard_flags_ = 0;
     custom_flags_ = 0;
 

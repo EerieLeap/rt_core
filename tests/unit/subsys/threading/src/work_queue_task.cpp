@@ -26,7 +26,7 @@ k_work_sync idle_sync{};
 void NoopWorkHandler(k_work*) {}
 
 WorkQueueTask<Payload> MakeTask(const WorkQueueTask<Payload>::Handler& handler) {
-    return WorkQueueTask<Payload>(&idle_queue, &idle_sync, NoopWorkHandler, handler);
+    return { &idle_queue, &idle_sync, NoopWorkHandler, handler };
 }
 
 } // namespace

@@ -627,9 +627,11 @@ private:
 public:
     DispatchBlocker(TChannel& channel, typename TChannel::EventTypeEnum type) :
         channel_(channel),
-        type_(type) {
-        subscription_ = CreateScopedSubscription(
-            channel_, type_, [context = context_](const typename TChannel::EventMessage& event) {
+        type_(type),
+        subscription_(CreateScopedSubscription(
+            channel_,
+            type_,
+            [context = context_](const typename TChannel::EventMessage& event) {
                 if(event.source_id == k_fence_source_id) {
                     k_sem_give(&context->fence);
                     return;
@@ -642,7 +644,8 @@ public:
                 // Gives up after 5 s, so a case that never releases cannot wedge the bus for good.
                 k_sem_take(&context->release, K_SECONDS(5));
             }
-        );
+        )) {
+
         zassert_not_null(subscription_.get(), "The blocker's subscription was refused.");
     }
 

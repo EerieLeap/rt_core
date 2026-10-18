@@ -16,9 +16,9 @@ Thread::Thread(
 ) :
     ThreadBase(std::move(name), stack_size, priority, is_cooperative, resource),
     instance_(instance),
-    is_initialized_(false),
-    is_created_(false),
-    is_running_(ATOMIC_INIT(0)) {}
+    ,
+    ,
+{}
 
 Thread::~Thread() {
     Join();

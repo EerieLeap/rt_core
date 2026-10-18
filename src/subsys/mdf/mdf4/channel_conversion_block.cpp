@@ -7,11 +7,11 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 ChannelConversionBlock::ChannelConversionBlock(ConversionType conversion_type) :
-    BlockBase("CC") {
+    BlockBase("CC"),
+    conversion_type_(conversion_type),
+    flags_(0),
+{
 
-    conversion_type_ = conversion_type;
-    precision_ = 0;
-    flags_ = 0;
     min_physical_value_ = 0.0;
     max_physical_value_ = 0.0;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 #include "zephyr/drivers/gpio.h"
 
@@ -17,7 +18,7 @@ private:
 
 public:
     GpioFactory(DtGpioProvider dt_gpio_provider) :
-        dt_gpio_provider_(dt_gpio_provider) {}
+        dt_gpio_provider_(std::move(dt_gpio_provider)) {}
 
     std::shared_ptr<IGpio> Create() {
 #ifdef CONFIG_GPIO_EMUL

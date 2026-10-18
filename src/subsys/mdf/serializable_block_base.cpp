@@ -1,13 +1,14 @@
 #include <ios>
 #include <stdexcept>
+#include <utility>
 
 #include "subsys/mdf/serializable_block_base.h"
 
 namespace eerie_leap::subsys::mdf {
 
 SerializableBlockBase::SerializableBlockBase() :
-    address_(0),
-    is_serialized_(false) {}
+    ,
+{}
 
 uint64_t SerializableBlockBase::GetSerializedSize() const {
     return GetBlockSize();
@@ -46,7 +47,7 @@ uint64_t SerializableBlockBase::RewriteToStream(std::streambuf& stream) {
         std::streambuf::pos_type(static_cast<std::streamoff>(address_)), std::ios_base::out
     );
 
-    if(position == std::streambuf::pos_type(std::streambuf::off_type(-1)))
+    if(position == std::streambuf::pos_type(static_cast<std::streambuf::off_type>(-1)))
         throw std::ios_base::failure("Stream does not support seeking.");
 
     const uint64_t size = GetSerializedSize();
@@ -110,7 +111,7 @@ uint64_t SerializableBlockBase::ResolveBlockAddress(uint64_t address) {
 void SerializableBlockBase::WriteBlockData(std::streambuf& stream, const uint8_t* data, uint64_t size) {
     const auto written = stream.sputn(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 
-    if(written < 0 || static_cast<uint64_t>(written) != size)
+    if(written < 0 || std::cmp_not_equal(written, size))
         throw std::ios_base::failure("Failed to write block to stream.");
 }
 

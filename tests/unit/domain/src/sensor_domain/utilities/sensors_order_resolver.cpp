@@ -2,6 +2,7 @@
 #include <eerie_memory.hpp>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <zephyr/ztest.h>
 
 #include "domain/sensor_domain/models/sensor.h"
@@ -20,7 +21,7 @@ using namespace eerie_leap::domain::sensor_domain::utilities;
 
 ZTEST_SUITE(sensors_order_resolver, NULL, NULL, NULL, NULL, NULL);
 
-std::shared_ptr<Sensor> sensors_order_resolver_MakeSensor(std::string_view id, const char* expression) {
+static std::shared_ptr<Sensor> sensors_order_resolver_MakeSensor(std::string_view id, const char* expression) {
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
 
     sensor->configuration.type = SensorType::VIRTUAL_ANALOG;
@@ -33,7 +34,7 @@ std::shared_ptr<Sensor> sensors_order_resolver_MakeSensor(std::string_view id, c
     return sensor;
 }
 
-int sensors_order_resolver_IndexOf(const std::vector<std::shared_ptr<Sensor>>& sensors, std::string_view id) {
+static int sensors_order_resolver_IndexOf(const std::vector<std::shared_ptr<Sensor>>& sensors, std::string_view id) {
     for(size_t i = 0; i < sensors.size(); ++i)
         if(sensors[i]->id == id)
             return static_cast<int>(i);
@@ -41,7 +42,7 @@ int sensors_order_resolver_IndexOf(const std::vector<std::shared_ptr<Sensor>>& s
     return -1;
 }
 
-bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_ptr<Sensor>>& sensors) {
+static bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     for(size_t i = 0; i < sensors.size(); ++i) {
         if(!sensors[i]->configuration.HasExpression())
             continue;
@@ -53,7 +54,7 @@ bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_
 
         for(const std::string_view variable : expression_evaluator->GetVariableNames()) {
             const int position = sensors_order_resolver_IndexOf(sensors, std::string(variable));
-            if(position < 0 || static_cast<size_t>(position) >= i)
+            if(position < 0 || std::cmp_greater_equal(position, i))
                 return false;
         }
     }
@@ -61,7 +62,7 @@ bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_
     return true;
 }
 
-std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 

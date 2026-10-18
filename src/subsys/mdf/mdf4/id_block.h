@@ -28,7 +28,7 @@ private:
     std::string version_str_; // 8 bytes, Format version
     std::string program_id_;  // 8 bytes, Program identifier
     // uint8_t reserved_0_[4];              // 4 bytes, Reserved (byte order / float format in MDF 3.x)
-    uint16_t version_num_; // 2 bytes, Version number
+    uint16_t version_num_{ VERSION_NUMBER }; // 2 bytes, Version number
     // uint8_t reserved_1_[30];             // 30 bytes, Reserved
     uint16_t standard_flags_; // 2 bytes, Flags
     uint16_t custom_flags_;   // 2 bytes, Flags

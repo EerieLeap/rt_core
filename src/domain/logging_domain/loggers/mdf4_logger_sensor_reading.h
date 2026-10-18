@@ -78,7 +78,7 @@ private:
     std::unique_ptr<Mdf4File> mdf4_file_;
     std::unordered_map<uint32_t, LogTarget> targets_;
     std::vector<TargetChannelGroup> target_channel_groups_;
-    std::streambuf* stream_;
+    std::streambuf* stream_{ nullptr };
     std::chrono::system_clock::time_point start_time_;
 
     uint64_t next_record_id_ = 1;

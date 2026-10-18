@@ -238,7 +238,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     // Create first sensor config
     const std::string sensor_1_name = "name 1";
     const std::string sensor_1_unit = "km/h";
-    const std::string sensor_1_description = "";
+    const std::string sensor_1_description;
     const CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
         .unit = CborHelpers::ToZcborString(sensor_1_unit),
         .description = CborHelpers::ToZcborString(sensor_1_description) };
@@ -263,7 +263,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Save_config_successfully_sav
     // Create second sensor config
     const std::string sensor_2_name = "name 2";
     const std::string sensor_2_unit = "m/s";
-    const std::string sensor_2_description = "";
+    const std::string sensor_2_description;
     const CborSensorMetadataConfig metadata_config_2 = { .name = CborHelpers::ToZcborString(sensor_2_name),
         .unit = CborHelpers::ToZcborString(sensor_2_unit),
         .description = CborHelpers::ToZcborString(sensor_2_description) };
@@ -309,7 +309,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
     // Create first sensor config
     const std::string sensor_1_name = "name 3";
     const std::string sensor_1_unit = "km/h";
-    const std::string sensor_1_description = "";
+    const std::string sensor_1_description;
     const CborSensorMetadataConfig metadata_config_1 = { .name = CborHelpers::ToZcborString(sensor_1_name),
         .unit = CborHelpers::ToZcborString(sensor_1_unit),
         .description = CborHelpers::ToZcborString(sensor_1_description) };
@@ -485,7 +485,7 @@ ZTEST(configuration_service, test_CborSensorsConfig_Load_config_successfully_sav
 
 ZTEST(configuration_service, test_CborCanbusConfig_Load_config_successfully_saved_and_loaded) {
     const std::string message_name = "EL_FRAME_0";
-    const std::string script_path = "";
+    const std::string script_path;
     CborCanMessageConfig message_config(std::allocator_arg, Mrm::GetDefaultPmr());
     message_config.frame_id = 0x123;
     message_config.is_enabled = false;

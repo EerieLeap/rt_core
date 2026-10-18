@@ -110,7 +110,7 @@ private:
     void RunInSession(TWork&& work) {
         const atomic_val_t session = atomic_get(&session_);
 
-        work_queue_thread_->Run([this, session, work = std::forward<TWork>(work)]() {
+        work_queue_thread_->Run([this, session, work = std::forward<TWork>(work)] {
             if(atomic_get(&session_) == session)
                 work();
         });

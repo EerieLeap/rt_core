@@ -31,7 +31,7 @@ struct TestData {
     int number;
 };
 
-void SetupFiles(FsService* fs_service, const std::string& name_prefix) {
+static void SetupFiles(FsService* fs_service, const std::string& name_prefix) {
     TestData test_data = { .str = "Some test string test_" + name_prefix, .number = 1234 };
 
     const std::string dir_path = "test_" + name_prefix + "_dir";
@@ -318,7 +318,7 @@ ZTEST(fs_service, test_ListFiles) {
     zassert_equal(core_files.size(), 2);
 
     std::unordered_set<std::string> core_files_set;
-    for(const auto name : core_files)
+    for(const auto& name : core_files)
         core_files_set.insert(name);
     zassert_equal(core_files_set.count(dir_path), 1);
     zassert_equal(core_files_set.count("test_ListFiles_file_4.txt"), 1);
@@ -327,7 +327,7 @@ ZTEST(fs_service, test_ListFiles) {
     zassert_equal(dir_files.size(), 3);
 
     std::unordered_set<std::string> dir_files_set;
-    for(const auto name : dir_files)
+    for(const auto& name : dir_files)
         dir_files_set.insert(name);
     zassert_equal(dir_files_set.count("test_ListFiles_file_1.txt"), 1);
     zassert_equal(dir_files_set.count("test_ListFiles_file_2.txt"), 1);
@@ -516,7 +516,7 @@ ZTEST(fs_service, test_Delete) {
     zassert_equal(core_files.size(), 2);
 
     std::unordered_set<std::string> core_files_set;
-    for(const auto name : core_files)
+    for(const auto& name : core_files)
         core_files_set.insert(name);
     zassert_equal(core_files_set.count(dir_path), 1);
     zassert_equal(core_files_set.count("test_Delete_file_4.txt"), 1);
@@ -525,7 +525,7 @@ ZTEST(fs_service, test_Delete) {
     zassert_equal(dir_files.size(), 3);
 
     std::unordered_set<std::string> dir_files_set;
-    for(const auto name : dir_files)
+    for(const auto& name : dir_files)
         dir_files_set.insert(name);
     zassert_equal(dir_files_set.count("test_Delete_file_1.txt"), 1);
     zassert_equal(dir_files_set.count("test_Delete_file_2.txt"), 1);
@@ -536,7 +536,7 @@ ZTEST(fs_service, test_Delete) {
     zassert_equal(dir_files.size(), 2);
 
     dir_files_set.clear();
-    for(const auto name : dir_files)
+    for(const auto& name : dir_files)
         dir_files_set.insert(name);
     zassert_equal(dir_files_set.count("test_Delete_file_1.txt"), 1);
     zassert_equal(dir_files_set.count("test_Delete_file_2.txt"), 0);
@@ -547,7 +547,7 @@ ZTEST(fs_service, test_Delete) {
     zassert_equal(core_files.size(), 1);
 
     core_files_set.clear();
-    for(const auto name : core_files)
+    for(const auto& name : core_files)
         core_files_set.insert(name);
     zassert_equal(core_files_set.count(dir_path), 1);
     zassert_equal(core_files_set.count("test_Delete_file_4.txt"), 0);

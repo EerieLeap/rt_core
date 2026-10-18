@@ -12,7 +12,7 @@ protected:
     std::pmr::memory_resource* mr_;
     int k_stack_size_;
     int k_priority_;
-    k_thread_stack_t* stack_area_;
+    k_thread_stack_t* stack_area_{ nullptr };
     std::string name_;
 
 public:

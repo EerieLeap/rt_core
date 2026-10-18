@@ -189,7 +189,7 @@ inline bool IsUnfinalized(const std::vector<uint8_t>& content) {
 }
 
 inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view text) {
-    return std::search(content.begin(), content.end(), text.begin(), text.end()) != content.end();
+    return std::ranges::search(content, , text, ) != content.end();
 }
 
 // A property of the header comment, as the logger writes LoggerMetadata.
@@ -390,12 +390,12 @@ inline LoggerMetadata MakeTestLoggerMetadata() {
 // interval and size limit over @p sensors, here with every sensor enabled and its raw value logged.
 // The logger takes a snapshot, so the sensors are enabled there without storing a configuration.
 inline LogWriterService::LoggerFactory MakeLoggerFactory(
-    std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
-    std::vector<std::shared_ptr<Sensor>> sensors,
+    const std::shared_ptr<LoggingConfigurationManager>& logging_configuration_manager,
+    const std::vector<std::shared_ptr<Sensor>>& sensors,
     bool log_only_new_data
 ) {
 
-    return [logging_configuration_manager, sensors, log_only_new_data]() -> std::shared_ptr<ILogger<SensorReading>> {
+    return [logging_configuration_manager, sensors, log_only_new_data] -> std::shared_ptr<ILogger<SensorReading>> {
         const auto stored_configuration = logging_configuration_manager->Get();
 
         LoggingConfiguration logger_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -716,11 +716,11 @@ private:
     void OnStatusUpdated(const LoggingEventsChannel::EventMessage& event) {
         StatusEvent status;
 
-        const auto is_active = event.payload.find(LoggingPayloadType::IsActive);
+        const auto* const is_active = event.payload.find(LoggingPayloadType::IsActive);
         if(is_active != event.payload.end() && std::holds_alternative<bool>(is_active->second))
             status.is_active = std::get<bool>(is_active->second);
 
-        const auto reason = event.payload.find(LoggingPayloadType::Reason);
+        const auto* const reason = event.payload.find(LoggingPayloadType::Reason);
         if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
             status.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
 
@@ -816,7 +816,7 @@ public:
         subscription_ = CreateScopedSubscription(
             LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [context = context_](const LoggingEventsChannel::EventMessage& event) {
-                const auto is_active = event.payload.find(LoggingPayloadType::IsActive);
+                const auto* const is_active = event.payload.find(LoggingPayloadType::IsActive);
                 if(is_active == event.payload.end()
                     || !std::holds_alternative<bool>(is_active->second)
                     || std::get<bool>(is_active->second)) {

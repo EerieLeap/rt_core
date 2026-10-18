@@ -39,7 +39,7 @@ std::optional<bool> ReadState(const EventData& value) {
                                                               : std::nullopt;
 
     if(const auto* real = std::get_if<float>(&value))
-        return *real == 0.0f || *real == 1.0f ? std::optional<bool>(*real == 1.0f) : std::nullopt;
+        return *real == 0.0F || *real == 1.0F ? std::optional<bool>(*real == 1.0F) : std::nullopt;
 
     return std::nullopt;
 }
@@ -105,7 +105,7 @@ struct LoggingTriggerSet::Trigger {
 LoggingTriggerSet::LoggingTriggerSet(
     std::shared_ptr<ILoggingControl> logging_control,
     std::span<const LoggingTrigger> triggers,
-    SelectorResolver is_selector_known,
+    const SelectorResolver& is_selector_known,
     FirstValue first_value
 ) :
     logging_control_(std::move(logging_control)),
@@ -191,7 +191,7 @@ void LoggingTriggerSet::OnConfigurationUpdated(const SelectorResolver& is_select
                 is_known[i] = is_selector_known(triggers_[i]->binding);
         } catch(...) {
             // Withdraws nothing, but the baselines below are set all the same.
-            std::fill(is_known.begin(), is_known.end(), true);
+            std::ranges::fill(is_known, , true);
             resolver_failure = std::current_exception();
         }
     }

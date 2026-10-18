@@ -11,13 +11,13 @@ class SubscriptionHandle {
 private:
     size_t id_;
     EventTypeEnum event_type_;
-    bool valid_;
+    bool valid_{ true };
 
 public:
     SubscriptionHandle(size_t id, EventTypeEnum type) :
         id_(id),
         event_type_(type),
-        valid_(true) {}
+    {}
 
     SubscriptionHandle(const SubscriptionHandle&) = delete;
     SubscriptionHandle& operator=(const SubscriptionHandle&) = delete;

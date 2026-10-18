@@ -18,7 +18,12 @@ struct Subscription {
     EventHandler<EventTypeEnum, PayloadTypeEnum> handler;
 
     template<EventFilter<EventTypeEnum, PayloadTypeEnum> FilterType>
-    Subscription(size_t sub_id, EventTypeEnum type, FilterType f, EventHandler<EventTypeEnum, PayloadTypeEnum> h) :
+    Subscription(
+        size_t sub_id,
+        EventTypeEnum type,
+        const FilterType& f,
+        EventHandler<EventTypeEnum, PayloadTypeEnum> h
+    ) :
         id(sub_id),
         event_type(type),
         filter(f),

@@ -199,7 +199,7 @@ ZTEST(adc_factory, test_Create_uses_the_device_tree_when_available) {
 }
 
 ZTEST(adc_factory, test_Create_falls_back_to_the_simulator) {
-    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& {
+    AdcFactory factory([] -> std::optional<std::vector<AdcDTInfo>>& {
         return no_dt_adcs;
     });
     const auto manager = factory.Create();

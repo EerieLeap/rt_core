@@ -46,7 +46,7 @@ private:
 public:
     /** @throws std::invalid_argument without the filesystem service or the COM service. */
     CanbusComLoggingAvailabilityReporter(
-        std::shared_ptr<WorkQueueThread> work_queue_thread,
+        const std::shared_ptr<WorkQueueThread>& work_queue_thread,
         std::shared_ptr<IFsService> sd_fs_service,
         std::shared_ptr<CanbusComService> canbus_com_service
     );

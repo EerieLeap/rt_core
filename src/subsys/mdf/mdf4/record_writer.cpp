@@ -144,7 +144,7 @@ uint64_t RecordWriter::Write(std::streambuf& stream, std::span<const MdfValue> v
         std::memcpy(record_.data() + invalidation_offset_, &invalid_mask, invalidation_bytes_);
 
     const auto written = stream.sputn(reinterpret_cast<const char*>(record_.data()), record_size_);
-    if(written != static_cast<std::streamsize>(record_size_))
+    if(std::cmp_not_equal(written, record_size_))
         throw std::ios_base::failure("Failed to write data record to stream.");
 
     channel_group_->IncrementCycleCount();

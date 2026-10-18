@@ -247,7 +247,8 @@ public:
     ) :
         configuration_name_(std::move(configuration_name)),
         fs_service_(std::move(fs_service)),
-        work_queue_thread_(std::move(work_queue_thread)) {
+        work_queue_thread_(std::move(work_queue_thread)),
+        serializer_(std::make_unique<cbor::CborSerializer<T>>()) {
 
         k_mutex_init(&mutex_);
 
@@ -258,7 +259,6 @@ public:
         k_work_init(&task_load_.work, WorkTaskLoad);
 
         const auto funcs = cbor::CborTraitRegistry::Get<T>();
-        serializer_ = std::make_unique<cbor::CborSerializer<T>>();
 
         if(!fs_service_->Exists(configuration_dir_))
             fs_service_->CreateDirectory(configuration_dir_);

@@ -43,8 +43,8 @@ public:
         std::function<std::optional<CdmpCommandResult>(const CdmpCommandRequestMessage& request)>;
 
 private:
-    int canbus_handler_id_;
-    int canbus_response_handler_id_;
+    int canbus_handler_id_{ -1 };
+    int canbus_response_handler_id_{ -1 };
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<CdmpTransactionService> transaction_service_;

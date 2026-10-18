@@ -89,7 +89,7 @@ void CanbusService::Configure() {
             continue;
         }
 
-        auto canbus_instance = canbuses.at(bus_channel).get();
+        auto* canbus_instance = canbuses.at(bus_channel).get();
 
         const CanbusConfig canbus_config(
             canbus_device, channel_configuration.type, channel_configuration.bitrate, channel_configuration.data_bitrate
@@ -219,7 +219,7 @@ void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const 
     StoreBitrate(*canbus_configuration_manager_, bus_channel, bitrate);
 }
 
-int CanbusService::RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler) {
+int CanbusService::RegisterConfigurationResetHandler(const CanbusServiceUpdatedHandler& handler) {
     const int handler_id = configuration_reset_next_handler_id_++;
     configuration_reset_handlers_.try_emplace(handler_id, std::move(handler));
 
@@ -230,7 +230,7 @@ bool CanbusService::UnregisterConfigurationResetHandler(int handler_id) {
     return configuration_reset_handlers_.erase(handler_id) > 0;
 }
 
-int CanbusService::RegisterConfigurationUpdatedHandler(CanbusServiceUpdatedHandler handler) {
+int CanbusService::RegisterConfigurationUpdatedHandler(const CanbusServiceUpdatedHandler& handler) {
     const int handler_id = configuration_updated_next_handler_id_++;
     configuration_updated_handlers_.try_emplace(handler_id, std::move(handler));
 

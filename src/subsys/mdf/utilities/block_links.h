@@ -66,7 +66,7 @@ public:
     const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
         std::vector<std::shared_ptr<ISerializableBlock>> links;
         links.reserve(links_.size());
-        for(auto& link : links_)
+        for(const auto& link : links_)
             links.push_back(link);
 
         return links;
@@ -79,7 +79,7 @@ public:
 
         uint64_t offset = 0;
 
-        for(auto& link : links_) {
+        for(const auto& link : links_) {
             if(link) {
                 auto address = link->GetAddress();
                 if(address == 0)

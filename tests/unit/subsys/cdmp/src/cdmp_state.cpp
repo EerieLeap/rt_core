@@ -198,7 +198,7 @@ struct StateFixture {
             const CanFilter filter = can_id_manager->GetReceiveFilter(
                 CanId::Standard(can_id_manager->GetBaseCanId() + offset)
             );
-            if(std::find(filters.begin(), filters.end(), filter) == filters.end())
+            if(std::ranges::find(filters, , filter) == filters.end())
                 filters.push_back(filter);
         }
 
@@ -206,7 +206,7 @@ struct StateFixture {
             const int handler_id = (*canbus)->RegisterFrameReceivedHandler(
                 filter, [this, recorded_offsets](const CanFrame& frame) {
                     const uint32_t offset = frame.id - can_id_manager->GetBaseCanId();
-                    if(std::find(recorded_offsets.begin(), recorded_offsets.end(), offset) != recorded_offsets.end())
+                    if(std::ranges::find(recorded_offsets, , offset) != recorded_offsets.end())
                         bus_frames.Add(offset, frame);
                 }
             );
@@ -236,7 +236,7 @@ struct StateFixture {
     void DrainQueue() {
         k_sem done;
         k_sem_init(&done, 0, 1);
-        work_queue->Run([&done]() {
+        work_queue->Run([&done] {
             k_sem_give(&done);
         });
         zassert_equal(k_sem_take(&done, K_MSEC(FRAME_TIMEOUT_MS)), 0, "The work queue is stuck");

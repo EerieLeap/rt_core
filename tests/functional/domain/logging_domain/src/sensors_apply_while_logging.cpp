@@ -49,8 +49,8 @@ std::shared_ptr<Sensor> MakeVirtualSensor(std::string_view id, const char* expre
 // shipped one back: the logger for the sensors stored when the writer starts, every one of them
 // logged. test_ASensorsApplyWhileLoggingStartsTheNextFile covers the supervisor's own factory.
 LogWriterService::LoggerFactory MakeStoredSensorsFactory(
-    std::shared_ptr<SensorsConfigurationManager> sensors_manager,
-    std::shared_ptr<LoggingConfigurationManager> logging_manager
+    const std::shared_ptr<SensorsConfigurationManager>& sensors_manager,
+    const std::shared_ptr<LoggingConfigurationManager>& logging_manager
 ) {
 
     return [sensors_manager, logging_manager] {
@@ -102,7 +102,7 @@ public:
 
 // Stores @p sensor and waits until processing runs it. The first flush then waits for the restart,
 // which may still be starting the dependents, and the second for what the restart queued meanwhile.
-void ApplySensors(LogWriterRig& rig, SensorsController& controller, std::shared_ptr<Sensor> sensor) {
+void ApplySensors(LogWriterRig& rig, SensorsController& controller, const std::shared_ptr<Sensor>& sensor) {
     const auto id = sensor->id;
 
     zassert_true(controller.GetConfigurationManager()->Update({ sensor }), "the new sensors were not stored");

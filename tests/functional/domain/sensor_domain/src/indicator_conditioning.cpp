@@ -669,7 +669,7 @@ struct ConditioningRig {
 
 ConditioningRig MakeRig(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
-    std::shared_ptr<FaultInjector> fault_injector = nullptr,
+    const std::shared_ptr<FaultInjector>& fault_injector = nullptr,
     std::shared_ptr<FsService> fs_service = nullptr
 ) {
 

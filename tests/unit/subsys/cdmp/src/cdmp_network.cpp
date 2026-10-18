@@ -219,7 +219,7 @@ struct NetworkFixture {
 
     // As the receive handler of a running service hands a frame over.
     void Receive(Frame frame) {
-        work_queue->Run([this, frame = std::move(frame)]() {
+        work_queue->Run([this, frame = std::move(frame)] {
             service.ProcessFrame(frame);
         });
     }
@@ -233,7 +233,7 @@ struct NetworkFixture {
     void DrainQueue() {
         k_sem done;
         k_sem_init(&done, 0, 1);
-        work_queue->Run([&done]() {
+        work_queue->Run([&done] {
             k_sem_give(&done);
         });
         zassert_equal(k_sem_take(&done, K_MSEC(FRAME_TIMEOUT_MS)), 0, "The work queue is stuck");
@@ -809,7 +809,7 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     // Hold the queue, so the next frame waits behind it until after the stop.
     k_sem release;
     k_sem_init(&release, 0, 1);
-    fixture.work_queue->Run([&release]() {
+    fixture.work_queue->Run([&release] {
         k_sem_take(&release, K_FOREVER);
     });
 

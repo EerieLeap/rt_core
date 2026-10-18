@@ -28,7 +28,7 @@ namespace {
 // native_sim links the host libc, so the finalized file can be handed to asammdf on the host.
 void DumpToHost([[maybe_unused]] const std::vector<uint8_t>& content) {
 #ifdef CONFIG_ARCH_POSIX
-    const std::string_view dump_dir = CONFIG_LOGGING_TEST_DUMP_DIR;
+    const std::string_view dump_dir;
     if(dump_dir.empty())
         return;
 

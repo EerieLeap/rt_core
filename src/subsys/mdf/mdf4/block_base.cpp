@@ -32,7 +32,7 @@ std::unique_ptr<uint8_t[]> BlockBase::SerializeBase() const {
     uint64_t offset = 0;
 
     auto id_char_array = "##" + id_;
-    std::copy(id_char_array.begin(), id_char_array.end(), buffer.get() + offset);
+    std::ranges::copy(id_char_array, , buffer.get() + offset);
     offset += BLOCK_ID_SIZE;
 
     offset += 4; // reserved_0_

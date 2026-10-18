@@ -103,7 +103,7 @@ private:
     // BlockLink references_[reference_count_]; // 8 bytes * reference_count_, reference parameters
 
     ConversionType conversion_type_; // 1 bytes, conversion type
-    uint8_t precision_;              // 1 bytes, precision
+    uint8_t precision_{ 0 };         // 1 bytes, precision
     uint16_t flags_;                 // 2 bytes, flags
     // uint16_t reference_count_;       // 2 bytes, derived from the extra links
     // uint16_t value_count_;           // 2 bytes, derived from values_

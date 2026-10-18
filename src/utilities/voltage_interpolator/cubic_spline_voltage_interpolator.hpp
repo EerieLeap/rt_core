@@ -51,28 +51,28 @@ public:
             h[i] = table[i + 1].voltage - table[i].voltage;
 
         for(size_t i = 1; i < n - 1; ++i)
-            alpha[i] = (3.0f / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a)
-                - (3.0f / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
+            alpha[i] = (3.0F / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a)
+                - (3.0F / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
 
-        l[0] = 1.0f;
-        mu[0] = 0.0f;
-        z[0] = 0.0f;
+        l[0] = 1.0F;
+        mu[0] = 0.0F;
+        z[0] = 0.0F;
 
         for(size_t i = 1; i < n - 1; ++i) {
-            l[i] = 2.0f * (table[i + 1].voltage - table[i - 1].voltage) - h[i - 1] * mu[i - 1];
+            l[i] = 2.0F * (table[i + 1].voltage - table[i - 1].voltage) - h[i - 1] * mu[i - 1];
             mu[i] = h[i] / l[i];
             z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
         }
 
-        l[n - 1] = 1.0f;
-        z[n - 1] = 0.0f;
-        coefficients_[n - 1].c = 0.0f;
+        l[n - 1] = 1.0F;
+        z[n - 1] = 0.0F;
+        coefficients_[n - 1].c = 0.0F;
 
         for(int j = n - 2; j >= 0; --j) {
             coefficients_[j].c = z[j] - mu[j] * coefficients_[j + 1].c;
             coefficients_[j].b = (coefficients_[j + 1].a - coefficients_[j].a) / h[j]
-                - h[j] * (coefficients_[j + 1].c + 2.0f * coefficients_[j].c) / 3.0f;
-            coefficients_[j].d = (coefficients_[j + 1].c - coefficients_[j].c) / (3.0f * h[j]);
+                - h[j] * (coefficients_[j + 1].c + 2.0F * coefficients_[j].c) / 3.0F;
+            coefficients_[j].d = (coefficients_[j + 1].c - coefficients_[j].c) / (3.0F * h[j]);
         }
     }
 
@@ -86,7 +86,7 @@ public:
                 return table.back().value;
         }
 
-        const auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
+        const auto it = std::ranges::upper_bound(table, , voltage, [](float val, const CalibrationData& d) {
             return val < d.voltage;
         });
 

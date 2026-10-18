@@ -224,7 +224,7 @@ ZTEST(adc_simulator_manager, test_factory_ignores_device_tree_without_a_driver) 
         .resolutions = { 12 },
         .oversampling = { 0 } } };
 
-    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& {
+    AdcFactory factory([] -> std::optional<std::vector<AdcDTInfo>>& {
         return dt_adcs;
     });
     const auto manager = factory.Create();

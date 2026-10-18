@@ -13,7 +13,7 @@ class FsServiceStreamBuf : public std::streambuf {
 private:
     IFsService* fs_service_;
     struct fs_file_t file_;
-    bool file_opened_;
+    bool file_opened_{ false };
 
     static constexpr size_t PATH_BUFFER_SIZE = 256;
     static constexpr size_t BUFFER_SIZE = 4096;

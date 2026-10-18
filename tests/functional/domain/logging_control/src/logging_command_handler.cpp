@@ -278,7 +278,7 @@ RegisterBlockingHandler(const Fixture& fixture, const std::shared_ptr<Signals>& 
 
     fixture.harness.com->SetCommandHandler<CanbusComLoggingCommand>(
         CanbusComCommandCode::LOGGING,
-        [signals, sentinel = std::move(sentinel), result](std::optional<CanbusComLoggingCommand>) {
+        [signals, sentinel = std::move(sentinel), result](const std::optional<CanbusComLoggingCommand>&) {
             signals->calls++;
             k_sem_give(&signals->entered);
             // Gives up after 5 s, so a case that never releases cannot wedge the CDMP queue for good.
@@ -336,7 +336,7 @@ ZTEST(logging_command_handler, test_AHandlerReplacedDuringItsCallFinishesThatCal
     const auto replacement_calls = std::make_shared<std::atomic<int>>(0);
     const int64_t start_ms = k_uptime_get();
     F().harness.com->SetCommandHandler<CanbusComLoggingCommand>(
-        CanbusComCommandCode::LOGGING, [replacement_calls](std::optional<CanbusComLoggingCommand>) {
+        CanbusComCommandCode::LOGGING, [replacement_calls](const std::optional<CanbusComLoggingCommand>&) {
             (*replacement_calls)++;
 
             return false;

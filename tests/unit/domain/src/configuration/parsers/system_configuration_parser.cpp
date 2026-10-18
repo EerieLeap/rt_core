@@ -10,7 +10,7 @@ using namespace eerie_leap::domain::system_domain::configuration::parsers;
 
 ZTEST_SUITE(system_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
-SystemConfiguration system_configuration_parser_GetTestConfiguration() {
+static SystemConfiguration system_configuration_parser_GetTestConfiguration() {
     SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     system_configuration.device_id = 8765;
     system_configuration.build_number = 12345;
@@ -18,7 +18,7 @@ SystemConfiguration system_configuration_parser_GetTestConfiguration() {
     return system_configuration;
 }
 
-void system_configuration_parser_CompareSystemConfigurations(
+static void system_configuration_parser_CompareSystemConfigurations(
     SystemConfiguration& system_configuration,
     SystemConfiguration& deserialized_system_configuration
 ) {

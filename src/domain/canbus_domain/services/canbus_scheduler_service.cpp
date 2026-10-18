@@ -52,7 +52,7 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
                 can_frame_data = processed_data;
         }
 
-        if(can_frame_data.size() > 0)
+        if(!can_frame_data.empty())
             (*task->canbus)->SendFrame(task->frame_id, can_frame_data);
 
         LOG_HEXDUMP_DBG(

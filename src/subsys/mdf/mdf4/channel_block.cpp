@@ -6,11 +6,12 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count) :
-    BlockBase("CN") {
-    type_ = type;
-    sync_type_ = sync_type;
-    data_type_ = data_type;
-    bit_offset_ = 0;
+    BlockBase("CN"),
+    type_(type),
+    sync_type_(sync_type),
+    data_type_(data_type),
+    bit_offset_(0) {
+
     byte_offset_ = 0;
     bit_count_ = bit_count;
     flags_ = 0;
@@ -89,16 +90,16 @@ void ChannelBlock::SetInvalidationBit(uint32_t position) {
     flags_ |= std::to_underlying(Flag::InvalidValid);
 }
 
-void ChannelBlock::SetName(std::shared_ptr<TextBlock> name) {
+void ChannelBlock::SetName(const std::shared_ptr<TextBlock>& name) {
     links_.SetLink(LinkType::TextName, name);
 }
 
-void ChannelBlock::SetUnit(std::shared_ptr<TextBlock> unit) {
+void ChannelBlock::SetUnit(const std::shared_ptr<TextBlock>& unit) {
     links_.SetLink(LinkType::TextUnit, unit);
 }
 
 void ChannelBlock::SetArrayBlock(std::shared_ptr<IBlock> array_block) {
-    links_.SetLink(LinkType::ChannelArray, array_block);
+    links_.SetLink(LinkType::ChannelArray, std::move(array_block));
 }
 
 void ChannelBlock::SetOffsetBytes(uint32_t offset_bytes) {
@@ -114,7 +115,7 @@ void ChannelBlock::SetBitCount(uint32_t bit_count) {
 }
 
 void ChannelBlock::SetSignalDataBlock(std::shared_ptr<IBlock> block) {
-    links_.SetLink(LinkType::SignalData, block);
+    links_.SetLink(LinkType::SignalData, std::move(block));
 }
 
 void ChannelBlock::SetComment(std::shared_ptr<MetadataBlock> comment) {

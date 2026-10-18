@@ -32,11 +32,11 @@ struct SensorProbe {
         const char* name = k_thread_name_get(k_current_get());
         handler_thread_name = name != nullptr ? std::string(name) : std::string();
 
-        if(auto it = event.payload.find(SensorPayloadType::SensorId); it != event.payload.end())
+        if(const auto* it = event.payload.find(SensorPayloadType::SensorId); it != event.payload.end())
             if(const auto* id = std::get_if<uint32_t>(&it->second))
                 sensor_id = *id;
 
-        if(auto it = event.payload.find(SensorPayloadType::Value); it != event.payload.end())
+        if(const auto* it = event.payload.find(SensorPayloadType::Value); it != event.payload.end())
             if(const auto* reading = std::get_if<float>(&it->second))
                 value = *reading;
 

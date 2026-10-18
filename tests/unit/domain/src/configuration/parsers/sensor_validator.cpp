@@ -85,7 +85,7 @@ bool Validates(SensorType type, std::optional<int> sampling_rate_ms = 100) {
 }
 
 bool Contains(const std::optional<std::string>& error, std::string_view text) {
-    return error.has_value() && error->find(text) != std::string::npos;
+    return error.has_value() && error->contains(text);
 }
 
 // The validation error on a unit with these channel counts, or nothing when the sensors validate.

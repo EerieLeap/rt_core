@@ -51,9 +51,7 @@ size_t CanFrameRouter::Attach(const SensorGeneration& generation) {
                 return nullptr;
 
             // Aliases the owning message configuration, so that stays alive too.
-            return std::shared_ptr<const CanSignalConfiguration>(
-                std::move(message_configuration), signal_configuration
-            );
+            return { std::move(message_configuration), signal_configuration };
         }
     );
 

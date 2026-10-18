@@ -81,7 +81,7 @@ struct FsRecorder {
     }
 };
 
-FsRecorder& Recorder() {
+static FsRecorder& Recorder() {
     static FsRecorder recorder;
 
     return recorder;
@@ -121,7 +121,7 @@ void ResetFs(void* = nullptr) {
 }
 
 AssetStore MakeStore(std::string_view directory = kAssetsDir) {
-    return AssetStore(GetFsService(), directory);
+    return { GetFsService(), directory };
 }
 
 bool WriteBlob(std::string_view path, size_t size, uint8_t seed = 0) {

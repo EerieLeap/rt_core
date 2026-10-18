@@ -34,7 +34,7 @@ public:
         }
 
         // Binary search for the correct interval
-        auto upper = std::lower_bound(table.begin(), table.end(), voltage, [](const CalibrationData& data, float v) {
+        auto upper = std::ranges::lower_bound(table, , voltage, [](const CalibrationData& data, float v) {
             return data.voltage < v;
         });
 
@@ -51,7 +51,7 @@ public:
         const float y0 = lower->value;
         const float y1 = upper->value;
 
-        float ratio = 0.0f;
+        float ratio = 0.0F;
         if(x1 != x0)
             ratio = (voltage - x0) / (x1 - x0);
 

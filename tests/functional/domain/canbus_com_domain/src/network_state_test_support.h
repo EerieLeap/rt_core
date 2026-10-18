@@ -123,12 +123,12 @@ public:
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
                 StatusEvent status{ .source_id = event.source_id };
 
-                if(auto it = event.payload.find(LoggingPayloadType::IsActive); it != event.payload.end()) {
+                if(const auto* it = event.payload.find(LoggingPayloadType::IsActive); it != event.payload.end()) {
                     if(const auto* value = std::get_if<bool>(&it->second))
                         status.is_active = *value;
                 }
 
-                if(auto it = event.payload.find(LoggingPayloadType::Reason); it != event.payload.end()) {
+                if(const auto* it = event.payload.find(LoggingPayloadType::Reason); it != event.payload.end()) {
                     if(const auto* value = std::get_if<uint32_t>(&it->second))
                         status.reason = *value;
                 }

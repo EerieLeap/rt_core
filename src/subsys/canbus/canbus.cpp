@@ -180,7 +180,7 @@ bool Canbus::Configure(const CanbusConfig& config) {
     if(config_.type == CanbusType::CANFD && config_.data_bitrate == 0)
         config_.data_bitrate = config_.bitrate;
 
-    const auto rollback = [&]() {
+    const auto rollback = [&] {
         config_ = previous_config;
         RegisterStateChangeCallback();
         return false;
@@ -301,7 +301,7 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
         .flags = flags,
     };
     // The DLC table rounds FD lengths up, so the padding bytes stay zeroed.
-    std::copy(frame_data.begin(), frame_data.end(), std::begin(can_frame.data));
+    std::ranges::copy(frame_data, , std::begin(can_frame.data));
 
     const int res = can_send(canbus_dev, &can_frame, timeout, SendFrameCallback, nullptr);
     if(res != 0) {
@@ -867,7 +867,7 @@ void Canbus::PrintCanLimits() const {
     );
 
     auto bitrates = classical_can_supported_bitrates_;
-    std::sort(bitrates.begin(), bitrates.end());
+    std::ranges::sort(bitrates, );
 
     for(const auto bitrate : bitrates) {
         struct can_timing timing_data = { 0 };
@@ -886,7 +886,7 @@ void Canbus::PrintCanFdLimits() const {
     );
 
     auto bitrates = canfd_supported_bitrates_;
-    std::sort(bitrates.begin(), bitrates.end());
+    std::ranges::sort(bitrates, );
 
     for(const auto bitrate : bitrates) {
         struct can_timing timing_data = { 0 };

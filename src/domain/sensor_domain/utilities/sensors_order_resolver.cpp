@@ -12,7 +12,7 @@ using namespace eerie_leap::domain::sensor_domain::models;
 using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
 using eerie_leap::utilities::memory::Mrm;
 
-void SensorsOrderResolver::AddSensor(std::shared_ptr<Sensor> sensor) {
+void SensorsOrderResolver::AddSensor(const std::shared_ptr<Sensor>& sensor) {
     if(sensor->configuration.HasExpression()) {
         // Compiled only for its variable names; the runtime builds its own evaluator.
         auto evaluator = ExpressionEvaluator::Create(sensor->configuration.expression, Mrm::GetExtPmr());

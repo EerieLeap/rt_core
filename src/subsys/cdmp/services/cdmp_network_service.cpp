@@ -100,7 +100,7 @@ void CdmpNetworkService::RegisterCanHandlers() {
     }
 
     canbus_handler_id_ = RegisterReceiveHandler(can_id_manager_->GetManagementCanId(), [this](const CanFrame& frame) {
-        RunInSession([this, frame]() {
+        RunInSession([this, frame] {
             ProcessFrame(frame.data);
         });
     });
@@ -125,13 +125,13 @@ void CdmpNetworkService::UnregisterCanHandlers() {
 void CdmpNetworkService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
     switch(new_status) {
         case CdmpDeviceStatus::INIT:
-            RunInSession([this]() {
+            RunInSession([this] {
                 StartInitialization();
             });
             break;
 
         case CdmpDeviceStatus::CLAIMING:
-            RunInSession([this]() {
+            RunInSession([this] {
                 StartIdClaim();
             });
             break;
@@ -239,7 +239,7 @@ void CdmpNetworkService::ProcessDiscoveryRequestFrame(std::span<const uint8_t> f
         if(device_->GetStatus() == CdmpDeviceStatus::INIT && message.uid < device_->GetUniqueIdentifier())
             lower_uid_discovering_ = true;
 
-        RunInSession([this]() {
+        RunInSession([this] {
             SendDiscoveryResponse();
         });
     } catch(const std::exception& e) {
@@ -347,7 +347,7 @@ WorkQueueTaskResult CdmpNetworkService::RunIdClaimAttempt() {
     if(id_claim_result_ == CdmpIdClaimResult::VERSION_INCOMPATIBLE) {
         LOG_ERR("ID claim refused: incompatible protocol version.");
         claiming_device_id_ = CdmpDevice::DEVICE_ID_UNASSIGNED;
-        RunInSession([this]() {
+        RunInSession([this] {
             device_->EnterVersionMismatch();
         });
 
@@ -368,7 +368,7 @@ WorkQueueTaskResult CdmpNetworkService::RunIdClaimAttempt() {
         } catch(const std::exception& e) {
             LOG_ERR("Error getting lowest available ID: %s", e.what());
             claiming_device_id_ = CdmpDevice::DEVICE_ID_UNASSIGNED;
-            RunInSession([this]() {
+            RunInSession([this] {
                 device_->EnterError();
             });
 
@@ -525,7 +525,7 @@ void CdmpNetworkService::RecordIdClaim(const CdmpIdClaimRequestMessage& claim) {
 CdmpNetworkService::PendingIdClaim* CdmpNetworkService::FindPendingIdClaim(uint8_t device_id) {
     ExpirePendingIdClaims();
 
-    auto it = std::ranges::find(pending_id_claims_, device_id, &PendingIdClaim::device_id);
+    auto* it = std::ranges::find(pending_id_claims_, device_id, &PendingIdClaim::device_id);
 
     return it != pending_id_claims_.end() ? &*it : nullptr;
 }

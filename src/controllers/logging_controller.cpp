@@ -141,7 +141,7 @@ MakeDeviceIdProvider(const std::shared_ptr<CanbusComService>& canbus_com_service
     if(canbus_com_service == nullptr)
         return nullptr;
 
-    return [weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)]() -> uint8_t {
+    return [weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] -> uint8_t {
         const auto com = weak_com.lock();
         const auto network_info = com != nullptr ? com->GetNetworkInfo() : nullptr;
 

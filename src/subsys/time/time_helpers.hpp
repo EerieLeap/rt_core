@@ -79,7 +79,7 @@ public:
         const uint64_t total_ns = timing_cycles_to_ns(total_cycles);
         timing_stop();
 
-        return static_cast<float>(total_ns) / 1000.0f;
+        return static_cast<float>(total_ns) / 1000.0F;
     }
 };
 

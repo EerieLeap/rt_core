@@ -73,8 +73,7 @@ uint8_t CdmpTransactionService::GetNextTransactionId() {
         next_transaction_id_++;
         if(next_transaction_id_ == 0)
             next_transaction_id_ = 1;
-    } while(pending_transactions_.find(next_transaction_id_) != pending_transactions_.end()
-        && next_transaction_id_ != transaction_id);
+    } while(pending_transactions_.contains(next_transaction_id_) && next_transaction_id_ != transaction_id);
 
     return transaction_id;
 }

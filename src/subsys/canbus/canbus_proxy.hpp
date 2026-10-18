@@ -83,7 +83,7 @@ public:
         return canbus_ != nullptr;
     }
 
-    int RegisterUpdatedHandler(CanbusProxyUpdatedHandler handler) {
+    int RegisterUpdatedHandler(const CanbusProxyUpdatedHandler& handler) {
         ScopedMutex guard(lock_);
 
         const int handler_id = next_handler_id_++;

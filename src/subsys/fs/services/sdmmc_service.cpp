@@ -21,8 +21,8 @@ using eerie_leap::subsys::threading::ScopedMutex;
 SdmmcService::SdmmcService(fs_mount_t* mountpoint, const char* disk_name) :
     FsService(mountpoint),
     disk_name_(disk_name),
-    sd_card_present_(ATOMIC_INIT(0)),
-    monitor_running_(ATOMIC_INIT(0)) {
+    ,
+{
 
     k_sem_init(&sd_monitor_stop_sem_, 0, 1);
     k_mutex_init(&handler_mutex_);
@@ -156,7 +156,7 @@ int SdmmcService::PrintInfo() const {
         return ret;
     }
 
-    memory_size_mb = (uint64_t)block_count * block_size / (1024 * 1024);
+    memory_size_mb = static_cast<uint64_t>(block_count) * block_size / (1024 * 1024);
     LOG_INF("SD card: %llu MB, %u sectors, %u bytes/sector", memory_size_mb, block_count, block_size);
 
     return 0;

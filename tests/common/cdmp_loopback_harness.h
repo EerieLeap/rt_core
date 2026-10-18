@@ -185,10 +185,10 @@ public:
     }
 
     void Clear() {
-        for(uint32_t offset = 0; offset < channels_.size(); offset++) {
-            while(k_sem_take(&channels_[offset].received, K_NO_WAIT) == 0) {
+        for(auto& channel : channels_) {
+            while(k_sem_take(&channel.received, K_NO_WAIT) == 0) {
                 k_mutex_lock(&lock_, K_FOREVER);
-                channels_[offset].frames.pop_front();
+                channel.frames.pop_front();
                 k_mutex_unlock(&lock_);
             }
         }
@@ -242,7 +242,7 @@ protected:
         std::vector<CanFilter> filters;
         for(uint32_t offset = MANAGEMENT; offset <= STATE_CHANGE_RESPONSE; offset++) {
             const CanFilter filter = ids.GetReceiveFilter(CanId::Standard(ids.GetBaseCanId() + offset));
-            if(std::find(filters.begin(), filters.end(), filter) == filters.end())
+            if(std::ranges::find(filters, , filter) == filters.end())
                 filters.push_back(filter);
         }
 

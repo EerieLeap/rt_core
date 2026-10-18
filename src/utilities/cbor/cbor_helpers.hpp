@@ -11,7 +11,7 @@ namespace eerie_leap::utilities::cbor {
 class CborHelpers {
 public:
     static std::string ToStdString(const zcbor_string& zstr) {
-        return std::string(reinterpret_cast<const char*>(zstr.value), zstr.len);
+        return { reinterpret_cast<const char*>(zstr.value), zstr.len };
     }
 
     static std::string_view ToStringView(const zcbor_string& zstr) {
@@ -22,7 +22,7 @@ public:
     }
 
     static std::pmr::string ToPmrString(std::pmr::memory_resource* mr, const zcbor_string& zstr) {
-        return std::pmr::string(reinterpret_cast<const char*>(zstr.value), zstr.len, mr);
+        return { reinterpret_cast<const char*>(zstr.value), zstr.len, mr };
     }
 
     static zcbor_string ToZcborString(std::string_view str) {

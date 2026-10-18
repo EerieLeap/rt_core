@@ -33,7 +33,7 @@ int CalibrationMgmtGroup::HandleStart(smp_streamer* ctxt) {
     if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found)
         return MGMT_ERR_EINVAL;
 
-    if(channel_count_ <= 0 || channel >= static_cast<uint32_t>(channel_count_))
+    if(channel_count_ <= 0 || std::cmp_greater_equal(channel, channel_count_))
         return Fail(ctxt, Error::BAD_CHANNEL);
 
     if(!calibration_service_->Start(static_cast<int>(channel)))

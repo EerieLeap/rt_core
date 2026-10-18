@@ -135,11 +135,11 @@ public:
 class UnseekableStreamBuf : public std::streambuf {
 protected:
     pos_type seekoff(off_type, std::ios_base::seekdir, std::ios_base::openmode) override {
-        return pos_type(off_type(-1));
+        return { static_cast<off_type>(-1) };
     }
 
     pos_type seekpos(pos_type, std::ios_base::openmode) override {
-        return pos_type(off_type(-1));
+        return { static_cast<off_type>(-1) };
     }
 };
 

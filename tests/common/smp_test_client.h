@@ -77,7 +77,7 @@ public:
     Bytes Build() {
         zassert_true(zcbor_map_end_encode(states_, 16));
         const auto size = static_cast<size_t>(states_[0].payload - buffer_.data());
-        return Bytes(buffer_.begin(), buffer_.begin() + size);
+        return { buffer_.begin(), buffer_.begin() + size };
     }
 };
 

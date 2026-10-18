@@ -54,10 +54,10 @@ ZTEST(string_helpers, test_GetHash_is_deterministic) {
 
 ZTEST(string_helpers, test_GetHash_matches_known_xxhash64_values) {
     // Expected values are the lower 32 bits of XXH64(seed=0) for these inputs.
-    zassert_equal(StringHelpers::GetHash("sensor_1"), 0x479b7bc9u);
-    zassert_equal(StringHelpers::GetHash(""), 0x51d8e999u);
-    zassert_equal(StringHelpers::GetHash("sensor_2"), 0xac41a995u);
-    zassert_equal(StringHelpers::GetHash("abc"), 0xad770999u);
+    zassert_equal(StringHelpers::GetHash("sensor_1"), 0x479b7bc9U);
+    zassert_equal(StringHelpers::GetHash(""), 0x51d8e999U);
+    zassert_equal(StringHelpers::GetHash("sensor_2"), 0xac41a995U);
+    zassert_equal(StringHelpers::GetHash("abc"), 0xad770999U);
 }
 
 ZTEST(string_helpers, test_GetHash_distinguishes_inputs) {

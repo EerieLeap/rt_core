@@ -216,7 +216,7 @@ inline std::unique_ptr<SensorsController> MakeSensorsController(
 
 // Initializes with @p sensors already stored, so that the controller's update handler does not fire.
 inline int InitializeWithSensors(SensorsController& controller, std::vector<std::shared_ptr<Sensor>> sensors) {
-    return controller.Initialize([&sensors](auto manager) {
+    return controller.Initialize([&sensors](const auto& manager) {
         zassert_true(manager->Update(sensors), "The sensors were not stored");
     });
 }
@@ -271,7 +271,7 @@ MakeCanbusController(const Rig& rig, std::shared_ptr<IFsService> sd_fs_service, 
 
 // Initializes with @p specs already stored, so that the controller's update handler does not fire.
 inline int InitializeWithMessages(CanbusController& controller, std::initializer_list<CanMessageSpec> specs) {
-    return controller.Initialize([specs](auto manager) {
+    return controller.Initialize([specs](const auto& manager) {
         StoreCanConfiguration(*manager, specs);
     });
 }

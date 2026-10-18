@@ -144,8 +144,8 @@ public:
      * record is invalid; sets InvalidValid. The group needs invalidation bytes that cover it.
      */
     void SetInvalidationBit(uint32_t position);
-    void SetName(std::shared_ptr<TextBlock> name);
-    void SetUnit(std::shared_ptr<TextBlock> unit);
+    void SetName(const std::shared_ptr<TextBlock>& name);
+    void SetUnit(const std::shared_ptr<TextBlock>& unit);
     void SetArrayBlock(std::shared_ptr<IBlock> array_block);
     void SetOffsetBytes(uint32_t offset_bytes);
     void SetOffsetBits(uint8_t offset_bits);

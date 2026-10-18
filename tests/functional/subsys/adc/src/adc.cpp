@@ -564,9 +564,9 @@ ZTEST(adc, test_Sample_before_Initialize_fails_every_channel) {
     const AdcSampleRequest request{ .channels = channels, .results = results, .samples = 1 };
     adc->Sample(request);
 
-    for(int i = 0; i < 2; i++) {
-        zassert_equal(results[i].error, AdcError::DRIVER);
-        zassert_equal(results[i].errno_value, -ENODEV);
+    for(auto& result : results) {
+        zassert_equal(result.error, AdcError::DRIVER);
+        zassert_equal(result.errno_value, -ENODEV);
     }
 
     zassert_equal(adc->GetStats().driver_calls, 0, "nothing reaches the driver");
@@ -588,9 +588,9 @@ ZTEST(adc, test_Sample_after_a_failed_probe_fails_every_channel) {
     adc->Sample(request);
     const auto after = adc->GetStats();
 
-    for(int i = 0; i < 2; i++) {
-        zassert_equal(results[i].error, AdcError::DRIVER);
-        zassert_equal(results[i].errno_value, -ENODEV);
+    for(auto& result : results) {
+        zassert_equal(result.error, AdcError::DRIVER);
+        zassert_equal(result.errno_value, -ENODEV);
     }
 
     zassert_equal(after.driver_calls, before.driver_calls, "nothing reaches the driver");

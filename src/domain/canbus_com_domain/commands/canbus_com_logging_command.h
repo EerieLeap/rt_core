@@ -13,9 +13,8 @@ private:
 public:
     CanbusComLoggingCommand(bool is_start) :
         is_start_(is_start) {}
-    CanbusComLoggingCommand(std::span<const uint8_t> data) {
-        is_start_ = data[0] == 0x01;
-    }
+    CanbusComLoggingCommand(std::span<const uint8_t> data) :
+        is_start_(data[0] == 0x01) {}
 
     ~CanbusComLoggingCommand() override = default;
 

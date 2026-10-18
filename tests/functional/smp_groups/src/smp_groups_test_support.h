@@ -78,7 +78,7 @@ public:
     }
 
     std::pmr::vector<uint8_t> GetCborConfiguration() override {
-        return std::pmr::vector<uint8_t>(stored.begin(), stored.end());
+        return { stored.begin(), stored.end() };
     }
 
     eerie_leap::configuration::services::StoredCborInfo GetCborConfigurationInfo() override {

@@ -283,17 +283,17 @@ ZTEST_SUITE(writer_updates, NULL, SetUp, Before, After, NULL);
 // Each store is what an SMP write or a shell command does, through a manager.
 
 // The sensors restart is the dependent's path: an addition used to finalize the file and open the next.
-void StoreSensors() {
+static void StoreSensors() {
     F().rig->Apply({ Indicator("switch", "1"), Analog("spare"), Analog("other"), Analog("added") });
 }
 
-void StoreAdc() {
+static void StoreAdc() {
     const auto adc = F().rig->adc_configuration_manager;
     zassert_true(adc->Update(*adc->Get()), "The same bytes stored again count");
 }
 
 // The logging configuration used to restart a running writer into a new file.
-void StoreLogging() {
+static void StoreLogging() {
     LoggingConfiguration configuration(std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = 200;
     configuration.max_log_size_mb = 0;
@@ -304,35 +304,35 @@ void StoreLogging() {
     zassert_true(F().controller->GetConfigurationManager()->Update(configuration));
 }
 
-void StoreLoggingControl() {
+static void StoreLoggingControl() {
     zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({ "switch" })));
 }
 
-void StoreCanbus() {
+static void StoreCanbus() {
     zassert_true(F().canbus->Update(canbus_com_loopback_test::ComConfiguration()));
 }
 
-void StoreSystem() {
+static void StoreSystem() {
     zassert_true(F().system->Update(*F().system->Get()));
 }
 
-void StoreUi() {
+static void StoreUi() {
     StoreStandIn(F().ui);
 }
 
-void StoreDisplay() {
+static void StoreDisplay() {
     StoreStandIn(F().display);
 }
 
 // rt_daq's `logging reapply-sensors`: the manager applies its own stored bytes.
-void ReapplySensors() {
+static void ReapplySensors() {
     const auto stored = F().rig->sensors_manager->GetCborConfiguration();
     zassert_false(stored.empty());
     zassert_true(F().rig->sensors_manager->ApplyCborConfiguration(stored));
 }
 
 // The write of a client, through the service, on the configuration queue.
-void WriteSensorsOverSmp() {
+static void WriteSensorsOverSmp() {
     const auto stored = F().rig->configuration_service->GetCborConfiguration(Type::Sensors);
     QueuedApply apply(
         F().rig->configuration_service, Type::Sensors, std::vector<uint8_t>(stored.begin(), stored.end())

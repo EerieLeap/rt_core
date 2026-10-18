@@ -62,7 +62,7 @@ Bytes Encode(const LoggingControlConfiguration& configuration) {
     const auto cbor_config = parser.Serialize(configuration);
     const auto bytes = serializer.Serialize(*cbor_config);
 
-    return Bytes(bytes.begin(), bytes.end());
+    return { bytes.begin(), bytes.end() };
 }
 
 // Decodes stored bytes to the CBOR structure; null for bytes that are not the schema's.

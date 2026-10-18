@@ -7,10 +7,11 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 FileHistoryBlock::FileHistoryBlock() :
-    BlockBase("FH") {
-    time_ns_ = 0;
-    tz_offset_min_ = 0;
-    dst_offset_min_ = 0;
+    BlockBase("FH"),
+    ,
+    dst_offset_min_(0),
+{
+
     time_flags_ = 0;
 
     links_.SetLink(LinkType::MetadataComment, std::make_shared<MetadataBlock>());

@@ -33,8 +33,8 @@ constexpr uint32_t MAX_INVALIDATION_BITS = INVALIDATION_BYTES * 8;
 
 Mdf4File::Mdf4File(Mdf4FileOptions options) :
     options_(options),
-    is_header_written_(false),
-    is_finalized_(false) {
+    ,
+{
 
     const auto id_size = options_.record_id_size_bytes;
     if(id_size != 1 && id_size != 2 && id_size != 4 && id_size != 8)
@@ -499,7 +499,7 @@ uint64_t Mdf4File::FinalizeToStream(std::streambuf& stream) {
     bytes_written += id_block_->RewriteToStream(stream);
 
     if(stream.pubseekoff(0, std::ios_base::end, std::ios_base::out)
-        == std::streambuf::pos_type(std::streambuf::off_type(-1))) {
+        == std::streambuf::pos_type(static_cast<std::streambuf::off_type>(-1))) {
 
         throw std::ios_base::failure("Failed to seek back to the end of the stream.");
     }

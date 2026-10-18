@@ -88,7 +88,7 @@ public:
     SensorsProcessingService(
         std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
         std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-        std::shared_ptr<ITimeService> time_service,
+        const std::shared_ptr<ITimeService>& time_service,
         std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
         std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
         // Snapshotted into every generation; PHYSICAL_ANALOG sensors get no reader without it.

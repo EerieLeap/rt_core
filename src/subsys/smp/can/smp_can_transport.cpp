@@ -345,7 +345,7 @@ void SmpCanTransport::OnFrame(const CanFrame& frame) {
 }
 
 SmpCanTransport::RxSlot* SmpCanTransport::FindRxSlot(uint8_t source) {
-    auto it = std::ranges::find(rx_slots_, source, &RxSlot::source);
+    auto* it = std::ranges::find(rx_slots_, source, &RxSlot::source);
 
     return it != rx_slots_.end() ? &*it : nullptr;
 }

@@ -40,11 +40,11 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
         }
     );
 
-    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler([this]() {
+    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler([this] {
         Stop();
     });
 
-    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler([this]() {
+    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler([this] {
         Start();
     });
 }
@@ -197,7 +197,7 @@ void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {
     cdmp_service_->GetCommandService()->UnregisterCommandHandler(std::to_underlying(command_code));
 }
 
-void CanbusComService::SendCommand(ICanbusComCommand& command, CommandAckCallback callback, uint8_t device_id) {
+void CanbusComService::SendCommand(ICanbusComCommand& command, const CommandAckCallback& callback, uint8_t device_id) {
     if(!cdmp_service_)
         return;
 

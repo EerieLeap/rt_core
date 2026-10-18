@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <stdexcept>
+#include <utility>
 
 #include "adc_sample_set.h"
 
@@ -13,7 +14,7 @@ const AdcSample* AdcSampleSet::Reserve(int channel, AdcChannelHandle handle, uin
         throw std::invalid_argument("ADC channel handle has no ADC.");
 
     const int channel_count = handle.adc->GetChannelCount();
-    if(handle.local_channel >= channel_count)
+    if(std::cmp_greater_equal(handle.local_channel, channel_count))
         throw std::invalid_argument("ADC channel out of range.");
 
     auto entry = std::ranges::find(adcs_, handle.adc, &AdcEntry::adc);

@@ -644,8 +644,8 @@ CdmpStateService::LocalRecord* CdmpStateService::AddLocalRecord(uint8_t state_ty
 
     const auto records = LocalRecords();
     const auto index = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type) - records.begin();
-    const auto first = local_records_.begin();
-    const auto position = first + index;
+    auto* const first = local_records_.begin();
+    auto* const position = first + index;
 
     std::move_backward(position, first + local_count_, first + local_count_ + 1);
     local_count_++;
@@ -737,8 +737,8 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
         return;
     }
 
-    const auto first = remote_records_.begin();
-    const auto position = first + (it - records.begin());
+    auto* const first = remote_records_.begin();
+    auto* const position = first + (it - records.begin());
 
     std::move_backward(position, first + remote_count_, first + remote_count_ + 1);
     remote_count_++;
@@ -835,7 +835,7 @@ void CdmpStateService::ForgetNetwork() {
 }
 
 CdmpStateService::SourceState* CdmpStateService::FindSourceState(uint8_t source, bool add) {
-    auto it = std::ranges::find(sources_, source, &SourceState::device_id);
+    auto* it = std::ranges::find(sources_, source, &SourceState::device_id);
     if(it != sources_.end())
         return &*it;
 

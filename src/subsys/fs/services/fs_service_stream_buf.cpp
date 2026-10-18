@@ -14,7 +14,7 @@ using namespace eerie_leap::utilities::string;
 
 FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode) :
     fs_service_(fs_service),
-    file_opened_(false) {
+{
 
     if(!fs_service_)
         throw std::invalid_argument("fs_service cannot be null");
@@ -240,15 +240,15 @@ std::streambuf::pos_type
 FsServiceStreamBuf::seekoff(std::streambuf::off_type off, std::ios_base::seekdir way, std::ios_base::openmode which) {
 
     if(!file_opened_)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     // Reads and writes share the file position, so any of the two areas can be seeked.
     if((which & (std::ios_base::in | std::ios_base::out)) == 0)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     // Pending output belongs at the current position, so it goes out before the position moves.
     if(!FlushPutArea())
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     int whence = FS_SEEK_SET;
     std::streambuf::off_type target = off;
@@ -263,16 +263,16 @@ FsServiceStreamBuf::seekoff(std::streambuf::off_type off, std::ios_base::seekdir
 
     const int rc = fs_seek(&file_, static_cast<off_t>(target), whence);
     if(rc != 0)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     const off_t pos = fs_tell(&file_);
     if(pos < 0)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     setg(nullptr, nullptr, nullptr);
     ResetPutArea();
 
-    return std::streambuf::pos_type(static_cast<std::streambuf::off_type>(pos));
+    return { static_cast<std::streambuf::off_type>(pos) };
 }
 
 std::streambuf::pos_type FsServiceStreamBuf::seekpos(std::streambuf::pos_type sp, std::ios_base::openmode which) {

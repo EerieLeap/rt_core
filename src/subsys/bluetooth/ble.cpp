@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <exception>
+#include <utility>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -299,22 +300,22 @@ void Ble::PairingFinishedWorkHandler(struct k_work* work) {
 
 int Ble::RegisterConnectedHandler(ConnectedHandler handler) {
     static int id = 0;
-    connected_handlers_[id] = handler;
+    connected_handlers_[id] = std::move(handler);
     return id++;
 }
 int Ble::RegisterDisconnectedHandler(DisconnectedHandler handler) {
     static int id = 0;
-    disconnected_handlers_[id] = handler;
+    disconnected_handlers_[id] = std::move(handler);
     return id++;
 }
 int Ble::RegisterPairingStartedHandler(PairingStartedHandler handler) {
     static int id = 0;
-    pairing_started_handlers_[id] = handler;
+    pairing_started_handlers_[id] = std::move(handler);
     return id++;
 }
 int Ble::RegisterPairingFinishedHandler(PairingFinishedHandler handler) {
     static int id = 0;
-    pairing_finished_handlers_[id] = handler;
+    pairing_finished_handlers_[id] = std::move(handler);
     return id++;
 }
 

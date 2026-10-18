@@ -76,7 +76,7 @@ ZTEST(live_data_service, test_period_is_at_least_the_minimum) {
     const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     LiveDataService service(notifier, readings.frame);
-    notifier->on_notified = [&service]() {
+    notifier->on_notified = [&service] {
         service.OnNotificationSent();
     };
 
@@ -131,7 +131,7 @@ ZTEST(live_data_service, test_unsubscribe_stops_sampling) {
     const auto notifier = std::make_shared<FakeNotifier>();
     Readings readings;
     LiveDataService service(notifier, readings.frame);
-    notifier->on_notified = [&service]() {
+    notifier->on_notified = [&service] {
         service.OnNotificationSent();
     };
 

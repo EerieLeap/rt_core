@@ -433,7 +433,7 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
 
     if(chunk > 0) {
         const ssize_t read = read_session_.reader.Read(offset, std::span(transfer_buffer_).first(chunk));
-        if(read != static_cast<ssize_t>(chunk)) {
+        if(std::cmp_not_equal(read, chunk)) {
             CloseReadSession();
 
             return Fail(ctxt, Error::IO_ERROR);
@@ -940,7 +940,7 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::ExtendReadCrc(size_t offset) {
         );
 
         // Fewer bytes than the file had when it was opened: it was cut short.
-        if(read != static_cast<ssize_t>(length))
+        if(std::cmp_not_equal(read, length))
             return Error::IO_ERROR;
 
         read_session_.crc = crc32_ieee_update(read_session_.crc, transfer_buffer_.data(), length);

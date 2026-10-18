@@ -65,7 +65,7 @@ using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensor_processor, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -141,7 +141,7 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     return sensors_order_resolver.GetProcessingOrder();
 }
 
-AdcConfiguration sensor_processor_GetTestConfiguration() {
+static AdcConfiguration sensor_processor_GetTestConfiguration() {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -177,7 +177,7 @@ struct sensor_processor_HelperInstances {
     std::vector<std::shared_ptr<Sensor>> sensors;
 };
 
-sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
+static sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     const auto time_provider = std::make_shared<BootElapsedTimeProvider>();
     const auto rtc_provider = std::make_shared<RtcProvider>();
     const auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
@@ -204,8 +204,7 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     SensorReaderFactory sensor_reader_factory(time_service, gpio, adc_manager);
 
     const auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
-    for(size_t i = 0; i < generation->runtimes.size(); i++) {
-        const auto& runtime = generation->runtimes[i];
+    for(const auto& runtime : generation->runtimes) {
         std::shared_ptr<ISensorReader> sensor_reader;
 
         if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
@@ -253,8 +252,8 @@ ZTEST(sensor_processor, test_ProcessReading) {
     helper.adc_samples->Acquire();
     const TickContext tick{ helper.time_service->GetCurrentTime() };
 
-    for(size_t i = 0; i < sensor_readers->size(); i++)
-        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
+    for(auto& i : *sensor_readers)
+        sensor_readings_frame->AddOrUpdateReading(i->Read(tick));
 
     auto reading_2_opt = sensor_readings_frame->TryGetReading("sensor_2");
     zassert_true(reading_2_opt.has_value());
@@ -289,9 +288,9 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_equal(proc_reading_2.value.value(), proc_reading_2_value);
     zassert_true(proc_reading_2.voltage.has_value());
     // Calibrated voltages are sensor volts: the simulator's 0..3.3 V at the pin maps onto 0..sensor_max_v.
-    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0f, AdcRange::Default().sensor_max_v);
+    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_2.raw_value.has_value());
-    zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0f, 200.0f);
+    zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0F, 200.0F);
 
     auto proc_reading_1_opt = sensor_readings_frame->TryGetReading("sensor_1");
     zassert_true(proc_reading_1_opt.has_value());
@@ -301,9 +300,9 @@ ZTEST(sensor_processor, test_ProcessReading) {
     const float proc_reading_1_value = reading_1_value * 2 + proc_reading_2_value + 1;
     zassert_equal(proc_reading_1.value.value(), proc_reading_1_value);
     zassert_true(proc_reading_1.voltage.has_value());
-    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0f, AdcRange::Default().sensor_max_v);
+    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_1.raw_value.has_value());
-    zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0f, 100.0f);
+    zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0F, 100.0F);
 
     auto proc_reading_3_opt = sensor_readings_frame->TryGetReading("sensor_3");
     zassert_true(proc_reading_3_opt.has_value());
@@ -313,7 +312,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     const float proc_reading_3_value = proc_reading_1_value + 8.34F;
     // Expression evaluator parses "8.34" at runtime independently of the compiler's constant
     // folding, so the result can differ by a ULP or two across platforms/libc - compare with tolerance.
-    zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001f);
+    zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001F);
     zassert_false(proc_reading_3.raw_value.has_value(), "A virtual sensor has no raw value");
 
     auto proc_reading_4_opt = sensor_readings_frame->TryGetReading("sensor_4");

@@ -590,7 +590,7 @@ ZTEST(mdf_blocks, test_ChannelBlockRoundsBitCountUpToWholeBytes) {
 }
 
 ZTEST(mdf_blocks, test_ChannelBlockAppendsToTheEndOfTheChain) {
-    const auto make = []() {
+    const auto make = [] {
         return std::make_shared<ChannelBlock>(
             ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
         );

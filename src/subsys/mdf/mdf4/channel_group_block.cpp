@@ -14,7 +14,7 @@ ChannelGroupBlock::ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t reco
     record_id_(record_id),
     record_id_size_bytes_(record_id_size_bytes) {
 
-    if(std::set<uint8_t>{ 0, 1, 2, 4, 8 }.count(record_id_size_bytes_) == 0)
+    if(!std::set<uint8_t>{ 0, 1, 2, 4, 8 }.contains(record_id_size_bytes_))
         throw std::runtime_error("Invalid record ID size bytes");
 
     if(record_id_size_bytes_ < 8 && record_id_ >= (1ULL << (record_id_size_bytes_ * 8)))
@@ -124,7 +124,7 @@ void ChannelGroupBlock::UnlinkNext() {
     links_.SetLink(LinkType::ChannelGroupNext, nullptr);
 }
 
-void ChannelGroupBlock::AddSourceInformation(std::shared_ptr<SourceInformationBlock> source_information) {
+void ChannelGroupBlock::AddSourceInformation(const std::shared_ptr<SourceInformationBlock>& source_information) {
     links_.SetLink(LinkType::SourceInformation, source_information);
 }
 
@@ -146,7 +146,7 @@ void ChannelGroupBlock::SetPathSeparator(uint16_t path_separator) {
     path_separator_ = path_separator;
 }
 
-void ChannelGroupBlock::SetName(std::shared_ptr<TextBlock> name) {
+void ChannelGroupBlock::SetName(const std::shared_ptr<TextBlock>& name) {
     links_.SetLink(LinkType::TextAcquisitionName, name);
 }
 
