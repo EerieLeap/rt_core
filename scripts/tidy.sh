@@ -21,8 +21,9 @@ set -euo pipefail
 
 readonly CLANG_TIDY_VERSION="23" # The major version CI pins (apt.llvm.org pins the major only).
 readonly INSTALL_HINT="Install from apt.llvm.org: key https://apt.llvm.org/llvm-snapshot.gpg.key to /etc/apt/trusted.gpg.d/apt.llvm.org.asc, source 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-$CLANG_TIDY_VERSION main', then apt-get install clang-tidy-$CLANG_TIDY_VERSION clang-tools-$CLANG_TIDY_VERSION."
-# Generated, vendored and upstream code that lives in tracked files.
-readonly EXCLUDED='/(configuration/cbor/cbor_[a-z_]+_config|libs/nameof|lua)/'
+# Generated, vendored and upstream code that lives in tracked files (rt_gauge's LVGL font and image
+# converter output included).
+readonly EXCLUDED='/(configuration/cbor/cbor_[a-z_]+_config|libs/nameof|lua|views/assets/(fonts|images))/'
 
 usage() {
     awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
