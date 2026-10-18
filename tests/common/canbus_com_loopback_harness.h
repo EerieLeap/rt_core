@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -94,10 +95,10 @@ public:
 
     Harness() {
         DtFs::InitInternalFs();
-        auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+        const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
         zassert_true(fs_service->Format());
 
-        auto configuration_manager = std::make_shared<CanbusConfigurationManager>(
+        const auto configuration_manager = std::make_shared<CanbusConfigurationManager>(
             std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", fs_service), nullptr
         );
         zassert_true(configuration_manager->Update(ComConfiguration()));
@@ -117,6 +118,11 @@ public:
         zassert_true(com->Initialize());
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     ~Harness() override {
         com.reset();
         canbus_service.reset();
@@ -131,12 +137,9 @@ public:
         std::array<CdmpDeviceInfo, 8> devices{};
         const size_t count = com->GetNetworkInfo()->GetNetworkDevices(devices);
 
-        for(const auto& device : std::span(devices).first(count)) {
-            if(device.device_id == device_id && device.status == CdmpDeviceStatus::ONLINE)
-                return true;
-        }
-
-        return false;
+        return std::ranges::any_of(std::span(devices).first(count), [device_id](const CdmpDeviceInfo& device) {
+            return device.device_id == device_id && device.status == CdmpDeviceStatus::ONLINE;
+        });
     }
 
     /** @brief Adds another unit to the unit's device table: its ID claim, then its first heartbeat. */

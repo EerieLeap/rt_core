@@ -62,8 +62,8 @@ private:
     }
 
 public:
-    k_sem pause_entered;
-    k_sem pause_release;
+    k_sem pause_entered{};
+    k_sem pause_release{};
     int start_calls = 0;
     int stop_calls = 0;
     int pause_calls = 0;
@@ -79,7 +79,7 @@ public:
     }
 };
 
-constexpr int kTransitionThreadPriority = 5;
+constexpr int TRANSITION_THREAD_PRIORITY = 5;
 
 K_THREAD_STACK_DEFINE(pausing_stack, 4096);
 K_THREAD_STACK_DEFINE(stopping_stack, 4096);
@@ -113,7 +113,7 @@ ZTEST(service_base, test_a_transition_waits_for_one_in_progress_on_another_threa
     k_thread pausing;
     k_thread_create(
         &pausing, pausing_stack, K_THREAD_STACK_SIZEOF(pausing_stack), PauseFromAnotherThread, &pause, nullptr, nullptr,
-        kTransitionThreadPriority, 0, K_NO_WAIT
+        TRANSITION_THREAD_PRIORITY, 0, K_NO_WAIT
     );
     zassert_ok(k_sem_take(&service.pause_entered, K_SECONDS(1)));
 
@@ -121,7 +121,7 @@ ZTEST(service_base, test_a_transition_waits_for_one_in_progress_on_another_threa
     k_thread stopping;
     k_thread_create(
         &stopping, stopping_stack, K_THREAD_STACK_SIZEOF(stopping_stack), StopFromAnotherThread, &stop, nullptr,
-        nullptr, kTransitionThreadPriority, 0, K_NO_WAIT
+        nullptr, TRANSITION_THREAD_PRIORITY, 0, K_NO_WAIT
     );
     k_msleep(50);
 

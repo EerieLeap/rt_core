@@ -91,17 +91,17 @@ Fixture MakeFixture() {
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
 
-    auto with_expression = MakeSensor("with_expression", SensorType::USER_ANALOG);
+    const auto with_expression = MakeSensor("with_expression", SensorType::USER_ANALOG);
     with_expression->configuration.expression = "blank * 2";
 
-    auto follower = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "follower");
+    const auto follower = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "follower");
     follower->configuration.type = SensorType::VIRTUAL_ANALOG;
     follower->configuration.expression = "blank + 1";
 
-    auto blank_switch = MakeSensor("blank_switch", SensorType::USER_INDICATOR);
+    const auto blank_switch = MakeSensor("blank_switch", SensorType::USER_INDICATOR);
     blank_switch->configuration.input_mode = IndicatorInputMode::Toggle;
 
-    std::vector<std::shared_ptr<Sensor>> sensors = {
+    const std::vector<std::shared_ptr<Sensor>> sensors = {
         MakeSensor("blank", SensorType::USER_ANALOG),
         with_expression,
         follower,
@@ -112,9 +112,9 @@ Fixture MakeFixture() {
     fixture.generation = SensorPipelineBuilder(nullptr, fixture.frame)
                              .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
-    processors->push_back(std::make_shared<ScriptProcessor>(SensorScript::kPostProcessFunction));
+    processors->push_back(std::make_shared<ScriptProcessor>(SensorScript::POST_PROCESS_FUNCTION));
     fixture.pipeline = std::make_shared<ReadingPipeline>(fixture.frame, processors, fixture.time_service);
 
     return fixture;
@@ -123,7 +123,7 @@ Fixture MakeFixture() {
 } // namespace
 
 ZTEST(blank_user_sensors, test_only_a_sensor_without_script_functions_or_expression_is_blank) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     zassert_not_null(fixture.Runtime("blank").written_value);
     zassert_not_null(fixture.Runtime("blank_switch").written_value);

@@ -117,7 +117,7 @@ void ConfigurationUpdateLoggingStop::OnStored(Type type) {
     }
 
     if(logging_control_ != nullptr)
-        logging_control_->RequestStop(ILoggingControl::kAllUnits);
+        logging_control_->RequestStop(ILoggingControl::ALL_UNITS);
 
     // Several stores before the task runs send one stop.
     if(broadcast_task_.has_value())
@@ -125,7 +125,7 @@ void ConfigurationUpdateLoggingStop::OnStored(Type type) {
 }
 
 WorkQueueTaskResult ConfigurationUpdateLoggingStop::Broadcast() {
-    stop_sender_->SendLoggingCommand(false, ILoggingCommandSender::kBroadcast);
+    stop_sender_->SendLoggingCommand(false, ILoggingCommandSender::BROADCAST);
 
     return {};
 }

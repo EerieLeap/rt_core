@@ -13,7 +13,7 @@ private:
 
 public:
     explicit DataBlock(uint64_t size_bytes = 0);
-    virtual ~DataBlock() = default;
+    ~DataBlock() override = default;
 
     /** Number of record bytes appended after the block header. */
     void SetDataSizeBytes(uint64_t size_bytes);

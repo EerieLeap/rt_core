@@ -11,6 +11,9 @@ using eerie_leap::subsys::threading::Thread;
 namespace {
 
 constexpr int STACK_SIZE = 8192;
+// A thread that throws needs room for the unwinder: DWARF unwinding takes 6.5 to 9 KB on riscv64, malta,
+// aarch64 and Xtensa, which leaves STACK_SIZE no margin.
+constexpr int THROWING_STACK_SIZE = 16384;
 constexpr int OVERSIZED_STACK_SIZE = 4 * 1024 * 1024;
 constexpr int PRIORITY = 5;
 constexpr int SYNC_TIMEOUT_MS = 500;
@@ -19,15 +22,13 @@ constexpr int IDLE_TIMEOUT_MS = 50;
 // Blocks inside the entry point so the test can observe a live thread.
 class BlockingWorker : public IThread {
 private:
-    k_sem entered_;
-    k_sem resume_;
-    atomic_t entries_;
-    atomic_t exits_;
+    k_sem entered_{};
+    k_sem resume_{};
+    atomic_t entries_{ ATOMIC_INIT(0) };
+    atomic_t exits_{ ATOMIC_INIT(0) };
 
 public:
-    BlockingWorker() :
-        entries_(ATOMIC_INIT(0)),
-        exits_(ATOMIC_INIT(0)) {
+    BlockingWorker() {
         k_sem_init(&entered_, 0, K_SEM_MAX_LIMIT);
         k_sem_init(&resume_, 0, K_SEM_MAX_LIMIT);
     }
@@ -58,14 +59,12 @@ public:
 class SleepingWorker : public IThread {
 private:
     int sleep_ms_;
-    atomic_t entries_;
-    atomic_t finished_;
+    atomic_t entries_{ ATOMIC_INIT(0) };
+    atomic_t finished_{ ATOMIC_INIT(0) };
 
 public:
     explicit SleepingWorker(int sleep_ms) :
-        sleep_ms_(sleep_ms),
-        entries_(ATOMIC_INIT(0)),
-        finished_(ATOMIC_INIT(0)) {}
+        sleep_ms_(sleep_ms) {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);
@@ -85,12 +84,11 @@ public:
 class ThrowingWorker : public IThread {
 private:
     bool throw_std_exception_;
-    atomic_t entries_;
+    atomic_t entries_{ ATOMIC_INIT(0) };
 
 public:
     explicit ThrowingWorker(bool throw_std_exception) :
-        throw_std_exception_(throw_std_exception),
-        entries_(ATOMIC_INIT(0)) {}
+        throw_std_exception_(throw_std_exception) {}
 
     void ThreadEntry() override {
         atomic_inc(&entries_);
@@ -98,7 +96,7 @@ public:
         if(throw_std_exception_)
             throw std::runtime_error("boom");
 
-        throw 42;
+        throw 42; // NOLINT(bugprone-std-exception-baseclass): the case is about a thread entry that throws something that is not a std::exception
     }
 
     [[nodiscard]] int Entries() const {
@@ -351,13 +349,13 @@ ZTEST(thread, test_threads_run_independently_of_each_other) {
     for(auto& thread : threads)
         thread.Join();
 
-    for(auto& worker : workers)
+    for(const auto& worker : workers)
         zassert_equal(worker.Exits(), 1);
 }
 
 ZTEST(thread, test_Start_survives_a_std_exception_thrown_from_the_entry_point) {
     ThrowingWorker worker(true);
-    Thread thread("throws_std_exception", &worker, STACK_SIZE, PRIORITY);
+    Thread thread("throws_std_exception", &worker, THROWING_STACK_SIZE, PRIORITY);
 
     thread.Initialize();
     thread.Start();
@@ -369,7 +367,7 @@ ZTEST(thread, test_Start_survives_a_std_exception_thrown_from_the_entry_point) {
 
 ZTEST(thread, test_Start_survives_a_non_std_exception_thrown_from_the_entry_point) {
     ThrowingWorker worker(false);
-    Thread thread("throws_non_std_exception", &worker, STACK_SIZE, PRIORITY);
+    Thread thread("throws_non_std_exception", &worker, THROWING_STACK_SIZE, PRIORITY);
 
     thread.Initialize();
     thread.Start();
@@ -381,7 +379,7 @@ ZTEST(thread, test_Start_survives_a_non_std_exception_thrown_from_the_entry_poin
 
 ZTEST(thread, test_Start_can_be_repeated_after_the_entry_point_threw) {
     ThrowingWorker worker(true);
-    Thread thread("restarted_after_throw", &worker, STACK_SIZE, PRIORITY);
+    Thread thread("restarted_after_throw", &worker, THROWING_STACK_SIZE, PRIORITY);
 
     thread.Initialize();
 

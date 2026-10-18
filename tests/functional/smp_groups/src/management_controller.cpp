@@ -45,10 +45,10 @@ constexpr uint32_t BUILD_NUMBER = 4321;
 ZTEST_SUITE(management_controller, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(management_controller, test_serves_the_config_and_device_groups) {
-    auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_config_wq", 4096, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_config_wq", 4096, 5);
     zassert_true(work_queue->Initialize());
 
-    auto configuration_service = std::make_shared<ConfigurationService>();
+    const auto configuration_service = std::make_shared<ConfigurationService>();
     configuration_service->RegisterCborConfigurationManager(
         ConfigurationService::Type::Ui, std::make_shared<FakeConfigurationManager>()
     );
@@ -76,10 +76,10 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
 }
 
 ZTEST(management_controller, test_serves_the_files_group) {
-    auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_files_wq", 4096, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_files_wq", 4096, 5);
     zassert_true(work_queue->Initialize());
 
-    auto configuration_service = std::make_shared<ConfigurationService>();
+    const auto configuration_service = std::make_shared<ConfigurationService>();
     const uint8_t list = std::to_underlying(FilesMgmtGroup::Command::LIST);
     const auto request = CborMap().PutText("dir", "scripts").Build();
 
@@ -97,7 +97,7 @@ ZTEST(management_controller, test_serves_the_files_group) {
         );
     }
 
-    auto card = std::make_shared<FakeFsService>();
+    const auto card = std::make_shared<FakeFsService>();
     card->directories["scripts"] = { { .name = "oil.lua", .size = 120 } };
 
     ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt, card);
@@ -117,21 +117,21 @@ ZTEST(management_controller, test_serves_the_files_group) {
 
 ZTEST(management_controller, test_serves_the_assets_group) {
     // Unwinding an exception on qemu_riscv64 needs more stack than the usual work queue has.
-    auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_assets_wq", 16384, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_assets_wq", 16384, 5);
     zassert_true(work_queue->Initialize());
 
-    auto volume = assets_group_test::GetSimFsService();
+    const auto volume = assets_group_test::GetSimFsService();
     volume->DeleteRecursive();
 
     // A provider keeps the span of its extensions, so they are in static storage.
-    static constexpr std::array<std::string_view, 1> extensions = { ".png" };
-    auto registry = std::make_shared<AssetsManager>();
+    static constexpr std::array<std::string_view, 1> EXTENSIONS = { ".png" };
+    const auto registry = std::make_shared<AssetsManager>();
     zassert_true(registry->Register(
         {
             .kind = AssetKind::IMAGES,
             .name = "images",
             .store = std::make_shared<AssetStore>(volume, "images"),
-            .extensions = extensions,
+            .extensions = EXTENSIONS,
             .access = eerie_leap::subsys::assets::ToMask(eerie_leap::subsys::assets::AssetAccess::READ),
             .max_size = 0,
         }
@@ -140,7 +140,7 @@ ZTEST(management_controller, test_serves_the_assets_group) {
     const Bytes data = Pattern(40, 7);
     zassert_true(volume->WriteFile("images/logo.png", data.data(), data.size()));
 
-    auto configuration_service = std::make_shared<ConfigurationService>();
+    const auto configuration_service = std::make_shared<ConfigurationService>();
 
     {
         ManagementController controller(
@@ -182,10 +182,10 @@ ZTEST(management_controller, test_serves_the_assets_group) {
 }
 
 ZTEST(management_controller, test_serves_an_empty_assets_group_without_a_registry) {
-    auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_no_assets_wq", 16384, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_no_assets_wq", 16384, 5);
     zassert_true(work_queue->Initialize());
 
-    auto configuration_service = std::make_shared<ConfigurationService>();
+    const auto configuration_service = std::make_shared<ConfigurationService>();
 
     ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER);
     zassert_equal(controller.Initialize(), 0);

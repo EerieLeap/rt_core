@@ -33,7 +33,6 @@ using namespace assets_group_test;
 
 using eerie_leap::subsys::assets::AssetAccess;
 using eerie_leap::subsys::assets::AssetKind;
-using eerie_leap::subsys::assets::AssetProvider;
 using eerie_leap::subsys::assets::AssetReader;
 using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::assets::AssetStore;
@@ -218,6 +217,11 @@ public:
 
         StartGroup();
     }
+
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
 
     ~Harness() {
         // A test that failed on the way must not leave the writes after it failing.
@@ -455,7 +459,7 @@ public:
 
             // Every chunk but the last has the size of the first one, wherever the download starts.
             zassert_false(response.Has("crc"), "Only the last chunk carries the CRC");
-            zassert_true(chunk.size() > 0, "A chunk before the end holds data");
+            zassert_true(!chunk.empty(), "A chunk before the end holds data");
             zassert_equal(chunk.size(), download.chunk_size);
             zassert_true(download.chunks < 1000, "The download does not end");
         }
@@ -1291,7 +1295,7 @@ ZTEST_F(smp_assets_group, test_a_request_with_a_missing_or_malformed_key_is_inva
     const uint8_t list_command = std::to_underlying(Command::LIST);
     const uint8_t delete_command = std::to_underlying(Command::DELETE);
 
-    auto client_read = [&](uint8_t command, const Bytes& body) {
+    const auto client_read = [&](uint8_t command, const Bytes& body) {
         return harness.client.Read(SmpGroupId::ASSETS, command, body);
     };
 
@@ -1661,7 +1665,7 @@ ZTEST_F(smp_assets_group, test_write_replaces_the_file_only_with_the_last_chunk)
     const Bytes new_data = Pattern(2 * UPLOAD_CHUNK_SIZE + 100, 2);
     harness.Put("images/a.bin", old_data);
 
-    const auto response = harness.UploadAll(IMAGES, "a.bin", new_data, [&harness, &old_data]() {
+    const auto response = harness.UploadAll(IMAGES, "a.bin", new_data, [&harness, &old_data] {
         // All but the last chunk are in: the staged file holds them and the asset is as it was.
         zassert_true(harness.IsStaged());
         zassert_true(harness.FileContent("images/a.bin") == old_data);
@@ -1998,7 +2002,7 @@ ZTEST_F(smp_assets_group, test_write_of_a_file_that_went_into_use_during_the_upl
     const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 2);
     harness.Put("scripts/a.lua", old_data);
 
-    const auto response = harness.UploadAll(SENSOR_SCRIPTS, "a.lua", data, [&harness]() {
+    const auto response = harness.UploadAll(SENSOR_SCRIPTS, "a.lua", data, [&harness] {
         harness.in_use.names.insert("a.lua");
     });
 
@@ -2028,7 +2032,7 @@ ZTEST_F(smp_assets_group, test_write_whose_in_use_check_throws_is_no_memory_and_
     // Before the file is replaced, the check can throw as well: the upload ends, the file stays.
     const Bytes newer = Pattern(2 * UPLOAD_CHUNK_SIZE, 3);
 
-    const auto response = harness.UploadAll(SENSOR_SCRIPTS, "a.lua", newer, [&harness]() {
+    const auto response = harness.UploadAll(SENSOR_SCRIPTS, "a.lua", newer, [&harness] {
         harness.in_use.throws_bad_alloc = true;
     });
     harness.in_use.throws_bad_alloc = false;
@@ -2183,7 +2187,7 @@ ZTEST_F(smp_assets_group, test_write_that_commits_while_the_file_is_being_read_c
     const size_t chunk = Harness::DataOf(harness.Read(IMAGES, "a.bin", 0)).size();
     atomic_val_t closed_before = 0;
 
-    const auto response = harness.UploadAll(IMAGES, "a.bin", new_data, [&closed_before]() {
+    const auto response = harness.UploadAll(IMAGES, "a.bin", new_data, [&closed_before] {
         closed_before = atomic_get(&files_closed);
     });
 
@@ -2397,7 +2401,7 @@ ZTEST_F(smp_assets_group, test_write_larger_than_the_volume_is_no_space) {
 
 ZTEST_F(smp_assets_group, test_write_into_a_nearly_full_volume_is_no_space) {
     Harness& harness = *fixture->harness;
-    constexpr uint64_t NEARLY_FULL = 24 * 1024;
+    constexpr uint64_t NEARLY_FULL = 24ULL * 1024;
     const Bytes old_data = Pattern(100, 1);
     harness.ReregisterImages(1000000);
     harness.Put("images/a.bin", old_data);
@@ -2504,7 +2508,7 @@ ZTEST_F(smp_assets_group, test_a_request_to_write_without_its_keys_is_invalid) {
     const std::span<const uint8_t> chunk(data);
     const uint8_t write_command = std::to_underlying(Command::WRITE);
 
-    auto client_write = [&harness, write_command](const Bytes& body) {
+    const auto client_write = [&harness](const Bytes& body) {
         return harness.client.Write(SmpGroupId::ASSETS, write_command, body);
     };
 

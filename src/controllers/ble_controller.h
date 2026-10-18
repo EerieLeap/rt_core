@@ -33,7 +33,7 @@ public:
     );
 
     int Initialize();
-    int Start();
+    static int Start();
 };
 
 } // namespace eerie_leap::controllers

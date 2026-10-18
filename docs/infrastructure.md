@@ -85,7 +85,7 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
   binding; `Find()` takes no lock. `Find()` returns null for an id nobody registered, so a stale
   binding is inert. `Register()` refuses `None` and any id `IsValidEventChannelId()` does not name
   (`-EINVAL`), and a second channel under a taken id (`-EEXIST`). Appending an id means moving
-  `k_last_event_channel_id` to it; `IsValidEventChannelId()` and the registry's table follow.
+  `LAST_EVENT_CHANNEL_ID` to it; `IsValidEventChannelId()` and the registry's table follow.
 - A selector is text, an integer or a bool (`IsSelectorValue()`). Text is compared by its hash,
   because payloads carry ids hashed (`ToSelectorValue()`, `SelectorMatches()`). An integer matches
   an `int` or `uint32_t` entry, a bool a `bool` entry.

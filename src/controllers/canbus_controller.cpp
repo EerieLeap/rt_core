@@ -209,13 +209,13 @@ void CanbusController::RegisterDependentService(std::shared_ptr<IService> servic
 
 void CanbusController::Reconfigure() {
     canbus_com_service_->Stop();
-    for(auto& service : dependent_services_)
+    for(const auto& service : dependent_services_)
         service->Stop();
 
     canbus_service_->Configure();
 
     canbus_com_service_->Start();
-    for(auto& service : dependent_services_)
+    for(const auto& service : dependent_services_)
         service->Start();
 }
 

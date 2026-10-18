@@ -29,8 +29,8 @@ using threading::WorkQueueThread;
 
 class CanbusSchedulerService final : public ServiceBase<> {
 private:
-    static constexpr int thread_stack_size_ = 8192;
-    static constexpr int thread_priority_ = 6;
+    static constexpr int THREAD_STACK_SIZE = 8192;
+    static constexpr int THREAD_PRIORITY = 6;
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
 
     std::shared_ptr<CanbusConfigurationManager> canbus_configuration_manager_;

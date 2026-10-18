@@ -11,7 +11,7 @@ namespace eerie_leap::domain::logging_domain::control {
 LOG_MODULE_REGISTER(canbus_com_logging_availability_reporter_logger);
 
 CanbusComLoggingAvailabilityReporter::CanbusComLoggingAvailabilityReporter(
-    std::shared_ptr<WorkQueueThread> work_queue_thread,
+    const std::shared_ptr<WorkQueueThread>& work_queue_thread,
     std::shared_ptr<IFsService> sd_fs_service,
     std::shared_ptr<CanbusComService> canbus_com_service
 ) :

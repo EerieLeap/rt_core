@@ -32,8 +32,8 @@ private:
     int64_t last_call_ticks_ = -1;
 
 public:
-    static constexpr size_t kMaxTicks = 512;
-    static constexpr int32_t kHoldMs = 200;
+    static constexpr size_t MAX_TICKS = 512;
+    static constexpr int32_t HOLD_MS = 200;
 
     // Writer thread only; read once the service is stopped.
     std::vector<int64_t> tick_times;
@@ -45,11 +45,11 @@ public:
     std::atomic<k_tid_t> stop_thread = nullptr;
     std::atomic<bool> is_held_reading_done = false;
     std::atomic<bool> stop_found_held_reading_done = false;
-    k_sem held_reading_started;
+    k_sem held_reading_started{};
 
     explicit ProbeLogger(std::shared_ptr<ILogger<SensorReading>> inner) :
         inner_(std::move(inner)) {
-        tick_times.reserve(kMaxTicks);
+        tick_times.reserve(MAX_TICKS);
         k_sem_init(&held_reading_started, 0, 1);
     }
 
@@ -76,7 +76,7 @@ public:
     bool LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) override {
         // Every call of one tick shares its uptime where code takes no time (native_sim).
         const int64_t now = k_uptime_ticks();
-        if(now != last_call_ticks_ && tick_times.size() < kMaxTicks)
+        if(now != last_call_ticks_ && tick_times.size() < MAX_TICKS)
             tick_times.push_back(now);
         last_call_ticks_ = now;
 
@@ -87,7 +87,7 @@ public:
             return inner_->LogReading(time, reading);
 
         k_sem_give(&held_reading_started);
-        k_msleep(kHoldMs);
+        k_msleep(HOLD_MS);
 
         const bool is_logged = inner_->LogReading(time, reading);
         is_held_reading_done = true;
@@ -110,7 +110,7 @@ public:
 private:
     LoggerFactory inner_;
 
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
     std::shared_ptr<ProbeLogger> current_;
     int count_ = 0;
 

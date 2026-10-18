@@ -46,6 +46,11 @@ struct TransactionFixture {
         k_sem_init(&completed, 0, K_SEM_MAX_LIMIT);
     }
 
+    TransactionFixture(const TransactionFixture&) = delete;
+    TransactionFixture& operator=(const TransactionFixture&) = delete;
+    TransactionFixture(TransactionFixture&&) = delete;
+    TransactionFixture& operator=(TransactionFixture&&) = delete;
+
     ~TransactionFixture() {
         transactions.reset();
         work_queue->Stop();
@@ -61,7 +66,7 @@ struct TransactionFixture {
         );
     }
 
-    void Respond(uint8_t source, uint8_t command_code, uint8_t transaction_id) {
+    void Respond(uint8_t source, uint8_t command_code, uint8_t transaction_id) const {
         transactions->CompleteTransaction(
             { .source_device_id = source,
                 .command_code = command_code,
@@ -130,7 +135,7 @@ ZTEST(cdmp_transaction, test_stop_cancels_pending_transactions) {
 
     zassert_equal(fixture.transactions->GetPendingTransactionCount(), 0);
     zassert_equal(fixture.results.size(), 2);
-    for(auto result_code : fixture.results)
+    for(const auto result_code : fixture.results)
         zassert_equal(result_code, CdmpResultCode::CANCELLED);
 
     // Stopped, the timeout task no longer runs, so a new transaction stays pending.

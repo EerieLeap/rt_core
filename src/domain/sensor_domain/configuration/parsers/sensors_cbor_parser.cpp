@@ -23,14 +23,14 @@ SensorsCborParser::SensorsCborParser(std::shared_ptr<IFsService> sd_fs_service) 
     sd_fs_service_(std::move(sd_fs_service)) {}
 
 // Serializes plain configuration data; nothing executable is built or touched here.
-pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
+PmrUniquePtr<CborSensorsConfig> SensorsCborParser::Serialize(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     uint32_t gpio_channel_count,
     uint32_t adc_channel_count
 ) {
 
     // NOTE: UpdateConnectionString() must be called before validation
-    for(auto& sensor : sensors)
+    for(const auto& sensor : sensors)
         sensor->configuration.UpdateConnectionString();
     SensorValidator::Validate(sensors, sd_fs_service_.get(), gpio_channel_count, adc_channel_count);
 
@@ -180,7 +180,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
 
     SensorsOrderResolver order_resolver;
 
-    for(auto& sensor : stored_sensors) {
+    for(const auto& sensor : stored_sensors) {
         auto& configuration = sensor->configuration;
 
         // Interpolators binary search the table, and an imported one may be stored unordered. Its
@@ -192,7 +192,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
         // The validator has parsed the text, so this does not throw.
         configuration.UnwrapConnectionString();
 
-        order_resolver.AddSensor(std::move(sensor));
+        order_resolver.AddSensor(sensor);
     }
 
     // Refuses a dependency cycle.

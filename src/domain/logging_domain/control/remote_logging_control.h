@@ -38,10 +38,10 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 // from the configuration work queue, and IsActive() follows the logging status the units share
 // (StatusUpdated on logging_events, published by the NetworkStateImporter).
 //
-// A request names its target: kAllUnits is one broadcast, a UID is one unicast to the unit with that
+// A request names its target: ALL_UNITS is one broadcast, a UID is one unicast to the unit with that
 // UID, found in the CDMP device table when the command is sent (online and CanLog()). The control
 // keeps the wanted state per target, so each target is re-asserted on its own record:
-// - kAllUnits has one slot, and a request for it replaces the state of every other target, since the
+// - ALL_UNITS has one slot, and a request for it replaces the state of every other target, since the
 //   broadcast reaches them too;
 // - a UID has a slot of its own (at most one per trigger), found or taken when it is requested; a
 //   request that finds none is logged and dropped;
@@ -165,7 +165,7 @@ private:
         Stop
     };
 
-    // The wanted state of one target. targets_[0] is kAllUnits and keeps uid 0.
+    // The wanted state of one target. targets_[0] is ALL_UNITS and keeps uid 0.
     struct Target {
         uint32_t uid = 0;
         Request wanted = Request::None;
@@ -176,9 +176,9 @@ private:
     };
 
     // Slot 0 and one slot per trigger.
-    static constexpr size_t kMaxTargets = models::LoggingControlConfiguration::kMaxTriggers + 1;
+    static constexpr size_t K_MAX_TARGETS = models::LoggingControlConfiguration::MAX_TRIGGERS + 1;
     // The device table the task reads: a CDMP network has at most this many other units.
-    static constexpr size_t kMaxNetworkDevices = 64;
+    static constexpr size_t K_MAX_NETWORK_DEVICES = 64;
 
     // Declared before task_, so the queue outlives the task.
     std::shared_ptr<WorkQueueThread> config_work_queue_thread_;
@@ -199,13 +199,13 @@ private:
     mutable k_spinlock targets_lock_{};
     // The latest request per target, kept until the next one: a start stays wanted until a stop is
     // requested.
-    std::array<Target, kMaxTargets> targets_{};
+    std::array<Target, K_MAX_TARGETS> targets_{};
     // The devices the restart monitor reported, taken by the task.
     std::bitset<256> restarted_devices_;
     // Set by the status handler on Unavailable -> Stopped, taken by the task. Remote mode only.
     bool is_status_reassert_due_ = false;
     // The device table the task resolves UIDs in; the task only (configuration work queue).
-    std::array<CdmpDeviceInfo, kMaxNetworkDevices> devices_{};
+    std::array<CdmpDeviceInfo, K_MAX_NETWORK_DEVICES> devices_{};
     // From the last StatusUpdated.
     std::atomic<bool> is_active_ = false;
     // Whether the last StatusUpdated was inactive Unavailable. The status handler only, inside guard_.

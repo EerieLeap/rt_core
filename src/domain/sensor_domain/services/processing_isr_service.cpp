@@ -30,6 +30,7 @@ void ProcessingIsrService::ProcessSensor(const SensorRuntime& runtime, SensorRea
     pipeline_->Process(runtime, reading);
 
     if(reading.HasError())
+        // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): ToString() returns string literals, which are null-terminated.
         LOG_DBG("Sensor %s: %s", runtime.GetSensor().id.c_str(), ToString(reading.error).data());
 }
 

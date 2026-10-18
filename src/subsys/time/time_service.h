@@ -15,7 +15,7 @@ private:
 public:
     TimeService(std::shared_ptr<ITimeProvider> rtc_provider, std::shared_ptr<ITimeProvider> boot_elapsed_time_provider);
 
-    void Initialize();
+    static void Initialize();
 
     std::chrono::system_clock::time_point GetCurrentTime() override;
     std::chrono::system_clock::time_point GetTimeSinceBoot() override;

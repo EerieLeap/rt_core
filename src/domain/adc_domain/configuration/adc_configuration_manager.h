@@ -34,8 +34,8 @@ private:
     AdcConfigurationCborParser cbor_parser_;
     ConfigurationUpdatedHandler configuration_updated_handler_;
 
-    eerie_memory::pmr_unique_ptr<CborAdcConfig> Serialize(const AdcConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<AdcConfiguration> Deserialize(const CborAdcConfig& cbor_config) override;
+    eerie_memory::PmrUniquePtr<CborAdcConfig> Serialize(const AdcConfiguration& configuration) override;
+    eerie_memory::PmrUniquePtr<AdcConfiguration> Deserialize(const CborAdcConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:
@@ -49,7 +49,7 @@ public:
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;
 
-    bool Update(const AdcConfiguration& configuration);
+    bool Update(const AdcConfiguration& configuration) override;
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 
     std::shared_ptr<IAdcManager> GetAdcManager() const {

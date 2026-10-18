@@ -1,4 +1,4 @@
-#include <errno.h>
+#include <cerrno>
 
 #include <zephyr/sys/printk.h>
 
@@ -11,23 +11,23 @@ namespace eerie_leap::utilities::dev_tools {
 
 namespace {
 
-constexpr size_t kCopyChunkSize = 128;
-constexpr size_t kBytesPerLine = 32;
+constexpr size_t COPY_CHUNK_SIZE = 128;
+constexpr size_t BYTES_PER_LINE = 32;
 
 } // namespace
 
 void CoredumpReporter::PrintHexChunk(const uint8_t* data, size_t len) {
-    static constexpr char kHexDigits[] = "0123456789abcdef";
-    char line[(kBytesPerLine * 2) + 1];
+    static constexpr char HEX_DIGITS[] = "0123456789abcdef";
+    char line[(BYTES_PER_LINE * 2) + 1];
 
-    for(size_t offset = 0; offset < len; offset += kBytesPerLine) {
-        size_t line_bytes = (len - offset < kBytesPerLine) ? (len - offset) : kBytesPerLine;
+    for(size_t offset = 0; offset < len; offset += BYTES_PER_LINE) {
+        const size_t line_bytes = (len - offset < BYTES_PER_LINE) ? (len - offset) : BYTES_PER_LINE;
         size_t pos = 0;
 
         for(size_t i = 0; i < line_bytes; i++) {
-            uint8_t byte = data[offset + i];
-            line[pos++] = kHexDigits[(byte >> 4) & 0xF];
-            line[pos++] = kHexDigits[byte & 0xF];
+            const uint8_t byte = data[offset + i];
+            line[pos++] = HEX_DIGITS[(byte >> 4) & 0xF];
+            line[pos++] = HEX_DIGITS[byte & 0xF];
         }
         line[pos] = '\0';
 
@@ -39,7 +39,7 @@ void CoredumpReporter::PrintStoredDump() {
     if(coredump_query(COREDUMP_QUERY_HAS_STORED_DUMP, nullptr) != 1)
         return;
 
-    int size = coredump_query(COREDUMP_QUERY_GET_STORED_DUMP_SIZE, nullptr);
+    const int size = coredump_query(COREDUMP_QUERY_GET_STORED_DUMP_SIZE, nullptr);
     if(size <= 0)
         return;
 
@@ -49,7 +49,7 @@ void CoredumpReporter::PrintStoredDump() {
     // dropout issue found in this project.
     printk("\n#CD:BEGIN#\n");
 
-    uint8_t buf[kCopyChunkSize];
+    uint8_t buf[COPY_CHUNK_SIZE];
     coredump_cmd_copy_arg copy{
         .offset = 0,
         .buffer = buf,
@@ -58,9 +58,9 @@ void CoredumpReporter::PrintStoredDump() {
 
     size_t remaining = static_cast<size_t>(size);
     while(remaining > 0) {
-        copy.length = (remaining < kCopyChunkSize) ? remaining : kCopyChunkSize;
+        copy.length = (remaining < COPY_CHUNK_SIZE) ? remaining : COPY_CHUNK_SIZE;
 
-        int copied = coredump_cmd(COREDUMP_CMD_COPY_STORED_DUMP, &copy);
+        const int copied = coredump_cmd(COREDUMP_CMD_COPY_STORED_DUMP, &copy);
         if(copied <= 0) {
             printk("#CD:ERROR CANNOT DUMP#\n");
             return;

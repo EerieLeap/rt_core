@@ -47,15 +47,15 @@ public:
 
 using TestEvent = TestChannel::EventMessage;
 
-constexpr uint32_t k_source = 0xACCE;
-constexpr uint32_t k_other_source = 0xBEEF;
+constexpr uint32_t K_SOURCE = 0xACCE;
+constexpr uint32_t OTHER_SOURCE = 0xBEEF;
 
-TestEvent MakeEvent(TestEventType type, uint32_t value, uint32_t source_id = k_source) {
+TestEvent MakeEvent(TestEventType type, uint32_t value, uint32_t source_id = K_SOURCE) {
     return TestEvent{ .source_id = source_id, .type = type, .payload = { { TestPayloadType::Value, value } } };
 }
 
 bool ValueIs(const TestEvent& event, uint32_t expected) {
-    auto it = event.payload.find(TestPayloadType::Value);
+    const auto* it = event.payload.find(TestPayloadType::Value);
 
     return it != event.payload.end()
         && std::holds_alternative<uint32_t>(it->second)
@@ -109,7 +109,7 @@ ZTEST(event_bus_event_channel_accepts, test_a_subscriber_without_a_filter_accept
     );
     zassert_not_null(erased.get());
     zassert_true(channel.Accepts(MakeEvent(TestEventType::Alpha, 7)));
-    zassert_true(channel.Accepts(TestEvent{ .source_id = k_source, .type = TestEventType::Alpha, .payload = {} }));
+    zassert_true(channel.Accepts(TestEvent{ .source_id = K_SOURCE, .type = TestEventType::Alpha, .payload = {} }));
 }
 
 ZTEST(event_bus_event_channel_accepts, test_Accepts_is_true_when_any_subscriber_accepts) {
@@ -198,21 +198,21 @@ ZTEST(event_bus_event_channel_accepts, test_the_erased_Accepts_builds_the_event_
         { { std::to_underlying(TestPayloadType::Label), EventData{ 43U } } }
     };
 
-    zassert_true(channel.Accepts(std::to_underlying(TestEventType::Alpha), k_source, matching));
-    zassert_false(channel.Accepts(std::to_underlying(TestEventType::Alpha), k_source, other));
-    zassert_false(channel.Accepts(std::to_underlying(TestEventType::Beta), k_source, matching));
+    zassert_true(channel.Accepts(std::to_underlying(TestEventType::Alpha), K_SOURCE, matching));
+    zassert_false(channel.Accepts(std::to_underlying(TestEventType::Alpha), K_SOURCE, other));
+    zassert_false(channel.Accepts(std::to_underlying(TestEventType::Beta), K_SOURCE, matching));
 
     // A typed filter may select on the publisher, so the erased form carries the source too.
     AnySubscription by_source = CreateScopedSubscription(
         channel, TestEventType::Beta,
         [](const TestEvent& event) {
-            return event.source_id == k_source;
+            return event.source_id == K_SOURCE;
         },
         [](const TestEvent&) {}
     );
 
-    zassert_true(channel.Accepts(std::to_underlying(TestEventType::Beta), k_source, other));
-    zassert_false(channel.Accepts(std::to_underlying(TestEventType::Beta), k_other_source, other));
+    zassert_true(channel.Accepts(std::to_underlying(TestEventType::Beta), K_SOURCE, other));
+    zassert_false(channel.Accepts(std::to_underlying(TestEventType::Beta), OTHER_SOURCE, other));
 }
 
 ZTEST(event_bus_event_channel_accepts, test_the_generation_moves_on_every_subscribe_and_unsubscribe) {

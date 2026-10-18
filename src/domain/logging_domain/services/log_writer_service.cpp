@@ -61,7 +61,7 @@ void LogWriterService::SetSizeLimitsForTesting(uint64_t max_log_size_bytes, uint
 }
 
 bool LogWriterService::DoInitialize() {
-    work_queue_thread_ = std::make_unique<WorkQueueThread>("log_writer_service", thread_stack_size_, thread_priority_);
+    work_queue_thread_ = std::make_unique<WorkQueueThread>("log_writer_service", THREAD_STACK_SIZE, THREAD_PRIORITY);
 
     if(!work_queue_thread_->Initialize()) {
         LOG_ERR("Failed to initialize the log writer work queue.");
@@ -95,11 +95,9 @@ bool LogWriterService::DoStart() {
         return false;
     }
 
-    if(!fs_service_->Exists(LogFileNaming::LOGS_DIR)) {
-        if(!fs_service_->CreateDirectory(LogFileNaming::LOGS_DIR)) {
-            LOG_ERR("Failed to create %s directory", LogFileNaming::LOGS_DIR);
-            return false;
-        }
+    if(!fs_service_->Exists(LogFileNaming::LOGS_DIR) && !fs_service_->CreateDirectory(LogFileNaming::LOGS_DIR)) {
+        LOG_ERR("Failed to create %s directory", LogFileNaming::LOGS_DIR);
+        return false;
     }
 
     const auto logging_configuration = logging_configuration_manager_->Get();
@@ -123,9 +121,16 @@ bool LogWriterService::DoStart() {
         return false;
     }
 
+    if(!work_queue_task_.has_value()) {
+        LOG_ERR("The log writer service is not initialized.");
+        return false;
+    }
+
+    auto& work_queue_task = *work_queue_task_;
+
     // The frame queues raw CAN frames whether or not logging runs. Whatever it holds now predates
     // this file and would, at the first tick, crowd out the frames that arrive after the start.
-    auto& task = *work_queue_task_.value().GetUserdata();
+    auto& task = *work_queue_task.GetUserdata();
     while(sensor_readings_frame_->TakeRawCanFrames(task.raw_readings, task.raw_frames) > 0) {
     }
 
@@ -164,19 +169,24 @@ bool LogWriterService::DoStart() {
     PublishStatus(true);
 
     task.next_deadline = k_uptime_ticks() + task.interval_ticks;
-    work_queue_task_.value().Reschedule(K_TIMEOUT_ABS_TICKS(task.next_deadline));
+    work_queue_task.Reschedule(K_TIMEOUT_ABS_TICKS(task.next_deadline));
 
     return true;
 }
 
 bool LogWriterService::DoStop() {
-    auto& task = *work_queue_task_.value().GetUserdata();
+    // Never initialized, so never started.
+    if(!work_queue_task_.has_value())
+        return true;
+
+    auto& work_queue_task = *work_queue_task_;
+    auto& task = *work_queue_task.GetUserdata();
 
     atomic_clear(&task.is_running);
 
     // Cancel() waits for a tick in progress, which, seeing the flag, schedules no other; the loop
     // takes a reschedule that raced the flag.
-    while(work_queue_task_.value().Cancel())
+    while(work_queue_task.Cancel())
         k_sleep(K_MSEC(1));
 
     CloseLogFile(task);
@@ -231,7 +241,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
     file_path_.Clear();
 
     for(int i = 0; i < 10; i++) {
-        auto new_file_path = LogFileNaming::GetFilePath(
+        const auto new_file_path = LogFileNaming::GetFilePath(
             LogFileNaming::LOGS_DIR, CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX, start_time, Rng::Get<uint16_t>(),
             logger_->GetFileExtension()
         );
@@ -365,7 +375,7 @@ WorkQueueTaskResult LogWriterService::EndSession(LoggingStatusReason reason) {
 }
 
 WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
-    if(!atomic_get(&task.is_running))
+    if(atomic_get(&task.is_running) == 0)
         return { .reschedule = false };
 
     const uint32_t tick_start_cycles = k_cycle_get_32();
@@ -496,7 +506,7 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
         task.next_deadline = std::min(task.next_deadline, now_ticks + task.burst_interval_ticks);
 
     // Stop() started while the tick ran: leave nothing behind for its cancel to chase.
-    if(!atomic_get(&task.is_running))
+    if(atomic_get(&task.is_running) == 0)
         return { .reschedule = false };
 
     return { .reschedule = true, .delay = K_TIMEOUT_ABS_TICKS(task.next_deadline) };

@@ -50,8 +50,8 @@ public:
 
 private:
     struct Inbox {
-        k_sem received;
-        k_mutex lock;
+        k_sem received{};
+        k_mutex lock{};
         std::deque<Entry> entries;
 
         Inbox() {
@@ -68,12 +68,12 @@ public:
         subscription_ = CreateScopedSubscription(
             LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
-                const auto active = event.payload.find(LoggingPayloadType::IsActive);
+                const auto* const active = event.payload.find(LoggingPayloadType::IsActive);
                 if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
                     return;
 
                 Entry entry{ .is_active = std::get<bool>(active->second) };
-                const auto reason = event.payload.find(LoggingPayloadType::Reason);
+                const auto* const reason = event.payload.find(LoggingPayloadType::Reason);
                 if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
                     entry.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
 
@@ -87,7 +87,7 @@ public:
         zassert_not_null(subscription_.get(), "The status log's subscription was refused.");
     }
 
-    std::optional<Entry> WaitForEntry(int timeout_ms = k_wait_ms) {
+    std::optional<Entry> WaitForEntry(int timeout_ms = WAIT_MS) {
         if(k_sem_take(&inbox_->received, Ms(timeout_ms)) != 0)
             return std::nullopt;
 
@@ -151,17 +151,17 @@ struct Fixture {
     }
 
     // The next LOGGING broadcast of the unit, or nothing in time.
-    std::optional<RecordedFrame> WaitForBroadcast(int timeout_ms = k_wait_ms) {
+    std::optional<RecordedFrame> WaitForBroadcast(int timeout_ms = WAIT_MS) {
         return harness.bus.Wait(COMMAND, IsLoggingBroadcastFrame, timeout_ms);
     }
 
     // The next LOGGING command to any unit: a restart is re-asserted to the unit that came back.
-    std::optional<RecordedFrame> WaitForCommand(int timeout_ms = k_wait_ms) {
+    std::optional<RecordedFrame> WaitForCommand(int timeout_ms = WAIT_MS) {
         return harness.bus.Wait(COMMAND, IsLoggingCommandFrame, timeout_ms);
     }
 
     // The next LOGGING command to @p device_id alone.
-    std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = k_wait_ms) {
+    std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = WAIT_MS) {
         return harness.bus.Wait(
             COMMAND,
             [device_id](const Bytes& bytes) {
@@ -206,12 +206,12 @@ ZTEST_SUITE(canbus_com_logging_command_sender, NULL, SetUp, Before, After, NULL)
 ZTEST(canbus_com_logging_command_sender, test_TheCommandIsTheLoggingBroadcast) {
     CanbusComLoggingCommandSender sender(F().harness.com);
 
-    sender.SendLoggingCommand(true, kBroadcast);
+    sender.SendLoggingCommand(true, BROADCAST);
     const auto start = F().WaitForBroadcast();
     zassert_true(start.has_value(), "A start must go out on the command identifier");
     zassert_equal(start->data[3], 0x01, "start");
 
-    sender.SendLoggingCommand(false, kBroadcast);
+    sender.SendLoggingCommand(false, BROADCAST);
     const auto stop = F().WaitForBroadcast();
     zassert_true(stop.has_value());
     zassert_equal(stop->data[3], 0x00, "stop");
@@ -221,7 +221,7 @@ ZTEST(canbus_com_logging_command_sender, test_TheCommandIsTheLoggingBroadcast) {
 ZTEST(canbus_com_logging_command_sender, test_AResponseAfterTheSenderIsGoneIsHarmless) {
     auto sender = std::make_unique<CanbusComLoggingCommandSender>(F().harness.com);
 
-    sender->SendLoggingCommand(true, kBroadcast);
+    sender->SendLoggingCommand(true, BROADCAST);
     const auto sent = F().WaitForBroadcast();
     zassert_true(sent.has_value());
 
@@ -240,7 +240,7 @@ ZTEST(canbus_com_logging_command_sender, test_AResponseAfterTheSenderIsGoneIsHar
     k_msleep(NO_FRAME_TIMEOUT_MS);
 
     CanbusComLoggingCommandSender later(F().harness.com);
-    later.SendLoggingCommand(false, kBroadcast);
+    later.SendLoggingCommand(false, BROADCAST);
     zassert_true(F().WaitForBroadcast().has_value(), "A new sender still works");
 }
 
@@ -297,7 +297,7 @@ ZTEST(canbus_com_logging_command_sender, test_AStartNoUnitReceivedIsSentAgainOnc
     zassert_false(status->is_active);
     zassert_equal(status->reason, LoggingStatusReason::Unavailable, "No unit shares a status");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForBroadcast().has_value(), "The start goes out");
     zassert_false(F().WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "once");
 
@@ -336,7 +336,7 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartThatKeepsItsRecordIsR
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -367,7 +367,7 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartThatAnnouncesItsRecor
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -401,7 +401,7 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAStoppedUnitIsReass
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -437,7 +437,7 @@ ZTEST(canbus_com_logging_command_sender, test_AUnitThatComesBackLoggingConsumesT
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -469,9 +469,9 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartWithoutAWantedStartSe
     zassert_false(F().WaitForCommand(NO_FRAME_TIMEOUT_MS).has_value(), "Nothing was wanted");
 
     // A stop ends what was wanted: the next restart, confirmed at once, sends nothing either.
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(IsStart(F().WaitForCommand()));
-    remote.control.RequestStop(kAllUnits);
+    remote.control.RequestStop(ALL_UNITS);
     zassert_true(IsStop(F().WaitForCommand()));
 
     F().RestartPeer({ { LOGGING_STATUS_CODE, 1, { 0x00, 0x00 } } }, false);
@@ -484,7 +484,7 @@ ZTEST(canbus_com_logging_command_sender, test_EachQuickRestartIsReassertedOnce) 
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -518,7 +518,7 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartWhileAnotherUnitLogsI
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareOtherStatus({ 0x01 });
@@ -549,7 +549,7 @@ ZTEST(canbus_com_logging_command_sender, test_AQuickRestartOfAUnitThatHadAFailur
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -580,7 +580,7 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheLoggingUnitsOwnComSer
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -604,7 +604,7 @@ ZTEST(canbus_com_logging_command_sender, test_UnitsThatRestartTogetherAreEachRea
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareOtherStatus({ 0x01 });
@@ -637,7 +637,7 @@ ZTEST(canbus_com_logging_command_sender, test_ALoggingUnitThatJoinsWhileAnotherL
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });
@@ -661,7 +661,7 @@ ZTEST(canbus_com_logging_command_sender, test_LoggingUnitsThatJoinTogetherAreEac
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().harness.Join(OTHER_ID, OTHER_UID);
@@ -687,7 +687,7 @@ ZTEST(canbus_com_logging_command_sender, test_ARestartOfTheUnitsOwnComServiceRea
     Remote remote;
     zassert_true(remote.log.WaitForEntry().has_value(), "Unavailable");
 
-    remote.control.RequestStart(kAllUnits);
+    remote.control.RequestStart(ALL_UNITS);
     zassert_true(F().WaitForCommand().has_value(), "The start goes out");
 
     F().ShareStatus({ 0x01 });

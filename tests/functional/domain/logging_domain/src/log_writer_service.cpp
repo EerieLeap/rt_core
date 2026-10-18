@@ -28,7 +28,7 @@ namespace {
 // native_sim links the host libc, so the finalized file can be handed to asammdf on the host.
 void DumpToHost([[maybe_unused]] const std::vector<uint8_t>& content) {
 #ifdef CONFIG_ARCH_POSIX
-    const std::string_view dump_dir = CONFIG_LOGGING_TEST_DUMP_DIR;
+    const std::string_view dump_dir;
     if(dump_dir.empty())
         return;
 
@@ -36,6 +36,7 @@ void DumpToHost([[maybe_unused]] const std::vector<uint8_t>& content) {
 
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     zassert_true(file.is_open(), "the dump file %s could not be opened", path.c_str());
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): ostream::write() takes chars, the content is bytes
     file.write(reinterpret_cast<const char*>(content.data()), static_cast<std::streamsize>(content.size()));
     zassert_true(file.good(), "the dump file %s could not be written", path.c_str());
 #endif
@@ -53,11 +54,11 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
         "the default configuration ticks every 100 ms"
     );
 
-    constexpr uint8_t published_frames = 7;
+    constexpr uint8_t PUBLISHED_FRAMES = 7;
     std::vector<std::chrono::system_clock::time_point> published_times;
 
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    for(uint8_t i = 0; i < published_frames; i++) {
+    for(uint8_t i = 0; i < PUBLISHED_FRAMES; i++) {
         published_times.push_back(PublishReadings(rig, sensors, i));
         k_sleep(K_MSEC(50));
     }
@@ -68,7 +69,7 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     const auto stats = rig.log_writer_service->GetStats();
     zassert_true(stats.ticks >= 4, "500 ms at 100 ms must run at least 4 ticks (got %u)", stats.ticks);
     zassert_equal(stats.write_errors, 0, "nothing may fail on an empty volume");
-    zassert_equal(stats.frames, published_frames, "every queued raw frame is logged (got %u)", stats.frames);
+    zassert_equal(stats.frames, PUBLISHED_FRAMES, "every queued raw frame is logged (got %u)", stats.frames);
     zassert_true(stats.readings >= 3, "each tick sees a new value timestamp (got %u readings)", stats.readings);
 
     const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
@@ -77,13 +78,13 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     const std::string path = std::string(LogFileNaming::LOGS_DIR) + "/" + files[0];
     const auto content = ReadWholeFile(*rig.fs_service, path);
 
-    zassert_true(content.size() >= kIdBlockSize + kBlockHeaderSize, "the file is shorter than an MDF header");
+    zassert_true(content.size() >= ID_BLOCK_SIZE + BLOCK_HEADER_SIZE, "the file is shorter than an MDF header");
     zassert_mem_equal(content.data(), "MDF     ", 8, "a stopped file must carry the finalized identifier");
 
     const auto data_block_address = FindDataBlockAddress(content);
     zassert_not_equal(data_block_address, 0, "the file has no DT block");
 
-    const auto data_block_length = ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset);
+    const auto data_block_length = ReadField<uint64_t>(content, data_block_address + BLOCK_LENGTH_OFFSET);
     zassert_equal(
         content.size(), data_block_address + static_cast<size_t>(data_block_length),
         "the file must end where the patched DT length says it ends"
@@ -93,7 +94,7 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     // Two frames 50 ms apart are drained by one tick, and each keeps the time it was published at.
     const auto records = ReadDataRecords(content);
     zassert_equal(
-        records.frame_times.size(), published_frames, "one CAN record per frame (got %zu)", records.frame_times.size()
+        records.frame_times.size(), PUBLISHED_FRAMES, "one CAN record per frame (got %zu)", records.frame_times.size()
     );
     for(size_t i = 0; i < records.frame_times.size(); i++) {
         zassert_equal(records.frame_sequences[i], i, "frame %zu is out of order", i);
@@ -129,21 +130,21 @@ ZTEST(log_writer_service, test_FramesQueuedBeforeStartAreNotLogged) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
 
-    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + 4; i++)
+    for(size_t i = 0; i < SensorLimits::RAW_CAN_QUEUE_SIZE + 4; i++)
         PublishFrame(rig, *sensors[1], 0xF0, rig.time_service->GetCurrentTime());
     k_sleep(K_MSEC(20));
 
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
 
-    constexpr uint8_t published_frames = 3;
-    for(uint8_t i = 0; i < published_frames; i++)
+    constexpr uint8_t PUBLISHED_FRAMES = 3;
+    for(uint8_t i = 0; i < PUBLISHED_FRAMES; i++)
         PublishFrame(rig, *sensors[1], i, rig.time_service->GetCurrentTime());
 
     k_sleep(K_MSEC(250));
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
     const auto stats = rig.log_writer_service->GetStats();
-    zassert_equal(stats.frames, published_frames, "only the frames after the start are logged (got %u)", stats.frames);
+    zassert_equal(stats.frames, PUBLISHED_FRAMES, "only the frames after the start are logged (got %u)", stats.frames);
     zassert_equal(stats.frames_dropped, 0, "drops before the start are not this file's (got %u)", stats.frames_dropped);
 
     const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
@@ -152,7 +153,7 @@ ZTEST(log_writer_service, test_FramesQueuedBeforeStartAreNotLogged) {
     const auto content = ReadWholeFile(*rig.fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + files[0]);
     const auto records = ReadDataRecords(content);
     zassert_equal(
-        records.frame_times.size(), published_frames, "one CAN record per frame after the start (got %zu)",
+        records.frame_times.size(), PUBLISHED_FRAMES, "one CAN record per frame after the start (got %zu)",
         records.frame_times.size()
     );
     for(size_t i = 0; i < records.frame_sequences.size(); i++)
@@ -254,7 +255,7 @@ ZTEST(log_writer_service, test_FailingSensorIsLoggedInvalidUntilItRecovers) {
 ZTEST(log_writer_service, test_SyncFollowsTheConfiguredInterval) {
     static_assert(CONFIG_EERIE_LEAP_LOG_SYNC_INTERVAL_MS == 300, "the suite configures a 300 ms sync interval");
 
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
 
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
     k_sleep(K_MSEC(1000));
@@ -272,7 +273,7 @@ ZTEST(log_writer_service, test_SyncFollowsTheConfiguredInterval) {
 // What the assets group asks before it reads or deletes a log: a path relative to the volume, as
 // the group builds it from the store's directory and a file name. FAT folds ASCII case.
 ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
     const std::string other_path = std::string(LogFileNaming::LOGS_DIR) + "/log_data_20000101T000000Z_0000.mf4";
 
     zassert_false(rig.log_writer_service->IsOpenFile(other_path), "a writer that never started has no file open");
@@ -321,7 +322,7 @@ ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
 // The header is synced at Start(), so a volume that refuses writes fails the Start instead of
 // a tick an interval later, and no empty file is left behind.
 ZTEST(log_writer_service, test_StartFailsWhenTheHeaderCannotReachTheVolume) {
-    auto rig = MakeLogWriterRig();
+    const auto rig = MakeLogWriterRig();
     const std::string filler_path = "start_fill.bin";
 
     // Created before the fill so that Start() gets as far as the file, not just the directory.

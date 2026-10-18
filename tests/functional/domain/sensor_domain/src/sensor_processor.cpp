@@ -65,11 +65,11 @@ using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensor_processor, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
-    auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
+static std::vector<std::shared_ptr<Sensor>> SensorProcessorGetTestSensors() {
+    const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
+    const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
-    auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
+    const auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
 
     sensor_1->metadata.name = "Sensor 1";
     sensor_1->metadata.unit = "km/h";
@@ -82,11 +82,11 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
-        { 3.3, 200.0 } };
-    auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
+    const std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 },
+        { 2.5, 162.0 }, { 3.3, 200.0 } };
+    const auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
-    auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
+    const auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
 
     sensor_2->metadata.name = "Sensor 2";
     sensor_2->metadata.unit = "km/h";
@@ -99,7 +99,7 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_2->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
     sensor_2->configuration.expression = "x * 4 + 1.6";
 
-    auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
+    const auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
 
     sensor_3->metadata.name = "Sensor 3";
     sensor_3->metadata.unit = "km/h";
@@ -110,7 +110,7 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_3->configuration.sampling_rate_ms = 2000;
     sensor_3->configuration.expression = "sensor_1 + 8.34";
 
-    auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
+    const auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
 
     sensor_4->metadata.name = "Sensor 4";
     sensor_4->metadata.unit = "";
@@ -122,7 +122,7 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_4->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_4->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
 
-    auto sensor_5 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_5");
+    const auto sensor_5 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_5");
 
     sensor_5->metadata.name = "Sensor 5";
     sensor_5->metadata.unit = "";
@@ -132,26 +132,26 @@ std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     sensor_5->configuration.sampling_rate_ms = 1000;
     sensor_5->configuration.expression = "sensor_1 < 400";
 
-    std::vector<std::shared_ptr<Sensor>> sensors = { sensor_1, sensor_2, sensor_3, sensor_4, sensor_5 };
+    const std::vector<std::shared_ptr<Sensor>> sensors = { sensor_1, sensor_2, sensor_3, sensor_4, sensor_5 };
 
     SensorsOrderResolver sensors_order_resolver;
-    for(auto& sensor : sensors)
+    for(const auto& sensor : sensors)
         sensors_order_resolver.AddSensor(sensor);
 
     return sensors_order_resolver.GetProcessingOrder();
 }
 
-AdcConfiguration sensor_processor_GetTestConfiguration() {
-    std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
+static AdcConfiguration SensorProcessorGetTestConfiguration() {
+    const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
-    auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
+    const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
         adc_calibration_data_samples
     );
-    auto adc_calibrator = std::make_shared<AdcCalibrator>(
+    const auto adc_calibrator = std::make_shared<AdcCalibrator>(
         InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr
     );
 
-    auto adc_channel_configuration = std::make_shared<AdcChannelConfiguration>(adc_calibrator);
+    const auto adc_channel_configuration = std::make_shared<AdcChannelConfiguration>(adc_calibrator);
 
     std::vector<std::shared_ptr<AdcChannelConfiguration>> channel_configurations;
     channel_configurations.reserve(8);
@@ -167,7 +167,7 @@ AdcConfiguration sensor_processor_GetTestConfiguration() {
     return adc_configuration;
 }
 
-struct sensor_processor_HelperInstances {
+struct SensorProcessorHelperInstances {
     std::shared_ptr<ITimeService> time_service;
     std::shared_ptr<IAdcManager> adc_manager; // Owns the ADCs the sample set points at.
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
@@ -177,35 +177,34 @@ struct sensor_processor_HelperInstances {
     std::vector<std::shared_ptr<Sensor>> sensors;
 };
 
-sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
-    auto time_provider = std::make_shared<BootElapsedTimeProvider>();
-    auto rtc_provider = std::make_shared<RtcProvider>();
-    auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
+static SensorProcessorHelperInstances SensorProcessorGetReadingInstances() {
+    const auto time_provider = std::make_shared<BootElapsedTimeProvider>();
+    const auto rtc_provider = std::make_shared<RtcProvider>();
+    const auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
 
     AdcFactory adc_factory(nullptr);
-    auto adc_manager = adc_factory.Create();
+    const auto adc_manager = adc_factory.Create();
     adc_manager->Initialize();
 
-    auto gpio = std::make_shared<GpioSimulator>();
+    const auto gpio = std::make_shared<GpioSimulator>();
     gpio->Initialize();
 
-    auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
-    auto sensors = sensor_processor_GetTestSensors();
+    const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
+    const auto sensors = SensorProcessorGetTestSensors();
 
     // The builder lays out the frame's slots and binds the expressions, as the processing service does.
-    auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
-                          .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
-    generation->adc_configuration = std::make_shared<AdcConfiguration>(sensor_processor_GetTestConfiguration());
+    const auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
+                                .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    generation->adc_configuration = std::make_shared<AdcConfiguration>(SensorProcessorGetTestConfiguration());
 
     // Analog readers reserve their slots in the sample set, as in a rate group.
-    auto adc_samples = std::make_shared<AdcSampleSet>();
+    const auto adc_samples = std::make_shared<AdcSampleSet>();
     RateGroupBuildContext context{ .adc_samples = *adc_samples,
         .adc_configuration = generation->adc_configuration.get() };
     SensorReaderFactory sensor_reader_factory(time_service, gpio, adc_manager);
 
-    auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
-    for(size_t i = 0; i < generation->runtimes.size(); i++) {
-        const auto& runtime = generation->runtimes[i];
+    const auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
+    for(const auto& runtime : generation->runtimes) {
         std::shared_ptr<ISensorReader> sensor_reader;
 
         if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
@@ -225,7 +224,7 @@ sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
 
     adc_samples->Seal();
 
-    return sensor_processor_HelperInstances{ .time_service = time_service,
+    return SensorProcessorHelperInstances{ .time_service = time_service,
         .adc_manager = adc_manager,
         .sensor_readings_frame = sensor_readings_frame,
         .generation = generation,
@@ -244,17 +243,17 @@ public:
 };
 
 ZTEST(sensor_processor, test_ProcessReading) {
-    auto helper = sensor_processor_GetReadingInstances();
+    const auto helper = SensorProcessorGetReadingInstances();
 
-    auto sensor_readings_frame = helper.sensor_readings_frame;
-    auto sensor_readers = helper.sensor_readers;
-    auto sensors = helper.sensors;
+    const auto sensor_readings_frame = helper.sensor_readings_frame;
+    const auto sensor_readers = helper.sensor_readers;
+    const auto sensors = helper.sensors;
 
     helper.adc_samples->Acquire();
     const TickContext tick{ helper.time_service->GetCurrentTime() };
 
-    for(size_t i = 0; i < sensor_readers->size(); i++)
-        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
+    for(auto& i : *sensor_readers)
+        sensor_readings_frame->AddOrUpdateReading(i->Read(tick));
 
     auto reading_2_opt = sensor_readings_frame->TryGetReading("sensor_2");
     zassert_true(reading_2_opt.has_value());
@@ -264,8 +263,8 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_true(reading_1_opt.has_value());
     auto& reading_1 = reading_1_opt.value();
 
-    float reading_1_value = reading_1.value.value();
-    float reading_2_value = reading_2.value.value();
+    const float reading_1_value = reading_1.value.value();
+    const float reading_2_value = reading_2.value.value();
 
     std::vector<std::shared_ptr<IReadingProcessor>> reading_processors;
     reading_processors.push_back(std::make_shared<ExpressionProcessor>(sensor_readings_frame));
@@ -274,7 +273,7 @@ ZTEST(sensor_processor, test_ProcessReading) {
     // The stages work on a local copy and the result is committed once, as the services do.
     for(const auto& runtime : helper.generation->runtimes) {
         auto reading = sensor_readings_frame->TryGetReading(runtime.sensor->id_hash).value();
-        for(auto& reading_processor : reading_processors)
+        for(const auto& reading_processor : reading_processors)
             reading_processor->Process(runtime, reading);
 
         sensor_readings_frame->AddOrUpdateReading(reading);
@@ -285,35 +284,35 @@ ZTEST(sensor_processor, test_ProcessReading) {
     auto& proc_reading_2 = proc_reading_2_opt.value();
     zassert_equal(proc_reading_2.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_2.value.has_value());
-    float proc_reading_2_value = reading_2_value * 4 + 1.6F;
+    const float proc_reading_2_value = reading_2_value * 4 + 1.6F;
     zassert_equal(proc_reading_2.value.value(), proc_reading_2_value);
     zassert_true(proc_reading_2.voltage.has_value());
     // Calibrated voltages are sensor volts: the simulator's 0..3.3 V at the pin maps onto 0..sensor_max_v.
-    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0f, AdcRange::Default().sensor_max_v);
+    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_2.raw_value.has_value());
-    zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0f, 200.0f);
+    zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0F, 200.0F);
 
     auto proc_reading_1_opt = sensor_readings_frame->TryGetReading("sensor_1");
     zassert_true(proc_reading_1_opt.has_value());
     auto& proc_reading_1 = proc_reading_1_opt.value();
     zassert_equal(proc_reading_1.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_1.value.has_value());
-    float proc_reading_1_value = reading_1_value * 2 + proc_reading_2_value + 1;
+    const float proc_reading_1_value = reading_1_value * 2 + proc_reading_2_value + 1;
     zassert_equal(proc_reading_1.value.value(), proc_reading_1_value);
     zassert_true(proc_reading_1.voltage.has_value());
-    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0f, AdcRange::Default().sensor_max_v);
+    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_1.raw_value.has_value());
-    zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0f, 100.0f);
+    zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0F, 100.0F);
 
     auto proc_reading_3_opt = sensor_readings_frame->TryGetReading("sensor_3");
     zassert_true(proc_reading_3_opt.has_value());
     auto& proc_reading_3 = proc_reading_3_opt.value();
     zassert_equal(proc_reading_3.status, ReadingStatus::PROCESSED);
     zassert_true(proc_reading_3.value.has_value());
-    float proc_reading_3_value = proc_reading_1_value + 8.34F;
+    const float proc_reading_3_value = proc_reading_1_value + 8.34F;
     // Expression evaluator parses "8.34" at runtime independently of the compiler's constant
     // folding, so the result can differ by a ULP or two across platforms/libc - compare with tolerance.
-    zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001f);
+    zassert_true(std::fabs(proc_reading_3.value.value() - proc_reading_3_value) < 0.0001F);
     zassert_false(proc_reading_3.raw_value.has_value(), "A virtual sensor has no raw value");
 
     auto proc_reading_4_opt = sensor_readings_frame->TryGetReading("sensor_4");

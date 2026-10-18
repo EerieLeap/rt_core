@@ -40,11 +40,11 @@ bool CanbusConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t>
     return true;
 }
 
-pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationManager::Serialize(const CanbusConfiguration& configuration) {
+PmrUniquePtr<CborCanbusConfig> CanbusConfigurationManager::Serialize(const CanbusConfiguration& configuration) {
     return cbor_parser_.Serialize(configuration);
 }
 
-pmr_unique_ptr<CanbusConfiguration> CanbusConfigurationManager::Deserialize(const CborCanbusConfig& cbor_config) {
+PmrUniquePtr<CanbusConfiguration> CanbusConfigurationManager::Deserialize(const CborCanbusConfig& cbor_config) {
     return cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config);
 }
 

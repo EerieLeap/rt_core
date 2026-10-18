@@ -10,7 +10,7 @@ using eerie_leap::subsys::event_bus::AcceptanceCache;
 ZTEST_SUITE(event_bus_acceptance_cache, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_acceptance_cache, test_an_empty_cache_knows_no_key) {
-    AcceptanceCache<4> cache;
+    const AcceptanceCache<4> cache;
 
     zassert_false(cache.Find(0).has_value());
     zassert_false(cache.Find(7).has_value());
@@ -77,18 +77,18 @@ ZTEST(event_bus_acceptance_cache, test_storing_a_known_key_replaces_its_answer) 
 
 ZTEST(event_bus_acceptance_cache, test_keys_are_found_whatever_order_they_are_stored_in) {
     AcceptanceCache<4> cache;
-    constexpr uint32_t k_max = std::numeric_limits<uint32_t>::max();
+    constexpr uint32_t K_MAX = std::numeric_limits<uint32_t>::max();
 
     cache.Store(7, true);
     cache.Store(0, false);
-    cache.Store(k_max, true);
+    cache.Store(K_MAX, true);
     cache.Store(3, false);
 
     zassert_equal(cache.GetCount(), 4);
     zassert_true(cache.Find(7).value());
     zassert_false(cache.Find(0).value());
-    zassert_true(cache.Find(k_max).value());
+    zassert_true(cache.Find(K_MAX).value());
     zassert_false(cache.Find(3).value());
     zassert_false(cache.Find(5).has_value());
-    zassert_false(cache.Find(k_max - 1).has_value());
+    zassert_false(cache.Find(K_MAX - 1).has_value());
 }

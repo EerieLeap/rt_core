@@ -16,7 +16,7 @@ using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
 
 // Base message structures (Base + 0)
 struct CdmpIdClaimRequestMessage {
-    static constexpr CdmpManagementMessageType message_type = CdmpManagementMessageType::ID_CLAIM;
+    static constexpr CdmpManagementMessageType MESSAGE_TYPE = CdmpManagementMessageType::ID_CLAIM;
     uint8_t claiming_device_id;
     uint32_t uid;
     uint8_t protocol_version;
@@ -36,7 +36,7 @@ struct CdmpIdClaimRequestMessage {
     }
 
     std::vector<uint8_t> ToCanFrame() const {
-        std::vector<uint8_t> frame_data = { std::to_underlying(message_type), claiming_device_id,
+        std::vector<uint8_t> frame_data = { std::to_underlying(MESSAGE_TYPE), claiming_device_id,
             static_cast<uint8_t>(uid), static_cast<uint8_t>(uid >> 8), static_cast<uint8_t>(uid >> 16),
             static_cast<uint8_t>(uid >> 24), 0, protocol_version };
 

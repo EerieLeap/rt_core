@@ -15,10 +15,10 @@ ZTEST(interpolation_method, test_GetInterpolationMethodName) {
 }
 
 ZTEST(interpolation_method, test_names_match_enum_order) {
-    zassert_equal(InterpolationMethodNames.size(), 3);
-    zassert_true(InterpolationMethodNames[static_cast<uint8_t>(InterpolationMethod::NONE)] == "NONE");
-    zassert_true(InterpolationMethodNames[static_cast<uint8_t>(InterpolationMethod::LINEAR)] == "LINEAR");
-    zassert_true(InterpolationMethodNames[static_cast<uint8_t>(InterpolationMethod::CUBIC_SPLINE)] == "CUBIC_SPLINE");
+    zassert_equal(INTERPOLATION_METHOD_NAMES.size(), 3);
+    zassert_true(INTERPOLATION_METHOD_NAMES[static_cast<uint8_t>(InterpolationMethod::NONE)] == "NONE");
+    zassert_true(INTERPOLATION_METHOD_NAMES[static_cast<uint8_t>(InterpolationMethod::LINEAR)] == "LINEAR");
+    zassert_true(INTERPOLATION_METHOD_NAMES[static_cast<uint8_t>(InterpolationMethod::CUBIC_SPLINE)] == "CUBIC_SPLINE");
 }
 
 ZTEST(interpolation_method, test_GetInterpolationMethod_from_name) {
@@ -28,7 +28,8 @@ ZTEST(interpolation_method, test_GetInterpolationMethod_from_name) {
 }
 
 ZTEST(interpolation_method, test_name_round_trip) {
-    for(auto method : { InterpolationMethod::NONE, InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE })
+    for(const auto method :
+        { InterpolationMethod::NONE, InterpolationMethod::LINEAR, InterpolationMethod::CUBIC_SPLINE })
         zassert_equal(GetInterpolationMethod(GetInterpolationMethodName(method)), method);
 }
 

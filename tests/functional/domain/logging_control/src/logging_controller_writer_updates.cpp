@@ -2,12 +2,12 @@
 
 // A configuration update on a unit that writes the log (rt_daq, writer role), L9: a configuration of any
 // type stored on the unit after LoggingController::Start() stops the writer for good (the wanted state is
-// cleared as by RequestStop(kAllUnits), and neither the restart after a logging configuration nor the sensors
+// cleared as by RequestStop(ALL_UNITS), and neither the restart after a logging configuration nor the sensors
 // restart starts it again) and broadcasts the LOGGING stop. What a unit stores while it starts, a
 // rejected write and the unit's own settings are no updates. The real sensor pipeline runs, and the
 // stores are those of an SMP write or a shell command: through a manager. The unit's CDMP bus is the
 // loopback one, which hands the unit its own frames, so each stop it broadcasts is heard by its own
-// handler (RequestStop(kAllUnits) again): a case waits for that (Peer::WaitForOwnAnswer()) before it requests
+// handler (RequestStop(ALL_UNITS) again): a case waits for that (Peer::WaitForOwnAnswer()) before it requests
 // anything, or runs without a COM service where the order of a request matters.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
@@ -29,8 +29,8 @@ namespace {
 
 using Type = ConfigurationService::Type;
 
-constexpr float kOn = 1.0F;
-constexpr float kOff = 0.0F;
+constexpr float K_ON = 1.0F;
+constexpr float K_OFF = 0.0F;
 
 bool IsStart(const std::optional<RecordedFrame>& frame) {
     return frame.has_value() && frame->data[3] == 0x01;
@@ -49,7 +49,7 @@ bool IsStopped(const std::optional<StatusLog::Entry>& entry) {
 }
 
 bool IsQuiet(StatusLog& log) {
-    return !log.WaitForEntry(k_no_wait_ms).has_value();
+    return !log.WaitForEntry(NO_WAIT_MS).has_value();
 }
 
 // `switch` is the sensor the logging configuration logs, `spare` and `other` are bound to nothing.
@@ -62,8 +62,8 @@ SensorList Base() {
 class HeldSensorsStore {
 private:
     struct Context {
-        k_sem stored;
-        k_sem release;
+        k_sem stored{};
+        k_sem release{};
         bool result = false;
 
         Context() {
@@ -84,11 +84,16 @@ public:
         });
     }
 
+    HeldSensorsStore(const HeldSensorsStore&) = delete;
+    HeldSensorsStore& operator=(const HeldSensorsStore&) = delete;
+    HeldSensorsStore(HeldSensorsStore&&) = delete;
+    HeldSensorsStore& operator=(HeldSensorsStore&&) = delete;
+
     ~HeldSensorsStore() {
         Release();
     }
 
-    [[nodiscard]] bool WaitUntilStored(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitUntilStored(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->stored, Ms(timeout_ms)) == 0 && context_->result;
     }
 
@@ -157,7 +162,7 @@ struct Fixture {
     // The GPIO reader of the processing's generation seeds `switch` with its level, 0, when it starts.
     // Returns once the triggers have seen it, so a later value is not overtaken by it.
     void WaitForSeed() {
-        zassert_true(switch_probe.WaitForValue(kOff), "The seed was published");
+        zassert_true(switch_probe.WaitForValue(K_OFF), "The seed was published");
         zassert_true(blocker.Fence(), "and the triggers saw it");
     }
 
@@ -192,7 +197,7 @@ struct Fixture {
     }
 
     // The unit's own stop leaves the bus once, and its own handler answers it.
-    void AssertOneStopBroadcast() {
+    void AssertOneStopBroadcast() const {
         const auto stop = peer->WaitForBroadcast();
         zassert_true(IsStop(stop), "The update broadcasts the LOGGING stop");
         zassert_true(peer->WaitForOwnAnswer(*stop), "and the unit's own handler is done with it");
@@ -283,17 +288,17 @@ ZTEST_SUITE(writer_updates, NULL, SetUp, Before, After, NULL);
 // Each store is what an SMP write or a shell command does, through a manager.
 
 // The sensors restart is the dependent's path: an addition used to finalize the file and open the next.
-void StoreSensors() {
+static void StoreSensors() {
     F().rig->Apply({ Indicator("switch", "1"), Analog("spare"), Analog("other"), Analog("added") });
 }
 
-void StoreAdc() {
+static void StoreAdc() {
     const auto adc = F().rig->adc_configuration_manager;
     zassert_true(adc->Update(*adc->Get()), "The same bytes stored again count");
 }
 
 // The logging configuration used to restart a running writer into a new file.
-void StoreLogging() {
+static void StoreLogging() {
     LoggingConfiguration configuration(std::allocator_arg, eerie_leap::utilities::memory::Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = 200;
     configuration.max_log_size_mb = 0;
@@ -304,35 +309,35 @@ void StoreLogging() {
     zassert_true(F().controller->GetConfigurationManager()->Update(configuration));
 }
 
-void StoreLoggingControl() {
+static void StoreLoggingControl() {
     zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({ "switch" })));
 }
 
-void StoreCanbus() {
+static void StoreCanbus() {
     zassert_true(F().canbus->Update(canbus_com_loopback_test::ComConfiguration()));
 }
 
-void StoreSystem() {
+static void StoreSystem() {
     zassert_true(F().system->Update(*F().system->Get()));
 }
 
-void StoreUi() {
+static void StoreUi() {
     StoreStandIn(F().ui);
 }
 
-void StoreDisplay() {
+static void StoreDisplay() {
     StoreStandIn(F().display);
 }
 
 // rt_daq's `logging reapply-sensors`: the manager applies its own stored bytes.
-void ReapplySensors() {
+static void ReapplySensors() {
     const auto stored = F().rig->sensors_manager->GetCborConfiguration();
     zassert_false(stored.empty());
     zassert_true(F().rig->sensors_manager->ApplyCborConfiguration(stored));
 }
 
 // The write of a client, through the service, on the configuration queue.
-void WriteSensorsOverSmp() {
+static void WriteSensorsOverSmp() {
     const auto stored = F().rig->configuration_service->GetCborConfiguration(Type::Sensors);
     QueuedApply apply(
         F().rig->configuration_service, Type::Sensors, std::vector<uint8_t>(stored.begin(), stored.end())
@@ -376,7 +381,7 @@ ZTEST(writer_updates, test_AStartRequestedAfterTheUpdatesStopWins) {
     HeldSensorsStore held(F().rig->sensors_manager, sensors);
     zassert_true(held.WaitUntilStored(), "The sensors are stored, and the supervisor's run waits behind the job");
 
-    F().controller->GetControl()->RequestStart(kAllUnits);
+    F().controller->GetControl()->RequestStart(ALL_UNITS);
     held.Release();
 
     zassert_true(IsStopped(F().log.WaitForEntry()), "The restart finalizes the file");
@@ -494,7 +499,7 @@ ZTEST(writer_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
     F().Boot({ Input("switch", 1), Analog("spare"), Analog("other") }, { "switch" }, true, true, true);
     F().RegisterOthers();
 
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_ON);
     zassert_true(IsStarted(F().log.WaitForEntry()), "A switch turned on starts logging");
     zassert_true(WaitUntil([] {
         return F().writer->IsRunning();
@@ -505,12 +510,12 @@ ZTEST(writer_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
     F().AssertStoppedForGood();
     F().AssertOneStopBroadcast();
 
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_ON);
     zassert_true(Flush());
     zassert_true(IsQuiet(F().log), "The switch is still on, and an update does not start it again");
 
-    PublishSensorValue("switch", kOff);
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_OFF);
+    PublishSensorValue("switch", K_ON);
     zassert_true(IsStarted(F().log.WaitForEntry()), "A change after the update starts it");
     zassert_true(WaitUntil([] {
         return F().writer->IsRunning() && CountLogFiles(*F().rig->fs_service) == 2;
@@ -522,8 +527,8 @@ ZTEST(writer_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
 ZTEST(writer_updates, test_ATriggerRebuiltByAnUpdateTakesItsSwitchAsABaseline) {
     F().Boot({ Input("switch", 1), Analog("spare"), Analog("other") }, { "switch" }, true, true, true);
 
-    F().rig->Commit("switch", kOn);
-    zassert_true(F().switch_probe.WaitForValue(kOn), "The publisher took the commit");
+    F().rig->Commit("switch", K_ON);
+    zassert_true(F().switch_probe.WaitForValue(K_ON), "The publisher took the commit");
     zassert_true(F().blocker.Fence());
     zassert_true(IsStarted(F().log.WaitForEntry()), "The switch turned on");
     zassert_true(WaitUntil([] {
@@ -536,12 +541,12 @@ ZTEST(writer_updates, test_ATriggerRebuiltByAnUpdateTakesItsSwitchAsABaseline) {
     zassert_true(Flush(), "The rebuild ran");
     F().AssertStoppedForGood();
     F().AssertOneStopBroadcast();
-    zassert_true(F().switch_probe.WaitForValue(kOn), "and its replay delivered the switch, still on");
+    zassert_true(F().switch_probe.WaitForValue(K_ON), "and its replay delivered the switch, still on");
     zassert_true(F().blocker.Fence());
     zassert_true(IsQuiet(F().log), "The replayed value is the rebuilt trigger's baseline: it starts nothing");
 
-    PublishSensorValue("switch", kOff);
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_OFF);
+    PublishSensorValue("switch", K_ON);
     zassert_true(IsStarted(F().log.WaitForEntry()), "It acts on its next change");
 }
 
@@ -555,7 +560,7 @@ ZTEST(writer_updates, test_TheWriterRoleStartsItsUpdateStop) {
     zassert_equal(F().controller->Start(), 0);
     LogCounter::Get().Watch("logging_controller_logger");
     zassert_equal(F().controller->Start(), 0, "A second call repeats the first one's result");
-    zassert_logged(1, "and logs an error");
+    ZASSERT_LOGGED(1, "and logs an error");
 
     StoreStandIn(F().ui);
     F().AssertStoppedForGood();

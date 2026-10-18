@@ -11,7 +11,7 @@ namespace eerie_leap::subsys::device_tree {
 
 class DtDisplay {
 private:
-    static const device* display_dev_;
+    static const device* display_dev;
 
     DtDisplay() = default;
 
@@ -19,7 +19,7 @@ public:
     static void Initialize();
 
     static const device* Get() {
-        return display_dev_;
+        return display_dev;
     }
 };
 

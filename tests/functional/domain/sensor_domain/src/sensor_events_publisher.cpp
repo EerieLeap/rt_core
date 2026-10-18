@@ -27,13 +27,13 @@ namespace {
 // The publisher stack the throwing filter case needs. With a throwing filter the publisher thread
 // peaked at 1.5 KiB on qemu_cortex_a9, 5.9 on qemu_malta, 6.4 on qemu_cortex_a53 and 7.8 on
 // qemu_riscv64, so 8192 would leave about 236 bytes there.
-constexpr int kThrowingFilterStackSize = 12288;
+constexpr int THROWING_FILTER_STACK_SIZE = 12288;
 
 // Stack the publisher thread must still have unused once a throw has been unwound. On every QEMU
 // board but qemu_riscv64 (which has a guard below the stack) only the stack sentinel checks the
 // stack, and it misses a frame that jumps past it, so a pass alone does not show that the stack
 // was enough.
-constexpr size_t kPublisherStackMargin = 512;
+[[maybe_unused]] constexpr size_t PUBLISHER_STACK_MARGIN = 512;
 
 // A frame of [a, b, c, d, sentinel] and a started publisher over it, stopped before anything goes.
 // The sensor ids are the case's own: a failed case ends without running its destructors, and the
@@ -64,6 +64,11 @@ struct Rig {
         zassert_true(publisher->Start());
     }
 
+    Rig(const Rig&) = delete;
+    Rig& operator=(const Rig&) = delete;
+    Rig(Rig&&) = delete;
+    Rig& operator=(Rig&&) = delete;
+
     // A case may already have destroyed the publisher.
     ~Rig() {
         if(publisher != nullptr)
@@ -86,7 +91,7 @@ void* Setup() {
 ZTEST_SUITE(sensor_events_publisher, NULL, Setup, NULL, NULL, NULL);
 
 ZTEST(sensor_events_publisher, test_a_publisher_without_a_frame_does_not_start) {
-    // On the heap, as in Rig: the object holds kMaxCount readings.
+    // On the heap, as in Rig: the object holds MAX_COUNT readings.
     auto publisher = std::make_unique<SensorEventsPublisher>(nullptr);
 
     zassert_false(publisher->Initialize());
@@ -105,8 +110,8 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
         std::atomic<int> sentinel{ 0 };
     };
 
-    auto calls = std::make_shared<FilterCalls>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto calls = std::make_shared<FilterCalls>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
 
     // The only subscriber on the channel, so Accepts() reaches its filter for every sensor; with an
     // earlier subscriber that accepts the sentinel, any_of would stop before it.
@@ -148,9 +153,9 @@ ZTEST(sensor_events_publisher, test_a_reading_nobody_accepts_is_taken_but_not_pu
 ZTEST(sensor_events_publisher, test_a_selector_filtered_subscriber_receives_only_its_sensor) {
     Rig rig("selector");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto b_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
@@ -172,8 +177,8 @@ ZTEST(sensor_events_publisher, test_a_selector_filtered_subscriber_receives_only
 ZTEST(sensor_events_publisher, test_a_subscription_added_after_the_cache_was_filled_is_honoured_at_the_next_tick) {
     Rig rig("late");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
     // Nobody wants a yet, so the tick caches it as rejected.
@@ -191,9 +196,9 @@ ZTEST(sensor_events_publisher, test_a_subscription_added_after_the_cache_was_fil
 ZTEST(sensor_events_publisher, test_a_sensor_whose_last_binding_goes_is_asked_again_and_no_longer_published) {
     Rig rig("dropped");
 
-    auto a_calls = std::make_shared<std::atomic<int>>(0);
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_calls = std::make_shared<std::atomic<int>>(0);
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
 
     // Takes only the sentinel and counts how often it is asked about a. Subscribed before a's
     // binding, so Accepts() reaches it for a before any_of stops at the binding.
@@ -235,8 +240,8 @@ ZTEST(sensor_events_publisher, test_a_sensor_whose_last_binding_goes_is_asked_ag
 ZTEST(sensor_events_publisher, test_values_committed_across_ticks_arrive_in_order) {
     Rig rig("order");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
@@ -254,10 +259,10 @@ ZTEST(sensor_events_publisher, test_values_committed_across_ticks_arrive_in_orde
 ZTEST(sensor_events_publisher, test_Replay_publishes_the_latest_value_of_every_accepted_sensor_once) {
     Rig rig("replay");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto b_recorder = std::make_shared<Recorder>();
-    auto d_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto d_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription d_binding = Bind(*rig.d, d_recorder);
@@ -295,8 +300,8 @@ ZTEST(sensor_events_publisher, test_Replay_publishes_the_latest_value_of_every_a
 ZTEST(sensor_events_publisher, test_Replay_reaches_a_sensor_bound_after_it_was_cached_as_rejected) {
     Rig rig("replay_late");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
     // a is cached as rejected, and then nothing commits it again: only the replay can bring it.
@@ -320,8 +325,8 @@ ZTEST(sensor_events_publisher, test_Replay_reaches_a_sensor_bound_after_it_was_c
 ZTEST(sensor_events_publisher, test_readings_without_a_value_are_not_published) {
     Rig rig("no_value");
 
-    auto a_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 
@@ -341,7 +346,7 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
     // The raised_publisher_stack scenario exists to run this case: a build that does not raise the
     // stack, or does not fill the stacks for the measurement below, fails here instead of skipping.
     static_assert(
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= kThrowingFilterStackSize,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= THROWING_FILTER_STACK_SIZE,
         "the raised_publisher_stack scenario must raise the publisher stack"
     );
     static_assert(
@@ -350,17 +355,17 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
     );
 #else
     if(!IS_ENABLED(CONFIG_ARCH_POSIX)
-        && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < kThrowingFilterStackSize)
+        && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < THROWING_FILTER_STACK_SIZE)
         ztest_test_skip();
 #endif
 
     Rig rig("throws");
 
-    auto throws = std::make_shared<std::atomic<int>>(0);
-    auto least_unused = std::make_shared<std::atomic<size_t>>(SIZE_MAX);
-    auto thrower = std::make_shared<std::atomic<k_tid_t>>(nullptr);
-    auto b_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto throws = std::make_shared<std::atomic<int>>(0);
+    const auto least_unused = std::make_shared<std::atomic<size_t>>(SIZE_MAX);
+    const auto thrower = std::make_shared<std::atomic<k_tid_t>>(nullptr);
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
 
     const uint32_t a_hash = rig.a->id_hash;
     AnySubscription throwing = CreateScopedSubscription(
@@ -410,14 +415,14 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
         "publisher stack: %zu of %d bytes unused after the unwind\n", least_unused->load(),
         CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE
     );
-    zassert_true(least_unused->load() >= kPublisherStackMargin, "the publisher stack is nearly used up by the unwind");
+    zassert_true(least_unused->load() >= PUBLISHER_STACK_MARGIN, "the publisher stack is nearly used up by the unwind");
 #endif
 }
 
 ZTEST(sensor_events_publisher, test_a_paused_publisher_publishes_nothing_until_resumed) {
     Rig rig("paused");
 
-    auto a_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
     AnySubscription a_binding = Bind(*rig.a, a_recorder);
 
     zassert_true(rig.publisher->Pause());
@@ -436,27 +441,27 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     // takes a second batch. Every sensor is accepted, so each round also fills the acceptance
     // cache and clears it when the next key finds it full. The k_count events of a tick fit
     // sensor_events' 128-event queue.
-    static constexpr size_t k_count = SensorLimits::kMaxCount + 1;
-    static constexpr size_t k_sentinel = k_count - 1;
+    static constexpr size_t K_COUNT = SensorLimits::MAX_COUNT + 1;
+    static constexpr size_t SENTINEL = K_COUNT - 1;
 
     struct Deliveries {
-        std::array<uint32_t, k_count> sorted_hashes{};
-        std::array<std::atomic<int>, k_count> counts{}; // By sensor.
+        std::array<uint32_t, K_COUNT> sorted_hashes{};
+        std::array<std::atomic<int>, K_COUNT> counts{}; // By sensor.
         Recorder sentinel;
     };
 
-    auto deliveries = std::make_shared<Deliveries>();
+    const auto deliveries = std::make_shared<Deliveries>();
 
     std::vector<std::shared_ptr<Sensor>> sensors;
-    sensors.reserve(k_count);
-    for(size_t i = 0; i < k_count; i++) {
+    sensors.reserve(K_COUNT);
+    for(size_t i = 0; i < K_COUNT; i++) {
         sensors.push_back(MakeSensor("drain_" + std::to_string(i)));
         deliveries->sorted_hashes[i] = sensors.back()->id_hash;
     }
 
     std::ranges::sort(deliveries->sorted_hashes);
 
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
     frame->Configure(sensors);
 
     // Takes this case's sensors only: a failed case leaves its subscription behind, and one without
@@ -471,12 +476,12 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
         [deliveries](const SensorEventsChannel::EventMessage& event) {
             // Sensor i commits i.
             const auto index = static_cast<size_t>(std::get<float>(event.payload.at(SensorPayloadType::Value)));
-            if(index >= k_count)
+            if(index >= K_COUNT)
                 return;
 
             deliveries->counts[index].fetch_add(1);
 
-            if(index == k_sentinel)
+            if(index == SENTINEL)
                 deliveries->sentinel.Record(static_cast<float>(index));
         }
     );
@@ -489,7 +494,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     for(int round = 1; round <= 2; round++) {
         zassert_true(publisher->Pause());
 
-        for(size_t i = 0; i < k_count; i++)
+        for(size_t i = 0; i < K_COUNT; i++)
             frame->AddOrUpdateReading(MakeReading(*sensors[i], static_cast<float>(i)));
 
         const int64_t resumed_at = k_uptime_get();
@@ -497,7 +502,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
         zassert_true(deliveries->sentinel.WaitForDelivery(), "round %d", round);
         const int64_t elapsed_ms = k_uptime_get() - resumed_at;
 
-        for(size_t i = 0; i < k_count; i++)
+        for(size_t i = 0; i < K_COUNT; i++)
             zassert_equal(deliveries->counts[i].load(), round, "sensor %zu, round %d", i, round);
 
         // native_sim's clock moves only while every thread waits, so a second tick would show as
@@ -514,7 +519,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
 }
 
 ZTEST(sensor_events_publisher, test_a_running_publisher_can_be_destroyed) {
-    auto a_recorder = std::make_shared<Recorder>();
+    const auto a_recorder = std::make_shared<Recorder>();
 
     {
         Rig rig("destroyed");
@@ -539,8 +544,8 @@ ZTEST(sensor_events_publisher, test_a_running_publisher_can_be_destroyed) {
     // And publishing goes on with the next publisher.
     Rig rig("after_destroyed");
 
-    auto b_recorder = std::make_shared<Recorder>();
-    auto sentinel_recorder = std::make_shared<Recorder>();
+    const auto b_recorder = std::make_shared<Recorder>();
+    const auto sentinel_recorder = std::make_shared<Recorder>();
     AnySubscription b_binding = Bind(*rig.b, b_recorder);
     AnySubscription sentinel_binding = Bind(*rig.sentinel, sentinel_recorder);
 

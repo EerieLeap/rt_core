@@ -29,7 +29,7 @@ struct GroupHarness {
     SmpTestClient client;
 
     GroupHarness() {
-        notifier->on_notified = [service = service.get()]() {
+        notifier->on_notified = [service = service.get()] {
             service->OnNotificationSent();
         };
         group.Register();

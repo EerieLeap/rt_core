@@ -19,7 +19,7 @@ using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
 using eerie_leap::subsys::event_bus::IsSelectorValue;
 using eerie_leap::subsys::event_bus::IsValidEventChannelId;
-using eerie_leap::subsys::event_bus::k_last_event_channel_id;
+using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::utilities::string::StringHelpers;
@@ -43,7 +43,7 @@ ConfigValue NonSelectors(size_t index) {
     }
 }
 
-constexpr size_t k_non_selector_count = 5;
+constexpr size_t NON_SELECTOR_COUNT = 5;
 
 } // namespace
 
@@ -71,9 +71,9 @@ ZTEST(event_bus_event_binding, test_IsValidEventChannelId_accepts_only_named_cha
 
 // The registry sizes its table from the last id, so the bound must stop exactly there.
 ZTEST(event_bus_event_binding, test_IsValidEventChannelId_stops_at_the_last_id) {
-    const auto last = std::to_underlying(k_last_event_channel_id);
+    const auto last = std::to_underlying(LAST_EVENT_CHANNEL_ID);
 
-    zassert_true(IsValidEventChannelId(k_last_event_channel_id));
+    zassert_true(IsValidEventChannelId(LAST_EVENT_CHANNEL_ID));
     zassert_false(IsValidEventChannelId(static_cast<EventChannelId>(last + 1)));
 }
 
@@ -94,7 +94,7 @@ ZTEST(event_bus_event_binding, test_IsSelectorValue_accepts_text_integers_and_bo
     zassert_true(IsSelectorValue(ConfigValue{ 7 }));
     zassert_true(IsSelectorValue(ConfigValue{ true }));
 
-    for(size_t i = 0; i < k_non_selector_count; ++i)
+    for(size_t i = 0; i < NON_SELECTOR_COUNT; ++i)
         zassert_false(IsSelectorValue(NonSelectors(i)), "Alternative %u accepted.", static_cast<unsigned>(i));
 }
 
@@ -119,7 +119,7 @@ ZTEST(event_bus_event_binding, test_ToSelectorValue_keeps_integers_and_bools) {
 }
 
 ZTEST(event_bus_event_binding, test_ToSelectorValue_rejects_what_cannot_select) {
-    for(size_t i = 0; i < k_non_selector_count; ++i)
+    for(size_t i = 0; i < NON_SELECTOR_COUNT; ++i)
         zassert_false(
             ToSelectorValue(NonSelectors(i)).has_value(), "Alternative %u resolved.", static_cast<unsigned>(i)
         );

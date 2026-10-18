@@ -31,14 +31,14 @@ void WriterLoggingControl::RequestStop(uint32_t target_uid) {
 }
 
 void WriterLoggingControl::Route(uint32_t target_uid, bool is_start) {
-    const bool is_all = target_uid == kAllUnits;
+    const bool is_all = target_uid == ALL_UNITS;
     const bool is_own = !is_all && target_uid == own_uid_;
 
     if(is_all || is_own) {
         if(is_start)
-            local_->RequestStart(kAllUnits);
+            local_->RequestStart(ALL_UNITS);
         else
-            local_->RequestStop(kAllUnits);
+            local_->RequestStop(ALL_UNITS);
     }
 
     if(is_own)

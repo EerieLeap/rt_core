@@ -16,8 +16,8 @@ private:
     void ResetBlock() override;
 
 protected:
-    uint64_t address_;
-    bool is_serialized_;
+    uint64_t address_{ 0 };
+    bool is_serialized_{ false };
 
 public:
     SerializableBlockBase();

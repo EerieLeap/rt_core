@@ -7,14 +7,6 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 HeaderBlock::HeaderBlock() :
     BlockBase("HD") {
-    start_time_ns_ = 0;
-    tz_offset_min_ = 0;
-    dst_offset_min_ = 0;
-    time_flags_ = 0;
-    time_class_ = 0;
-    flags_ = 0;
-    hd_start_angle_rad_ = 0.0;
-    hd_distance_m_ = 0.0;
 
     links_.SetLink(LinkType::FileHistoryFirst, std::make_shared<FileHistoryBlock>());
 }
@@ -22,7 +14,9 @@ HeaderBlock::HeaderBlock() :
 void HeaderBlock::SetCurrentTimeNs(uint64_t time_ns) {
     start_time_ns_ = time_ns;
     if(links_.GetLink(LinkType::FileHistoryFirst)) {
-        auto file_history = std::dynamic_pointer_cast<FileHistoryBlock>(links_.GetLink(LinkType::FileHistoryFirst));
+        const auto file_history = std::dynamic_pointer_cast<FileHistoryBlock>(
+            links_.GetLink(LinkType::FileHistoryFirst)
+        );
         file_history->SetTimeNs(time_ns);
     }
 }
@@ -37,7 +31,7 @@ std::shared_ptr<FileHistoryBlock> HeaderBlock::GetFileHistory() const {
 
 void HeaderBlock::AddFileHistory(std::shared_ptr<FileHistoryBlock> file_history) {
     if(links_.GetLink(LinkType::FileHistoryFirst)) {
-        auto linked_file_history = std::dynamic_pointer_cast<FileHistoryBlock>(
+        const auto linked_file_history = std::dynamic_pointer_cast<FileHistoryBlock>(
             links_.GetLink(LinkType::FileHistoryFirst)
         );
         linked_file_history->LinkBlock(std::move(file_history));
@@ -46,7 +40,9 @@ void HeaderBlock::AddFileHistory(std::shared_ptr<FileHistoryBlock> file_history)
 
 void HeaderBlock::AddDataGroup(std::shared_ptr<DataGroupBlock> data_group) {
     if(links_.GetLink(LinkType::DataGroupFirst)) {
-        auto linked_data_group = std::dynamic_pointer_cast<DataGroupBlock>(links_.GetLink(LinkType::DataGroupFirst));
+        const auto linked_data_group = std::dynamic_pointer_cast<DataGroupBlock>(
+            links_.GetLink(LinkType::DataGroupFirst)
+        );
         linked_data_group->LinkBlock(std::move(data_group));
     } else {
         links_.SetLink(LinkType::DataGroupFirst, std::move(data_group));
@@ -85,7 +81,6 @@ std::unique_ptr<uint8_t[]> HeaderBlock::Serialize() const {
     offset += sizeof(hd_start_angle_rad_);
 
     std::memcpy(buffer.get() + offset, &hd_distance_m_, sizeof(hd_distance_m_));
-    offset += sizeof(hd_distance_m_);
 
     return buffer;
 }

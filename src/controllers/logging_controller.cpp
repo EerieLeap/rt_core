@@ -43,7 +43,6 @@ namespace eerie_leap::controllers {
 
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
-using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::subsys::event_bus::EventBinding;
@@ -141,7 +140,7 @@ MakeDeviceIdProvider(const std::shared_ptr<CanbusComService>& canbus_com_service
     if(canbus_com_service == nullptr)
         return nullptr;
 
-    return [weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)]() -> uint8_t {
+    return [weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] -> uint8_t {
         const auto com = weak_com.lock();
         const auto network_info = com != nullptr ? com->GetNetworkInfo() : nullptr;
 
@@ -256,7 +255,7 @@ uint32_t LoggingController::GetUnitUid() const {
 bool LoggingController::HasDependencies() const {
     bool has_all = true;
 
-    auto require = [&has_all](bool is_present, const char* what) {
+    const auto require = [&has_all](bool is_present, const char* what) {
         if(!is_present) {
             LOG_ERR("The logging controller needs %s.", what);
             has_all = false;
@@ -270,6 +269,7 @@ bool LoggingController::HasDependencies() const {
     // a controller built on a service that holds one would report success while every apply went to
     // a manager nothing reacts to.
     if(configuration_service_ != nullptr) {
+        // NOLINTNEXTLINE(misc-const-correctness): reassigned when CONFIG_EERIE_LEAP_DOMAIN_LOGGING is set, which this build is not
         bool is_registered = configuration_service_->IsRegistered(ConfigurationService::Type::LoggingControl);
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
         is_registered = is_registered || configuration_service_->IsRegistered(ConfigurationService::Type::Logging);
@@ -346,7 +346,7 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
 
     // 7. A configuration stored on this unit stops logging on every unit once Start() is called (L9).
     //    It registers nothing before that, so it may come before the configuration types. In both roles
-    //    the control's RequestStop(kAllUnits) sends the broadcast (the writer's network half, the remote
+    //    the control's RequestStop(ALL_UNITS) sends the broadcast (the writer's network half, the remote
     //    control itself), so there is no sender of its own.
     if(configuration_service_ != nullptr) {
         configuration_update_logging_stop_ = std::make_unique<ConfigurationUpdateLoggingStop>(
@@ -617,7 +617,7 @@ void LoggingController::StopLogWriter() {
         return;
 
     // The supervisor itself: this stops this unit's writer, not the other units.
-    log_writer_supervisor_->RequestStop(ILoggingControl::kAllUnits);
+    log_writer_supervisor_->RequestStop(ILoggingControl::ALL_UNITS);
 
     if(config_work_queue_thread_->IsCurrentThread()) {
         // The stop is queued behind this very job, so waiting for it would wait for itself.
@@ -627,7 +627,7 @@ void LoggingController::StopLogWriter() {
         );
     } else {
         // A stack semaphore: the wait has no timeout, and the job gives it before this returns.
-        k_sem done;
+        k_sem done{};
         k_sem_init(&done, 0, 1);
 
         try {

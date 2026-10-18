@@ -43,8 +43,8 @@ public:
         std::function<std::optional<CdmpCommandResult>(const CdmpCommandRequestMessage& request)>;
 
 private:
-    int canbus_handler_id_;
-    int canbus_response_handler_id_;
+    int canbus_handler_id_{ -1 };
+    int canbus_response_handler_id_{ -1 };
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<CdmpTransactionService> transaction_service_;
@@ -52,7 +52,7 @@ private:
     // Set and removed on any thread while the CDMP work queue calls them. A call copies the handler's
     // pointer under the lock and runs it outside, so a handler removed meanwhile finishes the call it
     // started on its own reference, and the lock is never held across a handler.
-    k_mutex command_handlers_mutex_;
+    k_mutex command_handlers_mutex_{};
     std::unordered_map<uint8_t, std::shared_ptr<const CommandHandler>> command_handlers_;
     std::unordered_map<uint8_t, ServiceCommandHandler> service_command_handlers_;
 
@@ -67,8 +67,8 @@ private:
     void SendCommandResponse(uint8_t target_device_id, const CdmpCommandResponseMessage& response);
     std::optional<CdmpCommandResult> NotifyCommandHandler(const CdmpCommandRequestMessage& command);
 
-    bool IsValidServiceCommandCode(uint8_t command_code) const;
-    bool IsValidUserCommandCode(uint8_t command_code) const;
+    static bool IsValidServiceCommandCode(uint8_t command_code);
+    static bool IsValidUserCommandCode(uint8_t command_code);
 
     bool DoInitialize() override;
     bool DoStart() override;
@@ -81,7 +81,11 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread
     );
 
-    ~CdmpCommandService();
+    ~CdmpCommandService() override;
+    CdmpCommandService(const CdmpCommandService&) = delete;
+    CdmpCommandService& operator=(const CdmpCommandService&) = delete;
+    CdmpCommandService(CdmpCommandService&&) = delete;
+    CdmpCommandService& operator=(CdmpCommandService&&) = delete;
 
     void RegisterCommandHandler(uint8_t command_code, CommandHandler handler);
     void RegisterUserCommandHandler(uint8_t command_code, CommandHandler handler);

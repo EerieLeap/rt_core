@@ -48,6 +48,9 @@ public:
         std::optional<SensorCapabilities> sensor_capabilities = std::nullopt
     );
     ~DeviceMgmtGroup();
+
+    DeviceMgmtGroup(const DeviceMgmtGroup&) = delete;
+    DeviceMgmtGroup& operator=(const DeviceMgmtGroup&) = delete;
 };
 
 } // namespace eerie_leap::domain::system_domain::smp

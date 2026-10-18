@@ -75,6 +75,7 @@ public:
     CanRecordWriter& operator=(const CanRecordWriter&) = delete;
     CanRecordWriter(CanRecordWriter&&) = default;
     CanRecordWriter& operator=(CanRecordWriter&&) = default;
+    ~CanRecordWriter() = default;
 
     /**
      * Writes the payload record and the frame record. Throws std::overflow_error, before anything is

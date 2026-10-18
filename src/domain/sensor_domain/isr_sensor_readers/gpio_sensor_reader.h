@@ -48,6 +48,9 @@ public:
         std::shared_ptr<IGpio> gpio
     );
     ~GpioSensorReader() override;
+
+    GpioSensorReader(const GpioSensorReader&) = delete;
+    GpioSensorReader& operator=(const GpioSensorReader&) = delete;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

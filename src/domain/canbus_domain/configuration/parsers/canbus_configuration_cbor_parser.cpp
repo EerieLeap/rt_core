@@ -21,7 +21,7 @@ using namespace eerie_leap::domain::canbus_domain::models;
 CanbusConfigurationCborParser::CanbusConfigurationCborParser(std::shared_ptr<IFsService> sd_fs_service) :
     sd_fs_service_(std::move(sd_fs_service)) {}
 
-pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const CanbusConfiguration& configuration) {
+PmrUniquePtr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const CanbusConfiguration& configuration) {
     CanbusConfigurationValidator::Validate(configuration, sd_fs_service_.get());
 
     auto config = make_unique_pmr<CborCanbusConfig>(Mrm::GetExtPmr());
@@ -78,7 +78,7 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
     return config;
 }
 
-pmr_unique_ptr<CanbusConfiguration>
+PmrUniquePtr<CanbusConfiguration>
 CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborCanbusConfig& config) {
     auto configuration = make_unique_pmr<CanbusConfiguration>(mr);
 
@@ -132,7 +132,7 @@ CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const 
                 && !message_configuration->script_path.empty()
                 && sd_fs_service_->Exists(message_configuration->script_path)) {
 
-                size_t script_size = sd_fs_service_->GetFileSize(message_configuration->script_path).value_or(0);
+                const size_t script_size = sd_fs_service_->GetFileSize(message_configuration->script_path).value_or(0);
 
                 if(script_size != 0) {
                     std::pmr::vector<uint8_t> buffer(script_size, Mrm::GetExtPmr());
@@ -148,12 +148,13 @@ CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const 
             channel_configuration.message_configurations.push_back(std::move(message_configuration));
         }
 
-        bool res = configuration->channel_configurations
-                       .emplace(channel_configuration.bus_channel, std::move(channel_configuration))
-                       .second;
+        // Read before the move: the duplicate message names the channel, which the moved-from value may not.
+        const auto bus_channel = channel_configuration.bus_channel;
+        const bool res =
+            configuration->channel_configurations.emplace(bus_channel, std::move(channel_configuration)).second;
 
         if(!res)
-            throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(channel_configuration.bus_channel));
+            throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(bus_channel));
     }
 
     // Narrowing would turn 256 into channel 0.

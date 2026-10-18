@@ -39,7 +39,7 @@ void CdmpCanbusServiceBase::Configure(std::shared_ptr<CanbusProxy> canbus) {
 void CdmpCanbusServiceBase::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {}
 
 int CdmpCanbusServiceBase::RegisterReceiveHandler(const CanId& can_id, CanFrameHandler handler) {
-    auto for_id = [id = can_id.id, handler = std::move(handler)](const CanFrame& frame) {
+    const auto for_id = [id = can_id.id, handler = std::move(handler)](const CanFrame& frame) {
         if(frame.id == id)
             handler(frame);
     };

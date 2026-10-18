@@ -22,7 +22,7 @@ public:
         return 0;
     }
 
-    const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
+    std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
         return {};
     }
 

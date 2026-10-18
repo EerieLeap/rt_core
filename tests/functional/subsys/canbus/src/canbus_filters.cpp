@@ -52,7 +52,7 @@ ZTEST(canbus_filters, test_mask_filter_accepts_matching_ids_only) {
     auto canbus = MakeRunningCanbus();
     FrameCollector collector;
 
-    int id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
+    const int id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
         collector.Collect(f);
     });
     zassert_true(id > 0);
@@ -76,7 +76,7 @@ ZTEST(canbus_filters, test_mask_filter_accepts_matching_ids_only) {
 ZTEST(canbus_filters, test_overlapping_filters_are_rejected) {
     auto canbus = MakeRunningCanbus();
 
-    int mask_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
+    const int mask_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
     zassert_true(mask_id > 0);
 
     zassert_equal(
@@ -90,10 +90,10 @@ ZTEST(canbus_filters, test_overlapping_filters_are_rejected) {
         Canbus::ERR_FILTER_OVERLAP, "A wider mask covering a registered mask must be rejected"
     );
 
-    int standard_id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x701), [](const CanFrame&) {});
+    const int standard_id = canbus->RegisterFrameReceivedHandler(CanId::Standard(0x701), [](const CanFrame&) {});
     zassert_true(standard_id > 0, "Standard ids never overlap extended filters");
 
-    int disjoint_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x08), [](const CanFrame&) {});
+    const int disjoint_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x08), [](const CanFrame&) {});
     zassert_true(disjoint_id > 0, "A disjoint mask must be accepted");
 
     zassert_true(canbus->RemoveFrameReceivedHandler(mask_id));
@@ -104,7 +104,7 @@ ZTEST(canbus_filters, test_overlapping_filters_are_rejected) {
 ZTEST(canbus_filters, test_mask_covering_a_registered_id_is_rejected) {
     auto canbus = MakeRunningCanbus();
 
-    int exact_id = canbus->RegisterFrameReceivedHandler(CanId::Extended(0x1FF00705), [](const CanFrame&) {});
+    const int exact_id = canbus->RegisterFrameReceivedHandler(CanId::Extended(0x1FF00705), [](const CanFrame&) {});
     zassert_true(exact_id > 0);
 
     zassert_equal(
@@ -112,7 +112,7 @@ ZTEST(canbus_filters, test_mask_covering_a_registered_id_is_rejected) {
     );
 
     zassert_true(canbus->RemoveFrameReceivedHandler(exact_id));
-    int mask_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
+    const int mask_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
     zassert_true(mask_id > 0, "The mask must be accepted once the covered id is gone");
 
     zassert_true(canbus->RemoveFrameReceivedHandler(mask_id));
@@ -126,10 +126,10 @@ ZTEST(canbus_filters, test_identical_mask_filters_share_a_registration) {
     // Bits outside the mask are irrelevant, so this is the same filter.
     const CanFilter same_filter = CanFilter::Masked(CanId::Extended(0x1FF007AB), TARGET_MASK);
 
-    int first_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
+    const int first_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
         first.Collect(f);
     });
-    int second_id = canbus->RegisterFrameReceivedHandler(same_filter, [&](const CanFrame& f) {
+    const int second_id = canbus->RegisterFrameReceivedHandler(same_filter, [&](const CanFrame& f) {
         second.Collect(f);
     });
     zassert_true(first_id > 0);
@@ -148,7 +148,7 @@ ZTEST(canbus_filters, test_identical_mask_filters_share_a_registration) {
     zassert_true(canbus->RemoveFrameReceivedHandler(second_id));
 
     FrameCollector third;
-    int third_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
+    const int third_id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [&](const CanFrame& f) {
         third.Collect(f);
     });
     zassert_true(third_id > 0, "The filter must be registrable again after the last handler is gone");
@@ -173,7 +173,7 @@ ZTEST(canbus_filters, test_mask_filter_limit_is_enforced) {
     zassert_equal(canbus->RegisterFrameReceivedHandler(extra, [](const CanFrame&) {}), Canbus::ERR_TOO_MANY_FILTERS);
 
     zassert_true(canbus->RemoveFrameReceivedHandler(ids[0]));
-    int extra_id = canbus->RegisterFrameReceivedHandler(extra, [](const CanFrame&) {});
+    const int extra_id = canbus->RegisterFrameReceivedHandler(extra, [](const CanFrame&) {});
     zassert_true(extra_id > 0, "A freed mask slot must be reusable");
 
     zassert_true(canbus->RemoveFrameReceivedHandler(extra_id));
@@ -209,7 +209,7 @@ ZTEST(canbus_filters, test_mask_filter_is_deferred_during_auto_detect) {
     zassert_true(canbus->Start());
     zassert_false(canbus->IsBitrateDetected());
 
-    int id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
+    const int id = canbus->RegisterFrameReceivedHandler(TargetFilter(0x07), [](const CanFrame&) {});
     zassert_true(id > 0, "A deferred mask handler must still return a usable id, got %d", id);
     zassert_true(canbus->RemoveFrameReceivedHandler(id));
 

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 
 #include "subsys/mdf/utilities/block_links_empty.h"
 
@@ -10,8 +11,8 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 using namespace eerie_leap::subsys::mdf::utilities;
 
-BlockBase::BlockBase(const std::string& id) :
-    id_(id) {
+BlockBase::BlockBase(std::string id) :
+    id_(std::move(id)) {
     if(id_.size() != BLOCK_ID_SIZE - 2)
         throw std::invalid_argument("MDF block id must be exactly 2 characters");
 }
@@ -32,7 +33,7 @@ std::unique_ptr<uint8_t[]> BlockBase::SerializeBase() const {
     uint64_t offset = 0;
 
     auto id_char_array = "##" + id_;
-    std::copy(id_char_array.begin(), id_char_array.end(), buffer.get() + offset);
+    std::ranges::copy(id_char_array, buffer.get() + offset);
     offset += BLOCK_ID_SIZE;
 
     offset += 4; // reserved_0_
@@ -48,17 +49,16 @@ std::unique_ptr<uint8_t[]> BlockBase::SerializeBase() const {
     offset += sizeof(link_count);
 
     if(link_count > 0) {
-        auto links = block_links->Serialize();
+        const auto links = block_links->Serialize();
         std::copy(links.get(), links.get() + block_links->GetLinksSizeBytes(), buffer.get() + offset);
-        offset += block_links->GetLinksSizeBytes();
     }
 
     return buffer;
 }
 
 const IBlockLinks* BlockBase::GetBlockLinks() const {
-    static const BlockLinksEmpty links_empty;
-    return &links_empty;
+    static const BlockLinksEmpty LINKS_EMPTY;
+    return &LINKS_EMPTY;
 }
 
 } // namespace eerie_leap::subsys::mdf::mdf4

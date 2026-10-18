@@ -24,9 +24,11 @@ public:
 
     template<typename T>
     static void Register(CborEncodeFn<T> encode, CborDecodeFn<T> decode, CborGetSerializingSizeFn<T> get_size) {
-        registry_[std::type_index(typeid(T))] = { .encode = reinterpret_cast<void*>(encode),
+        // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast): function pointers of any T are stored type-erased as void* and cast back to the same type in Get<T>()
+        registry[std::type_index(typeid(T))] = { .encode = reinterpret_cast<void*>(encode),
             .decode = reinterpret_cast<void*>(decode),
             .get_size = reinterpret_cast<void*>(get_size) };
+        // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T>
@@ -37,14 +39,16 @@ public:
             CborGetSerializingSizeFn<T> get_size;
         };
 
-        auto& funcs = registry_.at(std::type_index(typeid(T)));
+        const auto& funcs = registry.at(std::type_index(typeid(T)));
+        // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast): the void* were stored from the same T in Register<T>()
         return Result{ .encode = reinterpret_cast<CborEncodeFn<T>>(funcs.encode),
             .decode = reinterpret_cast<CborDecodeFn<T>>(funcs.decode),
             .get_size = reinterpret_cast<CborGetSerializingSizeFn<T>>(funcs.get_size) };
+        // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
 private:
-    static inline std::unordered_map<std::type_index, CborTraitFunctions> registry_;
+    static inline std::unordered_map<std::type_index, CborTraitFunctions> registry;
 };
 
 } // namespace eerie_leap::configuration::cbor

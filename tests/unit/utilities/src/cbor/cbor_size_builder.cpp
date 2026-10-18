@@ -48,12 +48,12 @@ ZTEST(cbor_size_builder, test_AddUintFixed) {
 }
 
 ZTEST(cbor_size_builder, test_AddTstr) {
-    static constexpr char kText[] = "sensor_1";
+    static constexpr char K_TEXT[] = "sensor_1";
     CborSizeBuilder builder;
 
-    builder.AddTstr(CborHelpers::ToZcborString(kText));
+    builder.AddTstr(CborHelpers::ToZcborString(K_TEXT));
 
-    zassert_equal(builder.Build(), 1 + sizeof(kText) - 1);
+    zassert_equal(builder.Build(), 1 + sizeof(K_TEXT) - 1);
 }
 
 ZTEST(cbor_size_builder, test_AddBool_AddFloat_AddDouble) {
@@ -89,8 +89,8 @@ ZTEST(cbor_size_builder, test_AddSize) {
 }
 
 ZTEST(cbor_size_builder, test_AddOptional_pointer) {
-    uint64_t value = 0x10000;
-    auto size_func = [](uint64_t item) {
+    const uint64_t value = 0x10000;
+    const auto size_func = [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     };
 
@@ -101,8 +101,8 @@ ZTEST(cbor_size_builder, test_AddOptional_pointer) {
 }
 
 ZTEST(cbor_size_builder, test_AddOptional_flag) {
-    uint64_t value = 0x10000;
-    auto size_func = [](uint64_t item) {
+    const uint64_t value = 0x10000;
+    const auto size_func = [](uint64_t item) {
         return CborSizeCalc::SizeOfUint(item);
     };
 
@@ -125,29 +125,29 @@ ZTEST(cbor_size_builder, test_Reset) {
     zassert_equal(builder.Build(), 1);
 }
 
-ZTEST(cbor_size_builder, test_implicit_size_t_conversion) {
+ZTEST(cbor_size_builder, test_explicit_size_t_conversion) {
     CborSizeBuilder builder;
     builder.AddUint(24).AddBool(true);
 
-    size_t size = builder;
+    const auto size = static_cast<size_t>(builder);
 
     zassert_equal(size, builder.Build());
     zassert_equal(size, 3);
 }
 
 ZTEST(cbor_size_builder, test_matches_calculator_for_composite_structure) {
-    static constexpr char kId[] = "sensor_1";
-    static constexpr char kUnit[] = "celsius";
+    static constexpr char K_ID[] = "sensor_1";
+    static constexpr char K_UNIT[] = "celsius";
 
-    size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart()
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kId))
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kUnit)) + CborSizeCalc::SizeOfUint(1000)
+    const size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart()
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_ID))
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_UNIT)) + CborSizeCalc::SizeOfUint(1000)
         + CborSizeCalc::SizeOfFloat(0.5F) + CborSizeCalc::SizeOfBool(true);
 
     CborSizeBuilder builder;
     builder.AddIndefiniteArrayStart()
-        .AddTstr(CborHelpers::ToZcborString(kId))
-        .AddTstr(CborHelpers::ToZcborString(kUnit))
+        .AddTstr(CborHelpers::ToZcborString(K_ID))
+        .AddTstr(CborHelpers::ToZcborString(K_UNIT))
         .AddUint(1000)
         .AddFloat(0.5F)
         .AddBool(true);

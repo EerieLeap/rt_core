@@ -10,7 +10,7 @@ namespace eerie_leap::domain::system_domain::configuration::parsers {
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 
-pmr_unique_ptr<CborSystemConfig> SystemConfigurationCborParser::Serialize(const SystemConfiguration& configuration) {
+PmrUniquePtr<CborSystemConfig> SystemConfigurationCborParser::Serialize(const SystemConfiguration& configuration) {
     SystemConfigurationValidator::Validate(configuration);
 
     auto config = make_unique_pmr<CborSystemConfig>(Mrm::GetExtPmr());
@@ -22,7 +22,7 @@ pmr_unique_ptr<CborSystemConfig> SystemConfigurationCborParser::Serialize(const 
     return config;
 }
 
-pmr_unique_ptr<SystemConfiguration>
+PmrUniquePtr<SystemConfiguration>
 SystemConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborSystemConfig& config) {
 
     auto configuration = make_unique_pmr<SystemConfiguration>(mr);

@@ -10,12 +10,9 @@ namespace eerie_leap::subsys::mdf::mdf4 {
 
 using namespace eerie_leap::utilities::string;
 
-IdBlock::IdBlock() {
-    version_str_ = "4.10";
-    program_id_ = "EL";
-    version_num_ = VERSION_NUMBER;
-    standard_flags_ = 0;
-    custom_flags_ = 0;
+IdBlock::IdBlock() :
+    version_str_("4.10"),
+    program_id_("EL") {
 
     SetFinalized(false);
 }
@@ -43,15 +40,15 @@ std::unique_ptr<uint8_t[]> IdBlock::Serialize() const {
 
     uint64_t offset = 0;
 
-    auto id_char_array = StringHelpers::ToPaddedCharArray(id_, 8);
+    const auto id_char_array = StringHelpers::ToPaddedCharArray(id_, 8);
     std::copy(id_char_array.get(), id_char_array.get() + 8, buffer.get() + offset);
     offset += 8;
 
-    auto version_str_char_array = StringHelpers::ToPaddedCharArray(version_str_, 8);
+    const auto version_str_char_array = StringHelpers::ToPaddedCharArray(version_str_, 8);
     std::copy(version_str_char_array.get(), version_str_char_array.get() + 8, buffer.get() + offset);
     offset += 8;
 
-    auto program_id_char_array = StringHelpers::ToPaddedCharArray(program_id_, 8);
+    const auto program_id_char_array = StringHelpers::ToPaddedCharArray(program_id_, 8);
     std::copy(program_id_char_array.get(), program_id_char_array.get() + 8, buffer.get() + offset);
     offset += 8;
 
@@ -66,7 +63,6 @@ std::unique_ptr<uint8_t[]> IdBlock::Serialize() const {
     offset += sizeof(standard_flags_);
 
     std::memcpy(buffer.get() + offset, &custom_flags_, sizeof(custom_flags_));
-    offset += sizeof(custom_flags_);
 
     return buffer;
 }

@@ -12,12 +12,12 @@ ExpressionEvaluator::ExpressionEvaluator(
 ) :
     expression_(expression, resource),
     program_(std::move(program)),
-    input_index_(program_.VariableIndex(k_input_name)) {}
+    input_index_(program_.VariableIndex(K_INPUT_NAME)) {}
 
 std::expected<ExpressionEvaluator, CompileError>
 ExpressionEvaluator::Create(std::string_view expression, std::pmr::memory_resource* resource) noexcept {
 
-    auto program = ee::Compile(expression, resource, k_limits);
+    auto program = ee::Compile(expression, resource, K_LIMITS);
     if(!program)
         return std::unexpected(program.error());
 
@@ -30,7 +30,7 @@ std::string ExpressionEvaluator::Describe(const CompileError& error) {
 }
 
 bool ExpressionEvaluator::BindVariable(std::string_view name, const float* value) noexcept {
-    if(value == nullptr || name == k_input_name)
+    if(value == nullptr || name == K_INPUT_NAME)
         return false;
 
     const auto index = program_.VariableIndex(name);
@@ -43,7 +43,7 @@ bool ExpressionEvaluator::BindVariable(std::string_view name, const float* value
 }
 
 std::optional<float> ExpressionEvaluator::Evaluate(std::optional<float> input) const noexcept {
-    std::array<float, ee::limits::kMaxVariables> values;
+    std::array<float, ee::limits::MAX_VARIABLES> values{};
     const size_t count = program_.VariableCount();
 
     for(size_t i = 0; i < count; i++) {

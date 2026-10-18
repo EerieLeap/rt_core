@@ -13,6 +13,12 @@ struct Payload {
     int value = 0;
     int* destructions = nullptr;
 
+    Payload() = default;
+    Payload(const Payload&) = delete;
+    Payload& operator=(const Payload&) = delete;
+    Payload(Payload&&) = delete;
+    Payload& operator=(Payload&&) = delete;
+
     ~Payload() {
         if(destructions != nullptr)
             ++(*destructions);
@@ -26,7 +32,7 @@ k_work_sync idle_sync{};
 void NoopWorkHandler(k_work*) {}
 
 WorkQueueTask<Payload> MakeTask(const WorkQueueTask<Payload>::Handler& handler) {
-    return WorkQueueTask<Payload>(&idle_queue, &idle_sync, NoopWorkHandler, handler);
+    return { &idle_queue, &idle_sync, NoopWorkHandler, handler };
 }
 
 } // namespace
@@ -35,14 +41,14 @@ ZTEST_SUITE(work_queue_task, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(work_queue_task, test_WorkQueueTaskResult_defaults_to_no_reschedule) {
     WorkQueueTaskResult result;
-    k_timeout_t no_wait = K_NO_WAIT;
+    const k_timeout_t no_wait = K_NO_WAIT;
 
     zassert_false(result.reschedule);
     zassert_equal(result.delay.ticks, no_wait.ticks);
 }
 
 ZTEST(work_queue_task, test_GetUserdata_is_null_until_user_data_is_set) {
-    auto task = MakeTask([](Payload*) {
+    const auto task = MakeTask([](Payload*) {
         return WorkQueueTaskResult{};
     });
 
@@ -58,7 +64,7 @@ ZTEST(work_queue_task, test_Execute_forwards_owned_user_data_to_the_handler) {
 
     auto payload = std::make_unique<Payload>();
     payload->value = 42;
-    Payload* expected = payload.get();
+    const Payload* expected = payload.get();
     task.SetUserData(std::move(payload));
 
     task.Execute();
@@ -92,8 +98,8 @@ ZTEST(work_queue_task, test_Execute_returns_the_handler_result) {
 
     task.SetUserData(std::make_unique<Payload>());
 
-    auto result = task.Execute();
-    k_timeout_t expected_delay = K_MSEC(25);
+    const auto result = task.Execute();
+    const k_timeout_t expected_delay = K_MSEC(25);
 
     zassert_true(result.reschedule);
     zassert_equal(result.delay.ticks, expected_delay.ticks);
@@ -126,7 +132,7 @@ ZTEST(work_queue_task, test_SetUserData_releases_the_previously_owned_payload) {
     task.SetUserData(std::move(first));
 
     auto second = std::make_unique<Payload>();
-    Payload* expected = second.get();
+    const Payload* expected = second.get();
     task.SetUserData(std::move(second));
 
     zassert_equal(destructions, 1);

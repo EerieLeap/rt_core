@@ -51,23 +51,23 @@ bool AdcConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cb
     return true;
 }
 
-pmr_unique_ptr<CborAdcConfig> AdcConfigurationManager::Serialize(const AdcConfiguration& configuration) {
+PmrUniquePtr<CborAdcConfig> AdcConfigurationManager::Serialize(const AdcConfiguration& configuration) {
     return cbor_parser_.Serialize(configuration);
 }
 
-pmr_unique_ptr<AdcConfiguration> AdcConfigurationManager::Deserialize(const CborAdcConfig& cbor_config) {
+PmrUniquePtr<AdcConfiguration> AdcConfigurationManager::Deserialize(const CborAdcConfig& cbor_config) {
     return cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config);
 }
 
 bool AdcConfigurationManager::CreateDefaultConfiguration() {
-    auto adc_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetExtPmr());
+    const auto adc_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetExtPmr());
 
     std::vector<std::shared_ptr<AdcChannelConfiguration>> channel_configurations;
     channel_configurations.reserve(adc_manager_->GetChannelCount());
     for(int i = 0; i < adc_manager_->GetChannelCount(); ++i)
         channel_configurations.push_back(std::make_shared<AdcChannelConfiguration>(adc_calibrator));
 
-    auto configuration = std::make_shared<AdcConfiguration>();
+    const auto configuration = std::make_shared<AdcConfiguration>();
     configuration->samples = AdcDefaultConfiguration::SAMPLES;
     configuration->channel_configurations = std::make_shared<std::vector<std::shared_ptr<AdcChannelConfiguration>>>(
         std::move(channel_configurations)

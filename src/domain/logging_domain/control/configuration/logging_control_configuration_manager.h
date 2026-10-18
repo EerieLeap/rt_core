@@ -29,20 +29,18 @@ class LoggingControlConfigurationManager :
     public CborConfigurationManagerBase<LoggingControlConfiguration, CborLoggingControlConfig>,
     public IConfigurationManager {
 private:
-    LoggingControlConfigurationCborParser cbor_parser_;
-
     // The controller sets and clears the handler while a store on another thread may be calling it.
     // A store copies the pointer under the lock and calls it outside, so a cleared handler finishes
     // the call it started on its own reference, and a call allocates nothing.
-    k_mutex handler_mutex_;
+    k_mutex handler_mutex_{};
     std::shared_ptr<const ConfigurationUpdatedHandler> configuration_updated_handler_;
 
     // Logs what the handler throws: the configuration is stored by then.
     void NotifyUpdated();
 
-    eerie_memory::pmr_unique_ptr<CborLoggingControlConfig>
+    eerie_memory::PmrUniquePtr<CborLoggingControlConfig>
     Serialize(const LoggingControlConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration>
+    eerie_memory::PmrUniquePtr<LoggingControlConfiguration>
     Deserialize(const CborLoggingControlConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
@@ -59,7 +57,7 @@ public:
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;
 
-    bool Update(const LoggingControlConfiguration& configuration);
+    bool Update(const LoggingControlConfiguration& configuration) override;
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 };
 

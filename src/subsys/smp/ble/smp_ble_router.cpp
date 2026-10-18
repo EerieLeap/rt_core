@@ -24,7 +24,7 @@ struct SmpBleUserData {
 
 static_assert(sizeof(SmpBleUserData) <= CONFIG_MCUMGR_TRANSPORT_NETBUF_USER_DATA_SIZE);
 
-SmpBleUserData& UserData(net_buf& packet) {
+SmpBleUserData& UserData(const net_buf& packet) {
     return *static_cast<SmpBleUserData*>(net_buf_user_data(&packet));
 }
 
@@ -32,14 +32,14 @@ constexpr size_t MAX_PACKET_SIZE = CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE;
 
 } // namespace
 
-std::atomic<SmpBleRouter*> SmpBleRouter::instance_ = nullptr;
+std::atomic<SmpBleRouter*> SmpBleRouter::instance = nullptr;
 
 SmpBleRouter::SmpBleRouter(std::shared_ptr<IBleNotifier> notifier, std::shared_ptr<ISmpForwarder> forwarder) :
     notifier_(std::move(notifier)),
     forwarder_(std::move(forwarder)) {
 
     SmpBleRouter* expected = nullptr;
-    if(!instance_.compare_exchange_strong(expected, this))
+    if(!instance.compare_exchange_strong(expected, this))
         throw std::logic_error("Only one SmpBleRouter may exist");
 
     k_fifo_init(&tx_queue_);
@@ -47,7 +47,7 @@ SmpBleRouter::SmpBleRouter(std::shared_ptr<IBleNotifier> notifier, std::shared_p
 }
 
 SmpBleRouter::~SmpBleRouter() {
-    k_work_sync sync;
+    k_work_sync sync{};
 
     // Once MCUmgr is done with our requests, it no longer calls Output().
     if(is_initialized_) {
@@ -56,7 +56,7 @@ SmpBleRouter::~SmpBleRouter() {
     }
 
     k_work_cancel_delayable_sync(&tx_work_, &sync);
-    instance_.store(nullptr);
+    instance.store(nullptr);
 
     DropTx();
     ResetRx();
@@ -121,8 +121,16 @@ void SmpBleRouter::OnReceive(std::span<const uint8_t> data) {
 
 void SmpBleRouter::OnHeader() {
     const auto header = SmpHeader::Parse(std::span(rx_head_).subspan(1));
-    rx_remaining_ = header->length;
     rx_discarding_ = true;
+
+    // Cannot happen with a full header; ends the packet as a drop all the same.
+    if(!header.has_value()) {
+        rx_dropped_++;
+        rx_remaining_ = 0;
+        return;
+    }
+
+    rx_remaining_ = header->length;
 
     if(!header->IsRequest() || header->GetPacketSize() > MAX_PACKET_SIZE) {
         rx_dropped_++;
@@ -171,7 +179,13 @@ void SmpBleRouter::Dispatch(uint8_t route, SmpPacket packet) {
 }
 
 void SmpBleRouter::Reject(uint8_t route, SmpPacket packet) {
-    SmpHeader header = *SmpHeader::Parse({ packet->data, packet->len });
+    const auto parsed = SmpHeader::Parse({ packet->data, packet->len });
+    if(!parsed.has_value()) {
+        rx_dropped_++;
+        return;
+    }
+
+    SmpHeader header = *parsed;
     header.operation = header.operation == SmpOperation::READ ? SmpOperation::READ_RESPONSE
                                                               : SmpOperation::WRITE_RESPONSE;
     header.flags = 0;
@@ -224,7 +238,7 @@ void SmpBleRouter::OnResponse(uint8_t source, SmpPacket packet) {
 int SmpBleRouter::Output(net_buf* packet) {
     SmpPacket owned(packet);
 
-    SmpBleRouter* router = instance_.load();
+    SmpBleRouter* router = instance.load();
     if(router == nullptr)
         return -ENODEV;
 
@@ -243,7 +257,7 @@ void SmpBleRouter::EnqueueTx(uint8_t route, uint8_t generation, SmpPacket packet
 }
 
 void SmpBleRouter::TxWorkHandler(k_work* /*work*/) {
-    SmpBleRouter* router = instance_.load();
+    SmpBleRouter* router = instance.load();
     if(router != nullptr)
         router->ProcessTx();
 }
@@ -251,7 +265,9 @@ void SmpBleRouter::TxWorkHandler(k_work* /*work*/) {
 void SmpBleRouter::ProcessTx() {
     while(true) {
         if(tx_packet_ == nullptr) {
+            // NOLINTBEGIN(misc-const-correctness): the variable is declared inside the k_fifo_get macro
             tx_packet_ = SmpPacket(static_cast<net_buf*>(k_fifo_get(&tx_queue_, K_NO_WAIT)));
+            // NOLINTEND(misc-const-correctness)
             if(tx_packet_ == nullptr)
                 return;
 
@@ -302,8 +318,10 @@ void SmpBleRouter::ProcessTx() {
 void SmpBleRouter::DropTx() {
     tx_packet_.reset();
 
+    // NOLINTBEGIN(misc-const-correctness): the variable is declared inside the k_fifo_get macro
     while(auto* packet = static_cast<net_buf*>(k_fifo_get(&tx_queue_, K_NO_WAIT)))
         smp_packet_free(packet);
+    // NOLINTEND(misc-const-correctness)
 }
 
 std::array<uint8_t, SmpBleRouter::INFO_SIZE> SmpBleRouter::GetInfo() {

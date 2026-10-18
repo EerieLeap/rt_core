@@ -16,7 +16,7 @@ namespace eerie_leap::subsys::device_tree {
 
 class DtGpio {
 private:
-    static std::optional<std::vector<gpio_dt_spec>> gpio_specs_;
+    static std::optional<std::vector<gpio_dt_spec>> gpio_specs;
 
     DtGpio() = default;
 
@@ -24,7 +24,7 @@ public:
     static void Initialize();
 
     static std::optional<std::vector<gpio_dt_spec>>& Get() {
-        return gpio_specs_;
+        return gpio_specs;
     }
 };
 

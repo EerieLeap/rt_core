@@ -41,7 +41,7 @@ public:
     static constexpr int32_t TX_RETRY_DELAY_MS = 10;
 
 private:
-    static std::atomic<SmpBleRouter*> instance_;
+    static std::atomic<SmpBleRouter*> instance;
 
     std::shared_ptr<IBleNotifier> notifier_;
     std::shared_ptr<ISmpForwarder> forwarder_;

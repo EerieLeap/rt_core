@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <exception>
 
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/timeutil.h>
@@ -28,14 +29,21 @@ void CdmpTransactionService::Initialize() {
 }
 
 CdmpTransactionService::~CdmpTransactionService() {
-    Stop();
+    // A destructor is noexcept: a throwing callback or mutex in Stop() would end in std::terminate.
+    try {
+        Stop();
+    } catch(const std::exception& e) {
+        LOG_ERR("CDMP Transaction Service teardown failed: %s", e.what());
+    } catch(...) {
+        LOG_ERR("CDMP Transaction Service teardown failed.");
+    }
 }
 
 void CdmpTransactionService::Start() {
     ScopedMutex guard(transactions_lock_);
 
-    if(!is_timeout_task_running_) {
-        timeout_task_.value().Schedule();
+    if(!is_timeout_task_running_ && timeout_task_.has_value()) {
+        timeout_task_->Schedule();
         is_timeout_task_running_ = true;
 
         LOG_INF("CDMP Transaction Service started");
@@ -66,15 +74,14 @@ void CdmpTransactionService::Stop() {
 }
 
 uint8_t CdmpTransactionService::GetNextTransactionId() {
-    uint8_t transaction_id = next_transaction_id_;
+    const uint8_t transaction_id = next_transaction_id_;
 
     // Skip transaction ID 0 and find next available
     do {
         next_transaction_id_++;
         if(next_transaction_id_ == 0)
             next_transaction_id_ = 1;
-    } while(pending_transactions_.find(next_transaction_id_) != pending_transactions_.end()
-        && next_transaction_id_ != transaction_id);
+    } while(pending_transactions_.contains(next_transaction_id_) && next_transaction_id_ != transaction_id);
 
     return transaction_id;
 }
@@ -88,7 +95,7 @@ uint8_t CdmpTransactionService::StartTransaction(
 
     ScopedMutex guard(transactions_lock_);
 
-    uint8_t transaction_id = GetNextTransactionId();
+    const uint8_t transaction_id = GetNextTransactionId();
 
     PendingTransaction transaction{ .transaction_id = transaction_id,
         .start_time = static_cast<uint64_t>(k_uptime_get()),
@@ -119,7 +126,7 @@ void CdmpTransactionService::CompleteTransaction(const CdmpCommandResponseMessag
     {
         ScopedMutex guard(transactions_lock_);
 
-        auto it = pending_transactions_.find(response.transaction_id);
+        const auto it = pending_transactions_.find(response.transaction_id);
         if(it == pending_transactions_.end() || !IsResponseTo(it->second, response))
             return;
 
@@ -140,7 +147,7 @@ void CdmpTransactionService::CleanupExpiredTransactions() {
         {
             ScopedMutex guard(transactions_lock_);
 
-            auto it = std::ranges::find_if(pending_transactions_, [current_time](const auto& entry) {
+            const auto it = std::ranges::find_if(pending_transactions_, [current_time](const auto& entry) {
                 return current_time - entry.second.start_time >= entry.second.timeout;
             });
             if(it == pending_transactions_.end())
@@ -184,10 +191,10 @@ WorkQueueTaskResult CdmpTransactionService::ProcessTransactionTimeouts(CdmpTrans
         // while Stop() cancels it.
         ScopedMutex guard(instance->transactions_lock_);
 
-        if(!instance->is_timeout_task_running_)
+        if(!instance->is_timeout_task_running_ || !instance->timeout_task_.has_value())
             return {};
 
-        instance->timeout_task_.value().Reschedule(K_MSEC(CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS / 2));
+        instance->timeout_task_->Reschedule(K_MSEC(CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS / 2));
     }
 
     instance->CleanupExpiredTransactions();

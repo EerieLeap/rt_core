@@ -11,35 +11,35 @@ using eerie_leap::utilities::string::StringHelpers;
 ZTEST_SUITE(string_helpers, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(string_helpers, test_ToPaddedCharArray_pads_with_explicit_char) {
-    auto padded = StringHelpers::ToPaddedCharArray("abc", 8, '.');
+    const auto padded = StringHelpers::ToPaddedCharArray("abc", 8, '.');
 
     zassert_not_null(padded.get());
     zassert_mem_equal(padded.get(), "abc.....", 8);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_pads_with_space_by_default) {
-    auto padded = StringHelpers::ToPaddedCharArray("abc", 6);
+    const auto padded = StringHelpers::ToPaddedCharArray("abc", 6);
 
     zassert_mem_equal(padded.get(), "abc   ", 6);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_exact_fit_has_no_padding) {
-    auto padded = StringHelpers::ToPaddedCharArray("abcdef", 6, '.');
+    const auto padded = StringHelpers::ToPaddedCharArray("abcdef", 6, '.');
 
     zassert_mem_equal(padded.get(), "abcdef", 6);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_empty_input_is_all_padding) {
-    auto padded = StringHelpers::ToPaddedCharArray("", 4, 'x');
+    const auto padded = StringHelpers::ToPaddedCharArray("", 4, 'x');
 
     zassert_mem_equal(padded.get(), "xxxx", 4);
 }
 
 ZTEST(string_helpers, test_ToPaddedCharArray_returns_independent_buffers) {
-    std::string source = "abc";
+    const std::string source = "abc";
 
-    auto first = StringHelpers::ToPaddedCharArray(source, 8, '.');
-    auto second = StringHelpers::ToPaddedCharArray(source, 8, '.');
+    const auto first = StringHelpers::ToPaddedCharArray(source, 8, '.');
+    const auto second = StringHelpers::ToPaddedCharArray(source, 8, '.');
 
     zassert_true(first.get() != second.get());
 
@@ -54,10 +54,10 @@ ZTEST(string_helpers, test_GetHash_is_deterministic) {
 
 ZTEST(string_helpers, test_GetHash_matches_known_xxhash64_values) {
     // Expected values are the lower 32 bits of XXH64(seed=0) for these inputs.
-    zassert_equal(StringHelpers::GetHash("sensor_1"), 0x479b7bc9u);
-    zassert_equal(StringHelpers::GetHash(""), 0x51d8e999u);
-    zassert_equal(StringHelpers::GetHash("sensor_2"), 0xac41a995u);
-    zassert_equal(StringHelpers::GetHash("abc"), 0xad770999u);
+    zassert_equal(StringHelpers::GetHash("sensor_1"), 0x479b7bc9U);
+    zassert_equal(StringHelpers::GetHash(""), 0x51d8e999U);
+    zassert_equal(StringHelpers::GetHash("sensor_2"), 0xac41a995U);
+    zassert_equal(StringHelpers::GetHash("abc"), 0xad770999U);
 }
 
 ZTEST(string_helpers, test_GetHash_distinguishes_inputs) {
@@ -68,9 +68,9 @@ ZTEST(string_helpers, test_GetHash_distinguishes_inputs) {
 
 ZTEST(string_helpers, test_GetHash_is_length_delimited) {
     // The view length, not a terminator, determines what is hashed.
-    static constexpr char kPayload[] = "sensor_1_extra";
+    static constexpr char PAYLOAD[] = "sensor_1_extra";
 
-    zassert_equal(StringHelpers::GetHash(std::string_view(kPayload, 8)), StringHelpers::GetHash("sensor_1"));
+    zassert_equal(StringHelpers::GetHash(std::string_view(PAYLOAD, 8)), StringHelpers::GetHash("sensor_1"));
 }
 
 ZTEST(string_helpers, test_UInt16ToStaticString) {
@@ -81,7 +81,7 @@ ZTEST(string_helpers, test_UInt16ToStaticString) {
 }
 
 ZTEST(string_helpers, test_UInt16ToStaticString_size_and_capacity) {
-    auto value = StringHelpers::UInt16ToStaticString(UINT16_MAX);
+    const auto value = StringHelpers::UInt16ToStaticString(UINT16_MAX);
 
     zassert_equal(value.Size(), 5);
     zassert_equal(decltype(value)::Capacity(), 5);
@@ -95,7 +95,7 @@ ZTEST(string_helpers, test_UInt32ToStaticString) {
 }
 
 ZTEST(string_helpers, test_UInt32ToStaticString_size_and_capacity) {
-    auto value = StringHelpers::UInt32ToStaticString(UINT32_MAX);
+    const auto value = StringHelpers::UInt32ToStaticString(UINT32_MAX);
 
     zassert_equal(value.Size(), 10);
     zassert_equal(decltype(value)::Capacity(), 10);

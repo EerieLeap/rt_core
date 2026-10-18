@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "utilities/string/string_helpers.h"
 
@@ -56,11 +57,13 @@ struct CanbusSource {
     CanbusSource& operator=(const CanbusSource&) = delete;
 
     CanbusSource(CanbusSource&&) noexcept = default;
+    CanbusSource& operator=(CanbusSource&&) = delete;
+    ~CanbusSource() = default;
 
     CanbusSource(CanbusSource&& other, allocator_type alloc) noexcept :
         bus_channel(other.bus_channel),
         frame_id(other.frame_id),
-        signal_name(other.signal_name, alloc),
+        signal_name(std::move(other.signal_name), alloc),
         signal_name_hash(other.signal_name_hash) {}
 
     /// Both numbers in decimal.
@@ -136,6 +139,7 @@ private:
 
         uint32_t value = 0;
         const char* end = text.data() + text.size();
+        // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): the range is bounded by `end`, which is computed from the size.
         const auto [parsed_end, error] = std::from_chars(text.data(), end, value, base);
         if(error != std::errc() || parsed_end != end || value > max)
             return std::nullopt;

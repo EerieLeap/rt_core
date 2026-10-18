@@ -56,6 +56,11 @@ public:
         unit->Configure(canbus);
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     ~Harness() override {
         unit->Stop();
         unit.reset();

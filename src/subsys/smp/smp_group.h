@@ -29,8 +29,10 @@ namespace eerie_leap::subsys::smp {
 template<typename T>
 zcbor_map_decode_key_val SmpMapKey(std::string_view key, bool (*decoder)(zcbor_state_t*, T*), T* value) {
     zcbor_map_decode_key_val entry{};
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor takes the key text as raw bytes
     entry.key.value = reinterpret_cast<const uint8_t*>(key.data());
     entry.key.len = key.size();
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the type-erased decoder pointer is what ZCBOR_MAP_DECODE_KEY_DECODER casts to
     entry.decoder = reinterpret_cast<zcbor_decoder_t*>(decoder);
     entry.value_ptr = value;
 
@@ -38,14 +40,14 @@ zcbor_map_decode_key_val SmpMapKey(std::string_view key, bool (*decoder)(zcbor_s
 }
 
 /** @brief Decodes the request map into @p keys; unknown keys are skipped. */
-inline bool SmpDecodeRequest(smp_streamer* ctxt, std::span<zcbor_map_decode_key_val> keys) {
+inline bool SmpDecodeRequest(const smp_streamer* ctxt, std::span<zcbor_map_decode_key_val> keys) {
     size_t decoded = 0;
 
     return zcbor_map_decode_bulk(ctxt->reader->zs, keys.data(), keys.size(), &decoded) == 0;
 }
 
 /** @brief Appends a group error (SMP v2 `err`, or `rc` for SMP v1 clients) to the response. */
-inline int SmpAddGroupError(smp_streamer* ctxt, SmpGroupId group, uint16_t error) {
+inline int SmpAddGroupError(const smp_streamer* ctxt, SmpGroupId group, uint16_t error) {
     return smp_add_cmd_err(ctxt->writer->zs, std::to_underlying(group), error) ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
 
@@ -59,18 +61,12 @@ inline int SmpAddGroupError(smp_streamer* ctxt, SmpGroupId group, uint16_t error
 template<typename TGroup>
 class SmpGroup {
 private:
-    static inline TGroup* instance_ = nullptr;
-    static inline const SmpGroup* registered_ = nullptr;
+    static inline TGroup* instance = nullptr;
+    static inline const SmpGroup* registered = nullptr;
     mgmt_group group_{};
 
-protected:
-    /** @brief Handler table entry that calls @p Handler on the registered instance. */
-    template<int (TGroup::*Handler)(smp_streamer*)>
-    static int Dispatch(smp_streamer* ctxt) {
-        TGroup* group = instance_;
-
-        return group != nullptr ? (group->*Handler)(ctxt) : MGMT_ERR_ENOTSUP;
-    }
+    // The constructor is private so that only TGroup, the class this is the base of, can be built on it.
+    friend TGroup;
 
     /**
      * @param handlers One entry per command ID; must have static storage duration.
@@ -80,11 +76,20 @@ protected:
         group_.mg_handlers = handlers.data();
         group_.mg_handlers_count = static_cast<uint16_t>(handlers.size());
         group_.mg_group_id = std::to_underlying(group_id);
-#if defined(CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL)
+#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
         group_.mg_translate_error = translate_error;
 #else
         (void)translate_error;
 #endif
+    }
+
+protected:
+    /** @brief Handler table entry that calls @p Handler on the registered instance. */
+    template<int (TGroup::*Handler)(smp_streamer*)>
+    static int Dispatch(smp_streamer* ctxt) {
+        TGroup* group = instance;
+
+        return group != nullptr ? (group->*Handler)(ctxt) : MGMT_ERR_ENOTSUP;
     }
 
 public:
@@ -100,28 +105,28 @@ public:
 
     /** @throws std::logic_error if another instance of @p TGroup is registered. */
     void Register() {
-        if(registered_ == this)
+        if(registered == this)
             return;
 
-        if(registered_ != nullptr)
+        if(registered != nullptr)
             throw std::logic_error("Another instance of this SMP group is registered");
 
-        instance_ = static_cast<TGroup*>(this);
-        registered_ = this;
+        instance = static_cast<TGroup*>(this);
+        registered = this;
         mgmt_register_group(&group_);
     }
 
     void Unregister() {
-        if(registered_ != this)
+        if(registered != this)
             return;
 
         mgmt_unregister_group(&group_);
-        instance_ = nullptr;
-        registered_ = nullptr;
+        instance = nullptr;
+        registered = nullptr;
     }
 
     [[nodiscard]] bool IsRegistered() const {
-        return registered_ == this;
+        return registered == this;
     }
 };
 

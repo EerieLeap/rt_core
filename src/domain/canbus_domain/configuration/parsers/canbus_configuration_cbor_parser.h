@@ -19,8 +19,8 @@ private:
 public:
     explicit CanbusConfigurationCborParser(std::shared_ptr<IFsService> sd_fs_service);
 
-    eerie_memory::pmr_unique_ptr<CborCanbusConfig> Serialize(const CanbusConfiguration& configuration);
-    eerie_memory::pmr_unique_ptr<CanbusConfiguration>
+    eerie_memory::PmrUniquePtr<CborCanbusConfig> Serialize(const CanbusConfiguration& configuration);
+    eerie_memory::PmrUniquePtr<CanbusConfiguration>
     Deserialize(std::pmr::memory_resource* mr, const CborCanbusConfig& config);
 };
 

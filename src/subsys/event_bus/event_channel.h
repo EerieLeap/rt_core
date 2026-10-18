@@ -34,7 +34,7 @@ public:
     using PayloadMap = EventPayload<TPayloadType>;
     using HandleType = SubscriptionHandle<TEventType>;
 
-    static constexpr size_t k_default_max_queued_events = 64;
+    static constexpr size_t DEFAULT_MAX_QUEUED_EVENTS = 64;
 
 private:
     std::string name_;
@@ -42,7 +42,7 @@ private:
 
     SubscriberMap<TEventType, TPayloadType> subscribers_;
     // Mutable for Accepts(), which runs the filters under it.
-    mutable k_mutex subscribers_mutex_;
+    mutable k_mutex subscribers_mutex_{};
     size_t next_id_ = 1;
     // Bumped under subscribers_mutex_ once a subscription is added or removed, with release order,
     // so a reader that loads it with acquire after seeing the change's effects sees the new value.
@@ -54,7 +54,7 @@ private:
     std::pmr::vector<EventMessage> event_queue_;
     size_t queue_head_ = 0;
     size_t queue_count_ = 0;
-    k_mutex queue_mutex_;
+    k_mutex queue_mutex_{};
     size_t dropped_events_ = 0;
     uint32_t last_dropped_source_id_ = 0;
 
@@ -80,12 +80,12 @@ private:
     };
 
     // Dispatch snapshots the matching subscribers; this many fit without touching the heap.
-    static constexpr size_t k_max_inline_subscribers = 16;
+    static constexpr size_t MAX_INLINE_SUBSCRIBERS = 16;
 
     void Dispatch(const EventMessage& event);
 
 protected:
-    EventChannel(std::string name, size_t max_queued_events = k_default_max_queued_events);
+    explicit EventChannel(std::string name, size_t max_queued_events = DEFAULT_MAX_QUEUED_EVENTS);
 
 public:
     ~EventChannel() override = default;
@@ -108,7 +108,7 @@ public:
 
     template<EventFilter<TEventType, TPayloadType> FilterType = AcceptAllFilter<TEventType, TPayloadType>>
     std::expected<SubscriptionHandle<TEventType>, std::string>
-    Subscribe(TEventType type, FilterType filter, EventHandler<TEventType, TPayloadType> handler);
+    Subscribe(TEventType type, const FilterType& filter, EventHandler<TEventType, TPayloadType> handler);
 
     std::expected<SubscriptionHandle<TEventType>, std::string>
     Subscribe(TEventType type, EventHandler<TEventType, TPayloadType> handler) {
@@ -160,11 +160,11 @@ template<
 AnySubscription CreateScopedSubscription(
     ChannelType& channel,
     typename ChannelType::EventTypeEnum type,
-    FilterType filter,
+    const FilterType& filter,
     EventHandler<typename ChannelType::EventTypeEnum, typename ChannelType::PayloadTypeEnum> handler
 ) {
 
-    auto subscription = channel.Subscribe(type, std::move(filter), std::move(handler));
+    auto subscription = channel.Subscribe(type, filter, std::move(handler));
     if(!subscription)
         return nullptr;
 

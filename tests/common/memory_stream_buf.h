@@ -5,6 +5,7 @@
 #include <ios>
 #include <streambuf>
 #include <string>
+#include <utility>
 
 namespace rt_core_test {
 
@@ -79,28 +80,31 @@ protected:
         const bool moves_write = (which & std::ios_base::out) != 0;
         const bool moves_read = (which & std::ios_base::in) != 0;
         if(!moves_write && !moves_read)
-            return pos_type(off_type(-1));
+            return { static_cast<off_type>(-1) };
 
         const off_type target = base(moves_write ? write_position_ : read_position_) + off;
-        if(target < 0 || target > static_cast<off_type>(data_.size()))
-            return pos_type(off_type(-1));
+        if(target < 0 || std::cmp_greater(target, data_.size()))
+            return { static_cast<off_type>(-1) };
 
         if(moves_write)
             write_position_ = static_cast<size_t>(target);
         if(moves_read)
             read_position_ = static_cast<size_t>(target);
 
-        return pos_type(target);
+        return { target };
     }
 
     pos_type seekpos(pos_type position, std::ios_base::openmode which) override {
-        return seekoff(off_type(position), std::ios_base::beg, which);
+        return seekoff(static_cast<off_type>(position), std::ios_base::beg, which);
     }
 
 public:
     MemoryStreamBuf() = default;
+    MemoryStreamBuf(const MemoryStreamBuf&) = delete;
+    MemoryStreamBuf& operator=(const MemoryStreamBuf&) = delete;
     MemoryStreamBuf(MemoryStreamBuf&&) = default;
     MemoryStreamBuf& operator=(MemoryStreamBuf&&) = default;
+    ~MemoryStreamBuf() override = default;
 
     /** Storage for @p size bytes up front, so writes up to that size do not allocate. */
     void Reserve(size_t size) {
@@ -110,7 +114,7 @@ public:
     [[nodiscard]] size_t Capacity() const {
         return data_.capacity();
     }
-    [[nodiscard]] std::string str() const {
+    [[nodiscard]] std::string Str() const {
         return data_;
     }
 };

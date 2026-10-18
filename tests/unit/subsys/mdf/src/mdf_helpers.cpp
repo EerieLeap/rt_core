@@ -51,7 +51,7 @@ ZTEST(mdf_helpers, test_ChannelDataTypeMapping) {
 }
 
 ZTEST(mdf_helpers, test_ChannelDataTypeMappingRejectsUnsupportedTypes) {
-    for(auto data_type : { MdfDataType::None, static_cast<MdfDataType>(200) }) {
+    for(const auto data_type : { MdfDataType::None, static_cast<MdfDataType>(200) }) {
         bool threw = false;
         try {
             MdfHelpers::ToMdf4ChannelDataType(data_type);

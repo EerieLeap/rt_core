@@ -16,12 +16,12 @@ enum class EventChannelId : uint32_t {
 };
 
 // Appending an id means moving this to it; IsValidEventChannelId() and the registry's table follow.
-inline constexpr EventChannelId k_last_event_channel_id = EventChannelId::Settings;
+inline constexpr EventChannelId LAST_EVENT_CHANNEL_ID = EventChannelId::Settings;
 
 // Whether a stored id names a channel at all; whether this unit registers it is the registry's
 // question.
 constexpr bool IsValidEventChannelId(EventChannelId channel) {
-    return channel != EventChannelId::None && channel <= k_last_event_channel_id;
+    return channel != EventChannelId::None && channel <= LAST_EVENT_CHANNEL_ID;
 }
 
 } // namespace eerie_leap::subsys::event_bus

@@ -64,6 +64,26 @@
             },
             "group": "none",
             "detail": "Reformat the sources in place with clang-format"
+        },
+        {
+            "label": "Lint: changed",
+            "type": "shell",
+            "command": "scripts/tidy.sh --changed -p ./twister-out/native_sim_native",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "detail": "Lint only the sources changed since the merge base with origin/main"
+        },
+        {
+            "label": "Lint: all",
+            "type": "shell",
+            "command": "scripts/tidy.sh -p ./twister-out/native_sim_native",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "detail": "Lint every source with the compile databases of a native_sim twister run"
         }
     ]
 }

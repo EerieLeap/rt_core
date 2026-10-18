@@ -81,7 +81,7 @@ struct Fixture {
         zassert_true(manager->Update(TriggersOn(sensor_ids)), "The configuration was not stored.");
     }
 
-    bool Flush() const {
+    static bool Flush() {
         return FlushQueue(*TestConfigQueue());
     }
 };
@@ -159,7 +159,7 @@ ZTEST(configuration_update_logging_stop, test_AStoreAfterStartStopsOnTheStoringT
 ZTEST(configuration_update_logging_stop, test_AnSmpApplyStops) {
     F().Start();
 
-    QueuedApply apply(F().service, Type::LoggingControl, k_trigger_on_ab);
+    QueuedApply apply(F().service, Type::LoggingControl, TRIGGER_ON_AB);
     zassert_true(apply.WaitForSuccess(), "The write is applied through the service");
 
     const auto requests = F().control->Requests();
@@ -260,17 +260,17 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
     F().Start();
     F().control->HoldRequests();
 
-    // The store runs on the queue, inside the report, which the control holds in RequestStop(kAllUnits).
+    // The store runs on the queue, inside the report, which the control holds in RequestStop(ALL_UNITS).
     TestConfigQueue()->Run([manager = F().manager] {
         (void)manager->Update(TriggersOn({ "a" }));
     });
     zassert_true(F().control->WaitUntilHeld(), "The report is inside the control");
 
     struct Destruction {
-        k_sem done;
+        k_sem done{};
         std::unique_ptr<ConfigurationUpdateLoggingStop> stop;
     };
-    auto destruction = std::make_shared<Destruction>();
+    const auto destruction = std::make_shared<Destruction>();
     k_sem_init(&destruction->done, 0, 1);
     destruction->stop = std::move(F().stop);
 
@@ -282,11 +282,11 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
     });
 
     zassert_not_equal(
-        k_sem_take(&destruction->done, Ms(k_no_wait_ms)), 0, "The destructor must wait for the report in progress"
+        k_sem_take(&destruction->done, Ms(NO_WAIT_MS)), 0, "The destructor must wait for the report in progress"
     );
 
     F().control->Release();
-    zassert_equal(k_sem_take(&destruction->done, Ms(k_wait_ms)), 0, "and returns once it is done");
+    zassert_equal(k_sem_take(&destruction->done, Ms(WAIT_MS)), 0, "and returns once it is done");
 
     zassert_true(F().Flush());
     zassert_equal(F().sender->Sends().size(), 0U, "A broadcast still pending is dropped");
@@ -348,7 +348,7 @@ ZTEST(configuration_update_logging_stop, test_StartBeforeInitializeFailsAndStart
 }
 
 ZTEST(configuration_update_logging_stop, test_AQueueThatDoesNotRunFailsToInitialize) {
-    auto never_ran = std::make_shared<WorkQueueThread>("never_ran_update_stop", 4096, 5);
+    const auto never_ran = std::make_shared<WorkQueueThread>("never_ran_update_stop", 4096, 5);
     ConfigurationUpdateLoggingStop stop(F().service, never_ran, F().control, F().sender);
 
     zassert_false(stop.Initialize(), "The broadcast needs a queue that runs");

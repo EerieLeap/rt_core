@@ -48,7 +48,7 @@ std::shared_ptr<TextBlock> MakeTextBlock(const std::string& text) {
 ZTEST_SUITE(mdf_blocks, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(mdf_blocks, test_IdBlockLayout) {
-    IdBlock block;
+    const IdBlock block;
 
     zassert_equal(block.GetBlockSize(), ID_BLOCK_SIZE);
     zassert_equal(block.GetSerializedSize(), ID_BLOCK_SIZE);
@@ -104,7 +104,7 @@ ZTEST(mdf_blocks, test_IdBlockStandardFlagsAreIdempotent) {
 }
 
 ZTEST(mdf_blocks, test_BlockHeaderLayout) {
-    TestBlock block("XX", 16);
+    const TestBlock block("XX", 16);
 
     zassert_equal(block.GetId(), std::string("XX"));
     zassert_equal(block.GetBaseSize(), BLOCK_HEADER_SIZE, "a block without links has no link area");
@@ -122,7 +122,7 @@ ZTEST(mdf_blocks, test_BlockRejectsIdThatIsNotTwoCharacters) {
     for(const auto& id : { std::string(""), std::string("X"), std::string("XXX") }) {
         bool threw = false;
         try {
-            TestBlock block(id);
+            const TestBlock block(id);
         } catch(const std::invalid_argument&) {
             threw = true;
         }
@@ -138,7 +138,7 @@ ZTEST(mdf_blocks, test_TextBlockPadsAndZeroTerminates) {
     } cases[] = { { 0, 8 }, { 1, 8 }, { 7, 8 }, { 8, 16 }, { 9, 16 }, { 15, 16 }, { 16, 24 } };
 
     for(const auto& test_case : cases) {
-        auto block = MakeTextBlock(std::string(test_case.text_size, 'a'));
+        const auto block = MakeTextBlock(std::string(test_case.text_size, 'a'));
 
         zassert_equal(
             block->GetBlockSize(), BLOCK_HEADER_SIZE + test_case.padded_size, "text of %zu bytes", test_case.text_size
@@ -164,8 +164,8 @@ ZTEST(mdf_blocks, test_MetadataBlockWrapsContentInXml) {
 
     const auto text = AsText(data, BLOCK_HEADER_SIZE, block.GetBlockSize() - BLOCK_HEADER_SIZE);
     zassert_true(text.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?><HDcomment>"), "%s", text.c_str());
-    zassert_not_equal(text.find("<TX>hello</TX>"), std::string::npos);
-    zassert_not_equal(text.find("</HDcomment>"), std::string::npos);
+    zassert_true(text.contains("<TX>hello</TX>"));
+    zassert_true(text.contains("</HDcomment>"));
 }
 
 ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
@@ -179,13 +179,13 @@ ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
 
     zassert_true(text.starts_with("<CNcomment>"), "readers match the root element at the start: %s", text.c_str());
     zassert_true(text.ends_with("</CNcomment>"), "%s", text.c_str());
-    zassert_not_equal(
-        text.find("<TX>Coolant &quot;inlet&quot; &lt;probe&gt; &amp; &apos;spare&apos;</TX>"), std::string::npos,
+    zassert_true(
+        text.contains("<TX>Coolant &quot;inlet&quot; &lt;probe&gt; &amp; &apos;spare&apos;</TX>"),
         "a description with markup characters must not break the XML: %s", text.c_str()
     );
-    zassert_not_equal(
-        text.find("<common_properties><e name=\"vendor &amp; model\">Acme &lt;X&gt;</e></common_properties>"),
-        std::string::npos, "property names and values must be escaped too: %s", text.c_str()
+    zassert_true(
+        text.contains("<common_properties><e name=\"vendor &amp; model\">Acme &lt;X&gt;</e></common_properties>"),
+        "property names and values must be escaped too: %s", text.c_str()
     );
 
     block.SetComment("CG", "plain");
@@ -236,7 +236,7 @@ ZTEST(mdf_blocks, test_HeaderBlockLayout) {
 
     // The file history block is created up front and shares the start time.
     auto children = block.GetChildren();
-    auto file_history = std::dynamic_pointer_cast<FileHistoryBlock>(children[1]);
+    const auto file_history = std::dynamic_pointer_cast<FileHistoryBlock>(children[1]);
     zassert_not_null(file_history, "the header always owns a file history block");
     zassert_equal(Read<uint64_t>(Serialize(*file_history), BaseSizeForLinks(2)), 1234567890123456789ULL);
 }
@@ -244,8 +244,8 @@ ZTEST(mdf_blocks, test_HeaderBlockLayout) {
 ZTEST(mdf_blocks, test_HeaderBlockChainsDataGroups) {
     HeaderBlock block;
 
-    auto first = std::make_shared<DataGroupBlock>(1);
-    auto second = std::make_shared<DataGroupBlock>(1);
+    const auto first = std::make_shared<DataGroupBlock>(1);
+    const auto second = std::make_shared<DataGroupBlock>(1);
     block.AddDataGroup(first);
     block.AddDataGroup(second);
 
@@ -269,18 +269,18 @@ ZTEST(mdf_blocks, test_FileHistoryBlockLayout) {
     zassert_equal(Read<uint64_t>(data, BLOCK_LINK_COUNT_OFFSET), 2);
     zassert_equal(Read<uint64_t>(data, BaseSizeForLinks(2)), 42);
 
-    auto comment = std::dynamic_pointer_cast<MetadataBlock>(block.GetChildren()[0]);
+    const auto comment = std::dynamic_pointer_cast<MetadataBlock>(block.GetChildren()[0]);
     zassert_not_null(comment, "the file history block always carries a comment");
 
     const auto comment_data = Serialize(*comment);
     const auto text = AsText(comment_data, BLOCK_HEADER_SIZE, comment->GetBlockSize() - BLOCK_HEADER_SIZE);
-    zassert_not_equal(text.find("<FHcomment>"), std::string::npos, "%s", text.c_str());
-    zassert_not_equal(
-        text.find("<tool_id>none</tool_id>"), std::string::npos,
+    zassert_true(text.contains("<FHcomment>"), "%s", text.c_str());
+    zassert_true(
+        text.contains("<tool_id>none</tool_id>"),
         "a file history that was never told its tool keeps the placeholder: %s", text.c_str()
     );
-    zassert_not_equal(text.find("<tool_vendor>Eerie Leap</tool_vendor>"), std::string::npos, "%s", text.c_str());
-    zassert_not_equal(text.find("<tool_version>0.0.0</tool_version>"), std::string::npos, "%s", text.c_str());
+    zassert_true(text.contains("<tool_vendor>Eerie Leap</tool_vendor>"), "%s", text.c_str());
+    zassert_true(text.contains("<tool_version>0.0.0</tool_version>"), "%s", text.c_str());
 }
 
 ZTEST(mdf_blocks, test_DataGroupBlockLayout) {
@@ -297,13 +297,13 @@ ZTEST(mdf_blocks, test_DataGroupBlockLayout) {
 }
 
 ZTEST(mdf_blocks, test_DataGroupBlockValidatesRecordIdSize) {
-    for(uint8_t size : { 0, 1, 2, 4, 8 })
+    for(const uint8_t size : { 0, 1, 2, 4, 8 })
         zassert_equal(DataGroupBlock(size).GetRecordIdSizeBytes(), size);
 
-    for(uint8_t size : { 3, 5, 6, 7, 9, 255 }) {
+    for(const uint8_t size : { 3, 5, 6, 7, 9, 255 }) {
         bool threw = false;
         try {
-            DataGroupBlock block(size);
+            const DataGroupBlock block(size);
         } catch(const std::runtime_error&) {
             threw = true;
         }
@@ -371,7 +371,7 @@ ZTEST(mdf_blocks, test_ChannelGroupRejectsRecordIdThatDoesNotFit) {
     for(const auto& test_case : cases) {
         bool threw = false;
         try {
-            ChannelGroupBlock block(test_case.size, test_case.record_id);
+            const ChannelGroupBlock block(test_case.size, test_case.record_id);
         } catch(const std::runtime_error&) {
             threw = true;
         }
@@ -389,13 +389,13 @@ ZTEST(mdf_blocks, test_ChannelGroupRejectsRecordIdThatDoesNotFit) {
 ZTEST(mdf_blocks, test_ChannelGroupAccumulatesChannelOffsets) {
     ChannelGroupBlock group(1, 1);
 
-    auto first = std::make_shared<ChannelBlock>(
+    const auto first = std::make_shared<ChannelBlock>(
         ChannelBlock::Type::Master, ChannelBlock::SyncType::Time, ChannelBlock::DataType::FloatLe, 32
     );
-    auto second = std::make_shared<ChannelBlock>(
+    const auto second = std::make_shared<ChannelBlock>(
         ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::UnsignedIntegerLe, 64
     );
-    auto third = std::make_shared<ChannelBlock>(
+    const auto third = std::make_shared<ChannelBlock>(
         ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::SignedIntegerLe, 32
     );
 
@@ -417,7 +417,7 @@ ZTEST(mdf_blocks, test_ChannelGroupAccumulatesChannelOffsets) {
 
 ZTEST(mdf_blocks, test_ChannelGroupRejectsChannelWithoutBitCount) {
     ChannelGroupBlock group(1, 1);
-    auto channel = std::make_shared<ChannelBlock>(
+    const auto channel = std::make_shared<ChannelBlock>(
         ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::ByteArray, 0
     );
 
@@ -590,15 +590,15 @@ ZTEST(mdf_blocks, test_ChannelBlockRoundsBitCountUpToWholeBytes) {
 }
 
 ZTEST(mdf_blocks, test_ChannelBlockAppendsToTheEndOfTheChain) {
-    auto make = []() {
+    const auto make = [] {
         return std::make_shared<ChannelBlock>(
             ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
         );
     };
 
-    auto first = make();
-    auto second = make();
-    auto third = make();
+    const auto first = make();
+    const auto second = make();
+    const auto third = make();
 
     first->LinkBlock(second);
     first->LinkBlock(third);
@@ -609,7 +609,7 @@ ZTEST(mdf_blocks, test_ChannelBlockAppendsToTheEndOfTheChain) {
 }
 
 ZTEST(mdf_blocks, test_SourceInformationBlockLayout) {
-    SourceInformationBlock block(SourceInformationBlock::SourceType::Bus, SourceInformationBlock::BusType::Can);
+    const SourceInformationBlock block(SourceInformationBlock::SourceType::Bus, SourceInformationBlock::BusType::Can);
 
     zassert_equal(block.GetBlockSize(), BaseSizeForLinks(3) + 8);
 
@@ -624,8 +624,8 @@ ZTEST(mdf_blocks, test_SourceInformationBlockLayout) {
 }
 
 ZTEST(mdf_blocks, test_AlgebraicConversionAddsFormulaAsExtraLink) {
-    auto formula = MakeTextBlock("x * 0.1");
-    auto conversion = ChannelConversionBlock::CreateAlgebraicConversion(formula);
+    const auto formula = MakeTextBlock("x * 0.1");
+    const auto conversion = ChannelConversionBlock::CreateAlgebraicConversion(formula);
 
     // The formula reference is appended after the four fixed links.
     zassert_equal(conversion->GetBlockSize(), BaseSizeForLinks(5) + 24);

@@ -114,7 +114,7 @@ public:
 // first result. Open, it reads a constant.
 class GatedAdc : public IAdc {
 private:
-    k_sem gate_;
+    k_sem gate_{};
 
 public:
     static constexpr float VOLTS = 1.25F;
@@ -173,6 +173,11 @@ public:
         group->Register();
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     // The group is unregistered before the service it dispatches to goes.
     ~Harness() {
         group.reset();
@@ -193,7 +198,7 @@ public:
 
     // Reads until the job has a result newer than @p after_sequence.
     Response ReadAfter(uint32_t after_sequence) {
-        const int64_t end = k_uptime_get() + 10 * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS;
+        const int64_t end = k_uptime_get() + 10LL * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS;
         auto response = Read();
         while(response.IsOk() && response.Value("seq") <= after_sequence && k_uptime_get() < end) {
             k_msleep(5);
@@ -290,7 +295,7 @@ ZTEST(smp_calibration_group, test_a_new_job_starts_after_stop) {
 }
 
 ZTEST(smp_calibration_group, test_read_before_the_first_result) {
-    auto adc = std::make_shared<GatedAdc>();
+    const auto adc = std::make_shared<GatedAdc>();
     Harness harness(adc);
 
     zassert_true(harness.Start(0).IsOk());
@@ -357,7 +362,7 @@ ZTEST(smp_calibration_group, test_read_and_stop_without_a_job_are_rejected) {
 ZTEST(smp_calibration_group, test_start_without_a_channel_is_invalid) {
     Harness harness;
 
-    auto response = harness.client.Write(SmpGroupId::CALIBRATION, Id(Command::START), CborMap().Build());
+    const auto response = harness.client.Write(SmpGroupId::CALIBRATION, Id(Command::START), CborMap().Build());
     zassert_false(response.IsOk());
     zassert_equal(response.Value("rc"), MGMT_ERR_EINVAL);
     zassert_false(harness.calibration_service->IsRunning());

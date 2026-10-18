@@ -40,11 +40,11 @@ CanbusComService::CanbusComService(std::shared_ptr<CanbusService> canbus_service
         }
     );
 
-    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler([this]() {
+    canbus_reset_handler_id_ = canbus_service_->RegisterConfigurationResetHandler([this] {
         Stop();
     });
 
-    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler([this]() {
+    canbus_updated_handler_id_ = canbus_service_->RegisterConfigurationUpdatedHandler([this] {
         Start();
     });
 }
@@ -72,7 +72,7 @@ bool CanbusComService::DoInitialize() {
 }
 
 bool CanbusComService::DoStart() {
-    auto com_canbus = canbus_service_->GetComCanbus();
+    const auto com_canbus = canbus_service_->GetComCanbus();
     if(!com_canbus)
         return false;
 
@@ -197,14 +197,14 @@ void CanbusComService::UnsetCommandHandler(CanbusComCommandCode command_code) {
     cdmp_service_->GetCommandService()->UnregisterCommandHandler(std::to_underlying(command_code));
 }
 
-void CanbusComService::SendCommand(ICanbusComCommand& command, CommandAckCallback callback, uint8_t device_id) {
+void CanbusComService::SendCommand(ICanbusComCommand& command, const CommandAckCallback& callback, uint8_t device_id) {
     if(!cdmp_service_)
         return;
 
     if(callback) {
         cdmp_service_->GetCommandService()->SendCommand(
             device_id, std::to_underlying(command.GetCommandCode()), command.GetData(),
-            [callback](uint8_t _, const CdmpResultCode result_code, std::span<const uint8_t> data) {
+            [callback](uint8_t /*device_id*/, const CdmpResultCode result_code, std::span<const uint8_t> /*data*/) {
                 callback(result_code == CdmpResultCode::SUCCESS);
             }
         );

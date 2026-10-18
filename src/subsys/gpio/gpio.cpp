@@ -27,7 +27,7 @@ int Gpio::Initialize() {
             return -1;
         }
 
-        int res = gpio_pin_configure_dt(&gpio_specs_[i], GPIO_INPUT);
+        const int res = gpio_pin_configure_dt(&gpio_specs_[i], GPIO_INPUT);
         if(res != 0) {
             LOG_ERR(
                 "Failed to configure Gpio channel %d, port %s, pin %d (%d)", static_cast<int>(i),
@@ -82,7 +82,7 @@ int Gpio::RegisterChannelChangedHandler(int channel, GpioEdge edge, GpioChannelH
         if(!channel_callback.is_interrupt_attached) {
             gpio_init_callback(&channel_callback.callback, ChannelChangedCallback, BIT(gpio_specs_[channel].pin));
 
-            int res = gpio_add_callback_dt(&gpio_specs_[channel], &channel_callback.callback);
+            const int res = gpio_add_callback_dt(&gpio_specs_[channel], &channel_callback.callback);
             if(res != 0) {
                 LOG_ERR("Failed to add Gpio callback for channel %d (%d)", channel, res);
 
@@ -96,7 +96,7 @@ int Gpio::RegisterChannelChangedHandler(int channel, GpioEdge edge, GpioChannelH
         channel_callback.handlers.push_back({ .id = handler_id, .edge = edge, .handler = std::move(handler) });
     }
 
-    int res = ApplyInterruptFlags(channel);
+    const int res = ApplyInterruptFlags(channel);
     if(res != 0) {
         RemoveChannelChangedHandler(channel, handler_id);
 
@@ -118,7 +118,7 @@ bool Gpio::RemoveChannelChangedHandler(int channel, int handler_id) {
     {
         ScopedMutex guard(lock_);
 
-        auto handler = std::ranges::find_if(
+        const auto handler = std::ranges::find_if(
             channel_callback.handlers, [handler_id](const ChannelHandler& channel_handler) {
                 return channel_handler.id == handler_id;
             }
@@ -148,7 +148,7 @@ int Gpio::ApplyInterruptFlags(int channel) {
         flags = GetInterruptFlags(*channel_callbacks_[channel]);
     }
 
-    int res = gpio_pin_interrupt_configure_dt(&gpio_specs_[channel], flags);
+    const int res = gpio_pin_interrupt_configure_dt(&gpio_specs_[channel], flags);
     if(res != 0)
         LOG_ERR("Failed to configure interrupt on Gpio channel %d (%d)", channel, res);
 
@@ -201,7 +201,7 @@ void Gpio::ChannelChangedWorkHandler(k_work* work) {
 }
 
 void Gpio::DispatchChannelChanged(ChannelCallback& channel_callback) {
-    bool state = atomic_get(&channel_callback.pending_state) != 0;
+    const bool state = atomic_get(&channel_callback.pending_state) != 0;
 
     ScopedMutex guard(lock_);
 

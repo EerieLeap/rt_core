@@ -103,17 +103,17 @@ private:
     // BlockLink references_[reference_count_]; // 8 bytes * reference_count_, reference parameters
 
     ConversionType conversion_type_; // 1 bytes, conversion type
-    uint8_t precision_;              // 1 bytes, precision
-    uint16_t flags_;                 // 2 bytes, flags
+    uint8_t precision_{ 0 };         // 1 bytes, precision
+    uint16_t flags_{ 0 };            // 2 bytes, flags
     // uint16_t reference_count_;       // 2 bytes, derived from the extra links
     // uint16_t value_count_;           // 2 bytes, derived from values_
-    double min_physical_value_;  // 8 bytes, minimum physical value
-    double max_physical_value_;  // 8 bytes, maximum physical value
-    std::vector<double> values_; // 8 bytes * value_count_, value parameters
+    double min_physical_value_{ 0.0 }; // 8 bytes, minimum physical value
+    double max_physical_value_{ 0.0 }; // 8 bytes, maximum physical value
+    std::vector<double> values_;       // 8 bytes * value_count_, value parameters
 
 public:
     explicit ChannelConversionBlock(ConversionType conversion_type);
-    virtual ~ChannelConversionBlock() = default;
+    ~ChannelConversionBlock() override = default;
 
     static std::shared_ptr<ChannelConversionBlock> CreateAlgebraicConversion(std::shared_ptr<TextBlock> formula);
 

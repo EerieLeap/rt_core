@@ -13,8 +13,8 @@ class SystemConfigurationCborParser {
 public:
     SystemConfigurationCborParser() = default;
 
-    eerie_memory::pmr_unique_ptr<CborSystemConfig> Serialize(const SystemConfiguration& configuration);
-    eerie_memory::pmr_unique_ptr<SystemConfiguration>
+    static eerie_memory::PmrUniquePtr<CborSystemConfig> Serialize(const SystemConfiguration& configuration);
+    static eerie_memory::PmrUniquePtr<SystemConfiguration>
     Deserialize(std::pmr::memory_resource* mr, const CborSystemConfig& config);
 };
 

@@ -23,7 +23,7 @@ using EventData = std::variant<int, uint32_t, float, std::string, bool>;
 // Payloads carry a handful of keys (four is the most any publisher sends today), so they live
 // inline: no bucket array, no node per key, nothing to free. A string value still owns its
 // characters; numeric payloads, which is what the sensor hot path sends, never touch the heap.
-inline constexpr size_t k_max_payload_entries = 6;
+inline constexpr size_t MAX_PAYLOAD_ENTRIES = 6;
 
 // A small map with the subset of std::unordered_map's interface the bus and its users rely on,
 // over a fixed array. Keys are unique; insertion order is kept. A payload that is already full
@@ -38,11 +38,11 @@ public:
     using const_iterator = const value_type*;
 
     static constexpr size_t capacity() {
-        return k_max_payload_entries;
+        return MAX_PAYLOAD_ENTRIES;
     }
 
 private:
-    std::array<value_type, k_max_payload_entries> entries_{};
+    std::array<value_type, MAX_PAYLOAD_ENTRIES> entries_{};
     uint8_t size_ = 0;
 
     // The slot for @p key: its entry when present, otherwise a fresh one (the last one when full).
@@ -50,7 +50,7 @@ private:
         if(auto it = find(key); it != end())
             return *it;
 
-        if(size_ == k_max_payload_entries) {
+        if(size_ == MAX_PAYLOAD_ENTRIES) {
             entries_[size_ - 1] = value_type{ key, EventData{} };
             return entries_[size_ - 1];
         }
@@ -190,7 +190,7 @@ using EventPayload = InlinePayload<PayloadTypeEnum>;
 template<concepts::EnumClassUint32 EventTypeEnum, concepts::EnumClassUint32 PayloadTypeEnum>
 struct Event {
     uint32_t source_id = 0;
-    EventTypeEnum type;
+    EventTypeEnum type{};
     EventPayload<PayloadTypeEnum> payload;
 };
 

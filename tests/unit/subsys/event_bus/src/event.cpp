@@ -19,23 +19,23 @@ namespace {
 
 using TestEvent = Event<TestEventType, TestPayloadType>;
 
-constexpr uint32_t k_source_one = 0xA001;
-constexpr uint32_t k_source_two = 0xA002;
+constexpr uint32_t SOURCE_ONE = 0xA001;
+constexpr uint32_t SOURCE_TWO = 0xA002;
 
 } // namespace
 
 ZTEST_SUITE(event_bus_event, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(event_bus_event, test_an_event_keeps_its_type_and_source) {
-    TestEvent event{ .source_id = k_source_one, .type = TestEventType::Beta, .payload = {} };
+    const TestEvent event{ .source_id = SOURCE_ONE, .type = TestEventType::Beta, .payload = {} };
 
     zassert_equal(event.type, TestEventType::Beta);
     zassert_true(event.payload.empty());
-    zassert_equal(event.source_id, k_source_one);
+    zassert_equal(event.source_id, SOURCE_ONE);
 }
 
 ZTEST(event_bus_event, test_a_payload_holds_one_entry_per_payload_type) {
-    TestEvent event{ .source_id = k_source_one, .type = TestEventType::Alpha, .payload = {} };
+    TestEvent event{ .source_id = SOURCE_ONE, .type = TestEventType::Alpha, .payload = {} };
 
     event.payload[TestPayloadType::Value] = 42;
     event.payload[TestPayloadType::Label] = std::string("degrees");
@@ -71,12 +71,12 @@ ZTEST(event_bus_event, test_the_payload_variant_keeps_int_and_uint32_apart) {
 ZTEST(event_bus_event, test_an_event_handler_receives_the_event_by_reference) {
     const TestEvent* observed = nullptr;
 
-    EventHandler<TestEventType, TestPayloadType> handler = [&observed](const TestEvent& event) {
+    const EventHandler<TestEventType, TestPayloadType> handler = [&observed](const TestEvent& event) {
         observed = &event;
     };
 
     TestEvent event{
-        .source_id = k_source_two, .type = TestEventType::Gamma, .payload = { { TestPayloadType::Value, 11 } }
+        .source_id = SOURCE_TWO, .type = TestEventType::Gamma, .payload = { { TestPayloadType::Value, 11 } }
     };
 
     handler(event);

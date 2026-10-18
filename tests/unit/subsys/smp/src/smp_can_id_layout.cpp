@@ -9,28 +9,28 @@ using eerie_leap::subsys::smp::can::SmpCanIdLayout;
 ZTEST_SUITE(smp_can_id_layout, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(smp_can_id_layout, test_id_carries_target_and_source) {
-    constexpr SmpCanIdLayout layout;
+    constexpr SmpCanIdLayout LAYOUT;
 
-    constexpr uint32_t id = layout.MakeId(0x07, 0x03);
+    constexpr uint32_t ID = LAYOUT.MakeId(0x07, 0x03);
 
-    zassert_equal(id, 0x1FF00703);
-    zassert_equal(SmpCanIdLayout::GetTarget(id), 0x07);
-    zassert_equal(SmpCanIdLayout::GetSource(id), 0x03);
-    zassert_true(layout.Contains(id));
-    zassert_false(layout.Contains(0x1FE00703));
+    zassert_equal(ID, 0x1FF00703);
+    zassert_equal(SmpCanIdLayout::GetTarget(ID), 0x07);
+    zassert_equal(SmpCanIdLayout::GetSource(ID), 0x03);
+    zassert_true(LAYOUT.Contains(ID));
+    zassert_false(LAYOUT.Contains(0x1FE00703));
 }
 
 ZTEST(smp_can_id_layout, test_target_filter_accepts_any_source) {
-    constexpr SmpCanIdLayout layout(0x1E000000);
-    constexpr uint32_t filter_id = layout.GetTargetFilterId(0x07);
+    constexpr SmpCanIdLayout LAYOUT(0x1E000000);
+    constexpr uint32_t FILTER_ID = LAYOUT.GetTargetFilterId(0x07);
 
-    auto matches = [&](uint32_t id) {
-        return (id & SmpCanIdLayout::TARGET_FILTER_MASK) == filter_id;
+    const auto matches = [&](uint32_t id) {
+        return (id & SmpCanIdLayout::TARGET_FILTER_MASK) == FILTER_ID;
     };
 
-    zassert_true(matches(layout.MakeId(0x07, 0x01)));
-    zassert_true(matches(layout.MakeId(0x07, 0xFE)));
-    zassert_false(matches(layout.MakeId(0x08, 0x01)));
+    zassert_true(matches(LAYOUT.MakeId(0x07, 0x01)));
+    zassert_true(matches(LAYOUT.MakeId(0x07, 0xFE)));
+    zassert_false(matches(LAYOUT.MakeId(0x08, 0x01)));
     zassert_false(matches(SmpCanIdLayout().MakeId(0x07, 0x01)));
 }
 

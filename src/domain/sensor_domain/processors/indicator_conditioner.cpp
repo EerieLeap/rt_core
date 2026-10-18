@@ -131,7 +131,7 @@ void IndicatorConditioner::ResumeSettle() {
 }
 
 void IndicatorConditioner::SettleWorkHandler(k_work* work) {
-    auto* settle_work = CONTAINER_OF(k_work_delayable_from_work(work), SettleWork, work);
+    const auto* settle_work = CONTAINER_OF(k_work_delayable_from_work(work), SettleWork, work);
     settle_work->conditioner->Settle();
 }
 
@@ -169,7 +169,8 @@ void IndicatorConditioner::Accept(bool input) {
 
 // The value only: raw_value keeps what the source read.
 void IndicatorConditioner::Apply(SensorReading& reading) const {
-    reading.value = (IsSwitch() ? is_switch_on_ : input_) ? 1.0F : 0.0F;
+    const bool is_on = IsSwitch() ? is_switch_on_ : input_;
+    reading.value = is_on ? 1.0F : 0.0F;
 }
 
 } // namespace eerie_leap::domain::sensor_domain::processors

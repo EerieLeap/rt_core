@@ -26,12 +26,12 @@ using CdmpTransactionCallback =
     std::function<void(uint8_t transaction_id, const CdmpResultCode, std::span<const uint8_t>)>;
 
 struct PendingTransaction {
-    uint8_t transaction_id;
-    uint64_t start_time;
-    uint64_t timeout;
+    uint8_t transaction_id = 0;
+    uint64_t start_time = 0;
+    uint64_t timeout = 0;
     CdmpTransactionCallback callback;
-    uint8_t expected_command;
-    uint8_t target_device_id; ///< DEVICE_ID_BROADCAST accepts a response from any device.
+    uint8_t expected_command = 0;
+    uint8_t target_device_id = 0; ///< DEVICE_ID_BROADCAST accepts a response from any device.
 };
 
 class CdmpTransactionService {
@@ -46,7 +46,7 @@ private:
 
     // Transactions start on any thread and complete or expire on the CDMP work queue, while Stop()
     // runs on the thread that changes the device status. Callbacks run outside the lock.
-    mutable k_mutex transactions_lock_;
+    mutable k_mutex transactions_lock_{};
     // The timeout task reschedules itself under the lock while this is set.
     bool is_timeout_task_running_ = false;
     uint8_t next_transaction_id_ = 1;
@@ -62,6 +62,10 @@ public:
     CdmpTransactionService(std::shared_ptr<WorkQueueThread> work_queue_thread, std::shared_ptr<CdmpDevice> device);
 
     ~CdmpTransactionService();
+    CdmpTransactionService(const CdmpTransactionService&) = delete;
+    CdmpTransactionService& operator=(const CdmpTransactionService&) = delete;
+    CdmpTransactionService(CdmpTransactionService&&) = delete;
+    CdmpTransactionService& operator=(CdmpTransactionService&&) = delete;
 
     void Initialize();
     void Start();

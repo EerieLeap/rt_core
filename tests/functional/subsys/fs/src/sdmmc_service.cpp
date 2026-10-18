@@ -16,7 +16,7 @@ using fs_test::ReadText;
 
 // Emulated targets have no SD host: the service runs against the internal volume and the disk
 // ioctls it issues on this name fail harmlessly.
-static constexpr const char* k_disk_name = "no-sd-card";
+static constexpr const char* DISK_NAME = "no-sd-card";
 
 static atomic_t card_present = ATOMIC_INIT(1);
 
@@ -27,7 +27,7 @@ static SdmmcService* GetSdmmcService() {
 
     if(sdmmc_service == nullptr) {
         DtFs::InitInternalFs();
-        sdmmc_service = new SdmmcService(DtFs::GetInternalFsMp(), k_disk_name);
+        sdmmc_service = new SdmmcService(DtFs::GetInternalFsMp(), DISK_NAME);
     }
 
     return sdmmc_service;
@@ -130,7 +130,7 @@ ZTEST(sdmmc_service, test_destructor_stops_the_monitor) {
     DtFs::InitInternalFs();
 
     {
-        SdmmcService local_service(DtFs::GetInternalFsMp(), k_disk_name);
+        SdmmcService local_service(DtFs::GetInternalFsMp(), DISK_NAME);
 
         zassert_true(local_service.Initialize());
         local_service.RegisterIsSdCardPresentHandler([] {
@@ -150,7 +150,7 @@ ZTEST(sdmmc_service, test_IsAvailable_requires_a_mounted_volume) {
     zassert_true(sdmmc_service->Initialize());
     zassert_true(sdmmc_service->IsAvailable());
 
-    SdmmcService orphan_service(nullptr, k_disk_name);
+    SdmmcService orphan_service(nullptr, DISK_NAME);
 
     zassert_false(orphan_service.Initialize());
     zassert_false(orphan_service.IsAvailable());

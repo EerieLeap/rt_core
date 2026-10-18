@@ -58,9 +58,12 @@ private:
         int Notify(std::span<const uint8_t> data) override;
     };
 
-    static std::atomic<AccessPointService*> instance_;
-    static const bt_gatt_attr attributes_[];
-    // Placed in the iterable section by its definition.
+    static std::atomic<AccessPointService*> instance;
+    static const bt_gatt_attr ATTRIBUTES[];
+    // Placed in the iterable section by its definition. The name stays lower case with its suffix: the
+    // linker sorts the section by symbol name, and an upper case name would put this service ahead of
+    // the GAP and GATT services, which changes the attribute handles.
+    // NOLINTNEXTLINE(readability-identifier-naming): the name fixes the service order, see above
     static const bt_gatt_service_static gatt_service_;
 
     Callbacks callbacks_;

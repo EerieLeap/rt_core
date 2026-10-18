@@ -5,10 +5,11 @@
 
 #include <zephyr/logging/log.h>
 
-#include "utilities/memory/memory_resource_manager.h"
 #include "subsys/threading/scoped_mutex.h"
+#include "utilities/memory/memory_resource_manager.h"
 
-#include "event_channel.h"
+// Not self-contained on purpose: event_channel.h includes this file at its end, so the class
+// definition is already visible here. Including the header back would be a cycle.
 
 namespace eerie_leap::subsys::event_bus {
 
@@ -16,8 +17,8 @@ using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::utilities::memory::Mrm;
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
-EventChannel<TEventType, TPayloadType>::EventChannel(std::string name, size_t max_queued_events)
-    : name_(std::move(name)),
+EventChannel<TEventType, TPayloadType>::EventChannel(std::string name, size_t max_queued_events) :
+    name_(std::move(name)),
     max_queued_events_(std::max<size_t>(max_queued_events, 1)),
     event_queue_(Mrm::GetExtPmr()) {
 
@@ -43,19 +44,24 @@ void EventChannel<TEventType, TPayloadType>::OnRegistered(IEventBus* bus) {
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 template<EventFilter<TEventType, TPayloadType> FilterType>
-std::expected<SubscriptionHandle<TEventType>, std::string>
-EventChannel<TEventType, TPayloadType>::Subscribe(TEventType type, FilterType filter, EventHandler<TEventType, TPayloadType> handler) {
+std::expected<SubscriptionHandle<TEventType>, std::string> EventChannel<TEventType, TPayloadType>::Subscribe(
+    TEventType type,
+    const FilterType& filter,
+    EventHandler<TEventType, TPayloadType> handler
+) {
     ScopedMutex guard(subscribers_mutex_);
 
     try {
-        size_t id = next_id_++;
-        auto subscription = std::make_shared<Subscription<TEventType, TPayloadType>>(id, type, filter, std::move(handler));
+        size_t const id = next_id_++;
+        auto subscription = std::make_shared<Subscription<TEventType, TPayloadType>>(
+            id, type, filter, std::move(handler)
+        );
 
         subscribers_[type].push_back(std::move(subscription));
         subscription_generation_.fetch_add(1, std::memory_order_release);
 
-        return SubscriptionHandle<TEventType>{id, type};
-    } catch (const std::exception& e) {
+        return SubscriptionHandle<TEventType>{ id, type };
+    } catch(const std::exception& e) {
         return std::unexpected("Subscription failed: " + std::string(e.what()));
     }
 }
@@ -67,14 +73,13 @@ bool EventChannel<TEventType, TPayloadType>::Unsubscribe(SubscriptionHandle<TEve
 
     ScopedMutex guard(subscribers_mutex_);
 
-    auto it = subscribers_.find(handle.GetEventType());
+    const auto it = subscribers_.find(handle.GetEventType());
     if(it == subscribers_.end())
         return false;
 
     auto& subscribers = it->second;
-    auto subscription_it = std::find_if(subscribers.begin(), subscribers.end(),
-        [&handle](const auto& sub) {
-            return sub->id == handle.GetId();
+    const auto subscription_it = std::find_if(subscribers.begin(), subscribers.end(), [&handle](const auto& sub) {
+        return sub->id == handle.GetId();
     });
 
     if(subscription_it != subscribers.end()) {
@@ -90,34 +95,37 @@ bool EventChannel<TEventType, TPayloadType>::Unsubscribe(SubscriptionHandle<TEve
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 AnySubscription EventChannel<TEventType, TPayloadType>::SubscribeErased(
-    uint32_t event_type, ErasedEventFilter filter, ErasedEventHandler handler) {
+    uint32_t event_type,
+    ErasedEventFilter filter,
+    ErasedEventHandler handler
+) {
 
     return CreateScopedSubscription(
-        *this,
-        static_cast<TEventType>(event_type),
+        *this, static_cast<TEventType>(event_type),
         [filter = std::move(filter)](const EventMessage& event) {
             if(!filter)
                 return true;
 
-            PayloadView view(event.payload);
+            PayloadView const view(event.payload);
 
             return filter(view);
         },
         [handler = std::move(handler)](const EventMessage& event) {
-            PayloadView view(event.payload);
+            PayloadView const view(event.payload);
 
             handler(view);
-        });
+        }
+    );
 }
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 void EventChannel<TEventType, TPayloadType>::PublishErasedAsync(
-    uint32_t event_type, uint32_t source_id, ErasedPayload payload) {
+    uint32_t event_type,
+    uint32_t source_id,
+    ErasedPayload payload
+) {
 
-    EventMessage event {
-        .source_id = source_id,
-        .type = static_cast<TEventType>(event_type)
-    };
+    EventMessage event{ .source_id = source_id, .type = static_cast<TEventType>(event_type) };
 
     for(const auto& [key, value] : payload)
         event.payload.emplace(static_cast<TPayloadType>(key), value);
@@ -131,23 +139,24 @@ bool EventChannel<TEventType, TPayloadType>::Accepts(const EventMessage& event) 
     // filter that throws propagates, as it does out of Dispatch().
     ScopedMutex guard(subscribers_mutex_);
 
-    auto it = subscribers_.find(event.type);
+    const auto it = subscribers_.find(event.type);
     if(it == subscribers_.end())
         return false;
 
-    return std::ranges::any_of(it->second,
-        [&event](const auto& subscription) { return subscription->filter(event); });
+    return std::ranges::any_of(it->second, [&event](const auto& subscription) {
+        return subscription->filter(event);
+    });
 }
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 bool EventChannel<TEventType, TPayloadType>::Accepts(
-    uint32_t event_type, uint32_t source_id, ErasedPayload payload) const {
+    uint32_t event_type,
+    uint32_t source_id,
+    ErasedPayload payload
+) const {
 
     // Built as PublishErasedAsync() builds it, so the answer is about that exact publish.
-    EventMessage event {
-        .source_id = source_id,
-        .type = static_cast<TEventType>(event_type)
-    };
+    EventMessage event{ .source_id = source_id, .type = static_cast<TEventType>(event_type) };
 
     for(const auto& [key, value] : payload)
         event.payload.emplace(static_cast<TPayloadType>(key), value);
@@ -209,9 +218,12 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
     }
 
     if(dropped != 0) {
+        // NOLINTNEXTLINE(misc-const-correctness): the variable is declared inside the Zephyr macro
         LOG_MODULE_DECLARE(event_bus_logger);
-        LOG_WRN("Channel '%s' dropped %u queued events, subscribers cannot keep up. Last dropped publisher: 0x%08x",
-            name_.c_str(), static_cast<unsigned>(dropped), dropped_source_id);
+        LOG_WRN(
+            "Channel '%s' dropped %u queued events, subscribers cannot keep up. Last dropped publisher: 0x%08x",
+            name_.c_str(), static_cast<unsigned>(dropped), dropped_source_id
+        );
     }
 
     if(!event)
@@ -225,16 +237,16 @@ bool EventChannel<TEventType, TPayloadType>::DrainOne() {
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event) {
     // Snapshot under the lock: a handler may subscribe or unsubscribe, which would
-    // otherwise mutate the very vector being iterated. The first k_max_inline_subscribers
+    // otherwise mutate the very vector being iterated. The first MAX_INLINE_SUBSCRIBERS
     // matches stay on the stack; only a channel with more spills to the heap.
-    std::array<SubscriptionPtr<TEventType, TPayloadType>, k_max_inline_subscribers> matched;
+    std::array<SubscriptionPtr<TEventType, TPayloadType>, MAX_INLINE_SUBSCRIBERS> matched;
     size_t matched_count = 0;
     std::vector<SubscriptionPtr<TEventType, TPayloadType>> overflow;
 
     {
         ScopedMutex guard(subscribers_mutex_);
 
-        if(auto it = subscribers_.find(event.type); it != subscribers_.end()) {
+        if(const auto it = subscribers_.find(event.type); it != subscribers_.end()) {
             for(const auto& subscription : it->second) {
                 if(!subscription->filter(event))
                     continue;
@@ -247,17 +259,23 @@ void EventChannel<TEventType, TPayloadType>::Dispatch(const EventMessage& event)
         }
     }
 
-    auto deliver = [this, &event](const SubscriptionPtr<TEventType, TPayloadType>& subscription) {
+    const auto deliver = [this, &event](const SubscriptionPtr<TEventType, TPayloadType>& subscription) {
         try {
             subscription->handler(event);
-        } catch (const std::exception& e) {
+        } catch(const std::exception& e) {
+            // NOLINTNEXTLINE(misc-const-correctness): the variable is declared inside the Zephyr macro
             LOG_MODULE_DECLARE(event_bus_logger);
-            LOG_ERR("Channel '%s' subscriber threw for event type %u. %s",
-                name_.c_str(), static_cast<unsigned>(event.type), e.what());
-        } catch (...) {
+            LOG_ERR(
+                "Channel '%s' subscriber threw for event type %u. %s", name_.c_str(), static_cast<unsigned>(event.type),
+                e.what()
+            );
+        } catch(...) {
+            // NOLINTNEXTLINE(misc-const-correctness): the variable is declared inside the Zephyr macro
             LOG_MODULE_DECLARE(event_bus_logger);
-            LOG_ERR("Channel '%s' subscriber threw a non-standard exception for event type %u",
-                name_.c_str(), static_cast<unsigned>(event.type));
+            LOG_ERR(
+                "Channel '%s' subscriber threw a non-standard exception for event type %u", name_.c_str(),
+                static_cast<unsigned>(event.type)
+            );
         }
     };
 

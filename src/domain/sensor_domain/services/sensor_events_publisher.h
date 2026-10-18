@@ -39,8 +39,8 @@ private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
 
     // Filled by each tick, so a tick does not allocate. Only the publisher thread touches them.
-    std::array<SensorReading, SensorLimits::kMaxCount> readings_;
-    AcceptanceCache<SensorLimits::kMaxCount> acceptance_cache_;
+    std::array<SensorReading, SensorLimits::MAX_COUNT> readings_;
+    AcceptanceCache<SensorLimits::MAX_COUNT> acceptance_cache_;
     std::optional<uint32_t> filter_error_generation_; // The generation a filter error was logged in.
     bool is_tick_error_logged_ = false;
 

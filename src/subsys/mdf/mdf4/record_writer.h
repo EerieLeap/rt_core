@@ -21,10 +21,10 @@ using eerie_leap::subsys::mdf::MdfValue;
  */
 class RecordWriter {
 public:
-    static constexpr size_t kMaxFields = 8;
-    static constexpr size_t kMaxRecordBytes = 64;
+    static constexpr size_t MAX_FIELDS = 8;
+    static constexpr size_t MAX_RECORD_BYTES = 64;
     // Write() takes the invalidation bits as one mask.
-    static constexpr size_t kMaxInvalidationBytes = sizeof(uint32_t);
+    static constexpr size_t MAX_INVALIDATION_BYTES = sizeof(uint32_t);
 
 private:
     struct Field {
@@ -33,8 +33,8 @@ private:
         uint8_t variant_index;
     };
 
-    std::array<uint8_t, kMaxRecordBytes> record_{}; // the record ID bytes stay in front
-    std::array<Field, kMaxFields> fields_{};
+    std::array<uint8_t, MAX_RECORD_BYTES> record_{}; // the record ID bytes stay in front
+    std::array<Field, MAX_FIELDS> fields_{};
     uint8_t field_count_ = 0;
     uint16_t record_size_ = 0;
     uint16_t invalidation_offset_ = 0;
@@ -53,6 +53,7 @@ public:
     RecordWriter& operator=(const RecordWriter&) = delete;
     RecordWriter(RecordWriter&&) = default;
     RecordWriter& operator=(RecordWriter&&) = default;
+    ~RecordWriter() = default;
 
     /**
      * Writes one record from one value per channel, in channel order, each holding the type of its

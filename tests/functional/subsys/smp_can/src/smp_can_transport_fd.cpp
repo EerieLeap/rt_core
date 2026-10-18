@@ -98,7 +98,7 @@ ZTEST_F(smp_can_transport_fd, test_forwarded_packet_fills_the_buffer_in_16_frame
 
 ZTEST_F(smp_can_transport_fd, test_response_to_a_forwarded_request_reaches_the_sink) {
     Harness& harness = *fixture->harness;
-    auto sink = std::make_shared<RecordingSink>();
+    const auto sink = std::make_shared<RecordingSink>();
     harness.transport->SetResponseSink(sink);
 
     const Bytes response = MakePacket(SmpOperation::WRITE_RESPONSE, 0, 0, 6, Bytes(100, 0xA5));

@@ -46,10 +46,10 @@ using namespace processing_test_support;
 
 namespace {
 
-constexpr uint8_t kBus = 0;
-constexpr uint32_t kEnabledFrameId = 0x100;
-constexpr uint32_t kDisabledFrameId = 0x200;
-constexpr int kTimeoutMs = 1000;
+constexpr uint8_t K_BUS = 0;
+constexpr uint32_t ENABLED_FRAME_ID = 0x100;
+constexpr uint32_t DISABLED_FRAME_ID = 0x200;
+constexpr int TIMEOUT_MS = 1000;
 
 const device* LoopbackDevice() {
     return DEVICE_DT_GET(DT_NODELABEL(can_loopback0));
@@ -70,7 +70,7 @@ void SendFrame(const CanbusProxy& canbus, uint32_t frame_id, uint8_t first_byte)
 }
 
 bool WaitForValue(const SensorReadingsFrame& frame, std::string_view sensor_id, float value) {
-    const int64_t deadline = k_uptime_get() + kTimeoutMs;
+    const int64_t deadline = k_uptime_get() + TIMEOUT_MS;
 
     while(frame.TryGetReadingValue(sensor_id) != value) {
         if(k_uptime_get() >= deadline)
@@ -111,11 +111,11 @@ CanbusConfiguration MakeCanbusConfiguration(bool is_second_message_enabled) {
 
     CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
     channel.type = CanbusType::CLASSICAL_CAN;
-    channel.bus_channel = kBus;
+    channel.bus_channel = K_BUS;
     channel.bitrate = 500000;
-    channel.message_configurations.push_back(MakeMessage(kEnabledFrameId, "EL_FRAME_0", true));
-    channel.message_configurations.push_back(MakeMessage(kDisabledFrameId, "EL_FRAME_1", is_second_message_enabled));
-    configuration.channel_configurations.emplace(kBus, std::move(channel));
+    channel.message_configurations.push_back(MakeMessage(ENABLED_FRAME_ID, "EL_FRAME_0", true));
+    channel.message_configurations.push_back(MakeMessage(DISABLED_FRAME_ID, "EL_FRAME_1", is_second_message_enabled));
+    configuration.channel_configurations.emplace(K_BUS, std::move(channel));
 
     return configuration;
 }
@@ -133,8 +133,8 @@ std::shared_ptr<Sensor> MakeCanSensor(std::string_view id, SensorType type, uint
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = type;
     sensor->configuration.canbus_source = type == SensorType::CANBUS_RAW
-        ? make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), kBus, frame_id)
-        : make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), kBus, frame_id, "sig");
+        ? make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), K_BUS, frame_id)
+        : make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), K_BUS, frame_id, "sig");
     sensor->configuration.UpdateConnectionString();
 
     return sensor;
@@ -145,10 +145,10 @@ std::shared_ptr<Sensor> MakeCanSensor(std::string_view id, SensorType type, uint
 ZTEST_SUITE(disabled_can_message_routes, NULL, NULL, NULL, ResetLoopbackDevice, NULL);
 
 ZTEST(disabled_can_message_routes, test_a_signal_on_a_disabled_message_gets_no_route) {
-    auto canbus_configuration_manager = MakeCanbusConfigurationManager(MakeFormattedFsService());
+    const auto canbus_configuration_manager = MakeCanbusConfigurationManager(MakeFormattedFsService());
 
     // Routes are resolved from the configuration alone; without a controller none of them listens.
-    auto canbus_service = std::make_shared<CanbusService>(
+    const auto canbus_service = std::make_shared<CanbusService>(
         [](uint8_t) -> const device* {
             return nullptr;
         },
@@ -156,15 +156,15 @@ ZTEST(disabled_can_message_routes, test_a_signal_on_a_disabled_message_gets_no_r
     );
 
     const std::vector<std::shared_ptr<Sensor>> sensors{
-        MakeCanSensor("on_enabled", SensorType::CANBUS_ANALOG, kEnabledFrameId),
-        MakeCanSensor("on_disabled", SensorType::CANBUS_ANALOG, kDisabledFrameId),
+        MakeCanSensor("on_enabled", SensorType::CANBUS_ANALOG, ENABLED_FRAME_ID),
+        MakeCanSensor("on_disabled", SensorType::CANBUS_ANALOG, DISABLED_FRAME_ID),
     };
 
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
     const auto generation = SensorPipelineBuilder(nullptr, frame)
                                 .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
 
-    auto work_queue_thread = std::make_shared<WorkQueueThread>("can_router_test", 4096, 6);
+    const auto work_queue_thread = std::make_shared<WorkQueueThread>("can_router_test", 4096, 6);
     zassert_true(work_queue_thread->Initialize());
 
     CanFrameRouter router(
@@ -183,50 +183,50 @@ ZTEST(disabled_can_message_routes, test_a_signal_on_a_disabled_message_gets_no_r
 }
 
 ZTEST(disabled_can_message_routes, test_a_frame_of_a_disabled_message_gives_its_signal_no_reading) {
-    auto fs_service = MakeFormattedFsService();
-    auto canbus_configuration_manager = MakeCanbusConfigurationManager(fs_service);
+    const auto fs_service = MakeFormattedFsService();
+    const auto canbus_configuration_manager = MakeCanbusConfigurationManager(fs_service);
 
-    auto canbus_service = std::make_shared<CanbusService>(
+    const auto canbus_service = std::make_shared<CanbusService>(
         [](uint8_t bus_channel) {
-            return bus_channel == kBus ? LoopbackDevice() : nullptr;
+            return bus_channel == K_BUS ? LoopbackDevice() : nullptr;
         },
         canbus_configuration_manager
     );
 
-    const auto canbus = canbus_service->GetCanbus(kBus);
+    const auto canbus = canbus_service->GetCanbus(K_BUS);
     zassert_not_null(canbus.get(), "The channel is open");
     SwitchToLoopbackMode();
 
     const std::vector<std::shared_ptr<Sensor>> sensors{
-        MakeCanSensor("on_enabled", SensorType::CANBUS_ANALOG, kEnabledFrameId),
-        MakeCanSensor("on_disabled", SensorType::CANBUS_ANALOG, kDisabledFrameId),
-        MakeCanSensor("raw_on_disabled", SensorType::CANBUS_RAW, kDisabledFrameId),
+        MakeCanSensor("on_enabled", SensorType::CANBUS_ANALOG, ENABLED_FRAME_ID),
+        MakeCanSensor("on_disabled", SensorType::CANBUS_ANALOG, DISABLED_FRAME_ID),
+        MakeCanSensor("raw_on_disabled", SensorType::CANBUS_RAW, DISABLED_FRAME_ID),
     };
 
     // Stored without the check a client's apply makes, as when the message is disabled after the
     // sensors were configured.
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 0, 0
     );
     zassert_true(sensors_configuration_manager->Update(sensors), "The sensors configuration is valid");
 
-    auto time_service = MakeTimeService();
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto time_service = MakeTimeService();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
 
-    auto processing_service = std::make_shared<SensorsProcessingService>(
+    const auto processing_service = std::make_shared<SensorsProcessingService>(
         sensors_configuration_manager, frame, time_service, nullptr,
         std::make_shared<SensorReaderFactory>(time_service, nullptr, nullptr), nullptr, canbus_service
     );
     zassert_true(processing_service->Initialize());
     zassert_true(processing_service->Start());
 
-    SendFrame(*canbus, kDisabledFrameId, 7);
-    SendFrame(*canbus, kEnabledFrameId, 1);
+    SendFrame(*canbus, DISABLED_FRAME_ID, 7);
+    SendFrame(*canbus, ENABLED_FRAME_ID, 1);
     zassert_true(WaitForValue(*frame, "on_enabled", 1.0F), "The signal of the enabled message is decoded");
 
     // The router dispatches one pass at a time, so once this frame lands the pass that took the
     // disabled message's frame is over.
-    SendFrame(*canbus, kEnabledFrameId, 2);
+    SendFrame(*canbus, ENABLED_FRAME_ID, 2);
     zassert_true(WaitForValue(*frame, "on_enabled", 2.0F));
 
     CanFrame raw_frame;
@@ -234,7 +234,7 @@ ZTEST(disabled_can_message_routes, test_a_frame_of_a_disabled_message_gives_its_
         frame->TryGetCanFrame(sensors[2]->id_hash, raw_frame),
         "A raw sensor on the disabled message's frame ID still gets the frame"
     );
-    zassert_true(raw_frame.data.size() > 0);
+    zassert_true(!raw_frame.data.empty());
     zassert_equal(raw_frame.data[0], 7);
 
     zassert_false(frame->TryGetReading("on_disabled").has_value(), "The signal of the disabled message got a reading");

@@ -15,7 +15,7 @@ public:
 
     virtual int Count() const = 0;
     virtual uint64_t GetLinksSizeBytes() const = 0;
-    virtual const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const = 0;
+    virtual std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const = 0;
     virtual std::unique_ptr<uint8_t[]> Serialize() const = 0;
 };
 

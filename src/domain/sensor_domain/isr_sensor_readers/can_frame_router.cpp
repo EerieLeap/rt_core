@@ -51,9 +51,7 @@ size_t CanFrameRouter::Attach(const SensorGeneration& generation) {
                 return nullptr;
 
             // Aliases the owning message configuration, so that stays alive too.
-            return std::shared_ptr<const CanSignalConfiguration>(
-                std::move(message_configuration), signal_configuration
-            );
+            return { std::move(message_configuration), signal_configuration };
         }
     );
 
@@ -142,7 +140,7 @@ void CanFrameRouter::OnFrameReceived(size_t route_index, const CanFrame& frame) 
 }
 
 void CanFrameRouter::WorkHandler(k_work* work) {
-    auto* pending_work = CONTAINER_OF(work, PendingWork, work);
+    const auto* pending_work = CONTAINER_OF(work, PendingWork, work);
     pending_work->router->ProcessPendingFrames();
 }
 

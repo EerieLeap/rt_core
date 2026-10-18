@@ -13,8 +13,7 @@ namespace eerie_leap::subsys::fs::services {
 using namespace eerie_leap::utilities::string;
 
 FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode) :
-    fs_service_(fs_service),
-    file_opened_(false) {
+    fs_service_(fs_service) {
 
     if(!fs_service_)
         throw std::invalid_argument("fs_service cannot be null");
@@ -53,7 +52,7 @@ FsServiceStreamBuf::FsServiceStreamBuf(IFsService* fs_service, std::string_view 
     else
         output_buffer_.resize(CONFIG_EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE);
 
-    int rc = fs_service_->OpenFile(relative_path, open_mode, &file_);
+    const int rc = fs_service_->OpenFile(relative_path, open_mode, &file_);
 
     if(rc < 0)
         throw std::system_error(-rc, std::generic_category(), "Failed to open file");
@@ -70,8 +69,8 @@ FsServiceStreamBuf::~FsServiceStreamBuf() {
 
 bool FsServiceStreamBuf::close() {
     if(file_opened_) {
-        bool flushed = FlushPutArea();
-        int rc = fs_close(&file_);
+        const bool flushed = FlushPutArea();
+        const int rc = fs_close(&file_);
         file_opened_ = false;
 
         // Without a put area every later sputc() reaches overflow() and is refused like sputn() is.
@@ -105,7 +104,7 @@ void FsServiceStreamBuf::MarkWriteFailed() {
 std::streamsize FsServiceStreamBuf::WriteToFile(const char* s, std::streamsize n) {
     write_calls_++;
 
-    ssize_t rc = fs_write(&file_, s, static_cast<size_t>(n));
+    const ssize_t rc = fs_write(&file_, s, static_cast<size_t>(n));
     const std::streamsize written = rc < 0 ? 0 : static_cast<std::streamsize>(rc);
     bytes_written_ += static_cast<uint64_t>(written);
 
@@ -165,7 +164,7 @@ std::streambuf::int_type FsServiceStreamBuf::overflow(std::streambuf::int_type c
     if(c == traits_type::eof() || !file_opened_ || write_failed_)
         return traits_type::eof();
 
-    char ch = traits_type::to_char_type(c);
+    const char ch = traits_type::to_char_type(c);
 
     if(output_buffer_.empty())
         return WriteToFile(&ch, 1) == 1 ? c : traits_type::eof();
@@ -188,7 +187,7 @@ std::streamsize FsServiceStreamBuf::xsgetn(char* s, std::streamsize n) {
         return 0;
 
     // Whatever underflow() already pulled in has to be handed out before reading the file again.
-    std::streamsize copied = std::min<std::streamsize>(egptr() - gptr(), n);
+    const std::streamsize copied = std::min<std::streamsize>(egptr() - gptr(), n);
     if(copied > 0) {
         std::memcpy(s, gptr(), static_cast<size_t>(copied));
         gbump(static_cast<int>(copied));
@@ -197,7 +196,7 @@ std::streamsize FsServiceStreamBuf::xsgetn(char* s, std::streamsize n) {
             return copied;
     }
 
-    ssize_t rc = fs_read(&file_, s + copied, static_cast<size_t>(n - copied));
+    const ssize_t rc = fs_read(&file_, s + copied, static_cast<size_t>(n - copied));
     if(rc < 0)
         return copied;
 
@@ -214,7 +213,7 @@ std::streambuf::int_type FsServiceStreamBuf::underflow() {
     if(!FlushPutArea())
         return traits_type::eof();
 
-    ssize_t bytes_read = fs_read(&file_, input_buffer_.data(), input_buffer_.size());
+    const ssize_t bytes_read = fs_read(&file_, input_buffer_.data(), input_buffer_.size());
 
     if(bytes_read <= 0)
         return traits_type::eof();
@@ -240,15 +239,15 @@ std::streambuf::pos_type
 FsServiceStreamBuf::seekoff(std::streambuf::off_type off, std::ios_base::seekdir way, std::ios_base::openmode which) {
 
     if(!file_opened_)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     // Reads and writes share the file position, so any of the two areas can be seeked.
     if((which & (std::ios_base::in | std::ios_base::out)) == 0)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     // Pending output belongs at the current position, so it goes out before the position moves.
     if(!FlushPutArea())
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     int whence = FS_SEEK_SET;
     std::streambuf::off_type target = off;
@@ -261,22 +260,22 @@ FsServiceStreamBuf::seekoff(std::streambuf::off_type off, std::ios_base::seekdir
         whence = FS_SEEK_END;
     }
 
-    int rc = fs_seek(&file_, static_cast<off_t>(target), whence);
+    const int rc = fs_seek(&file_, static_cast<off_t>(target), whence);
     if(rc != 0)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
-    off_t pos = fs_tell(&file_);
+    const off_t pos = fs_tell(&file_);
     if(pos < 0)
-        return std::streambuf::pos_type(std::streambuf::off_type(-1));
+        return { static_cast<std::streambuf::off_type>(-1) };
 
     setg(nullptr, nullptr, nullptr);
     ResetPutArea();
 
-    return std::streambuf::pos_type(static_cast<std::streambuf::off_type>(pos));
+    return { static_cast<std::streambuf::off_type>(pos) };
 }
 
 std::streambuf::pos_type FsServiceStreamBuf::seekpos(std::streambuf::pos_type sp, std::ios_base::openmode which) {
-    auto off = static_cast<std::streambuf::off_type>(sp);
+    const auto off = static_cast<std::streambuf::off_type>(sp);
     return seekoff(off, std::ios_base::beg, which);
 }
 

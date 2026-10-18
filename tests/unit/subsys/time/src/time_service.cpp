@@ -22,14 +22,14 @@ public:
         step_(step) {}
 
     std::chrono::system_clock::time_point GetTime() override {
-        auto current = value_;
+        const auto current = value_;
         value_ += step_;
         ++calls_;
 
         return TimeHelpers::FromMilliseconds(current);
     }
 
-    int calls() const {
+    int Calls() const {
         return calls_;
     }
 
@@ -47,8 +47,8 @@ struct Fixture {
 
 Fixture
 MakeFixture(milliseconds rtc_value = 1761106217000ms, milliseconds boot_value = 1234ms, milliseconds step = 0ms) {
-    auto rtc_provider = std::make_shared<StubTimeProvider>(rtc_value, step);
-    auto boot_provider = std::make_shared<StubTimeProvider>(boot_value, step);
+    const auto rtc_provider = std::make_shared<StubTimeProvider>(rtc_value, step);
+    const auto boot_provider = std::make_shared<StubTimeProvider>(boot_value, step);
 
     return { rtc_provider, boot_provider, std::make_shared<TimeService>(rtc_provider, boot_provider) };
 }
@@ -58,69 +58,69 @@ MakeFixture(milliseconds rtc_value = 1761106217000ms, milliseconds boot_value = 
 ZTEST_SUITE(time_service, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(time_service, test_GetCurrentTime_returns_the_rtc_provider_time) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetCurrentTime()).count(), 1761106217000);
 }
 
 ZTEST(time_service, test_GetTimeSinceBoot_returns_the_boot_provider_time) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetTimeSinceBoot()).count(), 1234);
 }
 
 ZTEST(time_service, test_GetCurrentTime_only_queries_the_rtc_provider) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     fixture.service->GetCurrentTime();
 
-    zassert_equal(fixture.rtc_provider->calls(), 1);
-    zassert_equal(fixture.boot_provider->calls(), 0);
+    zassert_equal(fixture.rtc_provider->Calls(), 1);
+    zassert_equal(fixture.boot_provider->Calls(), 0);
 }
 
 ZTEST(time_service, test_GetTimeSinceBoot_only_queries_the_boot_provider) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     fixture.service->GetTimeSinceBoot();
 
-    zassert_equal(fixture.boot_provider->calls(), 1);
-    zassert_equal(fixture.rtc_provider->calls(), 0);
+    zassert_equal(fixture.boot_provider->Calls(), 1);
+    zassert_equal(fixture.rtc_provider->Calls(), 0);
 }
 
 ZTEST(time_service, test_Initialize_does_not_query_the_providers) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
-    fixture.service->Initialize();
+    TimeService::Initialize();
 
-    zassert_equal(fixture.rtc_provider->calls(), 0);
-    zassert_equal(fixture.boot_provider->calls(), 0);
+    zassert_equal(fixture.rtc_provider->Calls(), 0);
+    zassert_equal(fixture.boot_provider->Calls(), 0);
 }
 
 ZTEST(time_service, test_values_are_not_cached_between_calls) {
-    auto fixture = MakeFixture(1000ms, 10ms, 5ms);
+    const auto fixture = MakeFixture(1000ms, 10ms, 5ms);
 
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetCurrentTime()).count(), 1000);
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetCurrentTime()).count(), 1005);
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetTimeSinceBoot()).count(), 10);
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetTimeSinceBoot()).count(), 15);
-    zassert_equal(fixture.rtc_provider->calls(), 2);
-    zassert_equal(fixture.boot_provider->calls(), 2);
+    zassert_equal(fixture.rtc_provider->Calls(), 2);
+    zassert_equal(fixture.boot_provider->Calls(), 2);
 }
 
 ZTEST(time_service, test_the_same_provider_can_back_both_clocks) {
-    auto provider = std::make_shared<StubTimeProvider>(500ms);
-    auto service = std::make_shared<TimeService>(provider, provider);
+    const auto provider = std::make_shared<StubTimeProvider>(500ms);
+    const auto service = std::make_shared<TimeService>(provider, provider);
 
     zassert_equal(TimeHelpers::ToMilliseconds(service->GetCurrentTime()).count(), 500);
     zassert_equal(TimeHelpers::ToMilliseconds(service->GetTimeSinceBoot()).count(), 500);
-    zassert_equal(provider->calls(), 2);
+    zassert_equal(provider->Calls(), 2);
 }
 
 ZTEST(time_service, test_service_keeps_the_providers_alive) {
     std::shared_ptr<ITimeService> service;
 
     {
-        auto provider = std::make_shared<StubTimeProvider>(777ms);
+        const auto provider = std::make_shared<StubTimeProvider>(777ms);
         service = std::make_shared<TimeService>(provider, provider);
     }
 
@@ -128,7 +128,7 @@ ZTEST(time_service, test_service_keeps_the_providers_alive) {
 }
 
 ZTEST(time_service, test_service_is_usable_through_the_interface) {
-    std::shared_ptr<ITimeService> service = std::make_shared<TimeService>(
+    const std::shared_ptr<ITimeService> service = std::make_shared<TimeService>(
         std::make_shared<RtcProvider>(), std::make_shared<BootElapsedTimeProvider>()
     );
 

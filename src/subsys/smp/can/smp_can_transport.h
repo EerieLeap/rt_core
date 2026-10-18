@@ -45,7 +45,7 @@ private:
         SmpCanReassembler reassembler{ CONFIG_EERIE_LEAP_SMP_CAN_RX_TIMEOUT_MS };
     };
 
-    static std::atomic<SmpCanTransport*> instance_;
+    static std::atomic<SmpCanTransport*> instance;
 
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     smp_transport smp_transport_{};
@@ -87,7 +87,7 @@ private:
     void OnFrame(const CanFrame& frame);
     RxSlot* FindRxSlot(uint8_t source);
     RxSlot* AcquireRxSlot(uint8_t source, SmpCanFrameFormat format);
-    void ReleaseRxSlot(RxSlot& slot);
+    static void ReleaseRxSlot(RxSlot& slot);
     void ReleaseExpiredRxSlots(int64_t now_ms);
     void Deliver(uint8_t source, SmpPacket packet);
 

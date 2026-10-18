@@ -15,7 +15,7 @@ using namespace script_assets_test;
 ZTEST_SUITE(sensors_controller_assets, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(sensors_controller_assets, test_the_sensor_scripts_are_registered_with_what_the_kind_needs) {
-    auto rig = MakeRig("sensor_assets_descriptor_wq");
+    const auto rig = MakeRig("sensor_assets_descriptor_wq");
 
     auto controller = MakeSensorsController(rig, rig.sd, rig.assets);
     zassert_true(rig.assets->GetProviders().empty(), "Nothing is registered before Initialize()");
@@ -27,7 +27,7 @@ ZTEST(sensors_controller_assets, test_the_sensor_scripts_are_registered_with_wha
     zassert_true(provider->name == "sensor_scripts", "The kind's name");
     zassert_equal(provider->extensions.size(), 1);
     zassert_true(provider->extensions[0] == ".lua", "A Lua script");
-    zassert_equal(provider->access, kAllScriptAccess, "Read, write and delete");
+    zassert_equal(provider->access, ALL_SCRIPT_ACCESS, "Read, write and delete");
     zassert_equal(provider->max_size, CONFIG_EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE);
     zassert_not_null(provider->store.get());
     zassert_true(provider->store->GetDirectory() == "scripts/sensors", "The directory of the kind on the SD volume");
@@ -47,18 +47,18 @@ ZTEST(sensors_controller_assets, test_the_sensor_scripts_are_registered_with_wha
 }
 
 ZTEST(sensors_controller_assets, test_nothing_is_registered_without_an_sd_service_or_a_manager) {
-    auto rig = MakeRig("sensor_assets_missing_wq");
-    WriteScript(*rig.fs_service, kSensorScript);
+    const auto rig = MakeRig("sensor_assets_missing_wq");
+    WriteScript(*rig.fs_service, SENSOR_SCRIPT);
 
     {
         // Without an SD service the script path is not checked, so the sensor may name any script.
         auto without_sd = MakeSensorsController(rig, nullptr, rig.assets);
         zassert_equal(
-            InitializeWithSensors(*without_sd, { MakeSensor("scripted", kSensorScript) }), 0,
+            InitializeWithSensors(*without_sd, { MakeSensor("scripted", SENSOR_SCRIPT) }), 0,
             "A unit without an SD card initializes"
         );
         zassert_true(rig.assets->GetProviders().empty(), "No SD service, no sensor scripts");
-        zassert_false(rig.assets->IsReferenced(kSensorScript), "and no referrer, though a sensor uses the script");
+        zassert_false(rig.assets->IsReferenced(SENSOR_SCRIPT), "and no referrer, though a sensor uses the script");
     }
 
     {
@@ -70,13 +70,13 @@ ZTEST(sensors_controller_assets, test_nothing_is_registered_without_an_sd_servic
         zassert_equal(sensors->size(), 1);
         zassert_true((*sensors)[0]->configuration.HasScript(), "The stored sensor uses the script");
         zassert_true(rig.assets->GetProviders().empty());
-        zassert_false(rig.assets->IsReferenced(kSensorScript));
+        zassert_false(rig.assets->IsReferenced(SENSOR_SCRIPT));
     }
 }
 
 ZTEST(sensors_controller_assets, test_a_script_is_referenced_by_any_sensor_enabled_or_not) {
-    auto rig = MakeRig("sensor_assets_referrer_wq");
-    for(const char* script : { kSensorScript, kDisabledSensorScript, kSensorScriptInCanDirectory })
+    const auto rig = MakeRig("sensor_assets_referrer_wq");
+    for(const char* script : { SENSOR_SCRIPT, DISABLED_SENSOR_SCRIPT, SENSOR_SCRIPT_IN_CAN_DIRECTORY })
         WriteScript(*rig.fs_service, script);
 
     auto controller = MakeSensorsController(rig, rig.sd, rig.assets);
@@ -84,19 +84,19 @@ ZTEST(sensors_controller_assets, test_a_script_is_referenced_by_any_sensor_enabl
         InitializeWithSensors(
             *controller,
             {
-                MakeSensor("enabled", kSensorScript),
-                MakeSensor("disabled", kDisabledSensorScript, false),
-                MakeSensor("in_can_directory", kSensorScriptInCanDirectory),
+                MakeSensor("enabled", SENSOR_SCRIPT),
+                MakeSensor("disabled", DISABLED_SENSOR_SCRIPT, false),
+                MakeSensor("in_can_directory", SENSOR_SCRIPT_IN_CAN_DIRECTORY),
                 MakeSensor("without_script", ""),
             }
         ),
         0
     );
 
-    zassert_true(rig.assets->IsReferenced(kSensorScript), "A sensor uses the script");
-    zassert_true(rig.assets->IsReferenced(kDisabledSensorScript), "A disabled sensor keeps its script");
+    zassert_true(rig.assets->IsReferenced(SENSOR_SCRIPT), "A sensor uses the script");
+    zassert_true(rig.assets->IsReferenced(DISABLED_SENSOR_SCRIPT), "A disabled sensor keeps its script");
     zassert_true(
-        rig.assets->IsReferenced(kSensorScriptInCanDirectory), "A script of the other kind's directory counts"
+        rig.assets->IsReferenced(SENSOR_SCRIPT_IN_CAN_DIRECTORY), "A script of the other kind's directory counts"
     );
 
     zassert_true(rig.assets->IsReferenced("SCRIPTS/Sensors/A.LUA"), "FAT folds the case of a name");
@@ -109,17 +109,17 @@ ZTEST(sensors_controller_assets, test_a_script_is_referenced_by_any_sensor_enabl
 }
 
 ZTEST(sensors_controller_assets, test_only_deleting_a_referenced_script_is_refused) {
-    auto rig = MakeRig("sensor_assets_in_use_wq");
-    WriteScript(*rig.fs_service, kSensorScript);
-    WriteScript(*rig.fs_service, kDisabledSensorScript);
+    const auto rig = MakeRig("sensor_assets_in_use_wq");
+    WriteScript(*rig.fs_service, SENSOR_SCRIPT);
+    WriteScript(*rig.fs_service, DISABLED_SENSOR_SCRIPT);
 
     auto controller = MakeSensorsController(rig, rig.sd, rig.assets);
     zassert_equal(
         InitializeWithSensors(
             *controller,
             {
-                MakeSensor("enabled", kSensorScript),
-                MakeSensor("disabled", kDisabledSensorScript, false),
+                MakeSensor("enabled", SENSOR_SCRIPT),
+                MakeSensor("disabled", DISABLED_SENSOR_SCRIPT, false),
             }
         ),
         0
@@ -128,37 +128,37 @@ ZTEST(sensors_controller_assets, test_only_deleting_a_referenced_script_is_refus
     const auto provider = rig.assets->Find(AssetKind::SENSOR_SCRIPTS);
     zassert_not_null(provider.get());
 
-    zassert_true(provider->is_in_use(AssetAccess::DELETE, kSensorScriptName), "A referenced script is not deleted");
+    zassert_true(provider->is_in_use(AssetAccess::DELETE, SENSOR_SCRIPT_NAME), "A referenced script is not deleted");
     zassert_true(provider->is_in_use(AssetAccess::DELETE, "A.LUA"), "whatever the case of its name");
     zassert_true(provider->is_in_use(AssetAccess::DELETE, "d.lua"), "also one of a disabled sensor");
-    zassert_false(provider->is_in_use(AssetAccess::WRITE, kSensorScriptName), "A referenced script may be replaced");
-    zassert_false(provider->is_in_use(AssetAccess::READ, kSensorScriptName), "or read");
-    zassert_false(provider->is_in_use(AssetAccess::DELETE, kOtherSensorScriptName), "Another script may be deleted");
+    zassert_false(provider->is_in_use(AssetAccess::WRITE, SENSOR_SCRIPT_NAME), "A referenced script may be replaced");
+    zassert_false(provider->is_in_use(AssetAccess::READ, SENSOR_SCRIPT_NAME), "or read");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, OTHER_SENSOR_SCRIPT_NAME), "Another script may be deleted");
 
     // The referrer reads the configuration in force, not the one the controller started with.
     zassert_true(controller->GetConfigurationManager()->Update({ MakeSensor("enabled", "") }));
-    zassert_false(provider->is_in_use(AssetAccess::DELETE, kSensorScriptName), "A script no sensor uses is deleted");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, SENSOR_SCRIPT_NAME), "A script no sensor uses is deleted");
     zassert_false(provider->is_in_use(AssetAccess::DELETE, "d.lua"));
 }
 
 ZTEST(sensors_controller_assets, test_destroying_the_controller_withdraws_the_kind_and_its_referrer) {
-    auto rig = MakeRig("sensor_assets_destroy_wq");
-    WriteScript(*rig.fs_service, kSensorScript);
+    const auto rig = MakeRig("sensor_assets_destroy_wq");
+    WriteScript(*rig.fs_service, SENSOR_SCRIPT);
 
     std::shared_ptr<const eerie_leap::subsys::assets::AssetProvider> provider;
     {
         auto controller = MakeSensorsController(rig, rig.sd, rig.assets);
-        zassert_equal(InitializeWithSensors(*controller, { MakeSensor("enabled", kSensorScript) }), 0);
+        zassert_equal(InitializeWithSensors(*controller, { MakeSensor("enabled", SENSOR_SCRIPT) }), 0);
 
         provider = rig.assets->Find(AssetKind::SENSOR_SCRIPTS);
         zassert_not_null(provider.get());
-        zassert_true(rig.assets->IsReferenced(kSensorScript));
+        zassert_true(rig.assets->IsReferenced(SENSOR_SCRIPT));
     }
 
     zassert_is_null(rig.assets->Find(AssetKind::SENSOR_SCRIPTS).get(), "The sensor scripts are no longer served");
-    zassert_false(rig.assets->IsReferenced(kSensorScript), "and the sensors no longer refer to anything");
+    zassert_false(rig.assets->IsReferenced(SENSOR_SCRIPT), "and the sensors no longer refer to anything");
     zassert_false(
-        provider->is_in_use(AssetAccess::DELETE, kSensorScriptName),
+        provider->is_in_use(AssetAccess::DELETE, SENSOR_SCRIPT_NAME),
         "A provider found before keeps working, and refuses nothing"
     );
 }
@@ -166,34 +166,35 @@ ZTEST(sensors_controller_assets, test_destroying_the_controller_withdraws_the_ki
 // The registry owns the provider, so the provider must not own the registry.
 ZTEST(sensors_controller_assets, test_the_provider_does_not_keep_the_registry_alive) {
     auto rig = MakeRig("sensor_assets_weak_wq");
-    WriteScript(*rig.fs_service, kSensorScript);
+    WriteScript(*rig.fs_service, SENSOR_SCRIPT);
 
     std::shared_ptr<const eerie_leap::subsys::assets::AssetProvider> provider;
     {
         auto controller = MakeSensorsController(rig, rig.sd, rig.assets);
-        zassert_equal(InitializeWithSensors(*controller, { MakeSensor("enabled", kSensorScript) }), 0);
+        zassert_equal(InitializeWithSensors(*controller, { MakeSensor("enabled", SENSOR_SCRIPT) }), 0);
 
         provider = rig.assets->Find(AssetKind::SENSOR_SCRIPTS);
         zassert_not_null(provider.get());
     }
 
-    std::weak_ptr<AssetsManager> weak_assets = rig.assets;
+    const std::weak_ptr<AssetsManager> weak_assets = rig.assets;
     rig.assets.reset();
 
     zassert_true(weak_assets.expired(), "Nothing the controller registered holds the registry");
     zassert_false(
-        provider->is_in_use(AssetAccess::DELETE, kSensorScriptName), "A provider outliving its registry refuses nothing"
+        provider->is_in_use(AssetAccess::DELETE, SENSOR_SCRIPT_NAME),
+        "A provider outliving its registry refuses nothing"
     );
 }
 
 // A kind registered already stays with its owner: the second controller serves nothing, and must not
 // withdraw the first one's kind, or leave a referrer behind that nothing removes.
 ZTEST(sensors_controller_assets, test_a_controller_that_could_not_register_withdraws_nothing_of_another) {
-    auto rig = MakeRig("sensor_assets_second_wq");
-    WriteScript(*rig.fs_service, kSensorScript);
+    const auto rig = MakeRig("sensor_assets_second_wq");
+    WriteScript(*rig.fs_service, SENSOR_SCRIPT);
 
     auto first = MakeSensorsController(rig, rig.sd, rig.assets);
-    zassert_equal(InitializeWithSensors(*first, { MakeSensor("enabled", kSensorScript) }), 0);
+    zassert_equal(InitializeWithSensors(*first, { MakeSensor("enabled", SENSOR_SCRIPT) }), 0);
     const auto provider = rig.assets->Find(AssetKind::SENSOR_SCRIPTS);
     zassert_not_null(provider.get());
 
@@ -209,7 +210,7 @@ ZTEST(sensors_controller_assets, test_a_controller_that_could_not_register_withd
         // would stay referenced once the first one's configuration lets go of it.
         zassert_true(first->GetConfigurationManager()->Update({ MakeSensor("enabled", "") }));
         zassert_false(
-            rig.assets->IsReferenced(kSensorScript),
+            rig.assets->IsReferenced(SENSOR_SCRIPT),
             "The second controller left no referrer that still sees the script it loaded"
         );
     }
@@ -218,8 +219,8 @@ ZTEST(sensors_controller_assets, test_a_controller_that_could_not_register_withd
         rig.assets->Find(AssetKind::SENSOR_SCRIPTS).get(), provider.get(), "The second one's end withdraws nothing"
     );
 
-    zassert_true(first->GetConfigurationManager()->Update({ MakeSensor("enabled", kSensorScript) }));
-    zassert_true(rig.assets->IsReferenced(kSensorScript), "and the first one's referrer stays");
+    zassert_true(first->GetConfigurationManager()->Update({ MakeSensor("enabled", SENSOR_SCRIPT) }));
+    zassert_true(rig.assets->IsReferenced(SENSOR_SCRIPT), "and the first one's referrer stays");
 }
 
 #endif // CONFIG_EERIE_LEAP_ASSETS

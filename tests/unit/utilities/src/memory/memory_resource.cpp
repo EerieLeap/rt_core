@@ -15,6 +15,7 @@ ZTEST(ext_memory_resource, test_allocate_and_deallocate) {
     void* block = resource.allocate(128, alignof(uint64_t));
 
     zassert_not_null(block);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): address arithmetic for an alignment check
     zassert_equal(reinterpret_cast<uintptr_t>(block) % alignof(uint64_t), 0);
 
     memset(block, 0xA5, 128);

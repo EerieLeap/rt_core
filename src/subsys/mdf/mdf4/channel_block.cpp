@@ -6,30 +6,19 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count) :
-    BlockBase("CN") {
-    type_ = type;
-    sync_type_ = sync_type;
-    data_type_ = data_type;
-    bit_offset_ = 0;
-    byte_offset_ = 0;
-    bit_count_ = bit_count;
-    flags_ = 0;
-    invalidation_bit_pos_ = 0;
-    precision_ = 0;
-    attachment_count_ = 0;
-    val_range_min_ = 0;
-    val_range_max_ = 0;
-    limit_min_ = 0;
-    limit_max_ = 0;
-    limit_ext_min_ = 0;
-    limit_ext_max_ = 0;
-}
+    BlockBase("CN"),
+    type_(type),
+    sync_type_(sync_type),
+    data_type_(data_type),
+    bit_count_(bit_count) {}
 
 // See ~ChannelGroupBlock(): no destructor recursion along the chain.
 ChannelBlock::~ChannelBlock() {
-    auto next = links_.TakeLink(LinkType::ChannelNext);
-    while(next && next.use_count() == 1)
-        next = static_cast<ChannelBlock&>(*next).links_.TakeLink(LinkType::ChannelNext);
+    auto next = links_.TakeLink<LinkType::ChannelNext>();
+    while(next && next.use_count() == 1) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only ChannelBlocks (LinkBlock is its only writer); no throwing dynamic_cast in a destructor
+        next = static_cast<ChannelBlock&>(*next).links_.TakeLink<LinkType::ChannelNext>();
+    }
 }
 
 ChannelBlock::Type ChannelBlock::GetType() const {
@@ -70,7 +59,8 @@ void ChannelBlock::SetConversion(std::shared_ptr<ChannelConversionBlock> convers
 
 void ChannelBlock::LinkBlock(std::shared_ptr<ChannelBlock> next_block) {
     auto* last = this;
-    while(auto next = last->links_.GetLink(LinkType::ChannelNext))
+    while(const auto next = last->links_.GetLink(LinkType::ChannelNext))
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only ChannelBlocks (LinkBlock is its only writer); no RTTI per step of the walk
         last = static_cast<ChannelBlock*>(next.get());
 
     last->links_.SetLink(LinkType::ChannelNext, std::move(next_block));
@@ -89,16 +79,16 @@ void ChannelBlock::SetInvalidationBit(uint32_t position) {
     flags_ |= std::to_underlying(Flag::InvalidValid);
 }
 
-void ChannelBlock::SetName(std::shared_ptr<TextBlock> name) {
+void ChannelBlock::SetName(const std::shared_ptr<TextBlock>& name) {
     links_.SetLink(LinkType::TextName, name);
 }
 
-void ChannelBlock::SetUnit(std::shared_ptr<TextBlock> unit) {
+void ChannelBlock::SetUnit(const std::shared_ptr<TextBlock>& unit) {
     links_.SetLink(LinkType::TextUnit, unit);
 }
 
 void ChannelBlock::SetArrayBlock(std::shared_ptr<IBlock> array_block) {
-    links_.SetLink(LinkType::ChannelArray, array_block);
+    links_.SetLink(LinkType::ChannelArray, std::move(array_block));
 }
 
 void ChannelBlock::SetOffsetBytes(uint32_t offset_bytes) {
@@ -114,7 +104,7 @@ void ChannelBlock::SetBitCount(uint32_t bit_count) {
 }
 
 void ChannelBlock::SetSignalDataBlock(std::shared_ptr<IBlock> block) {
-    links_.SetLink(LinkType::SignalData, block);
+    links_.SetLink(LinkType::SignalData, std::move(block));
 }
 
 void ChannelBlock::SetComment(std::shared_ptr<MetadataBlock> comment) {
@@ -177,7 +167,6 @@ std::unique_ptr<uint8_t[]> ChannelBlock::Serialize() const {
     offset += sizeof(limit_ext_min_);
 
     std::memcpy(buffer.get() + offset, &limit_ext_max_, sizeof(limit_ext_max_));
-    offset += sizeof(limit_ext_max_);
 
     return buffer;
 }

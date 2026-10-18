@@ -9,8 +9,8 @@ template<typename T>
 struct LoadedConfig {
 public:
     std::pmr::vector<uint8_t> config_raw;
-    eerie_memory::pmr_unique_ptr<T> config;
-    uint32_t checksum;
+    eerie_memory::PmrUniquePtr<T> config;
+    uint32_t checksum{ 0 };
 };
 
 } // namespace eerie_leap::configuration::services

@@ -60,12 +60,12 @@ void WorkQueueThread::Stop() {
 
     k_work_queue_drain(&work_q_, true);
 
-    int ret = k_work_queue_stop(&work_q_, K_FOREVER);
+    const int ret = k_work_queue_stop(&work_q_, K_FOREVER);
     if(ret != 0) {
         LOG_ERR("Failed to stop work queue: %d", ret);
     }
 
-    ScopedMutex guard(runner_tasks_mutex_);
+    const ScopedMutex guard(runner_tasks_mutex_);
     runner_tasks_.clear();
     runner_completed_tasks_.clear();
 }
@@ -125,7 +125,7 @@ void WorkQueueThread::RunnerTaskHandler(k_work* work) {
         LOG_ERR("Work queue runner task threw a non-standard exception.");
     }
 
-    ScopedMutex guard(*task->GetMutex());
+    const ScopedMutex guard(*task->GetMutex());
 
     auto& tasks = task->GetRunnerTasks();
     auto& completed_tasks = task->GetCompletedTasks();
@@ -138,7 +138,7 @@ void WorkQueueThread::RunnerTaskHandler(k_work* work) {
 void WorkQueueThread::Run(const WorkQueueRunnerTask::Handler& handler) {
     IsValid();
 
-    ScopedMutex guard(runner_tasks_mutex_);
+    const ScopedMutex guard(runner_tasks_mutex_);
 
     PruneCompletedTasks(runner_completed_tasks_);
 

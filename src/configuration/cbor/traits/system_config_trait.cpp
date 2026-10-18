@@ -6,12 +6,19 @@
 
 namespace eerie_leap::configuration::cbor::traits {
 
+namespace {
+
 struct CborSystemConfigTraitRegistrar {
     CborSystemConfigTraitRegistrar() {
         CborTraitRegistry::Register<CborSystemConfig>(
             cbor_encode_CborSystemConfig, cbor_decode_CborSystemConfig, cbor_get_size_CborSystemConfig
         );
     }
-} CborSystemConfigTraitRegistrar;
+};
+
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): the registry insert can only throw std::bad_alloc, fatal before main
+const CborSystemConfigTraitRegistrar CBOR_SYSTEM_CONFIG_TRAIT_REGISTRAR;
+
+} // namespace
 
 } // namespace eerie_leap::configuration::cbor::traits

@@ -17,9 +17,9 @@ using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::canbus::CanId;
 
 struct CanbusTask {
-    k_timeout_t send_interval_ms;
-    uint8_t bus_channel;
-    CanId frame_id;
+    k_timeout_t send_interval_ms{};
+    uint8_t bus_channel = 0;
+    CanId frame_id{};
     std::shared_ptr<CanMessageConfiguration> message_configuration;
     std::shared_ptr<CanbusProxy> canbus;
     std::shared_ptr<CanFrameBuilder> can_frame_builder;

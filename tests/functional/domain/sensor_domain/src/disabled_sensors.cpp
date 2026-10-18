@@ -58,12 +58,12 @@ struct Fixture {
 };
 
 // Enabled, they would get an interpolator, GPIO edges, or an expression bound to input.
-constexpr std::array<std::string_view, 4> kDisabledIds = { "analog", "indicator", "disabled_dependent",
+constexpr std::array<std::string_view, 4> DISABLED_IDS = { "analog", "indicator", "disabled_dependent",
     "disabled_polled" };
 
 // input (polled) -> dependent, next to the disabled sensors.
 Fixture MakeFixture() {
-    auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
+    const auto indicator = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "indicator");
     indicator->configuration.type = SensorType::PHYSICAL_INDICATOR;
     indicator->configuration.channel = 0;
 
@@ -111,16 +111,29 @@ ZTEST(disabled_sensors, test_builder_keeps_the_slot_of_a_disabled_sensor_and_bui
     zassert_equal(fixture.generation->runtimes.size(), 6, "Every sensor has a runtime");
     zassert_equal(fixture.frame->GetSlotCount(), 6, "Every sensor has a slot");
 
-    for(const auto id : kDisabledIds) {
+    for(const auto id : DISABLED_IDS) {
         const auto& runtime = fixture.Runtime(id);
         const auto slot = fixture.frame->FindSlot(id);
 
-        zassert_true(slot.has_value() && runtime.slot == slot.value(), "%s lost its slot", id.data());
-        zassert_equal(runtime.update_method, SensorReadingUpdateMethod::NONE, "%s has an update method", id.data());
-        zassert_is_null(runtime.voltage_interpolator.get(), "%s has an interpolator", id.data());
-        zassert_is_null(runtime.expression_evaluator.get(), "%s has an expression evaluator", id.data());
-        zassert_true(runtime.input_slots.empty(), "%s is bound to its inputs", id.data());
-        zassert_true(runtime.dependents.empty(), "%s has dependents", id.data());
+        zassert_true(
+            slot.has_value() && runtime.slot == slot.value(), "%.*s lost its slot", static_cast<int>(id.size()),
+            id.data()
+        );
+        zassert_equal(
+            runtime.update_method, SensorReadingUpdateMethod::NONE, "%.*s has an update method",
+            static_cast<int>(id.size()), id.data()
+        );
+        zassert_is_null(
+            runtime.voltage_interpolator.get(), "%.*s has an interpolator", static_cast<int>(id.size()), id.data()
+        );
+        zassert_is_null(
+            runtime.expression_evaluator.get(), "%.*s has an expression evaluator", static_cast<int>(id.size()),
+            id.data()
+        );
+        zassert_true(
+            runtime.input_slots.empty(), "%.*s is bound to its inputs", static_cast<int>(id.size()), id.data()
+        );
+        zassert_true(runtime.dependents.empty(), "%.*s has dependents", static_cast<int>(id.size()), id.data());
     }
 
     const auto& input = fixture.Runtime("input");
@@ -137,7 +150,7 @@ ZTEST(disabled_sensors, test_a_disabled_dependent_is_not_evaluated_when_its_inpu
     const auto fixture = MakeFixture();
     const auto time_service = MakeTimeService();
 
-    auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
+    const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
     ReadingPipeline pipeline(fixture.frame, processors, time_service);
 
@@ -150,18 +163,23 @@ ZTEST(disabled_sensors, test_a_disabled_dependent_is_not_evaluated_when_its_inpu
     zassert_equal(fixture.frame->TryGetReadingValue("input").value(), 2.0F);
     zassert_equal(fixture.frame->TryGetReadingValue("dependent").value(), 4.0F, "The enabled dependent is evaluated");
 
-    for(const auto id : kDisabledIds) {
-        zassert_false(fixture.frame->TryGetReading(id).has_value(), "%s got a reading", id.data());
-        zassert_false(fixture.frame->TryGetReadingValue(id).has_value(), "%s got a value", id.data());
+    for(const auto id : DISABLED_IDS) {
+        zassert_false(
+            fixture.frame->TryGetReading(id).has_value(), "%.*s got a reading", static_cast<int>(id.size()), id.data()
+        );
+        zassert_false(
+            fixture.frame->TryGetReadingValue(id).has_value(), "%.*s got a value", static_cast<int>(id.size()),
+            id.data()
+        );
     }
 }
 
 ZTEST(disabled_sensors, test_a_disabled_sensor_never_gets_a_reading_while_the_others_run) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
-    auto adc = std::make_shared<FakeAdc>(4);
-    auto adc_manager = MakeAdcManager(adc);
-    auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
+    const auto adc = std::make_shared<FakeAdc>(4);
+    const auto adc_manager = MakeAdcManager(adc);
+    const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
     zassert_true(adc_configuration_manager->Update(
         *MakeAdcConfiguration(adc_manager->GetChannelCount(), 8, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } }))
     ));
@@ -172,7 +190,7 @@ ZTEST(disabled_sensors, test_a_disabled_sensor_never_gets_a_reading_while_the_ot
         Disabled(MakeVirtualSensor("disabled_virtual", "enabled_virtual + 1", 20)),
     };
 
-    auto rig = MakeProcessingRig(
+    const auto rig = MakeProcessingRig(
         fs_service, adc_manager, adc_configuration_manager,
         {
             disabled[0],

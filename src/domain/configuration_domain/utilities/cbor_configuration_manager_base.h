@@ -29,7 +29,7 @@ private:
     std::shared_ptr<TConfiguration> configuration_;
     // Get() runs on any thread (CDMP, shell, the log writer's start) while an apply replaces the
     // pointer on the configuration work queue; copying a shared_ptr that is being assigned is a race.
-    mutable k_mutex configuration_mutex_;
+    mutable k_mutex configuration_mutex_{};
 
     // Set while the stored configuration could not be applied and an unsaved default stands in for it.
     bool is_stored_configuration_rejected_ = false;
@@ -38,12 +38,12 @@ private:
 
     // Set from any thread; a store copies it under the lock and calls it outside, so a handler cleared
     // during its call finishes that call, and a call allocates nothing.
-    mutable k_mutex stored_handler_mutex_;
+    mutable k_mutex stored_handler_mutex_{};
     std::shared_ptr<const StoredHandler> stored_handler_;
 
     // Both validate; Deserialize must accept everything Serialize produces.
-    virtual eerie_memory::pmr_unique_ptr<TCborConfig> Serialize(const TConfiguration& configuration) = 0;
-    virtual eerie_memory::pmr_unique_ptr<TConfiguration> Deserialize(const TCborConfig& cbor_config) = 0;
+    virtual eerie_memory::PmrUniquePtr<TCborConfig> Serialize(const TConfiguration& configuration) = 0;
+    virtual eerie_memory::PmrUniquePtr<TConfiguration> Deserialize(const TCborConfig& cbor_config) = 0;
     virtual bool CreateDefaultConfiguration() = 0;
     virtual void OnConfigurationChanged(const std::shared_ptr<TConfiguration>&) {}
 
@@ -53,23 +53,23 @@ private:
     virtual void ValidateApply(const TConfiguration&) {}
 
     // Takes over the parsed allocation instead of moving it into a new one.
-    static std::shared_ptr<TConfiguration> Share(eerie_memory::pmr_unique_ptr<TConfiguration> configuration) {
-        auto deleter = configuration.get_deleter();
-        std::pmr::polymorphic_allocator<> control_block_allocator(deleter.get_memory_resource());
+    static std::shared_ptr<TConfiguration> Share(eerie_memory::PmrUniquePtr<TConfiguration> configuration) {
+        const auto deleter = configuration.get_deleter();
+        const std::pmr::polymorphic_allocator<> control_block_allocator(deleter.GetMemoryResource());
 
         return std::shared_ptr<TConfiguration>(configuration.release(), deleter, control_block_allocator);
     }
 
     std::shared_ptr<TConfiguration> CurrentConfiguration() const {
-        eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
+        const eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
 
         return configuration_;
     }
 
     void SetConfiguration(std::shared_ptr<TConfiguration> configuration) {
-        auto current = configuration;
+        const auto current = configuration;
         {
-            eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
+            const eerie_leap::subsys::threading::ScopedMutex guard(configuration_mutex_);
             configuration_.swap(configuration);
         }
 
@@ -79,7 +79,10 @@ private:
 
     // Serializes, parses back and saves, then adopts what was parsed.
     bool Store(const TConfiguration& configuration) {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         std::shared_ptr<TConfiguration> updated_configuration;
 
@@ -104,11 +107,14 @@ private:
     // After a successful store. Logs what the handler throws: the configuration is stored by then, and
     // the store must not turn into a failure a client retries.
     void NotifyStored() {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         std::shared_ptr<const StoredHandler> handler;
         {
-            eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
+            const eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
             handler = stored_handler_;
         }
 
@@ -144,7 +150,10 @@ protected:
     // over it would destroy the user's configuration. A default is created in memory instead and
     // GetCborConfigurationInfo() reports the stored one as not applied.
     bool LoadOrCreateDefault() {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         try {
             if(Get(true) != nullptr) {
@@ -203,7 +212,10 @@ protected:
 
     // Keeps the given instance, so it is validated only once; callers must not modify it afterwards.
     bool Adopt(std::shared_ptr<TConfiguration> configuration) {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         try {
             auto cbor_config = Serialize(*configuration);
@@ -239,8 +251,9 @@ public:
         return CurrentConfiguration();
     }
 
-    // A configuration update: reports to the stored handler (SetStoredHandler()).
-    bool Update(const TConfiguration& configuration) {
+    // A configuration update: reports to the stored handler (SetStoredHandler()). Virtual, like
+    // ApplyCborConfiguration(), so a manager adds its updated handler by overriding it.
+    virtual bool Update(const TConfiguration& configuration) {
         if(!Store(configuration))
             return false;
 
@@ -262,7 +275,7 @@ public:
         if(handler)
             slot = std::make_shared<const StoredHandler>(std::move(handler));
 
-        eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
+        const eerie_leap::subsys::threading::ScopedMutex guard(stored_handler_mutex_);
         stored_handler_.swap(slot);
         // The previous handler is released after the lock, by whoever drops it last.
     }
@@ -270,9 +283,12 @@ public:
     using ICborConfigurationManager::ApplyCborConfiguration;
 
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
-        auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
+        const auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
         if(cbor_config == nullptr) {
             SetReason(reason, "Malformed CBOR");
             return false;

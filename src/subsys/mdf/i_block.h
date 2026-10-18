@@ -11,7 +11,7 @@ using eerie_leap::subsys::mdf::utilities::IBlockLinks;
 
 class IBlock : public virtual ISerializableBlock {
 public:
-    virtual ~IBlock() = default;
+    ~IBlock() override = default;
     virtual std::string GetId() const = 0;
     virtual const IBlockLinks* GetBlockLinks() const = 0;
 };

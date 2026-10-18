@@ -24,9 +24,9 @@ struct SensorMetadata {
     ~SensorMetadata() = default;
 
     SensorMetadata(SensorMetadata&& other, allocator_type alloc) noexcept :
-        name(other.name, alloc),
-        unit(other.unit, alloc),
-        description(other.description, alloc) {}
+        name(std::move(other.name), alloc),
+        unit(std::move(other.unit), alloc),
+        description(std::move(other.description), alloc) {}
 };
 
 } // namespace eerie_leap::domain::sensor_domain::models

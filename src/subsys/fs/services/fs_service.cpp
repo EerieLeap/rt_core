@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <utility>
 
 #include <zephyr/fs/fs.h>
 #include <zephyr/logging/log.h>
@@ -85,24 +86,26 @@ bool FsService::WriteFile(std::string_view relative_path, const void* data_p, si
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    struct fs_file_t file;
+    struct fs_file_t file{};
     fs_file_t_init(&file);
 
-    int rc = fs_open(&file, full_path.String().CStr(), FS_O_WRITE | FS_O_CREATE | (append ? FS_O_APPEND : FS_O_TRUNC));
+    const int rc = fs_open(
+        &file, full_path.String().CStr(), FS_O_WRITE | FS_O_CREATE | (append ? FS_O_APPEND : FS_O_TRUNC)
+    );
     if(rc < 0) {
         LOG_ERR("fs_open failed: %d.", rc);
         return false;
     }
 
-    ssize_t written = fs_write(&file, data_p, data_size);
-    int close_rc = fs_close(&file);
+    const ssize_t written = fs_write(&file, data_p, data_size);
+    const int close_rc = fs_close(&file);
 
     if(written < 0) {
         LOG_ERR("fs_write failed: %d.", static_cast<int>(written));
         return false;
     }
 
-    if(static_cast<size_t>(written) != data_size) {
+    if(std::cmp_not_equal(written, data_size)) {
         LOG_ERR("fs_write stored %d of %d bytes.", static_cast<int>(written), static_cast<int>(data_size));
         return false;
     }
@@ -129,16 +132,16 @@ bool FsService::ReadFile(std::string_view relative_path, void* data_p, size_t da
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    struct fs_file_t file;
+    struct fs_file_t file{};
     fs_file_t_init(&file);
 
-    int rc = fs_open(&file, full_path.String().CStr(), FS_O_READ);
+    const int rc = fs_open(&file, full_path.String().CStr(), FS_O_READ);
     if(rc < 0) {
         LOG_ERR("fs_open failed: %d.", rc);
         return false;
     }
 
-    ssize_t read = fs_read(&file, data_p, data_size);
+    const ssize_t read = fs_read(&file, data_p, data_size);
     fs_close(&file);
 
     if(read < 0) {
@@ -168,7 +171,7 @@ int FsService::OpenFile(std::string_view relative_path, fs_mode_t flags, fs_file
 
     fs_file_t_init(file_p);
 
-    int rc = fs_open(file_p, full_path.String().CStr(), flags);
+    const int rc = fs_open(file_p, full_path.String().CStr(), flags);
     if(rc < 0)
         LOG_ERR("fs_open failed: %d.", rc);
 
@@ -199,7 +202,7 @@ bool FsService::CreateDirectory(std::string_view relative_path) {
 
         current_path /= segment;
 
-        int rc = fs_mkdir(current_path.String().CStr());
+        const int rc = fs_mkdir(current_path.String().CStr());
         if(rc < 0 && rc != -EEXIST) {
             LOG_ERR("Failed to create dir '%s': %d.", current_path.String().CStr(), rc);
             return false;
@@ -221,8 +224,8 @@ bool FsService::Exists(std::string_view relative_path) const {
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    struct fs_dirent entry;
-    int rc = fs_stat(full_path.String().CStr(), &entry);
+    struct fs_dirent entry{};
+    const int rc = fs_stat(full_path.String().CStr(), &entry);
 
     return rc == 0;
 }
@@ -239,7 +242,7 @@ bool FsService::DeleteFile(std::string_view relative_path) {
     if(!TryBuildPath(relative_path, full_path))
         return false;
 
-    int rc = fs_unlink(full_path.String().CStr());
+    const int rc = fs_unlink(full_path.String().CStr());
     if(rc < 0) {
         LOG_ERR("fs_unlink failed: %d.", rc);
         return false;
@@ -263,9 +266,10 @@ bool FsService::DeleteRecursive(std::string_view relative_path) {
     return DeleteDirectoryContents(&full_path);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): the depth is bounded by the path buffer, a name is at least two bytes
 bool FsService::DeleteDirectoryContents(FilesystemPath<PATH_BUFFER_SIZE>* full_path) {
-    struct fs_dir_t dir;
-    struct fs_dirent entry;
+    struct fs_dir_t dir{};
+    struct fs_dirent entry{};
     fs_dir_t_init(&dir);
 
     int rc = fs_opendir(&dir, full_path->String().CStr());
@@ -285,7 +289,7 @@ bool FsService::DeleteDirectoryContents(FilesystemPath<PATH_BUFFER_SIZE>* full_p
         if(entry.name[0] == '\0')
             break;
 
-        size_t base_path_size = full_path->String().Size();
+        const size_t base_path_size = full_path->String().Size();
         if(base_path_size + 1 + std::strlen(entry.name) > PATH_BUFFER_SIZE) {
             LOG_ERR("Path does not fit the %d byte path buffer.", static_cast<int>(PATH_BUFFER_SIZE));
             fs_closedir(&dir);
@@ -420,7 +424,7 @@ int FsService::Rename(std::string_view from, std::string_view to) {
 
     // FAT unlinks the target before it looks for the source as well: a missing source would cost
     // the file it was meant to replace.
-    struct fs_dirent entry;
+    struct fs_dirent entry{};
     int rc = fs_stat(from_path.String().CStr(), &entry);
     if(rc < 0) {
         LOG_ERR("fs_stat failed on path: %s (%d).", from_path.String().CStr(), rc);
@@ -448,8 +452,8 @@ std::vector<std::string> FsService::ListFiles(std::string_view relative_path) co
     if(!TryBuildPath(relative_path, full_path))
         return files;
 
-    struct fs_dir_t dir;
-    struct fs_dirent entry;
+    struct fs_dir_t dir{};
+    struct fs_dirent entry{};
     fs_dir_t_init(&dir);
 
     int rc = fs_opendir(&dir, full_path.String().CStr());
@@ -499,8 +503,8 @@ int FsService::ListDirectory(
     if(!TryBuildPath(relative_path, full_path))
         return -EINVAL;
 
-    struct fs_dir_t dir;
-    struct fs_dirent entry;
+    struct fs_dir_t dir{};
+    struct fs_dirent entry{};
     fs_dir_t_init(&dir);
 
     int rc = fs_opendir(&dir, full_path.String().CStr());
@@ -517,10 +521,17 @@ int FsService::ListDirectory(
     struct DirectoryCloser {
         fs_dir_t* dir;
 
+        explicit DirectoryCloser(fs_dir_t* directory) :
+            dir(directory) {}
+        DirectoryCloser(const DirectoryCloser&) = delete;
+        DirectoryCloser& operator=(const DirectoryCloser&) = delete;
+        DirectoryCloser(DirectoryCloser&&) = delete;
+        DirectoryCloser& operator=(DirectoryCloser&&) = delete;
         ~DirectoryCloser() {
             fs_closedir(dir);
         }
-    } closer{ &dir };
+    };
+    const DirectoryCloser closer{ &dir };
 
     while(true) {
         rc = fs_readdir(&dir, &entry);
@@ -564,8 +575,8 @@ std::optional<size_t> FsService::GetFileSize(std::string_view relative_path) con
     if(!TryBuildPath(relative_path, full_path))
         return std::nullopt;
 
-    struct fs_dirent entry;
-    int rc = fs_stat(full_path.String().CStr(), &entry);
+    struct fs_dirent entry{};
+    const int rc = fs_stat(full_path.String().CStr(), &entry);
 
     if(rc < 0) {
         LOG_ERR("fs_stat failed: %d.", rc);
@@ -589,7 +600,7 @@ uint64_t FsService::GetTotalSpace() const {
         return 0;
     }
 
-    struct fs_statvfs stat;
+    struct fs_statvfs stat{};
     if(fs_statvfs(mountpoint_->mnt_point, &stat) < 0) {
         LOG_ERR("fs_statvfs failed when querying total space.");
         return 0;
@@ -608,7 +619,7 @@ uint64_t FsService::GetUsedSpace() const {
         return 0;
     }
 
-    struct fs_statvfs stat;
+    struct fs_statvfs stat{};
     if(fs_statvfs(mountpoint_->mnt_point, &stat) < 0) {
         LOG_ERR("fs_statvfs failed when querying used space.");
         return 0;
@@ -633,7 +644,8 @@ bool FsService::Format() {
         return false;
     }
 
-    int rc = fs_mkfs(mountpoint_->type, (uintptr_t)mountpoint_->storage_dev, NULL, 0);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): fs_mkfs takes the storage device as an integer
+    const int rc = fs_mkfs(mountpoint_->type, reinterpret_cast<uintptr_t>(mountpoint_->storage_dev), nullptr, 0);
     if(rc < 0) {
         LOG_ERR("Format failed: %d.", rc);
         Mount();
@@ -654,7 +666,7 @@ bool FsService::Mount() {
     if(mountpoint_ == nullptr)
         return false;
 
-    int rc = fs_mount(mountpoint_);
+    const int rc = fs_mount(mountpoint_);
     if(rc < 0) {
         LOG_ERR("Failed to mount FS: %d.", rc);
         return false;
@@ -671,7 +683,7 @@ void FsService::Unmount() {
     if(!IsMounted())
         return;
 
-    int rc = fs_unmount(mountpoint_);
+    const int rc = fs_unmount(mountpoint_);
     if(rc < 0)
         LOG_ERR("Failed to unmount FS: %d.", rc);
     else

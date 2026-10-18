@@ -21,7 +21,7 @@ void ExtHeapFree(void* pointer) noexcept;
 template<typename T>
 class HeapAllocator {
 private:
-    static constexpr size_t kAlignment = alignof(T) > 32 ? alignof(T) : 32;
+    static constexpr size_t ALIGNMENT = alignof(T) > 32 ? alignof(T) : 32;
 
 public:
     using value_type = T;
@@ -29,12 +29,14 @@ public:
     HeapAllocator() = default;
 
     template<typename U>
+    // NOLINTNEXTLINE(google-explicit-constructor): the rebind conversion between allocator types must be implicit (allocator requirements)
     constexpr HeapAllocator(const HeapAllocator<U>& obj) noexcept {}
 
-    T* allocate(size_t n, size_t align = kAlignment) {
+    T* allocate(size_t n, size_t align = ALIGNMENT) {
         void* pointer = ExtHeapAllocate(align, n * sizeof(T));
 
         if(pointer == nullptr) {
+            // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
             LOG_MODULE_DECLARE(heap_allocator_logger);
             LOG_ERR("Failed to allocate %zu bytes for %zu elements of type %s\n", n * sizeof(T), n, typeid(T).name());
             throw std::bad_alloc();
@@ -43,7 +45,7 @@ public:
         return static_cast<T*>(pointer);
     }
 
-    void deallocate(void* p, size_t n, size_t align = 0) noexcept {
+    void deallocate(void* p, size_t /*n*/, size_t /*align*/ = 0) noexcept {
         ExtHeapFree(p);
     }
 
@@ -53,7 +55,7 @@ public:
 
         T* new_p = allocate(new_n);
 
-        size_t copy_count = (old_n < new_n) ? old_n : new_n;
+        const size_t copy_count = (old_n < new_n) ? old_n : new_n;
 
         if constexpr(std::is_trivially_copyable_v<T>) {
             memcpy(new_p, p, copy_count * sizeof(T));
@@ -77,12 +79,12 @@ public:
 // to new memory allocator utilities is complete.
 
 template<class T, class U>
-bool operator==(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) {
+bool operator==(const HeapAllocator<T>& /*lhs*/, const HeapAllocator<U>& /*rhs*/) {
     return true;
 }
 
 template<class T, class U>
-bool operator!=(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) {
+bool operator!=(const HeapAllocator<T>& /*lhs*/, const HeapAllocator<U>& /*rhs*/) {
     return false;
 }
 
@@ -91,7 +93,7 @@ std::shared_ptr<T> make_shared_ext(Args&&... args) {
     return std::allocate_shared<T>(HeapAllocator<T>(), std::forward<Args>(args)...);
 }
 
-struct ext_deleter {
+struct ExtDeleter {
     template<typename T>
     void operator()(T* p) const {
         if(p) {
@@ -104,16 +106,16 @@ struct ext_deleter {
 };
 
 template<typename T>
-using ext_unique_ptr = std::unique_ptr<T, ext_deleter>;
+using ExtUniquePtr = std::unique_ptr<T, ExtDeleter>;
 
 template<typename T, typename... Args>
-ext_unique_ptr<T> make_unique_ext(Args&&... args) {
+ExtUniquePtr<T> make_unique_ext(Args&&... args) {
     HeapAllocator<T> allocator;
     auto p = allocator.allocate(1);
 
     try {
         new(p) T(std::forward<Args>(args)...);
-        return ext_unique_ptr<T>(p, ext_deleter{});
+        return ExtUniquePtr<T>(p, ExtDeleter{});
     } catch(...) {
         allocator.deallocate(p, 1);
         throw;

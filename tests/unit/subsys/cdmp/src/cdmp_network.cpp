@@ -164,9 +164,17 @@ struct NetworkFixture {
         });
     }
 
+    NetworkFixture(const NetworkFixture&) = delete;
+    NetworkFixture& operator=(const NetworkFixture&) = delete;
+    NetworkFixture(NetworkFixture&&) = delete;
+    NetworkFixture& operator=(NetworkFixture&&) = delete;
+
     ~NetworkFixture() {
-        if(canbus != nullptr)
-            (*canbus)->RemoveFrameReceivedHandler(bus_handler_id);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(canbus != nullptr) {
+            if(Canbus* live_bus = canbus->Get(); live_bus != nullptr)
+                live_bus->RemoveFrameReceivedHandler(bus_handler_id);
+        }
 
         // Queued work must run while the service exists; after the stop it does nothing.
         service.Stop();
@@ -219,7 +227,7 @@ struct NetworkFixture {
 
     // As the receive handler of a running service hands a frame over.
     void Receive(Frame frame) {
-        work_queue->Run([this, frame = std::move(frame)]() {
+        work_queue->Run([this, frame = std::move(frame)] {
             service.ProcessFrame(frame);
         });
     }
@@ -231,9 +239,9 @@ struct NetworkFixture {
 
     /** @brief Returns once the work queued so far has run. */
     void DrainQueue() {
-        k_sem done;
+        k_sem done{};
         k_sem_init(&done, 0, 1);
-        work_queue->Run([&done]() {
+        work_queue->Run([&done] {
             k_sem_give(&done);
         });
         zassert_equal(k_sem_take(&done, K_MSEC(FRAME_TIMEOUT_MS)), 0, "The work queue is stuck");
@@ -285,7 +293,7 @@ struct NetworkFixture {
 ZTEST_SUITE(cdmp_network, NULL, NULL, NULL, ResetLoopbackDevice, NULL);
 
 ZTEST(cdmp_network, test_snapshot_is_empty_without_peers) {
-    NetworkFixture fixture;
+    const NetworkFixture fixture;
     std::array<CdmpDeviceInfo, 4> devices{};
 
     zassert_equal(fixture.service.GetNetworkDevices(devices), 0);
@@ -807,9 +815,9 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     zassert_equal(fixture.events.size(), 1);
 
     // Hold the queue, so the next frame waits behind it until after the stop.
-    k_sem release;
+    k_sem release{};
     k_sem_init(&release, 0, 1);
-    fixture.work_queue->Run([&release]() {
+    fixture.work_queue->Run([&release] {
         k_sem_take(&release, K_FOREVER);
     });
 
@@ -973,8 +981,8 @@ ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
     CdmpDeviceStatus seen_new = CdmpDeviceStatus::ONLINE;
     int calls = 0;
 
-    int handler_id = service.RegisterStatusChangedHandler([&](CdmpDeviceStatus old_status,
-                                                              CdmpDeviceStatus new_status) {
+    const int handler_id = service.RegisterStatusChangedHandler([&](CdmpDeviceStatus old_status,
+                                                                    CdmpDeviceStatus new_status) {
         seen_old = old_status;
         seen_new = new_status;
         calls++;
@@ -993,14 +1001,14 @@ ZTEST(cdmp_service, test_status_changed_handler_sees_transitions) {
 }
 
 ZTEST(cdmp_service, test_network_snapshot_starts_empty) {
-    CdmpService service(DISPLAY_FEATURES, OWN_UID);
+    const CdmpService service(DISPLAY_FEATURES, OWN_UID);
     std::array<CdmpDeviceInfo, 4> devices{};
 
     zassert_equal(service.GetNetworkDevices(devices), 0);
 }
 
 ZTEST(cdmp_service, test_device_info_follows_the_features_of_the_device) {
-    CdmpService service(DISPLAY_FEATURES, OWN_UID);
+    const CdmpService service(DISPLAY_FEATURES, OWN_UID);
 
     zassert_equal(service.GetDeviceInfo().features, DISPLAY_FEATURES);
 

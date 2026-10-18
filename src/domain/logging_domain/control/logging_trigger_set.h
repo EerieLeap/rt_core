@@ -59,7 +59,7 @@ public:
     LoggingTriggerSet(
         std::shared_ptr<ILoggingControl> logging_control,
         std::span<const LoggingTrigger> triggers,
-        SelectorResolver is_selector_known = nullptr,
+        const SelectorResolver& is_selector_known = nullptr,
         FirstValue first_value = FirstValue::OneStarts
     );
 

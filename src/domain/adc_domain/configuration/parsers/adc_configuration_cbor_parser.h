@@ -19,10 +19,10 @@ public:
     // channel_count is the device tree's, which configurations are validated and padded against.
     explicit AdcConfigurationCborParser(size_t channel_count);
 
-    eerie_memory::pmr_unique_ptr<CborAdcConfig> Serialize(const AdcConfiguration& adc_configuration);
+    eerie_memory::PmrUniquePtr<CborAdcConfig> Serialize(const AdcConfiguration& adc_configuration) const;
     // A configuration with fewer channels than the device tree gets the default calibration on the rest.
-    eerie_memory::pmr_unique_ptr<AdcConfiguration>
-    Deserialize(std::pmr::memory_resource* mr, const CborAdcConfig& adc_config);
+    eerie_memory::PmrUniquePtr<AdcConfiguration>
+    Deserialize(std::pmr::memory_resource* mr, const CborAdcConfig& adc_config) const;
 };
 
 } // namespace eerie_leap::domain::adc_domain::configuration::parsers

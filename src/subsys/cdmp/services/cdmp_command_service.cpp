@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 
+#include <utility>
+
 #include "subsys/threading/scoped_mutex.h"
 
 #include "cdmp_command_service.h"
@@ -19,8 +21,6 @@ CdmpCommandService::CdmpCommandService(
     std::shared_ptr<WorkQueueThread> work_queue_thread
 ) :
     CdmpCanbusServiceBase(std::move(can_id_manager), std::move(device)),
-    canbus_handler_id_(-1),
-    canbus_response_handler_id_(-1),
     work_queue_thread_(std::move(work_queue_thread)) {
 
     k_mutex_init(&command_handlers_mutex_);
@@ -62,7 +62,7 @@ void CdmpCommandService::RegisterCanHandlers() {
 
     canbus_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetCommandRequestCanId(), [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() {
+            work_queue_thread_->Run([this, frame] {
                 ProcessRequestFrame(frame.data);
             });
         }
@@ -70,7 +70,7 @@ void CdmpCommandService::RegisterCanHandlers() {
 
     canbus_response_handler_id_ = RegisterReceiveHandler(
         can_id_manager_->GetCommandResponseCanId(), [this](const CanFrame& frame) {
-            work_queue_thread_->Run([this, frame]() {
+            work_queue_thread_->Run([this, frame] {
                 ProcessResponseFrame(frame.data);
             });
         }
@@ -92,16 +92,11 @@ void CdmpCommandService::UnregisterCanHandlers() {
     }
 }
 
-void CdmpCommandService::OnDeviceStatusChanged(CdmpDeviceStatus old_status, CdmpDeviceStatus new_status) {
-    switch(new_status) {
-        case CdmpDeviceStatus::ONLINE:
-            transaction_service_->Start();
-            break;
-
-        default:
-            transaction_service_->Stop();
-            break;
-    }
+void CdmpCommandService::OnDeviceStatusChanged(CdmpDeviceStatus /*old_status*/, CdmpDeviceStatus new_status) {
+    if(new_status == CdmpDeviceStatus::ONLINE)
+        transaction_service_->Start();
+    else
+        transaction_service_->Stop();
 }
 
 void CdmpCommandService::ProcessRequestFrame(std::span<const uint8_t> frame_data) {
@@ -157,7 +152,7 @@ void CdmpCommandService::ProcessRequestFrame(std::span<const uint8_t> frame_data
 void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMessage& command) {
     if(command.command_code == std::to_underlying(CdmpServiceCommandCode::STATUS_REQUEST)) {
         // Status request is allowed even when device is not online
-        CdmpCommandResponseStatusMessage message(
+        const CdmpCommandResponseStatusMessage message(
             device_->GetDeviceId(), command.transaction_id, CdmpResultCode::SUCCESS, device_->GetStatus(),
             device_->GetProtocolVersion(), device_->GetHealthStatus()
         );
@@ -165,7 +160,7 @@ void CdmpCommandService::ProcessServiceRequestFrame(const CdmpCommandRequestMess
         NotifyCommandHandler(command);
         SendCommandResponse(command.target_device_id, message);
     } else if(device_->GetStatus() == CdmpDeviceStatus::ONLINE) {
-        auto handler = service_command_handlers_.find(command.command_code);
+        const auto handler = service_command_handlers_.find(command.command_code);
         if(handler == service_command_handlers_.end()) {
             NotifyCommandHandler(command);
             return;
@@ -209,7 +204,7 @@ void CdmpCommandService::SendCommandResponse(uint8_t target_device_id, const Cdm
         CanId can_id = can_id_manager_->GetCommandResponseCanId();
 
         if(target_device_id != device_->GetDeviceId())
-            k_msleep(device_->GetStaggeredMessageDelay());
+            k_msleep(static_cast<int32_t>(device_->GetStaggeredMessageDelay()));
 
         (*canbus_)->SendFrame(can_id, frame);
 
@@ -254,7 +249,7 @@ void CdmpCommandService::RegisterUserCommandHandler(uint8_t command_code, Comman
     if(!IsValidUserCommandCode(command_code))
         throw std::runtime_error("Invalid user command code");
 
-    RegisterCommandHandler(command_code, handler);
+    RegisterCommandHandler(command_code, std::move(handler));
 }
 
 void CdmpCommandService::RegisterServiceCommandHandler(
@@ -305,8 +300,8 @@ uint8_t CdmpCommandService::SendCommand(
         if(command_code == 0)
             throw std::runtime_error("Command code 0 is not allowed");
 
-        uint8_t transaction_id = transaction_service_->StartTransaction(
-            target_device_id, command_code, CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS, callback
+        const uint8_t transaction_id = transaction_service_->StartTransaction(
+            target_device_id, command_code, CONFIG_EERIE_LEAP_CDMP_CMD_TRANSACTION_TIMEOUT_MS, std::move(callback)
         );
 
         CdmpCommandRequestMessage command{ .target_device_id = target_device_id,
@@ -334,10 +329,10 @@ uint8_t CdmpCommandService::SendCommand(
     CdmpTransactionCallback callback
 ) {
 
-    return SendCommand(target_device_id, std::to_underlying(command_code), data, callback);
+    return SendCommand(target_device_id, std::to_underlying(command_code), data, std::move(callback));
 }
 
-bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
+bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) {
     auto service_command_code = static_cast<CdmpServiceCommandCode>(command_code);
 
     return service_command_code == CdmpServiceCommandCode::STATUS_REQUEST
@@ -345,7 +340,7 @@ bool CdmpCommandService::IsValidServiceCommandCode(uint8_t command_code) const {
         || service_command_code == CdmpServiceCommandCode::STATE_SYNC_REQUEST;
 }
 
-bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) const {
+bool CdmpCommandService::IsValidUserCommandCode(uint8_t command_code) {
     return command_code >= CdmpConstants::USER_COMMAND_CODE_MIN && command_code <= CdmpConstants::USER_COMMAND_CODE_MAX;
 }
 

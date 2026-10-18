@@ -28,7 +28,7 @@ std::unique_ptr<Canbus> MakeCanbus() {
 
 ZTEST(canbus_proxy, test_holds_and_exposes_instance) {
     auto canbus = MakeCanbus();
-    auto* raw = canbus.get();
+    const auto* raw = canbus.get();
 
     CanbusProxy proxy(std::move(canbus));
 
@@ -40,7 +40,7 @@ ZTEST(canbus_proxy, test_holds_and_exposes_instance) {
 ZTEST(canbus_proxy, test_release_empties_the_proxy) {
     CanbusProxy proxy(MakeCanbus());
 
-    auto released = proxy.Release();
+    const auto released = proxy.Release();
 
     zassert_not_null(released.get());
     zassert_false(proxy.IsValid());
@@ -49,7 +49,7 @@ ZTEST(canbus_proxy, test_release_empties_the_proxy) {
 
 ZTEST(canbus_proxy, test_dereferencing_an_empty_proxy_throws) {
     CanbusProxy proxy(MakeCanbus());
-    auto released = proxy.Release();
+    const auto released = proxy.Release();
 
     bool threw = false;
     try {
@@ -65,7 +65,7 @@ ZTEST(canbus_proxy, test_update_replaces_instance) {
     CanbusProxy proxy(MakeCanbus());
 
     auto replacement = MakeCanbus();
-    auto* raw = replacement.get();
+    const auto* raw = replacement.get();
 
     proxy.Update(std::move(replacement));
 
@@ -79,20 +79,20 @@ ZTEST(canbus_proxy, test_updated_handlers_are_notified) {
     int notifications = 0;
     Canbus* last = nullptr;
 
-    int handler_id = proxy.RegisterUpdatedHandler([&](Canbus* canbus) {
+    const int handler_id = proxy.RegisterUpdatedHandler([&](Canbus* canbus) {
         notifications++;
         last = canbus;
     });
     zassert_true(handler_id > 0);
 
     auto replacement = MakeCanbus();
-    auto* raw = replacement.get();
+    const auto* raw = replacement.get();
     proxy.Update(std::move(replacement));
 
     zassert_equal(notifications, 1);
     zassert_equal(last, raw);
 
-    auto released = proxy.Release();
+    const auto released = proxy.Release();
     zassert_equal(notifications, 2);
     zassert_is_null(last, "Release() must report that the proxy is now empty");
 

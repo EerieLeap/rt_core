@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include <zephyr/kernel.h>
 
 #include "subsys/threading/scoped_mutex.h"
@@ -23,7 +25,7 @@ using eerie_leap::subsys::threading::ScopedMutex;
 // is always LvglLock, then this lock, and a widget detaches under the LVGL lock.
 class DispatchGuard {
 private:
-    k_mutex lock_;
+    k_mutex lock_{};
     void* owner_;
 
 public:
@@ -36,13 +38,14 @@ public:
     DispatchGuard& operator=(const DispatchGuard&) = delete;
     DispatchGuard(DispatchGuard&&) = delete;
     DispatchGuard& operator=(DispatchGuard&&) = delete;
+    ~DispatchGuard() = default;
 
     template<typename TDispatch>
     void Dispatch(TDispatch&& dispatch) {
         ScopedMutex guard(lock_);
 
         if(owner_ != nullptr)
-            dispatch();
+            std::forward<TDispatch>(dispatch)();
     }
 
     // Blocks until a dispatch in flight on another thread returns; every later one is a no-op.

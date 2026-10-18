@@ -34,7 +34,7 @@ class WorkQueueLoadBalancer {
 private:
     std::vector<std::shared_ptr<WorkQueueThread>> work_queue_threads_;
     std::vector<WorkQueueLoadMetrics> thread_metrics_;
-    k_mutex balancer_mutex_;
+    k_mutex balancer_mutex_{};
 
 public:
     WorkQueueLoadBalancer();

@@ -7,12 +7,12 @@
 // Fonts converted from 8x8 bin files with help of
 // 8x8 Pixel ROM Font Editor https://www.min.at/prinz/o/software/pixelfont/
 
-#define CFB_FONTS_FIRST_CHAR 32
-#define CFB_FONTS_LAST_CHAR 126
+constexpr uint8_t CFB_FONTS_FIRST_CHAR = 32;
+constexpr uint8_t CFB_FONTS_LAST_CHAR = 126;
 
 // Font: Apple IIe Video ROM - 342-0133-A - US 1982
 // https://github.com/ivop/8x8-fonts/blob/main/apple/Apple_IIe_Video_ROM_-_342-0133-A_-_US_1982.bin
-const uint8_t apple2_font_8x8[95][8] = {
+const uint8_t APPLE2_FONT_8X8[95][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, // Char 032 ( )
     { 0x08, 0x08, 0x08, 0x08, 0x08, 0x00, 0x08, 0x00 }, // Char 033 (!)
     { 0x14, 0x14, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00 }, // Char 034 (")
@@ -111,11 +111,11 @@ const uint8_t apple2_font_8x8[95][8] = {
 };
 
 FONT_ENTRY_DEFINE(
-    cfb_apple2_font88,
+    CFB_APPLE2_FONT88,
     8,
     8,
     CFB_FONT_MONO_HPACKED,
-    apple2_font_8x8,
+    APPLE2_FONT_8X8,
     CFB_FONTS_FIRST_CHAR,
     CFB_FONTS_LAST_CHAR
 );

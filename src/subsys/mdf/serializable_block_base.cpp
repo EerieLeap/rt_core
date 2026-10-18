@@ -1,13 +1,12 @@
 #include <ios>
 #include <stdexcept>
+#include <utility>
 
 #include "subsys/mdf/serializable_block_base.h"
 
 namespace eerie_leap::subsys::mdf {
 
-SerializableBlockBase::SerializableBlockBase() :
-    address_(0),
-    is_serialized_(false) {}
+SerializableBlockBase::SerializableBlockBase() = default;
 
 uint64_t SerializableBlockBase::GetSerializedSize() const {
     return GetBlockSize();
@@ -30,7 +29,7 @@ uint64_t SerializableBlockBase::WriteBlockToStream(std::streambuf& stream) {
     WriteBlockData(stream, block_data.get(), size);
 
     uint64_t bytes_written = size;
-    for(auto& child : GetChildren()) {
+    for(const auto& child : GetChildren()) {
         if(child && !child->IsSerialized())
             bytes_written += child->WriteToStream(stream);
     }
@@ -46,7 +45,7 @@ uint64_t SerializableBlockBase::RewriteToStream(std::streambuf& stream) {
         std::streambuf::pos_type(static_cast<std::streamoff>(address_)), std::ios_base::out
     );
 
-    if(position == std::streambuf::pos_type(std::streambuf::off_type(-1)))
+    if(position == std::streambuf::pos_type(static_cast<std::streambuf::off_type>(-1)))
         throw std::ios_base::failure("Stream does not support seeking.");
 
     const uint64_t size = GetSerializedSize();
@@ -80,7 +79,7 @@ void SerializableBlockBase::ResetBlock() {
     address_ = 0;
     is_serialized_ = false;
 
-    for(auto& child : GetChildren()) {
+    for(const auto& child : GetChildren()) {
         if(child)
             child->Reset();
     }
@@ -99,7 +98,7 @@ uint64_t SerializableBlockBase::ResolveBlockAddress(uint64_t address) {
     address_ = address;
     uint64_t current_address = address_ + GetBlockSize();
 
-    for(auto& child : GetChildren()) {
+    for(const auto& child : GetChildren()) {
         if(child && child->GetAddress() == 0)
             current_address = child->ResolveAddress(current_address);
     }
@@ -108,9 +107,10 @@ uint64_t SerializableBlockBase::ResolveBlockAddress(uint64_t address) {
 }
 
 void SerializableBlockBase::WriteBlockData(std::streambuf& stream, const uint8_t* data, uint64_t size) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): streambuf::sputn takes char*, the block holds raw bytes
     const auto written = stream.sputn(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 
-    if(written < 0 || static_cast<uint64_t>(written) != size)
+    if(written < 0 || std::cmp_not_equal(written, size))
         throw std::ios_base::failure("Failed to write block to stream.");
 }
 

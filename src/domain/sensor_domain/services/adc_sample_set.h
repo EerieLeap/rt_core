@@ -57,6 +57,7 @@ public:
     AdcSampleSet& operator=(const AdcSampleSet&) = delete;
     AdcSampleSet(AdcSampleSet&&) = default;
     AdcSampleSet& operator=(AdcSampleSet&&) = default;
+    ~AdcSampleSet() = default;
 
     // Construction time only. `channel` is the global channel `handle` was resolved from. The
     // returned slot is valid for the set's lifetime and is written by Acquire(). Throws

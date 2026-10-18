@@ -52,7 +52,7 @@ public:
     }
 
     uint64_t GetLinksSizeBytes() const override {
-        return (N + extra_links_count_) * LINK_SIZE_BYTES;
+        return static_cast<uint64_t>(N + extra_links_count_) * LINK_SIZE_BYTES;
     }
 
     std::shared_ptr<IBlock> GetLink(LinkType type) const {
@@ -63,10 +63,19 @@ public:
         return std::exchange(links_[ToIndex(type)], nullptr);
     }
 
-    const std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
+    /** TakeLink() for a link type known at compile time: checked there, so it cannot throw. */
+    template<LinkType Type>
+    std::shared_ptr<IBlock> TakeLink() noexcept {
+        constexpr auto INDEX = std::to_underlying(Type);
+        static_assert(INDEX >= 0 && INDEX < N, "Invalid block link type");
+
+        return std::exchange(links_[static_cast<size_t>(INDEX)], nullptr);
+    }
+
+    std::vector<std::shared_ptr<ISerializableBlock>> GetLinks() const override {
         std::vector<std::shared_ptr<ISerializableBlock>> links;
         links.reserve(links_.size());
-        for(auto& link : links_)
+        for(const auto& link : links_)
             links.push_back(link);
 
         return links;
@@ -79,7 +88,7 @@ public:
 
         uint64_t offset = 0;
 
-        for(auto& link : links_) {
+        for(const auto& link : links_) {
             if(link) {
                 auto address = link->GetAddress();
                 if(address == 0)

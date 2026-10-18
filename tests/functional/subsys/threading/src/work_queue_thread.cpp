@@ -18,12 +18,11 @@ constexpr int SYNC_TIMEOUT_MS = 1000;
 constexpr int IDLE_TIMEOUT_MS = 100;
 
 struct TaskProbe {
-    k_sem finished;
-    atomic_t runs;
+    k_sem finished{};
+    atomic_t runs{ ATOMIC_INIT(0) };
     int reschedules;
 
     explicit TaskProbe(int reschedules = 0) :
-        runs(ATOMIC_INIT(0)),
         reschedules(reschedules) {
         k_sem_init(&finished, 0, K_SEM_MAX_LIMIT);
     }
@@ -37,7 +36,7 @@ struct TaskProbe {
 };
 
 WorkQueueTaskResult ProbeHandler(TaskProbe* probe) {
-    atomic_val_t previous_runs = atomic_inc(&probe->runs);
+    const atomic_val_t previous_runs = atomic_inc(&probe->runs);
     k_sem_give(&probe->finished);
 
     return { .reschedule = previous_runs < probe->reschedules, .delay = K_MSEC(5) };
@@ -53,7 +52,7 @@ std::unique_ptr<WorkQueueThread> MakeQueueThread(const char* name) {
 template<typename TAction>
 bool ThrowsRuntimeError(TAction&& action) {
     try {
-        action();
+        std::forward<TAction>(action)();
     } catch(const std::runtime_error&) {
         return true;
     } catch(...) {
@@ -70,6 +69,7 @@ struct ThreadLookup {
 
 void MatchThreadName(const k_thread* thread, void* user_data) {
     auto* lookup = static_cast<ThreadLookup*>(user_data);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast): k_thread_name_get() takes a non-const k_tid_t; the callback's const is fixed by Zephyr
     const char* name = k_thread_name_get(const_cast<k_thread*>(thread));
 
     if(name != nullptr && std::string(name) == lookup->name)
@@ -190,7 +190,7 @@ ZTEST(work_queue_thread, test_Schedule_defers_the_handler_by_the_requested_delay
     TaskProbe probe;
     auto task = queue_thread->CreateTask(ProbeHandler, &probe);
 
-    int64_t started_at = k_uptime_get();
+    const int64_t started_at = k_uptime_get();
     task.Schedule(K_MSEC(150));
 
     zassert_true(probe.WaitForRun(SYNC_TIMEOUT_MS));
@@ -252,7 +252,7 @@ ZTEST(work_queue_thread, test_tasks_of_one_queue_run_on_the_queue_thread) {
     auto queue_thread = MakeQueueThread("wq_affinity");
 
     k_tid_t observed = nullptr;
-    k_sem done;
+    k_sem done{};
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 
     queue_thread->Run([&] {
@@ -273,7 +273,7 @@ ZTEST(work_queue_thread, test_Run_executes_every_submitted_handler) {
     auto queue_thread = MakeQueueThread("wq_runner");
 
     atomic_t completed = ATOMIC_INIT(0);
-    k_sem done;
+    k_sem done{};
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 
     for(int i = 0; i < RUN_COUNT; ++i) {
@@ -329,8 +329,8 @@ ZTEST(work_queue_thread, test_the_destructor_drains_and_stops_the_queue_thread) 
 ZTEST(work_queue_thread, test_Stop_releases_the_runner_task_state) {
     auto queue_thread = MakeQueueThread("wq_released");
 
-    auto tracker = std::make_shared<int>(0);
-    k_sem done;
+    const auto tracker = std::make_shared<int>(0);
+    k_sem done{};
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 
     queue_thread->Run([tracker, &done] {
@@ -370,7 +370,7 @@ ZTEST(work_queue_thread, test_IsCurrentThread_tells_the_queue_thread_apart_from_
 
     bool observed_own = false;
     bool observed_other = false;
-    k_sem done;
+    k_sem done{};
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 
     queue_thread->Run([&] {

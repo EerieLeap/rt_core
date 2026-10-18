@@ -14,12 +14,12 @@ using eerie_leap::subsys::device_tree::AdcDTInfo;
 
 namespace {
 
-constexpr int kSimulatorChannels = 8;
+constexpr int SIMULATOR_CHANNELS = 8;
 
 float SampleOne(IAdc& adc, uint8_t channel, uint16_t samples = 16) {
     const uint8_t channels[1] = { channel };
     AdcSample results[1];
-    AdcSampleRequest request{ .channels = channels, .results = results, .samples = samples };
+    const AdcSampleRequest request{ .channels = channels, .results = results, .samples = samples };
 
     adc.Sample(request);
     zassert_equal(results[0].error, AdcError::NONE, "channel %u", channel);
@@ -35,14 +35,14 @@ ZTEST(adc_simulator, test_Initialize_succeeds) {
     AdcSimulator adc;
 
     zassert_true(adc.Initialize());
-    zassert_equal(adc.GetChannelCount(), kSimulatorChannels);
+    zassert_equal(adc.GetChannelCount(), SIMULATOR_CHANNELS);
 }
 
 ZTEST(adc_simulator, test_capabilities_are_reported) {
     AdcSimulator adc;
     adc.Initialize();
 
-    auto capabilities = adc.GetCapabilities();
+    const auto capabilities = adc.GetCapabilities();
 
     zassert_false(capabilities.burst);
     zassert_false(capabilities.multi_channel);
@@ -53,15 +53,15 @@ ZTEST(adc_simulator, test_Sample_marks_out_of_range_channels) {
     AdcSimulator adc;
     adc.Initialize();
 
-    const uint8_t channels[3] = { 7, kSimulatorChannels, 100 };
+    const uint8_t channels[3] = { 7, SIMULATOR_CHANNELS, 100 };
     AdcSample results[3];
-    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 16 };
+    const AdcSampleRequest request{ .channels = channels, .results = results, .samples = 16 };
     adc.Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
     zassert_between_inclusive(results[0].volts, 0.0F, 3.3F);
 
-    for(int i : { 1, 2 }) {
+    for(const int i : { 1, 2 }) {
         zassert_equal(results[i].error, AdcError::CHANNEL_OUT_OF_RANGE, "channel %u should be rejected", channels[i]);
         zassert_equal(results[i].errno_value, -EINVAL);
     }
@@ -77,12 +77,12 @@ ZTEST(adc_simulator, test_Sample_marks_unordered_channels) {
     // The same contract as the hardware ADC: channels ascending, each at most once.
     const uint8_t channels[3] = { 3, 1, 3 };
     AdcSample results[3];
-    AdcSampleRequest request{ .channels = channels, .results = results, .samples = 16 };
+    const AdcSampleRequest request{ .channels = channels, .results = results, .samples = 16 };
     adc.Sample(request);
 
     zassert_equal(results[0].error, AdcError::NONE);
 
-    for(int i : { 1, 2 }) {
+    for(const int i : { 1, 2 }) {
         zassert_equal(results[i].error, AdcError::CHANNEL_OUT_OF_RANGE, "entry %d should be rejected", i);
         zassert_equal(results[i].errno_value, -EINVAL);
     }
@@ -105,7 +105,7 @@ ZTEST(adc_simulator, test_Sample_clamps_samples_to_at_least_one) {
     AdcSimulator adc;
     adc.Initialize();
 
-    float volts = SampleOne(adc, 0, 0);
+    const float volts = SampleOne(adc, 0, 0);
 
     zassert_between_inclusive(volts, 0.0F, 3.3F, "zero samples must still produce a reading");
     zassert_equal(adc.GetStats().conversions, 1);
@@ -117,7 +117,7 @@ ZTEST(adc_simulator, test_Sample_stays_within_the_adc_range) {
 
     for(int channel = 0; channel < adc.GetChannelCount(); ++channel) {
         for(int i = 0; i < 50; ++i) {
-            float volts = SampleOne(adc, channel);
+            const float volts = SampleOne(adc, channel);
             zassert_between_inclusive(volts, 0.0F, 3.3F);
         }
     }
@@ -127,7 +127,7 @@ ZTEST(adc_simulator, test_Sample_varies) {
     AdcSimulator adc;
     adc.Initialize();
 
-    float first = SampleOne(adc, 0);
+    const float first = SampleOne(adc, 0);
     bool changed = false;
     for(int i = 0; i < 20 && !changed; ++i)
         changed = SampleOne(adc, 0) != first;
@@ -142,14 +142,14 @@ ZTEST(adc_simulator_manager, test_counts) {
 
     zassert_true(manager.Initialize());
     zassert_equal(manager.GetAdcCount(), 1);
-    zassert_equal(manager.GetChannelCount(), kSimulatorChannels);
+    zassert_equal(manager.GetChannelCount(), SIMULATOR_CHANNELS);
     zassert_equal(manager.GetAdcs().size(), 1);
 }
 
 ZTEST(adc_simulator_manager, test_rejects_a_null_adc) {
     bool threw = false;
     try {
-        AdcManager manager({ nullptr });
+        const AdcManager manager({ nullptr });
     } catch(const std::invalid_argument&) {
         threw = true;
     }
@@ -158,15 +158,15 @@ ZTEST(adc_simulator_manager, test_rejects_a_null_adc) {
 }
 
 ZTEST(adc_simulator_manager, test_Resolve_maps_global_to_local) {
-    auto simulator = std::make_shared<AdcSimulator>();
+    const auto simulator = std::make_shared<AdcSimulator>();
     AdcManager manager({ simulator });
     manager.Initialize();
 
-    for(int channel = 0; channel < kSimulatorChannels; ++channel) {
-        auto handle = manager.Resolve(channel);
+    for(int channel = 0; channel < SIMULATOR_CHANNELS; ++channel) {
+        const auto handle = manager.Resolve(channel);
 
         zassert_equal(handle.adc, simulator.get());
-        zassert_equal(handle.local_channel, channel);
+        zassert_equal(static_cast<int>(handle.local_channel), channel);
     }
 }
 
@@ -174,7 +174,7 @@ ZTEST(adc_simulator_manager, test_Resolve_rejects_out_of_range_channels) {
     AdcManager manager({ std::make_shared<AdcSimulator>() });
     manager.Initialize();
 
-    for(int channel : { -1, kSimulatorChannels, 100 }) {
+    for(const int channel : { -1, SIMULATOR_CHANNELS, 100 }) {
         bool threw = false;
         try {
             manager.Resolve(channel);
@@ -190,13 +190,13 @@ ZTEST(adc_simulator_manager, test_Resolve_spans_two_simulators) {
     AdcManager manager({ std::make_shared<AdcSimulator>(), std::make_shared<AdcSimulator>() });
     manager.Initialize();
 
-    zassert_equal(manager.GetChannelCount(), 2 * kSimulatorChannels);
+    zassert_equal(manager.GetChannelCount(), 2 * SIMULATOR_CHANNELS);
 
-    auto last_of_first = manager.Resolve(kSimulatorChannels - 1);
-    auto first_of_second = manager.Resolve(kSimulatorChannels);
+    const auto last_of_first = manager.Resolve(SIMULATOR_CHANNELS - 1);
+    const auto first_of_second = manager.Resolve(SIMULATOR_CHANNELS);
 
     zassert_equal(last_of_first.adc, manager.GetAdcs()[0].get());
-    zassert_equal(last_of_first.local_channel, kSimulatorChannels - 1);
+    zassert_equal(last_of_first.local_channel, SIMULATOR_CHANNELS - 1);
     zassert_equal(first_of_second.adc, manager.GetAdcs()[1].get());
     zassert_equal(first_of_second.local_channel, 0);
 }
@@ -205,11 +205,11 @@ ZTEST(adc_simulator_manager, test_resolved_channels_read_within_range) {
     AdcManager manager({ std::make_shared<AdcSimulator>() });
     manager.Initialize();
 
-    for(int channel = 0; channel < kSimulatorChannels; ++channel) {
-        auto handle = manager.Resolve(channel);
+    for(int channel = 0; channel < SIMULATOR_CHANNELS; ++channel) {
+        const auto handle = manager.Resolve(channel);
 
         for(int i = 0; i < 25; ++i) {
-            float volts = SampleOne(*handle.adc, handle.local_channel);
+            const float volts = SampleOne(*handle.adc, handle.local_channel);
             zassert_between_inclusive(volts, 0.0F, 3.3F);
         }
     }
@@ -224,14 +224,14 @@ ZTEST(adc_simulator_manager, test_factory_ignores_device_tree_without_a_driver) 
         .resolutions = { 12 },
         .oversampling = { 0 } } };
 
-    AdcFactory factory([]() -> std::optional<std::vector<AdcDTInfo>>& {
+    AdcFactory factory([] -> std::optional<std::vector<AdcDTInfo>>& {
         return dt_adcs;
     });
-    auto manager = factory.Create();
+    const auto manager = factory.Create();
 
     zassert_equal(manager->GetAdcCount(), 1);
     zassert_not_null(dynamic_cast<AdcSimulator*>(manager->GetAdcs()[0].get()));
     zassert_true(manager->Initialize());
-    zassert_equal(manager->GetChannelCount(), kSimulatorChannels);
+    zassert_equal(manager->GetChannelCount(), SIMULATOR_CHANNELS);
 }
 #endif

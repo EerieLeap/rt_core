@@ -90,17 +90,17 @@ using eerie_memory::make_unique_pmr;
 
 // MDF layout the tests read back: identifier(8) at 0, ID block 64 bytes, then ##XX blocks whose
 // length sits 8 bytes into their header.
-constexpr size_t kIdBlockSize = 64;
-constexpr size_t kBlockHeaderSize = 24;
-constexpr size_t kBlockLengthOffset = 8;
-constexpr size_t kHeaderStartTimeOffset = kIdBlockSize + kBlockHeaderSize + 6 * 8; // hd_start_time_ns
+constexpr size_t ID_BLOCK_SIZE = 64;
+constexpr size_t BLOCK_HEADER_SIZE = 24;
+constexpr size_t BLOCK_LENGTH_OFFSET = 8;
+constexpr size_t HEADER_START_TIME_OFFSET = ID_BLOCK_SIZE + BLOCK_HEADER_SIZE + 6 * 8; // hd_start_time_ns
 
 // The configuration work queue stops a failed session, which unwinds the exception of the finalize
 // the dead stream refused. What that costs depends on the unwinder, not the word size: ARM's EHABI
 // tables are light (1476 bytes measured on qemu_cortex_a9), libgcc's DWARF unwinder is not (6580 on
 // qemu_malta, 7712 on qemu_cortex_a53, 8836 on qemu_riscv64). The stack comes from the heap without
 // a guard, so an overflow corrupts the heap rather than faulting.
-constexpr int kConfigWorkQueueStackSize = 16384;
+constexpr int CONFIG_WORK_QUEUE_STACK_SIZE = 16384;
 
 // One volume for the suite, formatted on first use; the service is shared like the SD service is.
 inline std::shared_ptr<FsService> GetFormattedFsService() {
@@ -114,6 +114,7 @@ inline std::shared_ptr<FsService> GetFormattedFsService() {
         // The fatfs fstab entry leaves storage_dev empty, and fs_mkfs() wants the volume name
         // ("intfs0:"), which is the mount point without its leading slash.
         if(mount_point->storage_dev == nullptr)
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast): fs_mount_t keeps the device name as a mutable pointer
             mount_point->storage_dev = const_cast<char*>(mount_point->mnt_point + 1);
 
         fs_service = std::make_shared<FsService>(mount_point);
@@ -127,7 +128,7 @@ inline std::shared_ptr<FsService> GetFormattedFsService() {
 
 // The log files, and the configurations a test stored, which the next rig would otherwise load.
 inline void RemoveDataDirectory() {
-    auto fs_service = GetFormattedFsService();
+    const auto fs_service = GetFormattedFsService();
 
     if(fs_service->Exists(LogFileNaming::LOGS_DIR))
         fs_service->DeleteRecursive(LogFileNaming::LOGS_DIR);
@@ -164,12 +165,13 @@ T ReadField(const std::vector<uint8_t>& data, size_t offset) {
 
 // Walks the block chain from the end of the ID block; 0 when there is no DT block.
 inline size_t FindDataBlockAddress(const std::vector<uint8_t>& data) {
-    size_t offset = kIdBlockSize;
+    size_t offset = ID_BLOCK_SIZE;
 
-    while(offset + kBlockHeaderSize <= data.size()) {
+    while(offset + BLOCK_HEADER_SIZE <= data.size()) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the block id is text inside a byte buffer
         const std::string id(reinterpret_cast<const char*>(data.data() + offset), 4);
-        const auto length = ReadField<uint64_t>(data, offset + kBlockLengthOffset);
-        zassert_true(length >= kBlockHeaderSize, "block %s has an invalid length", id.c_str());
+        const auto length = ReadField<uint64_t>(data, offset + BLOCK_LENGTH_OFFSET);
+        zassert_true(length >= BLOCK_HEADER_SIZE, "block %s has an invalid length", id.c_str());
 
         if(id == "##DT")
             return offset;
@@ -189,7 +191,7 @@ inline bool IsUnfinalized(const std::vector<uint8_t>& content) {
 }
 
 inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view text) {
-    return std::search(content.begin(), content.end(), text.begin(), text.end()) != content.end();
+    return !std::ranges::search(content, text).empty();
 }
 
 // A property of the header comment, as the logger writes LoggerMetadata.
@@ -199,13 +201,13 @@ inline std::string Property(const char* name, const std::string& value) {
 
 // A finalized file ends exactly where its DT block says it ends.
 inline void AssertFinalizedFile(const std::vector<uint8_t>& content, const char* name) {
-    zassert_true(content.size() >= kIdBlockSize + kBlockHeaderSize, "%s is shorter than an MDF header", name);
+    zassert_true(content.size() >= ID_BLOCK_SIZE + BLOCK_HEADER_SIZE, "%s is shorter than an MDF header", name);
     zassert_true(IsFinalized(content), "%s must carry the finalized identifier", name);
 
     const auto data_block_address = FindDataBlockAddress(content);
     zassert_not_equal(data_block_address, 0, "%s has no DT block", name);
 
-    const auto data_block_length = ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset);
+    const auto data_block_length = ReadField<uint64_t>(content, data_block_address + BLOCK_LENGTH_OFFSET);
     zassert_equal(
         content.size(), data_block_address + static_cast<size_t>(data_block_length),
         "%s must end where the patched DT length says it ends", name
@@ -231,9 +233,9 @@ inline std::vector<LogFile> ReadLogFiles(FsService& fs_service) {
         file.path = std::string(LogFileNaming::LOGS_DIR) + "/" + name;
         file.content = ReadWholeFile(fs_service, file.path);
         zassert_true(
-            file.content.size() >= kHeaderStartTimeOffset + 8, "%s is shorter than an MDF header", file.path.c_str()
+            file.content.size() >= HEADER_START_TIME_OFFSET + 8, "%s is shorter than an MDF header", file.path.c_str()
         );
-        file.start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(file.content, kHeaderStartTimeOffset));
+        file.start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(file.content, HEADER_START_TIME_OFFSET));
         files.push_back(std::move(file));
     }
 
@@ -295,7 +297,7 @@ inline void RemoveFiller(FsService& fs_service, std::string_view path) {
 
 // An analog sensor with a convertible expression and a raw CAN sensor on bus 0.
 inline std::vector<std::shared_ptr<Sensor>> MakeLoggedSensors() {
-    auto oil_pressure = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "oil_pressure");
+    const auto oil_pressure = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "oil_pressure");
     oil_pressure->metadata.name = "Oil pressure";
     oil_pressure->metadata.unit = "bar";
     oil_pressure->metadata.description = "Main gallery, <after> the filter & cooler";
@@ -303,7 +305,7 @@ inline std::vector<std::shared_ptr<Sensor>> MakeLoggedSensors() {
     oil_pressure->configuration.channel = 0;
     oil_pressure->configuration.expression = "x * 0.1";
 
-    auto can_raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "can_raw");
+    const auto can_raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "can_raw");
     can_raw->metadata.name = "Raw frames";
     can_raw->configuration.type = SensorType::CANBUS_RAW;
     can_raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 0, 0x100);
@@ -313,11 +315,11 @@ inline std::vector<std::shared_ptr<Sensor>> MakeLoggedSensors() {
 }
 
 // Record layouts of MakeLoggedSensors(): record ids in creation order, sizes after the id.
-constexpr uint8_t kValueRecordId = 1; // time 8, value 4, raw value 4, invalidation 1
-constexpr uint8_t kVlsdRecordId = 2;  // length 4, payload
-constexpr uint8_t kCanRecordId = 3;   // time 8, CAN_DataFrame 15
-constexpr size_t kValueRecordSize = 1 + 8 + 4 + 4 + 1;
-constexpr size_t kCanRecordSize = 1 + 8 + 15;
+constexpr uint8_t VALUE_RECORD_ID = 1; // time 8, value 4, raw value 4, invalidation 1
+constexpr uint8_t VLSD_RECORD_ID = 2;  // length 4, payload
+constexpr uint8_t CAN_RECORD_ID = 3;   // time 8, CAN_DataFrame 15
+constexpr size_t VALUE_RECORD_SIZE = 1 + 8 + 4 + 4 + 1;
+constexpr size_t CAN_RECORD_SIZE = 1 + 8 + 15;
 
 struct DataRecords {
     std::vector<double> value_times;
@@ -333,27 +335,27 @@ inline DataRecords ReadDataRecords(const std::vector<uint8_t>& content) {
     zassert_not_equal(data_block_address, 0, "the file has no DT block");
 
     const size_t end = data_block_address
-        + static_cast<size_t>(ReadField<uint64_t>(content, data_block_address + kBlockLengthOffset));
-    size_t position = data_block_address + kBlockHeaderSize;
+        + static_cast<size_t>(ReadField<uint64_t>(content, data_block_address + BLOCK_LENGTH_OFFSET));
+    size_t position = data_block_address + BLOCK_HEADER_SIZE;
     uint8_t last_sequence = 0;
     DataRecords records;
 
     while(position < end) {
         switch(content[position]) {
-            case kValueRecordId:
+            case VALUE_RECORD_ID:
                 records.value_times.push_back(ReadField<double>(content, position + 1));
                 records.values.push_back(ReadField<float>(content, position + 1 + 8));
                 records.value_invalid_masks.push_back(content[position + 1 + 8 + 4 + 4]);
-                position += kValueRecordSize;
+                position += VALUE_RECORD_SIZE;
                 break;
-            case kVlsdRecordId:
+            case VLSD_RECORD_ID:
                 last_sequence = content[position + 1 + 4];
                 position += 1 + 4 + ReadField<uint32_t>(content, position + 1);
                 break;
-            case kCanRecordId:
+            case CAN_RECORD_ID:
                 records.frame_times.push_back(ReadField<double>(content, position + 1));
                 records.frame_sequences.push_back(last_sequence);
-                position += kCanRecordSize;
+                position += CAN_RECORD_SIZE;
                 break;
             default:
                 zassert_unreachable("unknown record id %u at %zu", content[position], position);
@@ -368,7 +370,7 @@ inline DataRecords ReadDataRecords(const std::vector<uint8_t>& content) {
 // Seconds from the file's start time to @p time, as the master channel stores it.
 inline double
 SecondsSinceFileStart(const std::vector<uint8_t>& content, const std::chrono::system_clock::time_point& time) {
-    const auto start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(content, kHeaderStartTimeOffset));
+    const auto start_time_ns = static_cast<int64_t>(ReadField<uint64_t>(content, HEADER_START_TIME_OFFSET));
     const auto time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
 
     return static_cast<double>(time_ns - start_time_ns) / 1e9;
@@ -390,12 +392,12 @@ inline LoggerMetadata MakeTestLoggerMetadata() {
 // interval and size limit over @p sensors, here with every sensor enabled and its raw value logged.
 // The logger takes a snapshot, so the sensors are enabled there without storing a configuration.
 inline LogWriterService::LoggerFactory MakeLoggerFactory(
-    std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
-    std::vector<std::shared_ptr<Sensor>> sensors,
+    const std::shared_ptr<LoggingConfigurationManager>& logging_configuration_manager,
+    const std::vector<std::shared_ptr<Sensor>>& sensors,
     bool log_only_new_data
 ) {
 
-    return [logging_configuration_manager, sensors, log_only_new_data]() -> std::shared_ptr<ILogger<SensorReading>> {
+    return [logging_configuration_manager, sensors, log_only_new_data] -> std::shared_ptr<ILogger<SensorReading>> {
         const auto stored_configuration = logging_configuration_manager->Get();
 
         LoggingConfiguration logger_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
@@ -415,16 +417,16 @@ inline LogWriterService::LoggerFactory MakeLoggerFactory(
 
 // The tool ID the supervisor is given here: not MakeTestLoggerMetadata()'s, so a header written by
 // the rig's own factory cannot pass for one written by the supervisor's.
-inline constexpr const char* kTestToolId = "rt_core_supervisor";
+inline constexpr const char* TEST_TOOL_ID = "rt_core_supervisor";
 
 // Carries logging_events in this binary. The channel drops every publish until a bus registers it,
 // and stays with the first one, so every rig shares this bus.
 class LoggingTestBus : public EventBus {
 private:
-    static constexpr int k_stack_size = 4096;
+    static constexpr int STACK_SIZE = 4096;
 
     LoggingTestBus() :
-        EventBus("logging_test_bus", k_stack_size) {
+        EventBus("logging_test_bus", STACK_SIZE) {
         RegisterChannel(LoggingEventsChannel::GetInstance());
     }
 
@@ -467,7 +469,7 @@ MakeLogWriterRig(std::span<const std::shared_ptr<Sensor>> sensors = {}, bool log
 
     rig.fs_service = GetFormattedFsService();
 
-    rig.config_work_queue = std::make_shared<WorkQueueThread>("config_work_queue", kConfigWorkQueueStackSize, 5);
+    rig.config_work_queue = std::make_shared<WorkQueueThread>("config_work_queue", CONFIG_WORK_QUEUE_STACK_SIZE, 5);
     zassert_true(rig.config_work_queue->Initialize(), "the configuration work queue did not start");
 
     rig.logging_configuration_manager = std::make_shared<LoggingConfigurationManager>(
@@ -510,7 +512,7 @@ TryStoreLoggingConfiguration(LoggingConfigurationManager& manager, uint32_t inte
 
 // Stores a logging configuration with @p interval_ms and @p max_log_size_mb and no sensor entries;
 // the rig's factory enables its sensors itself. Never while the queue is gated: the save runs there.
-inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
+inline void StoreLoggingConfiguration(const LogWriterRig& rig, uint32_t interval_ms, uint32_t max_log_size_mb = 0) {
     zassert_true(
         TryStoreLoggingConfiguration(*rig.logging_configuration_manager, interval_ms, max_log_size_mb),
         "the logging configuration was not stored"
@@ -518,8 +520,11 @@ inline void StoreLoggingConfiguration(LogWriterRig& rig, uint32_t interval_ms, u
 }
 
 // Stores a logging configuration that logs @p sensors, for the supervisor's own factory.
-inline void
-EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> sensors, uint32_t interval_ms = 100) {
+inline void EnableSensorLogging(
+    const LogWriterRig& rig,
+    std::span<const std::shared_ptr<Sensor>> sensors,
+    uint32_t interval_ms = 100
+) {
     LoggingConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     configuration.logging_interval_ms = interval_ms;
     configuration.max_log_size_mb = 0;
@@ -531,7 +536,7 @@ EnableSensorLogging(LogWriterRig& rig, std::span<const std::shared_ptr<Sensor>> 
 }
 
 inline void PublishValue(
-    LogWriterRig& rig,
+    const LogWriterRig& rig,
     const Sensor& sensor,
     uint8_t sequence,
     const std::chrono::system_clock::time_point& time
@@ -546,7 +551,7 @@ inline void PublishValue(
 }
 
 inline void PublishFrame(
-    LogWriterRig& rig,
+    const LogWriterRig& rig,
     const Sensor& sensor,
     uint8_t sequence,
     const std::chrono::system_clock::time_point& time
@@ -608,9 +613,9 @@ inline LogWriterSupervisor& AttachSupervisor(
     }
     rig.sensors_configuration_manager = sensors_configuration_manager;
 
-    auto supervisor = std::make_shared<LogWriterSupervisor>(
+    const auto supervisor = std::make_shared<LogWriterSupervisor>(
         rig.config_work_queue, rig.log_writer_service, rig.logging_configuration_manager,
-        std::move(sensors_configuration_manager), kTestToolId, std::move(device_id_provider)
+        std::move(sensors_configuration_manager), TEST_TOOL_ID, std::move(device_id_provider)
     );
     SupervisorSlot() = supervisor;
     zassert_true(supervisor->Initialize(), "the log writer supervisor did not initialize");
@@ -631,8 +636,8 @@ inline void ReleaseSupervisor() {
 class ConfigQueueGate {
 private:
     struct Context {
-        k_sem entered;
-        k_sem open;
+        k_sem entered{};
+        k_sem open{};
 
         Context() {
             k_sem_init(&entered, 0, 1);
@@ -648,7 +653,7 @@ public:
     [[nodiscard]] bool Close(WorkQueueThread& work_queue) {
         Open();
 
-        auto context = std::make_shared<Context>();
+        const auto context = std::make_shared<Context>();
         work_queue.Run([context] {
             k_sem_give(&context->entered);
             k_sem_take(&context->open, K_SECONDS(5));
@@ -675,8 +680,8 @@ inline ConfigQueueGate& Gate() {
 }
 
 // Returns once everything queued on the rig's configuration work queue before the call has run.
-[[nodiscard]] inline bool FlushConfigQueue(LogWriterRig& rig) {
-    auto done = std::make_shared<k_sem>();
+[[nodiscard]] inline bool FlushConfigQueue(const LogWriterRig& rig) {
+    const auto done = std::make_shared<k_sem>();
     k_sem_init(done.get(), 0, 1);
 
     rig.config_work_queue->Run([done] {
@@ -686,7 +691,7 @@ inline ConfigQueueGate& Gate() {
     return k_sem_take(done.get(), K_SECONDS(5)) == 0;
 }
 
-inline k_tid_t ConfigQueueThread(LogWriterRig& rig) {
+inline k_tid_t ConfigQueueThread(const LogWriterRig& rig) {
     return k_work_queue_thread_get(rig.config_work_queue->GetWorkQueue());
 }
 
@@ -700,7 +705,7 @@ class StatusRecorder {
 private:
     AnySubscription subscription_;
 
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
     std::vector<StatusEvent> events_;
 
     // The recorder of the running test; see ResetAfterTest().
@@ -713,11 +718,11 @@ private:
     void OnStatusUpdated(const LoggingEventsChannel::EventMessage& event) {
         StatusEvent status;
 
-        const auto is_active = event.payload.find(LoggingPayloadType::IsActive);
+        const auto* const is_active = event.payload.find(LoggingPayloadType::IsActive);
         if(is_active != event.payload.end() && std::holds_alternative<bool>(is_active->second))
             status.is_active = std::get<bool>(is_active->second);
 
-        const auto reason = event.payload.find(LoggingPayloadType::Reason);
+        const auto* const reason = event.payload.find(LoggingPayloadType::Reason);
         if(reason != event.payload.end() && std::holds_alternative<uint32_t>(reason->second))
             status.reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason->second));
 
@@ -786,8 +791,8 @@ class StatusBlocker {
 private:
     // Owned by the handler, so a blocker on an aborted test's stack leaves nothing it could reach.
     struct Context {
-        k_sem entered;
-        k_sem release;
+        k_sem entered{};
+        k_sem release{};
         std::atomic<bool> is_armed = false;
 
         Context() {
@@ -813,7 +818,7 @@ public:
         subscription_ = CreateScopedSubscription(
             LoggingEventsChannel::GetInstance(), LoggingEventType::StatusUpdated,
             [context = context_](const LoggingEventsChannel::EventMessage& event) {
-                const auto is_active = event.payload.find(LoggingPayloadType::IsActive);
+                const auto* const is_active = event.payload.find(LoggingPayloadType::IsActive);
                 if(is_active == event.payload.end()
                     || !std::holds_alternative<bool>(is_active->second)
                     || std::get<bool>(is_active->second)) {
@@ -873,7 +878,7 @@ inline void ResetAfterTest(void* = nullptr) {
     StatusRecorder::ReleaseLeftover();
     ReleaseSupervisor();
 
-    if(auto service = std::exchange(LastRigService(), nullptr); service != nullptr)
+    if(const auto service = std::exchange(LastRigService(), nullptr); service != nullptr)
         service->Stop();
 
     // The bus delivers what this test published before the next test subscribes.

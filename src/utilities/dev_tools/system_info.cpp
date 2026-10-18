@@ -11,7 +11,7 @@ namespace eerie_leap::utilities::dev_tools {
 LOG_MODULE_REGISTER(dev_tools_logger);
 
 // Set CONFIG_THREAD_ANALYZER_ISR_STACK_USAGE for ISR stack usage info
-void SystemInfo::PrintThreadInfo(int cpu) {
+void SystemInfo::PrintThreadInfo([[maybe_unused]] int cpu) {
 #ifdef CONFIG_THREAD_ANALYZER
     thread_analyzer_print(cpu);
 #else
@@ -20,6 +20,7 @@ void SystemInfo::PrintThreadInfo(int cpu) {
 }
 
 static const char* stack_info_thread_name_filter = nullptr;
+// NOLINTNEXTLINE(misc-const-correctness): signature fixed by thread_analyzer_cb
 [[maybe_unused]] static void PrintStackInfoCallback(thread_analyzer_info* info) {
     if(stack_info_thread_name_filter != nullptr && strcmp(stack_info_thread_name_filter, info->name) != 0) {
         return;
@@ -27,7 +28,7 @@ static const char* stack_info_thread_name_filter = nullptr;
 
     // Print stack usage information
     constexpr size_t PERCENT_MULTIPLIER = 100U;
-    size_t used_percent = (info->stack_used * PERCENT_MULTIPLIER) / info->stack_size;
+    const size_t used_percent = (info->stack_used * PERCENT_MULTIPLIER) / info->stack_size;
 
     LOG_INF(
         "  %-14s: Unused %zu Usage %zu / %zu (%zu %%)", info->name, info->stack_size - info->stack_used,
@@ -35,14 +36,13 @@ static const char* stack_info_thread_name_filter = nullptr;
     );
 }
 
-struct ThreadSearchData {
-    const char* target_name;
-    const k_thread* found_thread;
-};
+namespace {
 
 struct ThreadIdData {
     int count;
 };
+
+} // namespace
 
 static void ThreadIdCallback(const k_thread* thread, void* user_data) {
     auto* thread_data = static_cast<ThreadIdData*>(user_data);
@@ -51,10 +51,9 @@ static void ThreadIdCallback(const k_thread* thread, void* user_data) {
         name = "unnamed";
     }
 
-    LOG_INF(
-        "  Thread %d: %-20s TID 0x%08x", thread_data->count++, name,
-        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(thread))
-    );
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the thread's address is its printed TID
+    const auto tid = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(thread));
+    LOG_INF("  Thread %d: %-20s TID 0x%08x", thread_data->count++, name, tid);
 }
 
 void SystemInfo::PrintThreadIds() {
@@ -64,7 +63,7 @@ void SystemInfo::PrintThreadIds() {
     k_thread_foreach(ThreadIdCallback, &data);
 }
 
-void SystemInfo::PrintStackInfo(int cpu, const char* thread_name) {
+void SystemInfo::PrintStackInfo([[maybe_unused]] int cpu, const char* thread_name) {
     stack_info_thread_name_filter = thread_name;
 
 #ifdef CONFIG_THREAD_ANALYZER
@@ -76,6 +75,7 @@ void SystemInfo::PrintStackInfo(int cpu, const char* thread_name) {
 }
 
 static const char* cpu_info_thread_name_filter = nullptr;
+// NOLINTNEXTLINE(misc-const-correctness): signature fixed by thread_analyzer_cb
 [[maybe_unused]] static void PrintCpuInfoCallback(thread_analyzer_info* info) {
     if(cpu_info_thread_name_filter != nullptr && strcmp(cpu_info_thread_name_filter, info->name) != 0)
         return;
@@ -87,7 +87,7 @@ static const char* cpu_info_thread_name_filter = nullptr;
 #endif
 }
 
-void SystemInfo::PrintCpuInfo(int cpu, const char* thread_name) {
+void SystemInfo::PrintCpuInfo([[maybe_unused]] int cpu, const char* thread_name) {
     cpu_info_thread_name_filter = thread_name;
 
 #ifdef CONFIG_THREAD_ANALYZER
@@ -104,10 +104,10 @@ void SystemInfo::PrintCpuInfo(int cpu, const char* thread_name) {
     #define EERIE_LEAP_HEAP_INFO_SUPPORTED
 
 static void PrintHeapStats(sys_heap* heap) {
-    sys_memory_stats stats;
+    sys_memory_stats stats{};
     sys_heap_runtime_stats_get(heap, &stats);
 
-    size_t used_percent = (stats.allocated_bytes * 100U) / (stats.free_bytes + stats.allocated_bytes);
+    const size_t used_percent = (stats.allocated_bytes * 100U) / (stats.free_bytes + stats.allocated_bytes);
 
     LOG_INF(
         "  %-14p: Unused %zu Usage %zu / %zu (%zu %%), Max Alloc %zu", heap, stats.free_bytes, stats.allocated_bytes,
@@ -118,9 +118,9 @@ static void PrintHeapStats(sys_heap* heap) {
 
 void SystemInfo::PrintHeapInfo() {
 #ifdef EERIE_LEAP_HEAP_INFO_SUPPORTED
-    sys_heap** heap_p;
+    sys_heap** heap_p = nullptr;
 
-    int heaps_count = sys_heap_array_get(&heap_p);
+    const int heaps_count = sys_heap_array_get(&heap_p);
     LOG_INF("Heap analyze, there are %d heaps allocated at addrs:", heaps_count);
 
     for(int i = 0; i < heaps_count; ++i)

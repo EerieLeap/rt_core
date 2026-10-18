@@ -38,6 +38,9 @@ private:
 public:
     explicit NetworkMgmtGroup(std::shared_ptr<const ICdmpNetworkInfo> network_info);
     ~NetworkMgmtGroup();
+
+    NetworkMgmtGroup(const NetworkMgmtGroup&) = delete;
+    NetworkMgmtGroup& operator=(const NetworkMgmtGroup&) = delete;
 };
 
 } // namespace eerie_leap::domain::canbus_com_domain::smp

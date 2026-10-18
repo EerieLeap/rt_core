@@ -119,7 +119,10 @@ inline std::vector<RoutedPacket> SplitStream(const Bytes& stream) {
             {
                 .route = stream[offset],
                 .header = *header,
-                .packet = Bytes(stream.begin() + offset + 1, stream.begin() + offset + 1 + size),
+                .packet = Bytes(
+                    stream.begin() + static_cast<std::ptrdiff_t>(offset + 1),
+                    stream.begin() + static_cast<std::ptrdiff_t>(offset + 1 + size)
+                ),
             }
         );
         offset += 1 + size;
@@ -140,8 +143,10 @@ inline std::optional<std::string> FindText(std::span<const uint8_t> body, std::s
             return std::nullopt;
 
         zcbor_string value{};
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
         if(std::string_view(reinterpret_cast<const char*>(name.value), name.len) == key
             && zcbor_tstr_decode(zsd, &value))
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
             return std::string(reinterpret_cast<const char*>(value.value), value.len);
 
         if(!zcbor_any_skip(zsd, nullptr))
@@ -162,6 +167,7 @@ inline std::optional<int32_t> FindInt(std::span<const uint8_t> body, std::string
             return std::nullopt;
 
         int32_t value = 0;
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
         if(std::string_view(reinterpret_cast<const char*>(name.value), name.len) == key
             && zcbor_int32_decode(zsd, &value))
             return value;

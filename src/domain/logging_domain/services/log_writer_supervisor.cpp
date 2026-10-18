@@ -139,8 +139,8 @@ LoggerMetadata CreateLoggerMetadata(
     metadata.tool_version = std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MAJOR) + "."
         + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MINOR) + "." + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_PATCH);
     metadata.product_id = CONFIG_EERIE_LEAP_PRODUCT_ID;
-    metadata.hw_version = SystemConfiguration::hw_version;
-    metadata.sw_version = SystemConfiguration::sw_version;
+    metadata.hw_version = SystemConfiguration::HW_VERSION;
+    metadata.sw_version = SystemConfiguration::SW_VERSION;
 
     // Unassigned (0) until the unit has claimed an ID on the CDMP network, or without one.
     if(device_id_provider)
@@ -166,7 +166,7 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
 
     return [logging_configuration_manager = std::move(logging_configuration_manager),
                sensors_configuration_manager = std::move(sensors_configuration_manager), tool_id = std::move(tool_id),
-               device_id_provider = std::move(device_id_provider)]() -> std::shared_ptr<ILogger<SensorReading>> {
+               device_id_provider = std::move(device_id_provider)] -> std::shared_ptr<ILogger<SensorReading>> {
         const auto sensors = sensors_configuration_manager->Get();
         const auto logging_configuration = logging_configuration_manager->Get();
 
@@ -281,7 +281,8 @@ void LogWriterSupervisor::RequestStart(uint32_t /*target_uid*/) {
     }
 
     state_->pending_request = Request::Start;
-    task_->Reschedule(K_NO_WAIT);
+    if(task_.has_value())
+        task_->Reschedule(K_NO_WAIT);
 }
 
 void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
@@ -291,14 +292,15 @@ void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
     }
 
     state_->pending_request = Request::Stop;
-    task_->Reschedule(K_NO_WAIT);
+    if(task_.has_value())
+        task_->Reschedule(K_NO_WAIT);
 }
 
 bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
     if(is_start)
-        RequestStart(kAllUnits);
+        RequestStart(ALL_UNITS);
     else
-        RequestStop(kAllUnits);
+        RequestStop(ALL_UNITS);
 
     return true;
 }
@@ -412,7 +414,7 @@ void LogWriterSupervisor::RestartIfRunning() {
 }
 
 void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessage& event) {
-    const auto active = event.payload.find(LoggingPayloadType::IsActive);
+    const auto* const active = event.payload.find(LoggingPayloadType::IsActive);
     if(active == event.payload.end() || !std::holds_alternative<bool>(active->second))
         return;
 
@@ -422,7 +424,7 @@ void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessa
         return;
 
     auto reason = LoggingStatusReason::Stopped;
-    const auto reason_entry = event.payload.find(LoggingPayloadType::Reason);
+    const auto* const reason_entry = event.payload.find(LoggingPayloadType::Reason);
     if(reason_entry != event.payload.end() && std::holds_alternative<uint32_t>(reason_entry->second))
         reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason_entry->second));
 
@@ -431,7 +433,8 @@ void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessa
         return;
 
     failure_reason_ = reason;
-    task_->Reschedule(K_NO_WAIT);
+    if(task_.has_value())
+        task_->Reschedule(K_NO_WAIT);
 }
 
 } // namespace eerie_leap::domain::logging_domain::services

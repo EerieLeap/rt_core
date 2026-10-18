@@ -68,17 +68,24 @@ CdmpStateService::CdmpStateService(
 }
 
 CdmpStateService::~CdmpStateService() {
-    Stop();
+    // A destructor is noexcept: an exception from Stop() or a mutex would end in std::terminate.
+    try {
+        Stop();
 
-    command_service_->UnregisterServiceCommandHandler(CdmpServiceCommandCode::STATE_SYNC_REQUEST);
-    network_service_->UnregisterHeartbeatHandler(heartbeat_handler_id_);
-    network_service_->UnregisterDeviceEventHandler(device_event_handler_id_);
+        command_service_->UnregisterServiceCommandHandler(CdmpServiceCommandCode::STATE_SYNC_REQUEST);
+        network_service_->UnregisterHeartbeatHandler(heartbeat_handler_id_);
+        network_service_->UnregisterDeviceEventHandler(device_event_handler_id_);
 
-    // Leaving ONLINE after the stop still reports the dropped copies. The others are cancelled too,
-    // so that no timer outlives the service whatever state the stop found.
-    for(auto* task : { &receive_task_, &transmit_task_, &replay_task_, &notify_task_ }) {
-        if(task->has_value())
-            task->value().Cancel();
+        // Leaving ONLINE after the stop still reports the dropped copies. The others are cancelled too,
+        // so that no timer outlives the service whatever state the stop found.
+        for(auto* task : { &receive_task_, &transmit_task_, &replay_task_, &notify_task_ }) {
+            if(task->has_value())
+                task->value().Cancel();
+        }
+    } catch(const std::exception& e) {
+        LOG_ERR("CDMP State Service teardown failed: %s", e.what());
+    } catch(...) {
+        LOG_ERR("CDMP State Service teardown failed.");
     }
 }
 
@@ -201,7 +208,8 @@ void CdmpStateService::QueueFrame(std::span<const uint8_t> frame_data, bool is_r
         return;
     }
 
-    receive_task_.value().Schedule();
+    if(receive_task_.has_value())
+        receive_task_->Schedule();
 }
 
 WorkQueueTaskResult CdmpStateService::ProcessReceivedFrames(CdmpStateService* instance) {
@@ -618,14 +626,14 @@ size_t CdmpStateService::GetRemoteStates(uint8_t state_type, std::span<CdmpRemot
 }
 
 std::span<CdmpStateService::RemoteRecord> CdmpStateService::SourceRecords(uint8_t source) {
-    auto range = std::ranges::equal_range(RemoteRecords(), source, {}, &RemoteRecord::source);
+    const auto range = std::ranges::equal_range(RemoteRecords(), source, {}, &RemoteRecord::source);
 
     return { range.begin(), range.end() };
 }
 
 CdmpStateService::LocalRecord* CdmpStateService::FindLocalRecord(uint8_t state_type) {
-    auto records = LocalRecords();
-    auto it = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type);
+    const auto records = LocalRecords();
+    const auto it = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type);
 
     return it != records.end() && it->state_type == state_type ? &*it : nullptr;
 }
@@ -633,8 +641,8 @@ CdmpStateService::LocalRecord* CdmpStateService::FindLocalRecord(uint8_t state_t
 CdmpStateService::LocalRecord* CdmpStateService::AddLocalRecord(uint8_t state_type) {
     if(local_count_ == local_records_.size()) {
         // A withdrawal still waiting for acknowledgements gives way; the digest covers it.
-        auto records = LocalRecords();
-        auto withdrawn = std::ranges::find(records, true, &LocalRecord::is_withdrawn);
+        const auto records = LocalRecords();
+        const auto withdrawn = std::ranges::find(records, true, &LocalRecord::is_withdrawn);
         if(withdrawn == records.end())
             return nullptr;
 
@@ -642,10 +650,10 @@ CdmpStateService::LocalRecord* CdmpStateService::AddLocalRecord(uint8_t state_ty
         local_count_--;
     }
 
-    auto records = LocalRecords();
+    const auto records = LocalRecords();
     const auto index = std::ranges::lower_bound(records, state_type, {}, &LocalRecord::state_type) - records.begin();
-    const auto first = local_records_.begin();
-    const auto position = first + index;
+    auto* const first = local_records_.begin();
+    auto* const position = first + index;
 
     std::move_backward(position, first + local_count_, first + local_count_ + 1);
     local_count_++;
@@ -697,8 +705,8 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
     ScopedMutex guard(records_lock_);
 
     const uint8_t source = message.source_device_id;
-    auto records = RemoteRecords();
-    auto it = std::ranges::lower_bound(
+    const auto records = RemoteRecords();
+    const auto it = std::ranges::lower_bound(
         records, std::pair(source, message.state_type), {}, [](const RemoteRecord& record) {
             return std::pair(record.source, record.state_type);
         }
@@ -737,8 +745,8 @@ void CdmpStateService::ApplyRecord(const CdmpStateChangeMessage& message) {
         return;
     }
 
-    const auto first = remote_records_.begin();
-    const auto position = first + (it - records.begin());
+    auto* const first = remote_records_.begin();
+    auto* const position = first + (it - records.begin());
 
     std::move_backward(position, first + remote_count_, first + remote_count_ + 1);
     remote_count_++;
@@ -756,8 +764,8 @@ void CdmpStateService::RemoveFromAcknowledgementSets(uint8_t peer_id, std::optio
         if(version.has_value() && record.version != version.value())
             continue;
 
-        auto unacknowledged = std::span(record.unacknowledged).first(record.unacknowledged_count);
-        auto it = std::ranges::find(unacknowledged, peer_id);
+        const auto unacknowledged = std::span(record.unacknowledged).first(record.unacknowledged_count);
+        const auto it = std::ranges::find(unacknowledged, peer_id);
         if(it == unacknowledged.end())
             continue;
 
@@ -769,8 +777,8 @@ void CdmpStateService::RemoveFromAcknowledgementSets(uint8_t peer_id, std::optio
 }
 
 void CdmpStateService::FreeAcknowledgedWithdrawals() {
-    auto records = LocalRecords();
-    auto freed = std::ranges::remove_if(records, [](const LocalRecord& record) {
+    const auto records = LocalRecords();
+    const auto freed = std::ranges::remove_if(records, [](const LocalRecord& record) {
         return record.is_withdrawn && !record.is_announce_pending && record.unacknowledged_count == 0;
     });
 
@@ -786,20 +794,20 @@ void CdmpStateService::ScheduleRetransmission(int64_t now) {
     }
 
     // Under records_lock_, like every other reschedule, so the latest one is always right.
-    if(next_retransmit_ms != std::numeric_limits<int64_t>::max())
-        transmit_task_.value().Reschedule(K_MSEC(std::max<int64_t>(next_retransmit_ms - now, 0)));
+    if(next_retransmit_ms != std::numeric_limits<int64_t>::max() && transmit_task_.has_value())
+        transmit_task_->Reschedule(K_MSEC(std::max<int64_t>(next_retransmit_ms - now, 0)));
 }
 
 template<typename TPredicate>
 void CdmpStateService::RemoveRemoteRecords(TPredicate predicate) {
-    auto records = RemoteRecords();
+    const auto records = RemoteRecords();
 
     for(const auto& record : records) {
         if(predicate(record))
             changed_types_.set(record.state_type);
     }
 
-    auto removed = std::ranges::remove_if(records, predicate);
+    const auto removed = std::ranges::remove_if(records, predicate);
     if(removed.empty())
         return;
 
@@ -835,7 +843,7 @@ void CdmpStateService::ForgetNetwork() {
 }
 
 CdmpStateService::SourceState* CdmpStateService::FindSourceState(uint8_t source, bool add) {
-    auto it = std::ranges::find(sources_, source, &SourceState::device_id);
+    auto* it = std::ranges::find(sources_, source, &SourceState::device_id);
     if(it != sources_.end())
         return &*it;
 

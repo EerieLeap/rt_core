@@ -24,7 +24,7 @@ class ServiceBase : public TService {
 
 private:
     atomic_t service_state_ = ATOMIC_INIT(static_cast<atomic_val_t>(ServiceState::STOPPED));
-    k_mutex transition_mutex_;
+    k_mutex transition_mutex_{};
 
     void SetState(ServiceState state) noexcept {
         atomic_set(&service_state_, static_cast<atomic_val_t>(state));
@@ -55,7 +55,7 @@ public:
     }
 
     bool Initialize() final {
-        ScopedMutex guard(transition_mutex_);
+        const ScopedMutex guard(transition_mutex_);
 
         if(GetState() != ServiceState::STOPPED)
             return false;
@@ -64,7 +64,7 @@ public:
     }
 
     bool Start() final {
-        ScopedMutex guard(transition_mutex_);
+        const ScopedMutex guard(transition_mutex_);
 
         const ServiceState previous_state = GetState();
 
@@ -95,7 +95,7 @@ public:
     }
 
     bool Stop() final {
-        ScopedMutex guard(transition_mutex_);
+        const ScopedMutex guard(transition_mutex_);
 
         const ServiceState previous_state = GetState();
 
@@ -126,7 +126,7 @@ public:
     }
 
     bool Pause() final {
-        ScopedMutex guard(transition_mutex_);
+        const ScopedMutex guard(transition_mutex_);
 
         if(!this->IsPausable() || GetState() != ServiceState::RUNNING)
             return false;
@@ -140,7 +140,7 @@ public:
     }
 
     bool Resume() final {
-        ScopedMutex guard(transition_mutex_);
+        const ScopedMutex guard(transition_mutex_);
 
         if(!this->IsPausable() || GetState() != ServiceState::PAUSED)
             return false;

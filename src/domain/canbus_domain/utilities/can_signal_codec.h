@@ -20,7 +20,7 @@ private:
 
     // Walks the frame bit positions the signal occupies, from its least to most significant bit.
     template<typename TBitHandler>
-    static void ForEachSignalBit(const CanSignalConfiguration& signal, TBitHandler&& handler);
+    static void ForEachSignalBit(const CanSignalConfiguration& signal, const TBitHandler& handler);
 
 public:
     static bool IsLayoutValid(const CanSignalConfiguration& signal, size_t data_size);

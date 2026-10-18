@@ -40,7 +40,7 @@ private:
     std::vector<uint32_t> accumulators_;
     adc_sequence_options sequence_options_{};
 
-    mutable k_mutex mutex_;
+    mutable k_mutex mutex_{};
     AdcStats stats_{};
 
     adc_sequence MakeSequence(int channel, uint32_t mask, uint16_t samplings);
@@ -64,6 +64,9 @@ public:
     // Owns a kernel mutex, which a copy would duplicate together with its lock state.
     Adc(const Adc&) = delete;
     Adc& operator=(const Adc&) = delete;
+    Adc(Adc&&) = delete;
+    Adc& operator=(Adc&&) = delete;
+    ~Adc() override = default;
 
     bool Initialize() override;
     void Sample(const AdcSampleRequest& request) noexcept override;

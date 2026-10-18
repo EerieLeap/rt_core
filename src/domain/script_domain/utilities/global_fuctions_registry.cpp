@@ -64,7 +64,7 @@ int GlobalFunctionsRegistry::LuaUpdateSensorValue(lua_State* state) {
         StringHelpers::GetHash(std::string_view(sensor_id, length)), value
     );
 
-    lua_pushboolean(state, updated);
+    lua_pushboolean(state, updated ? 1 : 0);
 
     return 1;
 }

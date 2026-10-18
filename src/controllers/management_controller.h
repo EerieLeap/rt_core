@@ -76,7 +76,7 @@ public:
         uint32_t build_number,
         std::optional<SensorCapabilities> sensor_capabilities = std::nullopt,
         std::shared_ptr<const IFsService> sd_fs_service = nullptr,
-        std::shared_ptr<AssetsManager> assets_manager = nullptr
+        const std::shared_ptr<AssetsManager>& assets_manager = nullptr
     );
 
     int Initialize();

@@ -36,8 +36,8 @@ struct SensorRuntime {
     SensorSlot slot;
     SensorReadingUpdateMethod update_method = SensorReadingUpdateMethod::NONE;
 
-    eerie_memory::pmr_unique_ptr<IVoltageInterpolator> voltage_interpolator = nullptr;
-    eerie_memory::pmr_unique_ptr<ExpressionEvaluator> expression_evaluator = nullptr;
+    eerie_memory::PmrUniquePtr<IVoltageInterpolator> voltage_interpolator = nullptr;
+    eerie_memory::PmrUniquePtr<ExpressionEvaluator> expression_evaluator = nullptr;
     SensorScript script;
 
     // Slots of the sensors the expression reads, resolved when the generation was built.

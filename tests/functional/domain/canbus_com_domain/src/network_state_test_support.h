@@ -123,12 +123,12 @@ public:
             [inbox = inbox_](const LoggingEventsChannel::EventMessage& event) {
                 StatusEvent status{ .source_id = event.source_id };
 
-                if(auto it = event.payload.find(LoggingPayloadType::IsActive); it != event.payload.end()) {
+                if(const auto* it = event.payload.find(LoggingPayloadType::IsActive); it != event.payload.end()) {
                     if(const auto* value = std::get_if<bool>(&it->second))
                         status.is_active = *value;
                 }
 
-                if(auto it = event.payload.find(LoggingPayloadType::Reason); it != event.payload.end()) {
+                if(const auto* it = event.payload.find(LoggingPayloadType::Reason); it != event.payload.end()) {
                     if(const auto* value = std::get_if<uint32_t>(&it->second))
                         status.reason = *value;
                 }
@@ -188,14 +188,14 @@ public:
      * is kept too, so that a test can wait for it.
      */
     struct LocalChange {
-        CanbusComStateType state_type{};
+        CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS;
         CanbusComStateData data;
         bool is_accepted = true;
     };
 
 private:
     struct HandlerEntry {
-        CanbusComStateType state_type{};
+        CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS;
         StateHandler handler;
     };
 

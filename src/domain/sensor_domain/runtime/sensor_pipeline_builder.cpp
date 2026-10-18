@@ -33,7 +33,7 @@ SensorPipelineBuilder::SensorPipelineBuilder(
     sd_fs_service_(std::move(sd_fs_service)),
     sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
-void SensorPipelineBuilder::BuildInterpolator(SensorRuntime& runtime) const {
+void SensorPipelineBuilder::BuildInterpolator(SensorRuntime& runtime) {
     const auto& configuration = runtime.sensor->configuration;
     if(!configuration.HasInterpolation())
         return;
@@ -143,20 +143,20 @@ void SensorPipelineBuilder::BuildScript(SensorGeneration& generation, SensorRunt
     script.environment = script.host->LoadChunk(
         std::span<const uint8_t>(buffer.data(), out_len), runtime.sensor->id.c_str()
     );
-    if(script.environment == LuaScript::kNoRef) {
+    if(script.environment == LuaScript::NO_REF) {
         LOG_ERR("Sensor %s: script %s failed to load.", runtime.sensor->id.c_str(), configuration.script_path.c_str());
         return;
     }
 
-    script.create_value = script.host->FindFunction(script.environment, SensorScript::kCreateValueFunction);
-    script.post_process = script.host->FindFunction(script.environment, SensorScript::kPostProcessFunction);
+    script.create_value = script.host->FindFunction(script.environment, SensorScript::CREATE_VALUE_FUNCTION);
+    script.post_process = script.host->FindFunction(script.environment, SensorScript::POST_PROCESS_FUNCTION);
 }
 
 // Only an indicator with a debounce or Toggle gets one, so the defaults cost nothing.
 void SensorPipelineBuilder::BuildConditioner(
     SensorRuntime& runtime,
     std::span<const IndicatorSwitchState> switch_states
-) const {
+) {
     const auto& sensor = *runtime.sensor;
     const auto& configuration = sensor.configuration;
     if(configuration.GetTraits().value_kind != SensorValueKind::INDICATOR || !configuration.HasConditioning())
@@ -192,7 +192,7 @@ void SensorPipelineBuilder::BindWrittenValue(SensorRuntime& runtime) const {
 }
 
 // Slots follow the configuration order, so a slot index is also the runtime's index.
-void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
+void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) {
     auto& runtimes = generation.runtimes;
     const size_t count = runtimes.size();
 
@@ -209,7 +209,7 @@ void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
     std::vector<bool> reached(count);
     std::vector<size_t> pending;
     for(size_t i = 0; i < count; i++) {
-        std::fill(reached.begin(), reached.end(), false);
+        std::ranges::fill(reached, false);
         pending.assign(direct[i].begin(), direct[i].end());
 
         while(!pending.empty()) {
@@ -243,7 +243,11 @@ std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
     for(const auto& sensor : *generation->sensors) {
         SensorRuntime runtime;
         runtime.sensor = sensor;
-        runtime.slot = sensor_readings_frame_->FindSlot(sensor->id_hash).value();
+        const auto slot = sensor_readings_frame_->FindSlot(sensor->id_hash);
+        if(!slot.has_value())
+            throw std::logic_error("Sensor " + std::string(sensor->id) + " has no slot in the readings frame.");
+
+        runtime.slot = *slot;
 
         // A disabled sensor keeps its slot, so lookups by its ID still resolve, but with NONE no
         // source reads it and nothing executable is built for it.

@@ -27,11 +27,15 @@ private:
     // uint8_t reserved_1_[7];          // 7 bytes, Reserved
 
     // Where the next channel group is linked; owned by the chain.
-    ChannelGroupBlock* last_channel_group_;
+    ChannelGroupBlock* last_channel_group_{ nullptr };
 
 public:
-    DataGroupBlock(uint8_t record_id_size_bytes);
-    virtual ~DataGroupBlock();
+    explicit DataGroupBlock(uint8_t record_id_size_bytes);
+    ~DataGroupBlock() override;
+    DataGroupBlock(const DataGroupBlock&) = delete;
+    DataGroupBlock& operator=(const DataGroupBlock&) = delete;
+    DataGroupBlock(DataGroupBlock&&) = delete;
+    DataGroupBlock& operator=(DataGroupBlock&&) = delete;
 
     uint8_t GetRecordIdSizeBytes() const;
     std::shared_ptr<DataBlock> GetDataBlock() const;

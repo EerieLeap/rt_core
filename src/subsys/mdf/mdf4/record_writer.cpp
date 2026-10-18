@@ -57,14 +57,14 @@ uint8_t GetVariantIndex(const ChannelBlock& channel) {
 
 RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) :
     channel_group_(&channel_group) {
-    if(channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel))
+    if((channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel)) != 0)
         throw std::runtime_error("A VLSD channel group has no fixed length records");
 
     const auto invalidation_bytes = channel_group.GetInvalidationBytes();
-    if(invalidation_bytes > kMaxInvalidationBytes) {
+    if(invalidation_bytes > MAX_INVALIDATION_BYTES) {
         throw std::runtime_error(
             "Record of " + std::to_string(invalidation_bytes) + " invalidation bytes exceeds the "
-            + std::to_string(kMaxInvalidationBytes) + " byte limit"
+            + std::to_string(MAX_INVALIDATION_BYTES) + " byte limit"
         );
     }
 
@@ -72,17 +72,17 @@ RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) :
     const uint64_t data_end = record_id_size + static_cast<uint64_t>(channel_group.GetDataSizeBytes());
     const uint64_t record_size = data_end + invalidation_bytes;
 
-    if(record_size > kMaxRecordBytes) {
+    if(record_size > MAX_RECORD_BYTES) {
         throw std::runtime_error(
-            "Record of " + std::to_string(record_size) + " bytes exceeds the " + std::to_string(kMaxRecordBytes)
+            "Record of " + std::to_string(record_size) + " bytes exceeds the " + std::to_string(MAX_RECORD_BYTES)
             + " byte limit"
         );
     }
 
     const auto channels = channel_group.GetChannels();
-    if(channels.size() > kMaxFields) {
+    if(channels.size() > MAX_FIELDS) {
         throw std::runtime_error(
-            "Record of " + std::to_string(channels.size()) + " channels exceeds the " + std::to_string(kMaxFields)
+            "Record of " + std::to_string(channels.size()) + " channels exceeds the " + std::to_string(MAX_FIELDS)
             + " channel limit"
         );
     }
@@ -143,8 +143,9 @@ uint64_t RecordWriter::Write(std::streambuf& stream, std::span<const MdfValue> v
     if(invalidation_bytes_ > 0)
         std::memcpy(record_.data() + invalidation_offset_, &invalid_mask, invalidation_bytes_);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): streambuf::sputn takes char*, the buffer holds raw record bytes
     const auto written = stream.sputn(reinterpret_cast<const char*>(record_.data()), record_size_);
-    if(written != static_cast<std::streamsize>(record_size_))
+    if(std::cmp_not_equal(written, record_size_))
         throw std::ios_base::failure("Failed to write data record to stream.");
 
     channel_group_->IncrementCycleCount();

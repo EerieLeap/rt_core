@@ -190,23 +190,23 @@ struct StateFixture {
 
         // The services may share one block filter for their IDs, which a different filter over the
         // same IDs would overlap, so the recorder registers the same filters and sorts by ID.
-        constexpr std::array recorded_offsets{ CdmpCanIdManager::COMMAND_OFFSET, CdmpCanIdManager::STATE_CHANGE_OFFSET,
+        constexpr std::array RECORDED_OFFSETS{ CdmpCanIdManager::COMMAND_OFFSET, CdmpCanIdManager::STATE_CHANGE_OFFSET,
             CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET };
 
         std::vector<CanFilter> filters;
-        for(uint32_t offset : recorded_offsets) {
+        for(const uint32_t offset : RECORDED_OFFSETS) {
             const CanFilter filter = can_id_manager->GetReceiveFilter(
                 CanId::Standard(can_id_manager->GetBaseCanId() + offset)
             );
-            if(std::find(filters.begin(), filters.end(), filter) == filters.end())
+            if(std::ranges::find(filters, filter) == filters.end())
                 filters.push_back(filter);
         }
 
         for(const CanFilter& filter : filters) {
             const int handler_id = (*canbus)->RegisterFrameReceivedHandler(
-                filter, [this, recorded_offsets](const CanFrame& frame) {
+                filter, [this, RECORDED_OFFSETS](const CanFrame& frame) {
                     const uint32_t offset = frame.id - can_id_manager->GetBaseCanId();
-                    if(std::find(recorded_offsets.begin(), recorded_offsets.end(), offset) != recorded_offsets.end())
+                    if(std::ranges::find(RECORDED_OFFSETS, offset) != RECORDED_OFFSETS.end())
                         bus_frames.Add(offset, frame);
                 }
             );
@@ -218,9 +218,17 @@ struct StateFixture {
             service->Configure(canbus);
     }
 
+    StateFixture(const StateFixture&) = delete;
+    StateFixture& operator=(const StateFixture&) = delete;
+    StateFixture(StateFixture&&) = delete;
+    StateFixture& operator=(StateFixture&&) = delete;
+
     ~StateFixture() {
-        for(int handler_id : bus_handler_ids)
-            (*canbus)->RemoveFrameReceivedHandler(handler_id);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(Canbus* live_bus = canbus->Get(); live_bus != nullptr) {
+            for(const int handler_id : bus_handler_ids)
+                live_bus->RemoveFrameReceivedHandler(handler_id);
+        }
 
         // Queued work must run while the services exist; after the stop it does nothing.
         for(ICdmpCanbusService* service : Services())
@@ -234,9 +242,9 @@ struct StateFixture {
 
     /** @brief Returns once the work queued so far has run. */
     void DrainQueue() {
-        k_sem done;
+        k_sem done{};
         k_sem_init(&done, 0, 1);
-        work_queue->Run([&done]() {
+        work_queue->Run([&done] {
             k_sem_give(&done);
         });
         zassert_equal(k_sem_take(&done, K_MSEC(FRAME_TIMEOUT_MS)), 0, "The work queue is stuck");
@@ -375,7 +383,7 @@ ZTEST(cdmp_state, test_newer_version_replaces_and_older_is_ignored) {
     fixture.Receive(PEER_ID, 5, TYPE_A, { 0x01 });
     zassert_true(fixture.HasRemote(PEER_ID, TYPE_A, { 0x02 }));
 
-    for(uint8_t version : { 5, 6, 5 }) {
+    for(const uint8_t version : { 5, 6, 5 }) {
         auto acknowledgement = fixture.WaitForAcknowledgement();
         zassert_true(acknowledgement.has_value(), "Every notification is acknowledged");
         zassert_equal(acknowledgement->version, version);
@@ -477,7 +485,7 @@ ZTEST(cdmp_state, test_notifications_are_ignored_while_offline) {
 }
 
 ZTEST(cdmp_state, test_digest_covers_own_records_in_type_order) {
-    StateFixture fixture;
+    const StateFixture fixture;
     zassert_equal(fixture.device->GetStateDigest(), 0, "No records, digest 0");
 
     // The parameters the spec names: polynomial 0x07, initial value 0, no reflection, no final XOR.
@@ -511,7 +519,7 @@ ZTEST(cdmp_state, test_digest_covers_own_records_in_type_order) {
 }
 
 ZTEST(cdmp_state, test_invalid_local_states_are_rejected) {
-    StateFixture fixture;
+    const StateFixture fixture;
 
     zassert_false(fixture.state->SetLocalState(0, Bytes{ 0x01 }), "Type 0 is invalid");
     zassert_false(fixture.state->SetLocalState(TYPE_A, Bytes{ 1, 2, 3, 4, 5, 6 }), "At most 5 data bytes");
@@ -519,7 +527,7 @@ ZTEST(cdmp_state, test_invalid_local_states_are_rejected) {
 }
 
 ZTEST(cdmp_state, test_local_records_fill_up_and_withdrawals_give_way) {
-    StateFixture fixture;
+    const StateFixture fixture;
 
     for(size_t i = 0; i < CONFIG_EERIE_LEAP_CDMP_STATE_MAX_LOCAL_RECORDS; i++)
         zassert_true(fixture.state->SetLocalState(TYPE_A + i, Bytes{ 0x01 }));
@@ -915,7 +923,7 @@ ZTEST(cdmp_state, test_broadcast_sync_request_is_replayed_after_the_stagger) {
     for(uint8_t device_id = 2; device_id < 22; device_id++)
         fixture.AddPeer(device_id, 0x01000000 + device_id);
     const auto stagger = static_cast<int64_t>(fixture.device->GetStaggeredMessageDelay());
-    zassert_equal(stagger, 20 * CdmpConstants::STAGGERED_MESSAGE_TIME_OFFSET_MS);
+    zassert_equal(stagger, 20LL * CdmpConstants::STAGGERED_MESSAGE_TIME_OFFSET_MS);
 
     const int64_t requested_ms = k_uptime_get();
     zassert_false(

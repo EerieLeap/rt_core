@@ -194,23 +194,23 @@ ZTEST(smp_can_reassembler, test_each_frame_extends_the_timeout) {
 }
 
 ZTEST(smp_can_reassembler, test_can_fd_packets_round_trip_with_padding) {
-    constexpr SmpCanFrameFormat can_fd(true);
+    constexpr SmpCanFrameFormat CAN_FD(true);
 
     for(size_t body_size = 0; body_size <= 200; body_size++) {
-        Receiver receiver(can_fd);
+        Receiver receiver(CAN_FD);
         auto packet = MakePacket(body_size);
 
-        zassert_equal(receiver.Feed(MakeFrames(packet, can_fd)), Result::COMPLETE, "Body size %zu", body_size);
+        zassert_equal(receiver.Feed(MakeFrames(packet, CAN_FD)), Result::COMPLETE, "Body size %zu", body_size);
         zassert_true(receiver.Holds(packet), "Body size %zu", body_size);
     }
 }
 
 ZTEST(smp_can_reassembler, test_can_fd_padding_may_reach_past_a_full_buffer) {
-    constexpr SmpCanFrameFormat can_fd(true);
-    Receiver receiver(can_fd);
+    constexpr SmpCanFrameFormat CAN_FD(true);
+    Receiver receiver(CAN_FD);
     auto packet = MakePacket(receiver.buffer.size() - SmpHeader::SIZE); // last frame: 17 bytes, sent as 20
 
-    auto frames = MakeFrames(packet, can_fd);
+    auto frames = MakeFrames(packet, CAN_FD);
     zassert_equal(frames.back().size(), 20);
 
     zassert_equal(receiver.Feed(frames), Result::COMPLETE);
@@ -218,9 +218,9 @@ ZTEST(smp_can_reassembler, test_can_fd_padding_may_reach_past_a_full_buffer) {
 }
 
 ZTEST(smp_can_reassembler, test_can_fd_last_frame_with_wrong_padding_is_dropped) {
-    constexpr SmpCanFrameFormat can_fd(true);
-    Receiver receiver(can_fd);
-    auto frames = MakeFrames(MakePacket(68), can_fd); // last frame: 14 bytes, sent as 16
+    constexpr SmpCanFrameFormat CAN_FD(true);
+    Receiver receiver(CAN_FD);
+    auto frames = MakeFrames(MakePacket(68), CAN_FD); // last frame: 14 bytes, sent as 16
     frames[1].resize(20, 0);
 
     receiver.reassembler.Accept(frames[0], 0);
@@ -229,10 +229,10 @@ ZTEST(smp_can_reassembler, test_can_fd_last_frame_with_wrong_padding_is_dropped)
 }
 
 ZTEST(smp_can_reassembler, test_classic_frames_do_not_continue_a_can_fd_packet) {
-    constexpr SmpCanFrameFormat can_fd(true);
-    Receiver receiver(can_fd);
+    constexpr SmpCanFrameFormat CAN_FD(true);
+    Receiver receiver(CAN_FD);
     auto packet = MakePacket(200);
-    auto fd_frames = MakeFrames(packet, can_fd);
+    auto fd_frames = MakeFrames(packet, CAN_FD);
     auto classic_frames = MakeFrames(packet);
 
     receiver.reassembler.Accept(fd_frames[0], 0);

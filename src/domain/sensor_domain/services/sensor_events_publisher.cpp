@@ -75,6 +75,9 @@ bool SensorEventsPublisher::DoPause() {
 }
 
 bool SensorEventsPublisher::DoResume() {
+    if(!work_queue_task_.has_value())
+        return false;
+
     work_queue_task_->Schedule();
 
     return true;
@@ -112,7 +115,7 @@ WorkQueueTaskResult SensorEventsPublisher::ProcessWorkTask(SensorEventsPublisher
 }
 
 void SensorEventsPublisher::PublishProcessedReadings() {
-    static constexpr auto caller = GetCallerName();
+    static constexpr auto CALLER = GetCallerName();
 
     auto& channel = SensorEventsChannel::GetInstance();
 
@@ -135,7 +138,7 @@ void SensorEventsPublisher::PublishProcessedReadings() {
             if(!reading.value.has_value())
                 continue;
 
-            const SensorEventsChannel::EventMessage event{ .source_id = caller.hash,
+            const SensorEventsChannel::EventMessage event{ .source_id = CALLER.hash,
                 .type = SensorEventType::DataUpdated,
                 .payload = { { SensorPayloadType::SensorId, reading.sensor_id_hash },
                     { SensorPayloadType::Value, *reading.value } } };

@@ -20,7 +20,7 @@ ZTEST_SUITE(event_channel_registry, NULL, SetUpBindingTestChannels, ResetBinding
 
 ZTEST(event_channel_registry, test_a_registered_channel_resolves) {
     auto& channels = RegisterBindingTestChannels();
-    auto& registry = EventChannelRegistry::GetInstance();
+    const auto& registry = EventChannelRegistry::GetInstance();
 
     zassert_equal(registry.Find(EventChannelId::Sensors), &channels.primary);
     zassert_equal(registry.Find(EventChannelId::Logging), &channels.secondary);
@@ -28,7 +28,7 @@ ZTEST(event_channel_registry, test_a_registered_channel_resolves) {
 
 // A binding stored before its channel existed, or for another unit's channel, must be inert.
 ZTEST(event_channel_registry, test_None_and_unregistered_or_unknown_ids_resolve_to_null) {
-    auto& registry = EventChannelRegistry::GetInstance();
+    const auto& registry = EventChannelRegistry::GetInstance();
 
     zassert_is_null(registry.Find(EventChannelId::None));
     zassert_is_null(registry.Find(EventChannelId::Navigation));

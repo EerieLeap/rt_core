@@ -7,14 +7,8 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 ChannelConversionBlock::ChannelConversionBlock(ConversionType conversion_type) :
-    BlockBase("CC") {
-
-    conversion_type_ = conversion_type;
-    precision_ = 0;
-    flags_ = 0;
-    min_physical_value_ = 0.0;
-    max_physical_value_ = 0.0;
-}
+    BlockBase("CC"),
+    conversion_type_(conversion_type) {}
 
 std::shared_ptr<ChannelConversionBlock>
 ChannelConversionBlock::CreateAlgebraicConversion(std::shared_ptr<TextBlock> formula) {
@@ -28,7 +22,7 @@ ChannelConversionBlock::CreateAlgebraicConversion(std::shared_ptr<TextBlock> for
 }
 
 uint64_t ChannelConversionBlock::GetBlockSize() const {
-    return GetBaseSize() + 1 + 1 + 2 + 2 + 2 + 8 + 8 + 8 * values_.size();
+    return GetBaseSize() + 1 + 1 + 2 + 2 + 2 + 8 + 8 + uint64_t{ 8 } * values_.size();
 }
 
 std::unique_ptr<uint8_t[]> ChannelConversionBlock::Serialize() const {

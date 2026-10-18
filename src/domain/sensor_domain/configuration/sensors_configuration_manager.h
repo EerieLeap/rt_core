@@ -42,9 +42,9 @@ private:
     int gpio_channel_count_;
     int adc_channel_count_;
 
-    eerie_memory::pmr_unique_ptr<CborSensorsConfig>
+    eerie_memory::PmrUniquePtr<CborSensorsConfig>
     Serialize(const std::vector<std::shared_ptr<Sensor>>& sensors) override;
-    eerie_memory::pmr_unique_ptr<std::vector<std::shared_ptr<Sensor>>>
+    eerie_memory::PmrUniquePtr<std::vector<std::shared_ptr<Sensor>>>
     Deserialize(const CborSensorsConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
     void ValidateApply(const std::vector<std::shared_ptr<Sensor>>& sensors) override;
@@ -67,7 +67,7 @@ public:
 
     using CborConfigurationManagerBase::ApplyCborConfiguration;
 
-    bool Update(const std::vector<std::shared_ptr<Sensor>>& sensors);
+    bool Update(const std::vector<std::shared_ptr<Sensor>>& sensors) override;
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override;
 
     [[nodiscard]] int GetGpioChannelCount() const {

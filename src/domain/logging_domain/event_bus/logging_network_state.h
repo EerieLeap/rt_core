@@ -56,7 +56,7 @@ struct LoggingNetworkState {
         if(event.type != EVENT_TYPE)
             return std::nullopt;
 
-        auto active = event.payload.find(LoggingPayloadType::IsActive);
+        const auto* active = event.payload.find(LoggingPayloadType::IsActive);
         if(active == event.payload.end())
             return std::nullopt;
 
@@ -68,7 +68,7 @@ struct LoggingNetworkState {
             return State(true);
 
         auto reason = LoggingStatusReason::Stopped;
-        if(auto it = event.payload.find(LoggingPayloadType::Reason); it != event.payload.end()) {
+        if(const auto* it = event.payload.find(LoggingPayloadType::Reason); it != event.payload.end()) {
             if(const auto* value = std::get_if<uint32_t>(&it->second))
                 reason = static_cast<LoggingStatusReason>(*value);
         }
@@ -88,7 +88,7 @@ struct LoggingNetworkState {
         if(std::ranges::any_of(states, &State::IsActive))
             return State(true);
 
-        auto failed = std::ranges::find_if(states, [](const State& state) {
+        const auto failed = std::ranges::find_if(states, [](const State& state) {
             return IsFailure(state.GetReason());
         });
 

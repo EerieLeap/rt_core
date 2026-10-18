@@ -18,8 +18,8 @@ private:
 public:
     CborSizeBuilder() :
         size_(0) {}
-    explicit CborSizeBuilder(size_t initialSize) :
-        size_(initialSize) {}
+    explicit CborSizeBuilder(size_t initial_size) :
+        size_(initial_size) {}
 
     // Integer types
     CborSizeBuilder& AddUint(uint64_t value) {
@@ -65,8 +65,8 @@ public:
         return *this;
     }
 
-    CborSizeBuilder& AddMapStart(size_t pairCount) {
-        size_ += CborSizeCalc::SizeOfMapStart(pairCount);
+    CborSizeBuilder& AddMapStart(size_t pair_count) {
+        size_ += CborSizeCalc::SizeOfMapStart(pair_count);
         return *this;
     }
 
@@ -82,21 +82,21 @@ public:
     }
 
     // Generic size addition
-    CborSizeBuilder& AddSize(size_t additionalSize) {
-        size_ += additionalSize;
+    CborSizeBuilder& AddSize(size_t additional_size) {
+        size_ += additional_size;
         return *this;
     }
 
     // Optional values
     template<typename T, typename SizeFunc>
-    CborSizeBuilder& AddOptional(const T* value, SizeFunc sizeFunc) {
-        size_ += CborSizeCalc::SizeOfOptional(value, sizeFunc);
+    CborSizeBuilder& AddOptional(const T* value, SizeFunc size_func) {
+        size_ += CborSizeCalc::SizeOfOptional(value, size_func);
         return *this;
     }
 
     template<typename T, typename SizeFunc>
-    CborSizeBuilder& AddOptional(bool hasValue, const T& value, SizeFunc sizeFunc) {
-        size_ += CborSizeCalc::SizeOfOptional(hasValue, value, sizeFunc);
+    CborSizeBuilder& AddOptional(bool has_value, const T& value, SizeFunc size_func) {
+        size_ += CborSizeCalc::SizeOfOptional(has_value, value, size_func);
         return *this;
     }
 
@@ -109,7 +109,7 @@ public:
         return size_;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return size_;
     }
 

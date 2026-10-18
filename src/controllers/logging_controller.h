@@ -231,7 +231,7 @@ private:
     std::unique_ptr<LoggingTriggerSet> logging_trigger_set_;
     // logging_trigger_set_ between RebuildTriggers() (configuration work queue) and an update's report
     // (the storing thread). Taken after the update stop's guard, and the set's guard after it.
-    k_mutex trigger_set_lock_;
+    k_mutex trigger_set_lock_{};
     // Set by the first update after Start(): from then on a rebuilt set takes first values as
     // baselines. Read by RebuildTriggers() under trigger_set_lock_.
     std::atomic<bool> is_configuration_updated_ = false;

@@ -123,8 +123,8 @@ public:
 
 private:
     struct Job {
-        Command command;
-        smp_streamer* ctxt;
+        Command command{};
+        smp_streamer* ctxt = nullptr;
         int rc = MGMT_ERR_EUNKNOWN;
     };
 
@@ -368,6 +368,10 @@ public:
         std::shared_ptr<WorkQueueThread> config_work_queue_thread
     );
     ~AssetsMgmtGroup();
+    AssetsMgmtGroup(const AssetsMgmtGroup&) = delete;
+    AssetsMgmtGroup& operator=(const AssetsMgmtGroup&) = delete;
+    AssetsMgmtGroup(AssetsMgmtGroup&&) = delete;
+    AssetsMgmtGroup& operator=(AssetsMgmtGroup&&) = delete;
 
     /**
      * @brief Creates the work queue tasks and the transfer buffer, and deletes staged files a power

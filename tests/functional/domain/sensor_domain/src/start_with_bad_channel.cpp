@@ -16,17 +16,17 @@ using namespace processing_test_support;
 ZTEST_SUITE(start_with_bad_channel, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(start_with_bad_channel, test_Start_skips_a_sensor_on_a_channel_without_calibration) {
-    auto fs_service = MakeFormattedFsService();
+    const auto fs_service = MakeFormattedFsService();
 
     // The device tree has four channels, so the sensors configuration accepts channels 0..3.
-    auto adc = MakeEmulator();
-    auto adc_manager = MakeAdcManager(adc);
+    const auto adc = MakeEmulator();
+    const auto adc_manager = MakeAdcManager(adc);
     zassert_equal(adc_manager->GetChannelCount(), 4);
     DriveConstant(*adc, 0, 1000);
 
     // The ADC configuration only knows two: what a configuration stored before the device tree
     // grew looks like before padding, forced here by a manager that sees a two-channel unit.
-    auto adc_configuration_manager = MakeAdcConfigurationManager(
+    const auto adc_configuration_manager = MakeAdcConfigurationManager(
         fs_service, MakeAdcManager(std::make_shared<FakeAdc>(2))
     );
     zassert_true(adc_configuration_manager->Update(
@@ -34,7 +34,7 @@ ZTEST(start_with_bad_channel, test_Start_skips_a_sensor_on_a_channel_without_cal
     ));
     zassert_equal(adc_configuration_manager->Get()->channel_configurations->size(), 2);
 
-    auto rig = MakeProcessingRig(
+    const auto rig = MakeProcessingRig(
         fs_service, adc_manager, adc_configuration_manager,
         {
             MakeAnalogSensor("good", 0, 20),

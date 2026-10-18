@@ -37,7 +37,7 @@ private:
     // Ascending period. Only replaced while no tick is scheduled, so the tick reads it unlocked;
     // the mutex keeps the stats readers off a vector that is being replaced.
     std::vector<std::unique_ptr<RateGroup>> groups_;
-    mutable k_mutex groups_mutex_;
+    mutable k_mutex groups_mutex_{};
 
     // Created on the first Start(): the work queue does not run before the owner is initialized.
     std::optional<WorkQueueTask<RateGroupScheduler>> task_;

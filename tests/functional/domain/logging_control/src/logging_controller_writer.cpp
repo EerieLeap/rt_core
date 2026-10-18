@@ -30,7 +30,6 @@ using namespace logging_controller_test;
 
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::control::WriterLoggingControl;
-using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
 using eerie_leap::domain::system_domain::models::HasFeature;
 using eerie_leap::domain::system_domain::models::ProductFeature;
 using eerie_leap::subsys::threading::IService;
@@ -60,7 +59,7 @@ struct Fixture {
         }
     }
 
-    Parts MakeParts() {
+    Parts MakeParts() const {
         Parts parts;
         parts.com = harness != nullptr ? harness->com : nullptr;
 
@@ -156,7 +155,7 @@ ZTEST(logging_controller_writer, test_TheWriterRoleBuildsItsPieces) {
 
     StoreLoggingConfiguration(controller, { "switch" });
 
-    control->RequestStart(kAllUnits);
+    control->RequestStart(ALL_UNITS);
     auto entry = log.WaitForEntry();
     zassert_true(entry.has_value() && entry->is_active, "A request starts the writer");
     zassert_true(WaitUntil([&writer] {
@@ -169,7 +168,7 @@ ZTEST(logging_controller_writer, test_TheWriterRoleBuildsItsPieces) {
         "and the control follows the status"
     );
 
-    control->RequestStop(kAllUnits);
+    control->RequestStop(ALL_UNITS);
     entry = log.WaitForEntry();
     zassert_true(entry.has_value() && !entry->is_active, "and stops it");
     zassert_equal(entry->reason, LoggingStatusReason::Stopped);
@@ -242,14 +241,16 @@ ZTEST(logging_controller_writer, test_ACdmpStartIsAcceptedAndShared) {
         ContainsText(content, Property("device_id", std::to_string(OWN_ID))),
         "The log header carries the CDMP device ID of this unit"
     );
-    zassert_true(ContainsText(content, std::string("<tool_id>") + kControllerToolId + "</tool_id>"), "and the tool ID");
+    zassert_true(
+        ContainsText(content, std::string("<tool_id>") + CONTROLLER_TOOL_ID + "</tool_id>"), "and the tool ID"
+    );
 }
 
 // The LOGGING feature this unit sends on CDMP follows the log volume: senders skip a unit that cannot
 // log. It is set before the first heartbeat, polled once a second, and cleared with the controller.
 ZTEST(logging_controller_writer, test_TheLoggingFeatureFollowsTheLogVolume) {
     F().Open(true);
-    auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+    const auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
     const auto com = F().harness->com;
     zassert_false(HasFeature(com->GetFeatures(), ProductFeature::LOGGING), "Cleared until a writer exists");
 
@@ -289,7 +290,7 @@ ZTEST(logging_controller_writer, test_TheLoggingFeatureFollowsTheLogVolume) {
 
 ZTEST(logging_controller_writer, test_WithoutAnAvailableLogVolumeTheFeatureStartsCleared) {
     F().Open(true);
-    auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
+    const auto volume = std::make_shared<SwitchableVolume>(F().rig->fs_service);
     volume->SetAvailable(false);
     const auto com = F().harness->com;
 
@@ -328,7 +329,7 @@ ZTEST(logging_controller_writer, test_AStoredConfigurationRebuildsTheTriggersAnd
     zassert_equal(F().Build(std::move(parts)).Initialize(), 0);
     StoreLoggingConfiguration(*F().controller, { "ab" });
 
-    QueuedApply apply(configuration_service, ConfigurationService::Type::LoggingControl, k_trigger_on_ab);
+    QueuedApply apply(configuration_service, ConfigurationService::Type::LoggingControl, TRIGGER_ON_AB);
     zassert_true(apply.WaitForSuccess(), "The configuration is stored");
 
     const auto entry = log.WaitForEntry();
@@ -393,7 +394,7 @@ ZTEST(logging_controller_writer, test_DestroyingWhileLoggingStopsTheWriter) {
 
     LogCounter::Get().Watch("logging_controller_logger");
     F().controller.reset();
-    zassert_logged(0, "The supervisor's queued stop stopped the writer; the direct stop was not needed");
+    ZASSERT_LOGGED(0, "The supervisor's queued stop stopped the writer; the direct stop was not needed");
 
     zassert_true(writer->IsStopped(), "The writer is never dropped while it runs");
     entry = log.WaitForEntry();
@@ -401,7 +402,7 @@ ZTEST(logging_controller_writer, test_DestroyingWhileLoggingStopsTheWriter) {
     zassert_equal(entry->reason, LoggingStatusReason::Stopped);
 
     // A sensors restart still holds the dependent: it must not bring the writer back.
-    auto result = std::make_shared<std::atomic<int>>(-1);
+    const auto result = std::make_shared<std::atomic<int>>(-1);
     TestConfigQueue()->Run([dependent, result] {
         result->store(dependent->Start() ? 1 : 0);
     });
@@ -429,9 +430,9 @@ ZTEST(logging_controller_writer, test_DestroyingOnTheConfigurationQueueStopsTheW
     // The job destroys it, so the holder is the only owner and the destructor runs inside the job.
     struct Context {
         std::unique_ptr<LoggingController> controller;
-        k_sem done;
+        k_sem done{};
     };
-    auto context = std::make_shared<Context>();
+    const auto context = std::make_shared<Context>();
     k_sem_init(&context->done, 0, 1);
     context->controller = std::move(F().controller);
 
@@ -440,8 +441,8 @@ ZTEST(logging_controller_writer, test_DestroyingOnTheConfigurationQueueStopsTheW
         context->controller.reset();
         k_sem_give(&context->done);
     });
-    zassert_equal(k_sem_take(&context->done, Ms(k_wait_ms)), 0, "The destructor returned on the queue");
-    zassert_logged(2, "On the queue the destructor says it cannot wait, then stops the writer directly");
+    zassert_equal(k_sem_take(&context->done, Ms(WAIT_MS)), 0, "The destructor returned on the queue");
+    ZASSERT_LOGGED(2, "On the queue the destructor says it cannot wait, then stops the writer directly");
 
     zassert_true(writer->IsStopped(), "and left the writer stopped");
     entry = log.WaitForEntry();
@@ -463,7 +464,7 @@ ZTEST(logging_controller_writer, test_DestroyingWhileLoggingWithdrawsTheCommand)
 
     LogCounter::Get().Watch("logging_controller_logger");
     F().controller.reset();
-    zassert_logged(0, "The supervisor's queued stop stopped the writer; the direct stop was not needed");
+    ZASSERT_LOGGED(0, "The supervisor's queued stop stopped the writer; the direct stop was not needed");
 
     zassert_true(writer->IsStopped(), "The writer is stopped with the controller");
 
@@ -505,7 +506,7 @@ using eerie_leap::subsys::assets::AssetStore;
 using eerie_leap::subsys::assets::ToMask;
 
 // A log name the writer could have given a file, which no file of a case has.
-constexpr const char* kOtherLogName = "log_data_20000101T000000Z_0000.mf4";
+constexpr const char* OTHER_LOG_NAME = "log_data_20000101T000000Z_0000.mf4";
 
 // The name of the one log file on the volume; empty when there is none, or more than one.
 std::string TheLogFileName(FsService& fs_service) {
@@ -582,7 +583,7 @@ ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
     const auto provider = assets->Find(AssetKind::LOGS);
     zassert_not_null(provider.get());
 
-    zassert_false(provider->is_in_use(AssetAccess::READ, kOtherLogName), "No file is open before the first start");
+    zassert_false(provider->is_in_use(AssetAccess::READ, OTHER_LOG_NAME), "No file is open before the first start");
 
     PublishSensorValue("switch", 1.0F);
     auto entry = log.WaitForEntry();
@@ -597,8 +598,8 @@ ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
     zassert_true(provider->is_in_use(AssetAccess::READ, name), "The file being written is not read");
     zassert_true(provider->is_in_use(AssetAccess::DELETE, name), "and not deleted");
     zassert_false(provider->is_in_use(AssetAccess::WRITE, name), "Nothing writes a log but the writer");
-    zassert_false(provider->is_in_use(AssetAccess::READ, kOtherLogName), "Another log is free to read");
-    zassert_false(provider->is_in_use(AssetAccess::DELETE, kOtherLogName), "and to delete");
+    zassert_false(provider->is_in_use(AssetAccess::READ, OTHER_LOG_NAME), "Another log is free to read");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, OTHER_LOG_NAME), "and to delete");
 
     PublishSensorValue("switch", 0.0F);
     entry = log.WaitForEntry();
@@ -652,7 +653,7 @@ ZTEST(logging_controller_writer, test_TheProviderDoesNotKeepTheRegistryAlive) {
 
     zassert_true(weak_assets.expired(), "Nothing the controller registered holds the registry");
     zassert_false(
-        provider->is_in_use(AssetAccess::READ, kOtherLogName), "A provider outliving its registry refuses nothing"
+        provider->is_in_use(AssetAccess::READ, OTHER_LOG_NAME), "A provider outliving its registry refuses nothing"
     );
 }
 

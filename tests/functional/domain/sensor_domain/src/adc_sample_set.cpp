@@ -127,7 +127,7 @@ ZTEST(adc_sample_set, test_Acquire_samples_each_adc_once_and_fills_every_slot) {
 }
 
 ZTEST(adc_sample_set, test_Acquire_is_one_request_per_tick_on_the_emulator) {
-    auto adc = processing_test_support::MakeEmulator();
+    const auto adc = processing_test_support::MakeEmulator();
     zassert_true(adc->Initialize());
     processing_test_support::DriveConstant(*adc, 1, 1000);
     processing_test_support::DriveConstant(*adc, 3, 2000);
@@ -144,8 +144,8 @@ ZTEST(adc_sample_set, test_Acquire_is_one_request_per_tick_on_the_emulator) {
     zassert_equal(adc->GetStats().requests - requests_before, 5);
     zassert_equal(slot1->error, AdcError::NONE);
     zassert_equal(slot3->error, AdcError::NONE);
-    zassert_within(slot1->volts, 1.0F, processing_test_support::kEmulTolerance);
-    zassert_within(slot3->volts, 2.0F, processing_test_support::kEmulTolerance);
+    zassert_within(slot1->volts, 1.0F, processing_test_support::EMUL_TOLERANCE);
+    zassert_within(slot3->volts, 2.0F, processing_test_support::EMUL_TOLERANCE);
 }
 
 ZTEST(adc_sample_set, test_Reserve_after_Seal_throws) {

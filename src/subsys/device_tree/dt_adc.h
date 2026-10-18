@@ -17,7 +17,7 @@ namespace eerie_leap::subsys::device_tree {
 
 class DtAdc {
 private:
-    static std::optional<std::vector<AdcDTInfo>> adc_infos_;
+    static std::optional<std::vector<AdcDTInfo>> adc_infos;
 
     DtAdc() = default;
 
@@ -25,7 +25,7 @@ public:
     static void Initialize();
 
     static std::optional<std::vector<AdcDTInfo>>& Get() {
-        return adc_infos_;
+        return adc_infos;
     }
 };
 

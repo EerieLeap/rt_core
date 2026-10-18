@@ -29,7 +29,7 @@ private:
     );
 
 public:
-    void AddSensor(std::shared_ptr<Sensor> sensor);
+    void AddSensor(const std::shared_ptr<Sensor>& sensor);
     std::vector<std::shared_ptr<Sensor>> GetProcessingOrder();
 };
 

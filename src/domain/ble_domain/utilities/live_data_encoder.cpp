@@ -24,11 +24,12 @@ size_t LiveDataEncoder::Encode(
     uint8_t count = 0;
 
     for(size_t index = 0; index < values.size(); index++) {
-        if(!values[index].has_value())
+        const auto& value = values[index];
+        if(!value.has_value())
             continue;
 
         out[size] = static_cast<uint8_t>(index);
-        sys_put_le32(std::bit_cast<uint32_t>(*values[index]), &out[size + 1]);
+        sys_put_le32(std::bit_cast<uint32_t>(*value), &out[size + 1]);
         size += ENTRY_SIZE;
         count++;
     }

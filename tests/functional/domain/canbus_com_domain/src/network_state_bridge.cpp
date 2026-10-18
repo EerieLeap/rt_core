@@ -16,9 +16,13 @@ namespace {
 constexpr uint8_t LOGGING_STATUS_CODE = std::to_underlying(CanbusComStateType::LOGGING_STATUS);
 
 // The records as other units send them: flags (bit 0 active), then the reason while inactive.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes ACTIVE = { 0x01, 0x00 };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes STOPPED = { 0x00, 0x00 };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes WRITE_FAILED = { 0x00, 0x01 };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes NO_SPACE = { 0x00, 0x02 };
 
 constexpr uint32_t ReasonValue(LoggingStatusReason reason) {
@@ -306,9 +310,9 @@ ZTEST_F(network_state_bridge, test_importer_ignores_other_state_types) {
     fixture->importer = std::make_unique<LoggingImporter>(fixture->transport);
     AssertImported(probe, false, LoggingStatusReason::Unavailable, "First call");
 
-    constexpr auto other_type = static_cast<CanbusComStateType>(0x7F);
-    transport.SetRemoteState(1, ACTIVE, other_type);
-    transport.NotifyHandlers(other_type);
+    constexpr auto OTHER_TYPE = static_cast<CanbusComStateType>(0x7F);
+    transport.SetRemoteState(1, ACTIVE, OTHER_TYPE);
+    transport.NotifyHandlers(OTHER_TYPE);
     transport.NotifyHandlers();
     zassert_false(probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(), "Another type's records are not combined");
 }

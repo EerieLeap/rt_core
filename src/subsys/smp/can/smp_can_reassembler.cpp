@@ -73,11 +73,15 @@ SmpCanReassembler::Result SmpCanReassembler::Append(std::span<const uint8_t> dat
     // Padding of the last frame may reach past the buffer, so only what fits is copied.
     const size_t start = length_;
     const size_t copied = std::min(data.size(), buffer_.size() - start);
-    std::copy_n(data.begin(), copied, buffer_.begin() + start);
+    std::copy_n(data.begin(), copied, buffer_.begin() + static_cast<std::ptrdiff_t>(start));
     length_ += copied;
 
     if(packet_size_ == 0 && length_ >= SmpHeader::SIZE) {
-        packet_size_ = SmpHeader::Parse(buffer_.first(length_))->GetPacketSize();
+        const auto header = SmpHeader::Parse(buffer_.first(length_));
+        if(!header.has_value())
+            return Drop();
+
+        packet_size_ = header->GetPacketSize();
         if(packet_size_ > buffer_.size())
             return Drop();
     }

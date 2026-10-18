@@ -50,9 +50,9 @@ void CdmpDevice::UpdateHeartbeat() {
 }
 
 bool CdmpDevice::IsProtocolCompatible(uint8_t other_version) const {
-    uint8_t my_major = (protocol_version_ >> 4) & 0x0F;
+    const uint8_t my_major = (protocol_version_ >> 4) & 0x0F;
     // uint8_t my_minor = protocol_version_ & 0x0F;
-    uint8_t other_major = (other_version >> 4) & 0x0F;
+    const uint8_t other_major = (other_version >> 4) & 0x0F;
     // uint8_t other_minor = other_version & 0x0F;
 
     // Major version must match for compatibility

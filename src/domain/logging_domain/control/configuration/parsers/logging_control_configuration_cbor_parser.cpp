@@ -16,9 +16,9 @@ using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::utilities::cbor::CborHelpers;
 
 // The schema (logging_control_config.cddl) and the codec cap the triggers at 16; the validator enforces the model's cap.
-static_assert(LoggingControlConfiguration::kMaxTriggers == 16, "The schema and the codec cap triggers at 16.");
+static_assert(LoggingControlConfiguration::MAX_TRIGGERS == 16, "The schema and the codec cap triggers at 16.");
 
-pmr_unique_ptr<CborLoggingControlConfig>
+PmrUniquePtr<CborLoggingControlConfig>
 LoggingControlConfigurationCborParser::Serialize(const LoggingControlConfiguration& configuration) {
 
     LoggingControlConfigurationValidator::Validate(configuration);
@@ -44,13 +44,13 @@ LoggingControlConfigurationCborParser::Serialize(const LoggingControlConfigurati
         else if(const auto* flag = std::get_if<bool>(&binding.selector_value))
             cbor_trigger.selector_value = *flag;
 
-        cbor_config->CborLoggingTriggerConfig_m.push_back(std::move(cbor_trigger));
+        cbor_config->CborLoggingTriggerConfig_m.push_back(cbor_trigger);
     }
 
     return cbor_config;
 }
 
-pmr_unique_ptr<LoggingControlConfiguration> LoggingControlConfigurationCborParser::Deserialize(
+PmrUniquePtr<LoggingControlConfiguration> LoggingControlConfigurationCborParser::Deserialize(
     std::pmr::memory_resource* mr,
     const CborLoggingControlConfig& config
 ) {

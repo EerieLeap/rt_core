@@ -69,8 +69,8 @@ private:
     std::vector<mdf4::RecordWriter> record_writers_;
     std::vector<mdf4::CanRecordWriter> can_record_writers_;
 
-    bool is_header_written_;
-    bool is_finalized_;
+    bool is_header_written_{ false };
+    bool is_finalized_{ false };
 
     std::shared_ptr<mdf4::ChannelBlock>
     CreateChannelBlock(MdfDataType data_type, const std::string& name, const std::string& unit = "");

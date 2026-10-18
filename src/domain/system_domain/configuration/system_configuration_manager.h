@@ -17,10 +17,8 @@ using eerie_leap::domain::system_domain::models::SystemConfiguration;
 
 class SystemConfigurationManager : public CborConfigurationManagerBase<SystemConfiguration, CborSystemConfig> {
 private:
-    SystemConfigurationCborParser cbor_parser_;
-
-    eerie_memory::pmr_unique_ptr<CborSystemConfig> Serialize(const SystemConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<SystemConfiguration> Deserialize(const CborSystemConfig& cbor_config) override;
+    eerie_memory::PmrUniquePtr<CborSystemConfig> Serialize(const SystemConfiguration& configuration) override;
+    eerie_memory::PmrUniquePtr<SystemConfiguration> Deserialize(const CborSystemConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:

@@ -40,6 +40,9 @@ bool SelectorMatches(const EventData& selector, const EventData& candidate) {
 
         const auto* unsigned_value = std::get_if<uint32_t>(&candidate);
 
+        // A text selector is stored as the int of its hash, so the comparison wraps on purpose: a hash above
+        // INT_MAX is a negative number here, and std::cmp_equal would never match it.
+        // NOLINTNEXTLINE(modernize-use-integer-sign-comparison): the wrap is the point, see above.
         return unsigned_value != nullptr && static_cast<int>(*unsigned_value) == *number;
     }
 

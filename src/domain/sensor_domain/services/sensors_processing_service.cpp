@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <exception>
 #include <stdexcept>
 
@@ -18,7 +19,7 @@ LOG_MODULE_REGISTER(processing_service_logger);
 SensorsProcessingService::SensorsProcessingService(
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame,
-    std::shared_ptr<ITimeService> time_service,
+    const std::shared_ptr<ITimeService>& time_service,
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory,
     std::shared_ptr<SensorReaderFactory> sensor_reader_factory,
     std::shared_ptr<AdcConfigurationManager> adc_configuration_manager,
@@ -68,12 +69,10 @@ bool SensorsProcessingService::DoInitialize() {
         return false;
     }
 
-    for(const auto& processing_service : processing_services_) {
-        if(!processing_service->Initialize())
-            return false;
-    }
-
-    return true;
+    // Stops at the first service that fails to initialize.
+    return std::ranges::all_of(processing_services_, [](const auto& processing_service) {
+        return processing_service->Initialize();
+    });
 }
 
 bool SensorsProcessingService::DoStart() {
@@ -192,8 +191,8 @@ void SensorsProcessingService::CommitSwitchStates() {
 
 // Exceptions must not unwind into the work queue's C dispatch.
 void SensorsProcessingService::SwitchStateWorkHandler(k_work* work) {
-    auto* switch_state_work = CONTAINER_OF(work, SwitchStateWork, work);
-    auto* service = switch_state_work->service;
+    const auto* switch_state_work = CONTAINER_OF(work, SwitchStateWork, work);
+    const auto* service = switch_state_work->service;
 
     try {
         service->pipeline_->CommitSwitchStates(*service->generation_);

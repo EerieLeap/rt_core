@@ -30,11 +30,14 @@ using Bytes = std::vector<uint8_t>;
 
 // {Sensors (1), DataUpdated (0), Value (1), selector SensorId (0) = "ab", target 0x01020304}. zcbor writes lists with
 // indefinite length, so each list is 9F ... FF.
-const Bytes k_text_selector = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x1A, 0x01, 0x02,
-    0x03, 0x04, 0xFF, 0xFF, 0xFF };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const Bytes TEXT_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x1A, 0x01, 0x02, 0x03,
+    0x04, 0xFF, 0xFF, 0xFF };
 // The same without a selector: false, key 0, the value written as int 0, and target 0 (every unit).
-const Bytes k_no_selector = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
-const Bytes k_empty = { 0x9F, 0x9F, 0xFF, 0xFF };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const Bytes NO_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const Bytes K_EMPTY = { 0x9F, 0x9F, 0xFF, 0xFF };
 
 LoggingTrigger MakeTrigger(uint32_t event_type = 0, uint32_t payload_key = 1, uint32_t selector_key = 0) {
     LoggingTrigger trigger;
@@ -56,17 +59,16 @@ LoggingControlConfiguration MakeConfiguration(std::vector<LoggingTrigger> trigge
 
 // Encodes a configuration the way the manager stores it.
 Bytes Encode(const LoggingControlConfiguration& configuration) {
-    LoggingControlConfigurationCborParser parser;
     CborSerializer<CborLoggingControlConfig> serializer;
 
-    auto cbor_config = parser.Serialize(configuration);
+    const auto cbor_config = LoggingControlConfigurationCborParser::Serialize(configuration);
     const auto bytes = serializer.Serialize(*cbor_config);
 
-    return Bytes(bytes.begin(), bytes.end());
+    return { bytes.begin(), bytes.end() };
 }
 
 // Decodes stored bytes to the CBOR structure; null for bytes that are not the schema's.
-pmr_unique_ptr<CborLoggingControlConfig> Decode(const Bytes& bytes) {
+PmrUniquePtr<CborLoggingControlConfig> Decode(const Bytes& bytes) {
     CborSerializer<CborLoggingControlConfig> serializer;
 
     return serializer.Deserialize(bytes);
@@ -119,8 +121,7 @@ ZTEST(logging_control_configuration_parser, test_TriggersRoundTripThroughCbor) {
     const auto decoded = Decode(bytes);
     zassert_not_null(decoded.get(), "and decode");
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded);
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *decoded);
 
     AssertSame(configuration, *restored);
     zassert_true(
@@ -133,10 +134,9 @@ ZTEST(logging_control_configuration_parser, test_AnEmptyConfigurationRoundTrips)
     const auto configuration = MakeConfiguration({});
 
     const auto bytes = Encode(configuration);
-    zassert_true(bytes == k_empty);
+    zassert_true(bytes == K_EMPTY);
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
     zassert_true(restored->triggers.empty());
 }
 
@@ -144,17 +144,15 @@ ZTEST(logging_control_configuration_parser, test_TheEncodingIsStable) {
     auto with_selector = MakeTrigger();
     with_selector.binding.selector_value = std::pmr::string("ab");
     with_selector.target_uid = 0x01020304;
-    zassert_true(Encode(MakeConfiguration({ with_selector })) == k_text_selector, "A text selector");
+    zassert_true(Encode(MakeConfiguration({ with_selector })) == TEXT_SELECTOR, "A text selector");
 
-    zassert_true(Encode(MakeConfiguration({ MakeTrigger() })) == k_no_selector, "No selector is int 0");
+    zassert_true(Encode(MakeConfiguration({ MakeTrigger() })) == NO_SELECTOR, "No selector is int 0");
 
     // And the same bytes read back.
-    LoggingControlConfigurationCborParser parser;
-
-    const auto text = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(k_text_selector));
+    const auto text = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(TEXT_SELECTOR));
     AssertSame(MakeConfiguration({ with_selector }), *text);
 
-    const auto none = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(k_no_selector));
+    const auto none = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(NO_SELECTOR));
     AssertSame(MakeConfiguration({ MakeTrigger() }), *none);
 }
 
@@ -162,8 +160,7 @@ ZTEST(logging_control_configuration_parser, test_AnAbsentSelectorIsIgnoredWhatev
     // has_selector false with a text value: the value is dropped.
     const Bytes bytes = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
 
     zassert_equal(restored->triggers.size(), 1);
     zassert_true(std::holds_alternative<std::monostate>(restored->triggers[0].binding.selector_value));
@@ -201,7 +198,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     // The worst case the validator lets through: the most triggers, each with the longest id and
     // numbers that need every byte. The buffer is as long as the size calculator says.
     std::vector<LoggingTrigger> triggers;
-    for(size_t i = 0; i < LoggingControlConfiguration::kMaxTriggers; i++) {
+    for(size_t i = 0; i < LoggingControlConfiguration::MAX_TRIGGERS; i++) {
         auto trigger = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
         trigger.binding.selector_value = std::pmr::string(64, static_cast<char>('a' + i));
         trigger.target_uid = 0xFFFFFFFF;
@@ -212,8 +209,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     const auto bytes = Encode(configuration);
     zassert_false(bytes.empty(), "The size calculator must not undercount");
 
-    LoggingControlConfigurationCborParser parser;
-    const auto restored = parser.Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
     AssertSame(configuration, *restored);
 
     // And with negative numbers and bools, which have their own sizes.
@@ -228,7 +224,7 @@ ZTEST(logging_control_configuration_parser, test_MoreTriggersThanTheSchemaAllows
     // 0*16: the sixteenth decodes, the seventeenth does not.
     const Bytes trigger = { 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF };
 
-    auto build = [&trigger](size_t count) {
+    const auto build = [&trigger](size_t count) {
         Bytes bytes = { 0x9F, 0x9F };
         for(size_t i = 0; i < count; i++)
             bytes.insert(bytes.end(), trigger.begin(), trigger.end());
@@ -251,10 +247,9 @@ ZTEST(logging_control_configuration_parser, test_DeserializeValidates) {
     const auto decoded = Decode(bytes);
     zassert_not_null(decoded.get(), "The bytes are the schema's");
 
-    LoggingControlConfigurationCborParser parser;
     bool is_rejected = false;
     try {
-        parser.Deserialize(Mrm::GetDefaultPmr(), *decoded);
+        LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *decoded);
     } catch(const std::invalid_argument&) {
         is_rejected = true;
     }
@@ -263,11 +258,9 @@ ZTEST(logging_control_configuration_parser, test_DeserializeValidates) {
 }
 
 ZTEST(logging_control_configuration_parser, test_SerializeValidates) {
-    LoggingControlConfigurationCborParser parser;
-
     bool is_rejected = false;
     try {
-        parser.Serialize(MakeConfiguration({ LoggingTrigger{} }));
+        LoggingControlConfigurationCborParser::Serialize(MakeConfiguration({ LoggingTrigger{} }));
     } catch(const std::invalid_argument&) {
         is_rejected = true;
     }

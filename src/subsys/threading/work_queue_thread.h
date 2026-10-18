@@ -10,9 +10,9 @@ namespace eerie_leap::subsys::threading {
 
 class WorkQueueThread : public ThreadBase {
 private:
-    k_work_q work_q_;
-    k_work_sync sync_;
-    k_mutex runner_tasks_mutex_;
+    k_work_q work_q_{};
+    k_work_sync sync_{};
+    k_mutex runner_tasks_mutex_{};
 
     bool is_running_ = false;
 
@@ -33,6 +33,11 @@ public:
         std::pmr::memory_resource* mr = nullptr
     );
     ~WorkQueueThread() override;
+
+    WorkQueueThread(const WorkQueueThread&) = delete;
+    WorkQueueThread& operator=(const WorkQueueThread&) = delete;
+    WorkQueueThread(WorkQueueThread&&) = delete;
+    WorkQueueThread& operator=(WorkQueueThread&&) = delete;
 
     bool Initialize();
     void Stop();

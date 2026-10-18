@@ -15,7 +15,7 @@ EventChannelRegistry& EventChannelRegistry::GetInstance() {
 }
 
 int EventChannelRegistry::Register(EventChannelId id, IEventChannel& channel) {
-    auto index = static_cast<size_t>(id);
+    const auto index = static_cast<size_t>(id);
 
     if(!IsValidEventChannelId(id)) {
         LOG_ERR("Channel id %u cannot be registered.", static_cast<unsigned>(index));

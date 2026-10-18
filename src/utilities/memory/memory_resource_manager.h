@@ -6,7 +6,7 @@ namespace eerie_leap::utilities::memory {
 
 class Mrm {
 private:
-    static ExtMemoryResource ext_memory_resource_;
+    static ExtMemoryResource ext_memory_resource;
 
 public:
     static std::pmr::memory_resource* GetDefaultPmr();

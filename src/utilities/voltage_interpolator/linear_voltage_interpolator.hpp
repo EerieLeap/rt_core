@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -34,9 +35,7 @@ public:
         }
 
         // Binary search for the correct interval
-        auto upper = std::lower_bound(table.begin(), table.end(), voltage, [](const CalibrationData& data, float v) {
-            return data.voltage < v;
-        });
+        auto upper = std::ranges::lower_bound(table, voltage, std::less<>{}, &CalibrationData::voltage);
 
         // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
         if(upper == table.begin())
@@ -44,25 +43,25 @@ public:
         else if(upper == table.end())
             --upper;
 
-        auto lower = upper - 1;
+        const auto lower = upper - 1;
 
-        float x0 = lower->voltage;
-        float x1 = upper->voltage;
-        float y0 = lower->value;
-        float y1 = upper->value;
+        const float x0 = lower->voltage;
+        const float x1 = upper->voltage;
+        const float y0 = lower->value;
+        const float y1 = upper->value;
 
-        float ratio = 0.0f;
+        float ratio = 0.0F;
         if(x1 != x0)
             ratio = (voltage - x0) / (x1 - x0);
 
         return y0 + ratio * (y1 - y0);
     }
 
-    const std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
+    std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
         return calibration_table_;
     }
 
-    const InterpolationMethod GetInterpolationMethod() const override {
+    InterpolationMethod GetInterpolationMethod() const override {
         return INTERPOLATION_METHOD;
     }
 };

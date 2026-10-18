@@ -23,12 +23,12 @@ private:
     std::shared_ptr<IFsService> sd_fs_service_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
 
-    void BuildInterpolator(SensorRuntime& runtime) const;
+    static void BuildInterpolator(SensorRuntime& runtime);
     void BuildExpression(SensorRuntime& runtime) const;
     void BuildScript(SensorGeneration& generation, SensorRuntime& runtime) const;
-    void BuildConditioner(SensorRuntime& runtime, std::span<const IndicatorSwitchState> switch_states) const;
+    static void BuildConditioner(SensorRuntime& runtime, std::span<const IndicatorSwitchState> switch_states);
     void BindWrittenValue(SensorRuntime& runtime) const;
-    void LinkDependents(SensorGeneration& generation) const;
+    static void LinkDependents(SensorGeneration& generation);
 
 public:
     SensorPipelineBuilder(

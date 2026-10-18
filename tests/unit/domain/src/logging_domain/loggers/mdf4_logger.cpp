@@ -64,6 +64,7 @@ constexpr uint8_t RAW_VALUE_INVALID = 0x02;
 constexpr uint8_t TEST_DEVICE_ID = 7;
 constexpr uint32_t TEST_SW_VERSION = 0x01020003;
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const auto START_TIME = std::chrono::system_clock::time_point(std::chrono::seconds(1'760'000'000));
 
 std::shared_ptr<Sensor> MakeValueSensor(std::string_view id, std::string_view expression = "") {
@@ -147,7 +148,7 @@ MemoryStreamBuf MakeStream() {
 
 // The records appended since the header, which StartLogging() reported as the bytes written so far.
 std::string RecordBytes(const MemoryStreamBuf& stream, uint64_t header_size) {
-    return stream.str().substr(static_cast<size_t>(header_size));
+    return stream.Str().substr(static_cast<size_t>(header_size));
 }
 
 template<typename T>
@@ -189,19 +190,19 @@ bool ContainsText(const std::vector<std::string>& texts, std::string_view expect
 
 bool AnyContains(const std::vector<std::string>& texts, std::string_view fragment) {
     return std::ranges::any_of(texts, [fragment](const std::string& text) {
-        return text.find(fragment) != std::string::npos;
+        return text.contains(fragment);
     });
 }
 
 // native_sim links the host libc, so the file can be handed to asammdf on the host.
 void DumpToHost([[maybe_unused]] const MemoryStreamBuf& stream, [[maybe_unused]] std::string_view file_name) {
 #ifdef CONFIG_ARCH_POSIX
-    const std::string_view dump_dir = CONFIG_LOGGING_UNIT_TEST_DUMP_DIR;
+    const std::string_view dump_dir;
     if(dump_dir.empty())
         return;
 
     const std::string path = std::string(dump_dir) + "/" + std::string(file_name);
-    const std::string content = stream.str();
+    const std::string content = stream.Str();
 
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     zassert_true(file.is_open(), "the dump file %s could not be opened", path.c_str());
@@ -257,22 +258,22 @@ ZTEST(mdf4_logger, test_RawValueRecord) {
     );
 
     const auto records = RecordBytes(stream, header_size);
-    constexpr size_t record_size = RAW_RECORD_SIZE;
-    constexpr size_t mask = record_size - 1;
+    constexpr size_t RECORD_SIZE = RAW_RECORD_SIZE;
+    constexpr size_t MASK = RECORD_SIZE - 1;
     zassert_equal(
-        records.size(), 2 * record_size, "two records of id + time + value + raw + invalidation (got %zu)",
+        records.size(), 2 * RECORD_SIZE, "two records of id + time + value + raw + invalidation (got %zu)",
         records.size()
     );
     zassert_equal(ReadAt<double>(records, 1), 0.25, "the first record is at 0.25 s");
     zassert_equal(ReadAt<float>(records, 1 + TIME_SIZE), 9.6F, "the value comes first");
     zassert_equal(ReadAt<float>(records, 1 + TIME_SIZE + VALUE_SIZE), 2.0F, "the raw value follows the value");
-    zassert_equal(static_cast<uint8_t>(records[mask]), 0, "a reading with both values clears both bits");
-    zassert_equal(ReadAt<float>(records, record_size + 1 + TIME_SIZE), 1.6F, "a missing raw value keeps the value");
+    zassert_equal(static_cast<uint8_t>(records[MASK]), 0, "a reading with both values clears both bits");
+    zassert_equal(ReadAt<float>(records, RECORD_SIZE + 1 + TIME_SIZE), 1.6F, "a missing raw value keeps the value");
     zassert_equal(
-        ReadAt<float>(records, record_size + 1 + TIME_SIZE + VALUE_SIZE), 0.0F, "a missing raw value is written as 0"
+        ReadAt<float>(records, RECORD_SIZE + 1 + TIME_SIZE + VALUE_SIZE), 0.0F, "a missing raw value is written as 0"
     );
     zassert_equal(
-        static_cast<uint8_t>(records[record_size + mask]), RAW_VALUE_INVALID,
+        static_cast<uint8_t>(records[RECORD_SIZE + MASK]), RAW_VALUE_INVALID,
         "a missing raw value sets the raw channel's bit only"
     );
 }
@@ -313,8 +314,8 @@ ZTEST(mdf4_logger, test_CanFrameRecord) {
     }
 
     const auto records = RecordBytes(stream, header_size);
-    constexpr size_t can_record_size = 1 + TIME_SIZE + CAN_FRAME_SIZE;
-    zassert_equal(can_record_size, 24, "a CAN record is id 1 + time 8 + CAN_DataFrame 15");
+    constexpr size_t CAN_RECORD_SIZE = 1 + TIME_SIZE + CAN_FRAME_SIZE;
+    zassert_equal(CAN_RECORD_SIZE, 24, "a CAN record is id 1 + time 8 + CAN_DataFrame 15");
 
     // The VLSD group is created first: id 1 for the payloads, id 2 for the CAN_DataFrame records.
     // Each payload record goes out before its frame record.
@@ -333,7 +334,7 @@ ZTEST(mdf4_logger, test_CanFrameRecord) {
     zassert_equal(static_cast<uint8_t>(records[first + 1 + TIME_SIZE + 6]), 8, "DataLength is the payload size");
     zassert_equal(ReadAt<uint64_t>(records, first + 1 + TIME_SIZE + 7), 0U, "the first VLSD offset is 0, 64 bits wide");
 
-    const size_t second = first + can_record_size + 1 + VLSD_LENGTH_SIZE + 12;
+    const size_t second = first + CAN_RECORD_SIZE + 1 + VLSD_LENGTH_SIZE + 12;
     zassert_equal(static_cast<uint8_t>(records[second]), 2, "the second frame record follows its 12 byte payload");
     zassert_equal(ReadAt<double>(records, second + 1), 0.00125, "frames of one tick keep their own times");
     zassert_equal(
@@ -366,27 +367,28 @@ ZTEST(mdf4_logger, test_InvalidReadingsSetTheirInvalidationBits) {
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
     const uint64_t header_size = logger.GetBytesWritten();
 
-    auto reading = [&sensors](size_t sensor, std::optional<float> value, std::optional<float> raw_value, int time_ms) {
-        auto result = MakeValueReading(*sensors[sensor], value, START_TIME + milliseconds(time_ms));
-        result.raw_value = raw_value;
+    const auto reading =
+        [&sensors](size_t sensor, std::optional<float> value, std::optional<float> raw_value, int time_ms) {
+            auto result = MakeValueReading(*sensors[sensor], value, START_TIME + milliseconds(time_ms));
+            result.raw_value = raw_value;
 
-        return result;
-    };
+            return result;
+        };
 
-    auto valid = reading(0, 9.6F, 2.0F, 100);
+    const auto valid = reading(0, 9.6F, 2.0F, 100);
     // The expression failed after the input was measured: the value is a leftover, the raw value real.
     auto error = reading(0, 9.6F, 2.5F, 200);
     error.SetError(ReadingError::EXPRESSION_FAILED);
-    auto without_value = reading(0, std::nullopt, 3.0F, 300);
-    auto without_raw = reading(0, 13.6F, std::nullopt, 400);
+    const auto without_value = reading(0, std::nullopt, 3.0F, 300);
+    const auto without_raw = reading(0, 13.6F, std::nullopt, 400);
     auto failed_read = reading(0, std::nullopt, std::nullopt, 500);
     failed_read.SetError(ReadingError::READER_FAILED);
-    auto valid_again = reading(0, 15.6F, 3.5F, 600);
+    const auto valid_again = reading(0, 15.6F, 3.5F, 600);
 
-    auto coolant_valid = reading(1, 80.0F, std::nullopt, 150);
+    const auto coolant_valid = reading(1, 80.0F, std::nullopt, 150);
     auto coolant_error = reading(1, 80.0F, std::nullopt, 250);
     coolant_error.SetError(ReadingError::READER_FAILED);
-    auto coolant_valid_again = reading(1, 81.0F, std::nullopt, 350);
+    const auto coolant_valid_again = reading(1, 81.0F, std::nullopt, 350);
 
     const std::array<const SensorReading*, 9> readings{ &valid, &coolant_valid, &error, &coolant_error, &without_value,
         &coolant_valid_again, &without_raw, &failed_read, &valid_again };
@@ -461,7 +463,7 @@ ZTEST(mdf4_logger, test_ErrorReadingIsASampleForLogOnlyNewData) {
     const auto first = MakeValueReading(*sensors[0], 1.0F, START_TIME + milliseconds(100));
     const auto recovered = MakeValueReading(*sensors[0], 2.0F, START_TIME + milliseconds(400));
 
-    for(bool log_only_new_data : { true, false }) {
+    for(const bool log_only_new_data : { true, false }) {
         Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, log_only_new_data), sensors, MakeMetadata());
 
         auto stream = MakeStream();
@@ -528,8 +530,8 @@ ZTEST(mdf4_logger, test_CanFramesIgnoreLogOnlyNewData) {
     zassert_true(logger.LogReading(*reading.timestamp, reading), "a frame with the same timestamp is written too");
 
     const auto records = RecordBytes(stream, header_size);
-    constexpr size_t pair_size = 1 + VLSD_LENGTH_SIZE + 2 + 1 + TIME_SIZE + CAN_FRAME_SIZE;
-    zassert_equal(records.size(), 2 * pair_size, "two payload and frame record pairs (got %zu)", records.size());
+    constexpr size_t PAIR_SIZE = 1 + VLSD_LENGTH_SIZE + 2 + 1 + TIME_SIZE + CAN_FRAME_SIZE;
+    zassert_equal(records.size(), 2 * PAIR_SIZE, "two payload and frame record pairs (got %zu)", records.size());
 }
 
 ZTEST(mdf4_logger, test_DisabledSensorIsNotWritten) {
@@ -543,7 +545,7 @@ ZTEST(mdf4_logger, test_DisabledSensorIsNotWritten) {
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
     const uint64_t header_size = logger.GetBytesWritten();
 
-    const auto texts = CollectBlockTexts(stream.str(), "##TX");
+    const auto texts = CollectBlockTexts(stream.Str(), "##TX");
     zassert_false(ContainsText(texts, "sensor_2"), "a disabled sensor must not get a channel group");
 
     zassert_false(
@@ -567,7 +569,7 @@ ZTEST(mdf4_logger, test_DisabledSensorGetsNoChannelEvenWithLoggingEnabled) {
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
     const uint64_t header_size = logger.GetBytesWritten();
 
-    const auto texts = CollectBlockTexts(stream.str(), "##TX");
+    const auto texts = CollectBlockTexts(stream.Str(), "##TX");
     zassert_true(ContainsText(texts, "enabled_value"), "an enabled sensor keeps its channel group");
     zassert_false(ContainsText(texts, "disabled_value"), "a disabled sensor must not get a channel group");
     zassert_false(ContainsText(texts, "disabled_raw"), "a disabled raw CAN sensor must not get a CAN group");
@@ -604,6 +606,7 @@ ZTEST(mdf4_logger, test_DisabledSensorGetsNoChannelEvenWithLoggingEnabled) {
 
 ZTEST(mdf4_logger, test_RecordIdSizeCountsOnlyEnabledSensors) {
     std::vector<std::shared_ptr<Sensor>> sensors;
+    sensors.reserve(130);
     for(int i = 0; i < 130; i++)
         sensors.push_back(MakeValueSensor("sensor_" + std::to_string(i)));
 
@@ -671,19 +674,19 @@ ZTEST(mdf4_logger, test_ReadingWithoutTimestampUsesTheGivenTime) {
     );
 
     const auto records = RecordBytes(stream, header_size);
-    constexpr size_t record_size = VALUE_RECORD_SIZE;
-    zassert_equal(records.size(), 3 * record_size, "three records written (got %zu)", records.size());
+    constexpr size_t RECORD_SIZE = VALUE_RECORD_SIZE;
+    zassert_equal(records.size(), 3 * RECORD_SIZE, "three records written (got %zu)", records.size());
     zassert_equal(ReadAt<double>(records, 1), 0.75, "the record time is the time the caller passed");
-    zassert_true(ReadAt<double>(records, record_size + 1) > 0.75, "the master channel of a group strictly increases");
+    zassert_true(ReadAt<double>(records, RECORD_SIZE + 1) > 0.75, "the master channel of a group strictly increases");
     zassert_true(
-        ReadAt<double>(records, 2 * record_size + 1) > ReadAt<double>(records, record_size + 1),
+        ReadAt<double>(records, 2 * RECORD_SIZE + 1) > ReadAt<double>(records, RECORD_SIZE + 1),
         "an invalid record keeps the master channel increasing"
     );
     zassert_equal(
-        ReadAt<float>(records, 2 * record_size + 1 + TIME_SIZE), 0.0F, "a reading without a value is written as 0"
+        ReadAt<float>(records, 2 * RECORD_SIZE + 1 + TIME_SIZE), 0.0F, "a reading without a value is written as 0"
     );
     zassert_equal(
-        static_cast<uint8_t>(records[3 * record_size - 1]), VALUE_INVALID, "with the value channel's bit set"
+        static_cast<uint8_t>(records[3 * RECORD_SIZE - 1]), VALUE_INVALID, "with the value channel's bit set"
     );
 }
 
@@ -718,16 +721,16 @@ ZTEST(mdf4_logger, test_HeldSampleIsRepeatedAtTheTickTime) {
     zassert_true(logger.LogReading(START_TIME + milliseconds(500), sample_3), "a late new sample is still written");
 
     const auto records = RecordBytes(stream, header_size);
-    constexpr size_t record_size = VALUE_RECORD_SIZE;
-    zassert_equal(records.size(), 6 * record_size, "six records (got %zu)", records.size());
+    constexpr size_t RECORD_SIZE = VALUE_RECORD_SIZE;
+    zassert_equal(records.size(), 6 * RECORD_SIZE, "six records (got %zu)", records.size());
 
     const std::array<double, 6> expected_times{ 0.1, 0.2, 0.3, 0.35, 0.4, 0.4 + 0.000001 };
     const std::array<float, 6> expected_values{ 1.0F, 1.0F, 1.0F, 2.0F, 2.0F, 3.0F };
     for(size_t i = 0; i < expected_times.size(); i++) {
-        const auto time = ReadAt<double>(records, i * record_size + 1);
+        const auto time = ReadAt<double>(records, i * RECORD_SIZE + 1);
         zassert_within(time, expected_times[i], 1e-9, "record %zu at %f s, expected %f s", i, time, expected_times[i]);
         zassert_equal(
-            ReadAt<float>(records, i * record_size + 1 + TIME_SIZE), expected_values[i], "record %zu value", i
+            ReadAt<float>(records, i * RECORD_SIZE + 1 + TIME_SIZE), expected_values[i], "record %zu value", i
         );
     }
 }
@@ -753,16 +756,16 @@ ZTEST(mdf4_logger, test_TimeKeepsMicrosecondsAfterADay) {
         zassert_true(logger.LogReading(time, MakeValueReading(*sensors[0], 1.0F, time)), "every sample is new");
 
     const auto records = RecordBytes(stream, header_size);
-    constexpr size_t record_size = VALUE_RECORD_SIZE;
-    zassert_equal(records.size(), times.size() * record_size, "every sample is written (got %zu)", records.size());
+    constexpr size_t RECORD_SIZE = VALUE_RECORD_SIZE;
+    zassert_equal(records.size(), times.size() * RECORD_SIZE, "every sample is written (got %zu)", records.size());
 
     for(size_t i = 0; i < times.size(); i++) {
         const auto expected = std::chrono::duration<double>(times[i] - START_TIME).count();
-        const auto time = ReadAt<double>(records, i * record_size + 1);
+        const auto time = ReadAt<double>(records, i * RECORD_SIZE + 1);
         zassert_within(time, expected, 1e-9, "record %zu at %.9f s, expected %.9f s", i, time, expected);
 
         if(i > 0) {
-            const auto previous = ReadAt<double>(records, (i - 1) * record_size + 1);
+            const auto previous = ReadAt<double>(records, (i - 1) * RECORD_SIZE + 1);
             zassert_true(time > previous, "record %zu must be later than the one before", i);
         }
     }
@@ -820,7 +823,7 @@ ZTEST(mdf4_logger, test_ConversionRule) {
     auto stream = MakeStream();
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
 
-    const auto file = stream.str();
+    const auto file = stream.Str();
     zassert_true(
         ContainsText(CollectBlockTexts(file, "##TX"), "X * 4 + 1.6"), "the convertible expression is a formula"
     );
@@ -842,7 +845,7 @@ ZTEST(mdf4_logger, test_ChannelAndGroupNames) {
     auto stream = MakeStream();
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
 
-    const auto file = stream.str();
+    const auto file = stream.Str();
     const auto texts = CollectBlockTexts(file, "##TX");
     const auto comments = CollectBlockTexts(file, "##MD");
 
@@ -869,6 +872,7 @@ ZTEST(mdf4_logger, test_RecordIdSizeFollowsTheSensorCount) {
     zassert_equal(Mdf4LoggerSensorReading::GetRecordIdSizeBytes(128), 2, "257 record ids need two bytes");
 
     std::vector<std::shared_ptr<Sensor>> sensors;
+    sensors.reserve(130);
     for(int i = 0; i < 130; i++)
         sensors.push_back(MakeValueSensor("sensor_" + std::to_string(i)));
 
@@ -897,7 +901,7 @@ ZTEST(mdf4_logger, test_HeaderPropertiesAreWritten) {
     auto stream = MakeStream();
     zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
 
-    const auto comments = CollectBlockTexts(stream.str(), "##MD");
+    const auto comments = CollectBlockTexts(stream.Str(), "##MD");
 
     zassert_true(
         AnyContains(comments, "<HDcomment><TX>Eerie Leap sensor log</TX><common_properties>"),
@@ -946,7 +950,7 @@ ZTEST(mdf4_logger, test_LogFileNaming) {
 
 ZTEST(mdf4_logger, test_AllocationCounterCounts) {
     const size_t before = GetAllocationCount();
-    auto block = std::make_unique<uint8_t[]>(32);
+    const auto block = std::make_unique<uint8_t[]>(32);
 
     zassert_equal(
         GetAllocationCount() - before, 1,
@@ -957,16 +961,17 @@ ZTEST(mdf4_logger, test_AllocationCounterCounts) {
 // The writers, their buffers and the targets are built by StartLogging(); a tick only finds the
 // target and hands the record to its writer.
 ZTEST(mdf4_logger, test_ATickAllocatesNothing) {
-    constexpr size_t value_sensor_count = 64;
-    constexpr size_t can_sensor_count = 8;
-    constexpr size_t frame_count = 32;
+    constexpr size_t VALUE_SENSOR_COUNT = 64;
+    constexpr size_t CAN_SENSOR_COUNT = 8;
+    constexpr size_t FRAME_COUNT = 32;
 
     std::vector<std::shared_ptr<Sensor>> sensors;
-    for(size_t i = 0; i < value_sensor_count; i++) {
+    sensors.reserve(VALUE_SENSOR_COUNT);
+    for(size_t i = 0; i < VALUE_SENSOR_COUNT; i++) {
         // Every other sensor gets a raw value channel, so both value record layouts are written.
         sensors.push_back(MakeValueSensor("sensor_" + std::to_string(i), i % 2 == 0 ? "x * 2" : ""));
     }
-    for(size_t i = 0; i < can_sensor_count; i++)
+    for(size_t i = 0; i < CAN_SENSOR_COUNT; i++)
         sensors.push_back(MakeCanRawSensor("can_" + std::to_string(i), static_cast<uint8_t>(i % 2)));
 
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
@@ -975,7 +980,7 @@ ZTEST(mdf4_logger, test_ATickAllocatesNothing) {
     const auto tick_time = START_TIME + std::chrono::milliseconds(100);
 
     std::vector<SensorReading> value_readings;
-    for(size_t i = 0; i < value_sensor_count; i++) {
+    for(size_t i = 0; i < VALUE_SENSOR_COUNT; i++) {
         auto reading = MakeValueReading(*sensors[i], static_cast<float>(i), reading_time);
         reading.raw_value = static_cast<float>(i) / 2.0F;
 
@@ -988,15 +993,15 @@ ZTEST(mdf4_logger, test_ATickAllocatesNothing) {
         value_readings.push_back(reading);
     }
 
-    std::array<CanFrame, frame_count> frames;
+    std::array<CanFrame, FRAME_COUNT> frames;
     std::vector<SensorReading> frame_readings;
-    for(size_t i = 0; i < frame_count; i++) {
+    for(size_t i = 0; i < FRAME_COUNT; i++) {
         frames[i].id = static_cast<uint32_t>(0x100 + i);
         frames[i].is_extended = i % 2 == 1;
         frames[i].is_can_fd = i % 4 == 0;
         frames[i].data = std::vector<uint8_t>(i % 4 == 0 ? 64 : 8, static_cast<uint8_t>(i));
 
-        SensorReading reading(sensors[value_sensor_count + i % can_sensor_count].get());
+        SensorReading reading(sensors[VALUE_SENSOR_COUNT + i % CAN_SENSOR_COUNT].get());
         reading.source = ReadingSource::ISR;
         reading.status = ReadingStatus::PROCESSED;
         reading.timestamp = reading_time + std::chrono::microseconds(i);
@@ -1021,7 +1026,7 @@ ZTEST(mdf4_logger, test_ATickAllocatesNothing) {
     const size_t allocations = GetAllocationCount() - allocations_before;
 
     zassert_equal(
-        logged, value_sensor_count + frame_count, "every reading of the tick must be logged (got %zu)", logged
+        logged, VALUE_SENSOR_COUNT + FRAME_COUNT, "every reading of the tick must be logged (got %zu)", logged
     );
     zassert_true(
         logger.GetBytesWritten() <= capacity,

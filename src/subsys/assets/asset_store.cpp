@@ -277,7 +277,7 @@ int AssetWriter::Flush() {
 
     if(rc < 0) {
         error_ = static_cast<int>(rc);
-    } else if(static_cast<size_t>(rc) != buffered_) {
+    } else if(std::cmp_not_equal(rc, buffered_)) {
         // FAT reports a full volume as a short write, with no error.
         LOG_WRN("Staged write stopped short: %d of %d bytes.", static_cast<int>(rc), static_cast<int>(buffered_));
         error_ = -ENOSPC;
@@ -516,7 +516,7 @@ int AssetStore::OpenRead(std::string_view name, AssetReader& reader) const {
         return -ENOENT;
 
     // Everything that can throw comes before the file is opened.
-    eerie_memory::pmr_unique_ptr<AssetReader::Block> buffer;
+    eerie_memory::PmrUniquePtr<AssetReader::Block> buffer;
     std::string path;
 
     try {
@@ -576,7 +576,7 @@ int AssetStore::BeginWrite(std::string_view name, AssetWriter& writer) {
         return -EINVAL;
 
     // Everything that can throw comes before the file is opened.
-    eerie_memory::pmr_unique_ptr<AssetWriter::Block> buffer;
+    eerie_memory::PmrUniquePtr<AssetWriter::Block> buffer;
     std::string directory;
     std::string target_path;
 
@@ -629,18 +629,15 @@ bool AssetStore::IsValidName(std::string_view name, std::span<const std::string_
     if(name.empty() || name.size() > CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH || name.front() == '.')
         return false;
 
-    for(const char c : name) {
-        if(!IsNameCharacter(c))
-            return false;
-    }
+    if(!std::ranges::all_of(name, [](char c) {
+           return IsNameCharacter(c);
+       }))
+        return false;
 
-    for(const std::string_view extension : extensions) {
+    return std::ranges::any_of(extensions, [name](std::string_view extension) {
         // At least one character stays in front of the extension.
-        if(name.size() > extension.size() && EndsWithIgnoreCase(name, extension))
-            return true;
-    }
-
-    return false;
+        return name.size() > extension.size() && EndsWithIgnoreCase(name, extension);
+    });
 }
 
 } // namespace eerie_leap::subsys::assets

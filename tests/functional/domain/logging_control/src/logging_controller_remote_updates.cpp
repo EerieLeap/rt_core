@@ -22,8 +22,8 @@ namespace {
 
 using Type = ConfigurationService::Type;
 
-constexpr float kOn = 1.0F;
-constexpr float kOff = 0.0F;
+constexpr float K_ON = 1.0F;
+constexpr float K_OFF = 0.0F;
 
 bool IsStart(const std::optional<RecordedFrame>& frame) {
     return frame.has_value() && frame->data[3] == 0x01;
@@ -77,7 +77,7 @@ struct Fixture {
     // The GPIO reader of the processing's generation seeds `switch` with its level, 0, when it starts.
     // Returns once the triggers have seen it, so a later value is not overtaken by it.
     void WaitForSeed() {
-        zassert_true(switch_probe.WaitForValue(kOff), "The seed was published");
+        zassert_true(switch_probe.WaitForValue(K_OFF), "The seed was published");
         zassert_true(blocker.Fence(), "and the triggers saw it");
     }
 
@@ -96,7 +96,7 @@ struct Fixture {
 
     // The unit wants logging: the start goes out and a logging unit shares that it logs.
     void WantLogging() {
-        controller->GetControl()->RequestStart(kAllUnits);
+        controller->GetControl()->RequestStart(ALL_UNITS);
         const auto start = peer.WaitForBroadcast();
         zassert_true(IsStart(start), "The start goes out");
         zassert_true(peer.WaitForOwnAnswer(*start), "and the unit's own handler is done with it");
@@ -271,7 +271,7 @@ ZTEST(remote_updates, test_TheUnitsOwnSettingSendsNothing) {
 ZTEST(remote_updates, test_TheBootsStoresSendNothing) {
     F().rig = std::make_unique<ProcessingRig>(
         SensorList{ Analog("spare"), Indicator("switch_on", "1") }, true, F().gpio,
-        [](std::shared_ptr<SensorsConfigurationManager> manager) {
+        [](const std::shared_ptr<SensorsConfigurationManager>& manager) {
             auto sensors = *manager->Get();
             sensors.push_back(Button());
             zassert_true(manager->Update(sensors), "The hook stores the button");
@@ -373,7 +373,7 @@ ZTEST(remote_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
     F().Boot({ Input("switch", 1), Analog("spare") }, { "switch" }, true);
     F().RegisterStandIns();
 
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_ON);
     const auto start = F().peer.WaitForBroadcast();
     zassert_true(IsStart(start), "A switch turned on starts logging");
     zassert_true(F().peer.WaitForOwnAnswer(*start));
@@ -381,15 +381,15 @@ ZTEST(remote_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
     StoreStandIn(F().ui);
     F().AssertOneStop();
 
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_ON);
     F().AssertSilent("The switch is still on, and an update does not start it again");
 
-    PublishSensorValue("switch", kOff);
+    PublishSensorValue("switch", K_OFF);
     const auto stop = F().peer.WaitForBroadcast();
     zassert_true(IsStop(stop), "Turned off, it stops (a stop that changes nothing)");
     zassert_true(F().peer.WaitForOwnAnswer(*stop));
 
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_ON);
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "and turned on again, it starts");
 }
 
@@ -398,8 +398,8 @@ ZTEST(remote_updates, test_AfterAnUpdateASwitchThatIsOnStartsNothing) {
 ZTEST(remote_updates, test_ATriggerRebuiltByAnUpdateTakesItsSwitchAsABaseline) {
     F().Boot({ Input("switch", 1), Analog("spare") }, { "switch" }, true);
 
-    F().rig->Commit("switch", kOn);
-    zassert_true(F().switch_probe.WaitForValue(kOn), "The publisher took the commit");
+    F().rig->Commit("switch", K_ON);
+    zassert_true(F().switch_probe.WaitForValue(K_ON), "The publisher took the commit");
     zassert_true(F().blocker.Fence());
     const auto start = F().peer.WaitForBroadcast();
     zassert_true(IsStart(start), "The switch turned on");
@@ -409,15 +409,15 @@ ZTEST(remote_updates, test_ATriggerRebuiltByAnUpdateTakesItsSwitchAsABaseline) {
     zassert_true(F().controller->GetLoggingControlConfigurationManager()->Update(TriggersOn({ "switch" })));
     zassert_true(Flush(), "The rebuild ran");
     F().AssertOneStop();
-    zassert_true(F().switch_probe.WaitForValue(kOn), "and its replay delivered the switch, still on");
+    zassert_true(F().switch_probe.WaitForValue(K_ON), "and its replay delivered the switch, still on");
     zassert_true(F().blocker.Fence());
     F().AssertSilent("The rebuilt trigger starts nothing: the replayed value is its baseline");
 
-    PublishSensorValue("switch", kOff);
+    PublishSensorValue("switch", K_OFF);
     const auto stop = F().peer.WaitForBroadcast();
     zassert_true(IsStop(stop), "It acts on its next change");
     zassert_true(F().peer.WaitForOwnAnswer(*stop));
-    PublishSensorValue("switch", kOn);
+    PublishSensorValue("switch", K_ON);
     zassert_true(IsStart(F().peer.WaitForBroadcast()));
 }
 
@@ -431,8 +431,8 @@ ZTEST(remote_updates, test_ATriggerOnAVanishedSensorForgetsIt) {
     F().rig->Apply({ Analog("spare") });
     F().AssertOneStop();
 
-    PublishSensorValue("one", kOff);
-    PublishSensorValue("one", kOn);
+    PublishSensorValue("one", K_OFF);
+    PublishSensorValue("one", K_ON);
     F().AssertSilent(
         "The sensor is gone: its trigger forgot it, and what the old generation still delivers asks nothing"
     );
@@ -440,7 +440,7 @@ ZTEST(remote_updates, test_ATriggerOnAVanishedSensorForgetsIt) {
     SensorProbe probe("one");
     F().rig->Apply({ Indicator("one", "1"), Analog("spare") });
     F().AssertOneStop();
-    zassert_true(probe.WaitForValue(kOn), "The sensor is back, on");
+    zassert_true(probe.WaitForValue(K_ON), "The sensor is back, on");
     zassert_true(F().blocker.Fence());
     F().AssertSilent("and a 1 after a sensors update is a baseline: it starts nothing");
 }
@@ -452,7 +452,7 @@ ZTEST(remote_updates, test_ATriggerOnASensorAddedByAnUpdateTakesABaseline) {
     SensorProbe probe("late");
     F().rig->Apply({ Indicator("late", "1"), Analog("spare") });
     F().AssertOneStop();
-    zassert_true(probe.WaitForValue(kOn), "The sensor the update brought is on");
+    zassert_true(probe.WaitForValue(K_ON), "The sensor the update brought is on");
     zassert_true(F().blocker.Fence());
     F().AssertSilent("and a baseline starts nothing");
 }

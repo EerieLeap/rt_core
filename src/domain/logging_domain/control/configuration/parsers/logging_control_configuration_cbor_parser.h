@@ -17,9 +17,10 @@ public:
 
     // Validates first. A text selector becomes a view into @p configuration, which the caller keeps
     // alive until the result is encoded.
-    eerie_memory::pmr_unique_ptr<CborLoggingControlConfig> Serialize(const LoggingControlConfiguration& configuration);
+    static eerie_memory::PmrUniquePtr<CborLoggingControlConfig>
+    Serialize(const LoggingControlConfiguration& configuration);
     // Copies what it keeps, so the result does not refer to @p config, and validates the result.
-    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration>
+    static eerie_memory::PmrUniquePtr<LoggingControlConfiguration>
     Deserialize(std::pmr::memory_resource* mr, const CborLoggingControlConfig& config);
 };
 

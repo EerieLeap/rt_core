@@ -38,8 +38,8 @@ void AdcSimulator::Sample(const AdcSampleRequest& request) noexcept {
 
         last_channel = channel;
 
-        uint32_t raw = sys_rand32_get();
-        request.results[i].volts = (raw / static_cast<float>(UINT32_MAX)) * 3.3F;
+        const uint32_t raw = sys_rand32_get();
+        request.results[i].volts = (static_cast<float>(raw) / static_cast<float>(UINT32_MAX)) * 3.3F;
         stats_.conversions++;
     }
 }

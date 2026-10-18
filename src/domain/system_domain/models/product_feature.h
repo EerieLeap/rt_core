@@ -28,7 +28,7 @@ constexpr bool HasFeature(uint16_t features, ProductFeature feature) {
 namespace detail {
 
 constexpr uint16_t GetBuildFeatures() {
-    uint16_t features = 0;
+    uint16_t features = 0; // NOLINT(misc-const-correctness): set by the CONFIG_ branches below.
 
 #if CONFIG_EERIE_LEAP_FEATURES_ANALOG_INPUTS
     features |= ToMask(ProductFeature::ANALOG_INPUTS);

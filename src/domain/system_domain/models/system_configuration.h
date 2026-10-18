@@ -11,10 +11,10 @@ struct SystemConfiguration {
 
     uint64_t device_id = 0;
 
-    static constexpr uint32_t hw_version = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR << 24
+    static constexpr uint32_t HW_VERSION = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR << 24
         | CONFIG_EERIE_LEAP_HW_VERSION_MINOR << 16 | CONFIG_EERIE_LEAP_HW_VERSION_PATCH;
 
-    static constexpr uint32_t sw_version = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR << 24
+    static constexpr uint32_t SW_VERSION = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR << 24
         | CONFIG_EERIE_LEAP_SW_VERSION_MINOR << 16 | CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
 
     uint32_t build_number = 0;
@@ -25,15 +25,18 @@ struct SystemConfiguration {
     SystemConfiguration& operator=(const SystemConfiguration&) = delete;
 
     SystemConfiguration(SystemConfiguration&&) noexcept = default;
+    SystemConfiguration& operator=(SystemConfiguration&&) = delete;
+    ~SystemConfiguration() = default;
 
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved): only numbers are copied, and a number has nothing to move.
     SystemConfiguration(SystemConfiguration&& other, [[maybe_unused]] allocator_type alloc) :
         device_id(other.device_id),
         build_number(other.build_number) {}
 
-    std::string GetFormattedHwVersion() const {
-        uint8_t hw_version_major = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR;
-        uint8_t hw_version_minor = CONFIG_EERIE_LEAP_HW_VERSION_MINOR;
-        uint16_t hw_version_patch = CONFIG_EERIE_LEAP_HW_VERSION_PATCH;
+    static std::string GetFormattedHwVersion() {
+        const uint8_t hw_version_major = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR;
+        const uint8_t hw_version_minor = CONFIG_EERIE_LEAP_HW_VERSION_MINOR;
+        const uint16_t hw_version_patch = CONFIG_EERIE_LEAP_HW_VERSION_PATCH;
 
         char version_str[32];
         snprintf(version_str, sizeof(version_str), "%u.%u.%u", hw_version_major, hw_version_minor, hw_version_patch);
@@ -42,9 +45,9 @@ struct SystemConfiguration {
     }
 
     std::string GetFormattedSwVersion() const {
-        uint8_t sw_version_major = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR;
-        uint8_t sw_version_minor = CONFIG_EERIE_LEAP_SW_VERSION_MINOR;
-        uint16_t sw_version_patch = CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
+        const uint8_t sw_version_major = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR;
+        const uint8_t sw_version_minor = CONFIG_EERIE_LEAP_SW_VERSION_MINOR;
+        const uint16_t sw_version_patch = CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
 
         char version_str[32];
         snprintf(

@@ -8,7 +8,7 @@ using namespace smp_ble_test;
 ZTEST_SUITE(smp_ble_router, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(smp_ble_router, test_local_route_reaches_the_smp_server) {
-    RouterHarness harness;
+    const RouterHarness harness;
 
     harness.router->OnReceive(Routed(0, MakeEchoRequest("hello", 11)));
 
@@ -19,7 +19,7 @@ ZTEST(smp_ble_router, test_local_route_reaches_the_smp_server) {
 }
 
 ZTEST(smp_ble_router, test_own_address_is_served_locally) {
-    RouterHarness harness;
+    const RouterHarness harness;
     harness.forwarder->address = 5;
     harness.forwarder->reachable = { 7 };
 
@@ -32,7 +32,7 @@ ZTEST(smp_ble_router, test_own_address_is_served_locally) {
 }
 
 ZTEST(smp_ble_router, test_packets_span_writes_and_notifications) {
-    RouterHarness harness;
+    const RouterHarness harness;
     const std::string text = LongText(120);
 
     // One byte per write splits the route and the SMP header too.
@@ -51,7 +51,7 @@ ZTEST(smp_ble_router, test_packets_span_writes_and_notifications) {
 }
 
 ZTEST(smp_ble_router, test_one_write_may_hold_several_packets) {
-    RouterHarness harness;
+    const RouterHarness harness;
 
     Bytes data = Routed(0, MakeEchoRequest("one", 1));
     const Bytes second = Routed(0, MakeEchoRequest("two", 2));
@@ -66,7 +66,7 @@ ZTEST(smp_ble_router, test_one_write_may_hold_several_packets) {
 }
 
 ZTEST(smp_ble_router, test_peer_route_is_forwarded_and_its_response_notified) {
-    RouterHarness harness;
+    const RouterHarness harness;
     harness.forwarder->address = 5;
     harness.forwarder->reachable = { 7 };
 
@@ -90,7 +90,7 @@ ZTEST(smp_ble_router, test_peer_route_is_forwarded_and_its_response_notified) {
 }
 
 ZTEST(smp_ble_router, test_refused_forward_is_dropped) {
-    RouterHarness harness;
+    const RouterHarness harness;
     harness.forwarder->reachable = { 7 };
     harness.forwarder->accept = false;
 
@@ -102,8 +102,8 @@ ZTEST(smp_ble_router, test_refused_forward_is_dropped) {
 }
 
 ZTEST(smp_ble_router, test_unreachable_destination_gets_enoent) {
-    for(bool has_forwarder : { true, false }) {
-        RouterHarness harness(has_forwarder);
+    for(const bool has_forwarder : { true, false }) {
+        const RouterHarness harness(has_forwarder);
 
         harness.router->OnReceive(Routed(9, MakeEchoRequest("nobody", 16, SmpOperation::READ)));
 
@@ -123,7 +123,7 @@ ZTEST(smp_ble_router, test_unreachable_destination_gets_enoent) {
 }
 
 ZTEST(smp_ble_router, test_busy_link_resumes_when_a_notification_leaves) {
-    RouterHarness harness;
+    const RouterHarness harness;
     harness.link->SetBudget(1);
 
     const std::string text = LongText(60);
@@ -142,7 +142,7 @@ ZTEST(smp_ble_router, test_busy_link_resumes_when_a_notification_leaves) {
 }
 
 ZTEST(smp_ble_router, test_disconnect_drops_a_partial_request) {
-    RouterHarness harness;
+    const RouterHarness harness;
 
     const Bytes stale = Routed(0, MakeEchoRequest("stale", 18));
     harness.router->OnReceive(std::span(stale).first(6));
@@ -157,7 +157,7 @@ ZTEST(smp_ble_router, test_disconnect_drops_a_partial_request) {
 
 ZTEST(smp_ble_router, test_disconnect_drops_pending_responses) {
     {
-        RouterHarness harness;
+        const RouterHarness harness;
         harness.link->SetBudget(0);
 
         harness.router->OnReceive(Routed(0, MakeEchoRequest("late", 20)));
@@ -176,7 +176,7 @@ ZTEST(smp_ble_router, test_disconnect_drops_pending_responses) {
 }
 
 ZTEST(smp_ble_router, test_stalled_request_times_out) {
-    RouterHarness harness;
+    const RouterHarness harness;
 
     const Bytes stale = Routed(0, MakeEchoRequest("stale", 21));
     harness.router->OnReceive(std::span(stale).first(12));
@@ -191,7 +191,7 @@ ZTEST(smp_ble_router, test_stalled_request_times_out) {
 }
 
 ZTEST(smp_ble_router, test_oversized_packets_and_responses_are_skipped) {
-    RouterHarness harness;
+    const RouterHarness harness;
 
     // Longer than a pool buffer; its body is skipped, not parsed as packets.
     const Bytes oversized = MakePacket(SmpOperation::WRITE, 0, 0, 23, Bytes(CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE, 0xA1));

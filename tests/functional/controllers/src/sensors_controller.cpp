@@ -114,16 +114,16 @@ public:
 
 ZTEST(sensors_controller, test_an_update_restarts_processing_once_it_was_started) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
 
-    auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_config_wq", 6144, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_config_wq", 6144, 5);
     zassert_true(work_queue->Initialize());
 
-    auto time_service = std::make_shared<TimeService>(
+    const auto time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
 
     // No GPIO, no ADC and no ADC configuration manager: the defaults rt_gauge relies on.
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
@@ -154,30 +154,31 @@ ZTEST(sensors_controller, test_an_update_restarts_processing_once_it_was_started
 
 ZTEST(sensors_controller, test_a_restart_stops_and_starts_again_the_dependents_that_were_running) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
 
-    auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_dependents_wq", 6144, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_dependents_wq", 6144, 5);
     zassert_true(work_queue->Initialize());
 
-    auto time_service = std::make_shared<TimeService>(
+    const auto time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
 
     // rt_gauge's seven arguments.
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([](auto manager) {
+        controller.Initialize([](const auto& manager) {
             zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }));
         }),
         0
     );
 
     const auto processing_service = controller.GetProcessingService();
-    auto running = std::make_shared<DependentService>(processing_service);
-    auto stopped = std::make_shared<DependentService>(processing_service);
-    auto refusing = std::make_shared<DependentService>(processing_service);
+    const auto running = std::make_shared<DependentService>(processing_service);
+    const auto stopped = std::make_shared<DependentService>(processing_service);
+    const auto refusing = std::make_shared<DependentService>(processing_service);
 
     controller.RegisterDependentService(running);
     controller.RegisterDependentService(nullptr);
@@ -217,20 +218,21 @@ ZTEST(sensors_controller, test_a_restart_stops_and_starts_again_the_dependents_t
 
 ZTEST(sensors_controller, test_a_disabled_sensor_gets_no_reading_from_processing_or_EmulateReadings) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
     fs_service->Format();
 
-    auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_disabled_wq", 6144, 5);
+    const auto work_queue = std::make_shared<WorkQueueThread>("sensors_test_disabled_wq", 6144, 5);
     zassert_true(work_queue->Initialize());
 
-    auto time_service = std::make_shared<TimeService>(
+    const auto time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
-    auto frame = std::make_shared<SensorReadingsFrame>();
+    const auto frame = std::make_shared<SensorReadingsFrame>();
 
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([](auto manager) {
+        controller.Initialize([](const auto& manager) {
             auto disabled = MakeVirtualSensor("disabled", "2 + 2");
             disabled->is_enabled = false;
 

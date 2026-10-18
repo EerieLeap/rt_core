@@ -33,17 +33,19 @@ GpioSensorReader::GpioSensorReader(
     if(!GetSensor().configuration.channel.has_value())
         throw std::runtime_error("Sensor channel is not set");
 
-    int channel = static_cast<int>(GetSensor().configuration.channel.value());
+    const int channel = static_cast<int>(GetSensor().configuration.channel.value());
 
     pending_work_.reader = this;
     k_work_init(&pending_work_.work, WorkHandler);
 
     // Handler removal is serialised against dispatch, so `this` outlives every call.
-    int handler_id = gpio_->RegisterChannelChangedHandler(channel, GpioEdge::BOTH, [this](int channel, bool state) {
-        ARG_UNUSED(channel);
+    const int handler_id = gpio_->RegisterChannelChangedHandler(
+        channel, GpioEdge::BOTH, [this](int channel, bool state) {
+            ARG_UNUSED(channel);
 
-        QueueState(state);
-    });
+            QueueState(state);
+        }
+    );
 
     if(handler_id <= 0)
         throw std::runtime_error("Failed to register GPIO handler for channel: " + std::to_string(channel));
@@ -80,7 +82,7 @@ void GpioSensorReader::QueueState(bool state) {
 }
 
 void GpioSensorReader::WorkHandler(k_work* work) {
-    auto* pending_work = CONTAINER_OF(work, PendingWork, work);
+    const auto* pending_work = CONTAINER_OF(work, PendingWork, work);
     pending_work->reader->ProcessPendingState();
 }
 

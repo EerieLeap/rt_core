@@ -42,7 +42,7 @@ private:
     const std::string configuration_file_path_ = configuration_dir_ + "/" + configuration_name_ + ".cbor";
 
     struct SaveTask {
-        k_work work;
+        k_work work{};
         CborConfigurationService<T>* instance{ nullptr };
         T* configuration{ nullptr }; // null to write config_bytes as they are
         std::span<const uint8_t> config_bytes;
@@ -50,7 +50,7 @@ private:
     };
 
     struct LoadTask {
-        k_work work;
+        k_work work{};
         CborConfigurationService<T>* instance{ nullptr };
         bool decode{ true };
         std::optional<LoadedConfig<T>> result{ std::nullopt };
@@ -60,8 +60,8 @@ private:
     // to eliminate cases when configuration is updated from some thread
     // which will require that thread to have enough stack size for the operation.
     // mutex_ serialises callers off the queue; the queue thread never takes it.
-    k_mutex mutex_;
-    k_work_sync work_sync_;
+    k_mutex mutex_{};
+    k_work_sync work_sync_{};
     SaveTask task_save_;
     LoadTask task_load_;
 
@@ -76,6 +76,7 @@ private:
     }
 
     bool SaveProcessor(T* configuration) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         auto config_bytes = serializer_->Serialize(*configuration);
@@ -107,6 +108,7 @@ private:
     }
 
     std::optional<LoadedConfig<T>> LoadProcessor(bool decode) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         if(!fs_service_->Exists(configuration_file_path_)) {
@@ -120,7 +122,7 @@ private:
             return std::nullopt;
         }
 
-        size_t buffer_size = *file_size;
+        const size_t buffer_size = *file_size;
         std::pmr::vector<uint8_t> buffer(buffer_size, Mrm::GetExtPmr());
         size_t out_len = 0;
 
@@ -134,7 +136,7 @@ private:
         const uint32_t crc = crc32_ieee(buffer.data(), buffer.size());
         SetStoredInfo(buffer.size(), crc);
 
-        eerie_memory::pmr_unique_ptr<T> configuration;
+        eerie_memory::PmrUniquePtr<T> configuration;
         if(decode) {
             configuration = serializer_->Deserialize(buffer);
 
@@ -154,6 +156,7 @@ private:
     }
 
     bool SaveOnQueue(T* configuration, std::span<const uint8_t> config_bytes) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         // Waiting here, in k_work_flush() or for mutex_, could wait for this very thread.
@@ -179,6 +182,7 @@ private:
     }
 
     std::optional<LoadedConfig<T>> LoadOnQueue(bool decode) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         if(IsOnWorkQueue())
@@ -202,6 +206,7 @@ private:
     }
 
     static void WorkTaskSave(k_work* work) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         SaveTask* task = CONTAINER_OF(work, SaveTask, work);
@@ -219,6 +224,7 @@ private:
     }
 
     static void WorkTaskLoad(k_work* work) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         // LoadTask is not standard-layout, so offsetof() is only conditionally supported;
@@ -247,7 +253,8 @@ public:
     ) :
         configuration_name_(std::move(configuration_name)),
         fs_service_(std::move(fs_service)),
-        work_queue_thread_(std::move(work_queue_thread)) {
+        work_queue_thread_(std::move(work_queue_thread)),
+        serializer_(std::make_unique<cbor::CborSerializer<T>>()) {
 
         k_mutex_init(&mutex_);
 
@@ -257,8 +264,8 @@ public:
         task_load_.instance = this;
         k_work_init(&task_load_.work, WorkTaskLoad);
 
-        auto funcs = cbor::CborTraitRegistry::Get<T>();
-        serializer_ = std::make_unique<cbor::CborSerializer<T>>();
+        // Fails fast when T has no registered CBOR traits.
+        static_cast<void>(cbor::CborTraitRegistry::Get<T>());
 
         if(!fs_service_->Exists(configuration_dir_))
             fs_service_->CreateDirectory(configuration_dir_);
@@ -296,7 +303,7 @@ public:
         return info;
     }
 
-    eerie_memory::pmr_unique_ptr<T> Deserialize(std::span<const uint8_t> config_bytes) {
+    eerie_memory::PmrUniquePtr<T> Deserialize(std::span<const uint8_t> config_bytes) {
         return serializer_->Deserialize(config_bytes);
     }
 

@@ -2,7 +2,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <ctime>
 #include <string>
+#include <utility>
 
 #include <zephyr/kernel.h>
 #include <zephyr/timing/timing.h>
@@ -12,17 +14,18 @@ namespace eerie_leap::subsys::time {
 class TimeHelpers {
 public:
     static std::string GetFormattedString(const std::chrono::system_clock::time_point& tp) {
-        auto duration = tp.time_since_epoch();
-        auto secs = duration_cast<std::chrono::seconds>(duration);
-        auto millis = duration_cast<std::chrono::milliseconds>(duration - secs).count();
+        const auto duration = tp.time_since_epoch();
+        const auto secs = duration_cast<std::chrono::seconds>(duration);
+        const auto millis = duration_cast<std::chrono::milliseconds>(duration - secs).count();
 
         std::time_t time_sec = std::chrono::system_clock::to_time_t(tp);
-        std::tm* timeinfo = localtime(&time_sec);
+        // NOLINTNEXTLINE(concurrency-mt-unsafe): the ESP32 picolibc configuration declares no localtime_r.
+        const std::tm* timeinfo = std::localtime(&time_sec);
 
         char buffer[32];
         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
 
-        std::string formatted_time = std::string(buffer);
+        const std::string formatted_time = std::string(buffer);
         return formatted_time + "." + std::to_string(millis);
     }
 
@@ -66,20 +69,21 @@ public:
      */
     template<typename Func>
     static float MeasureExecutionTimeUs(Func&& func) {
-        timing_t start_time, end_time;
+        timing_t start_time = 0;
+        timing_t end_time = 0;
 
         timing_init();
         timing_start();
         start_time = timing_counter_get();
 
-        func();
+        std::forward<Func>(func)();
 
         end_time = timing_counter_get();
-        uint64_t total_cycles = timing_cycles_get(&start_time, &end_time);
-        uint64_t total_ns = timing_cycles_to_ns(total_cycles);
+        const uint64_t total_cycles = timing_cycles_get(&start_time, &end_time);
+        const uint64_t total_ns = timing_cycles_to_ns(total_cycles);
         timing_stop();
 
-        return static_cast<float>(total_ns) / 1000.0f;
+        return static_cast<float>(total_ns) / 1000.0F;
     }
 };
 

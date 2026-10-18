@@ -29,16 +29,16 @@ ZTEST(can_frame_payload, test_initializer_list_construction) {
 }
 
 ZTEST(can_frame_payload, test_vector_construction) {
-    std::vector<uint8_t> bytes(8, 0x5A);
+    const std::vector<uint8_t> bytes(8, 0x5A);
     CanFramePayload payload(bytes);
 
     zassert_equal(payload.size(), 8);
-    for(size_t i = 0; i < payload.size(); i++)
-        zassert_equal(payload[i], 0x5A);
+    for(const auto byte : payload)
+        zassert_equal(byte, 0x5A);
 }
 
 ZTEST(can_frame_payload, test_array_construction) {
-    std::array<uint8_t, 4> bytes = { 1, 2, 3, 4 };
+    const std::array<uint8_t, 4> bytes = { 1, 2, 3, 4 };
     CanFramePayload payload(bytes);
 
     zassert_equal(payload.size(), 4);
@@ -60,7 +60,7 @@ ZTEST(can_frame_payload, test_assign_replaces_content) {
 }
 
 ZTEST(can_frame_payload, test_oversized_input_is_truncated_not_overflowing) {
-    std::vector<uint8_t> bytes(CAN_FRAME_MAX_DATA_LENGTH * 4, 0xEE);
+    const std::vector<uint8_t> bytes(CAN_FRAME_MAX_DATA_LENGTH * 4, 0xEE);
     CanFramePayload payload(bytes);
 
     zassert_equal(payload.size(), CAN_FRAME_MAX_DATA_LENGTH);
@@ -87,7 +87,7 @@ ZTEST(can_frame_payload, test_resize_is_clamped_to_capacity) {
 
 ZTEST(can_frame_payload, test_span_conversion_matches_size) {
     CanFramePayload payload({ 9, 8, 7 });
-    std::span<const uint8_t> view = payload;
+    const std::span<const uint8_t> view = payload;
 
     zassert_equal(view.size(), 3);
     zassert_equal(view[0], 9);
@@ -98,7 +98,7 @@ ZTEST(can_frame_payload, test_iteration_stops_at_size) {
     CanFramePayload payload({ 4, 4, 4 });
 
     size_t count = 0;
-    for(uint8_t byte : payload) {
+    for(const uint8_t byte : payload) {
         zassert_equal(byte, 4);
         count++;
     }

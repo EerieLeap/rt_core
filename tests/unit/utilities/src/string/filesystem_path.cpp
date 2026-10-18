@@ -93,15 +93,15 @@ ZTEST(filesystem_path, test_append_is_chainable) {
 }
 
 ZTEST(filesystem_path, test_parent_path_of_nested_path) {
-    FilesystemPath<64> path("/lfs/sensors/config.json");
+    const FilesystemPath<64> path("/lfs/sensors/config.json");
 
     zassert_true(path.parent_path().String() == "/lfs/sensors");
 }
 
 ZTEST(filesystem_path, test_parent_path_drops_trailing_separator_only) {
-    FilesystemPath<64> nested("foo/bar/");
-    FilesystemPath<64> single("foo/");
-    FilesystemPath<64> absolute("/lfs/sensors/");
+    const FilesystemPath<64> nested("foo/bar/");
+    const FilesystemPath<64> single("foo/");
+    const FilesystemPath<64> absolute("/lfs/sensors/");
 
     zassert_true(nested.parent_path().String() == "foo/bar");
     zassert_true(single.parent_path().String() == "foo");
@@ -109,9 +109,9 @@ ZTEST(filesystem_path, test_parent_path_drops_trailing_separator_only) {
 }
 
 ZTEST(filesystem_path, test_parent_path_collapses_redundant_separators) {
-    FilesystemPath<64> doubled("foo//bar");
-    FilesystemPath<64> trailing("/lfs//");
-    FilesystemPath<64> separators_only("///");
+    const FilesystemPath<64> doubled("foo//bar");
+    const FilesystemPath<64> trailing("/lfs//");
+    const FilesystemPath<64> separators_only("///");
 
     zassert_true(doubled.parent_path().String() == "foo");
     zassert_true(trailing.parent_path().String() == "/lfs");
@@ -119,25 +119,25 @@ ZTEST(filesystem_path, test_parent_path_collapses_redundant_separators) {
 }
 
 ZTEST(filesystem_path, test_parent_path_without_separator_is_empty) {
-    FilesystemPath<64> path("config.json");
+    const FilesystemPath<64> path("config.json");
 
     zassert_true(path.parent_path().String().Empty());
 }
 
 ZTEST(filesystem_path, test_parent_path_of_root_is_root) {
-    FilesystemPath<64> path("/");
+    const FilesystemPath<64> path("/");
 
     zassert_true(path.parent_path().String() == "/");
 }
 
 ZTEST(filesystem_path, test_parent_path_of_top_level_entry_is_root) {
-    FilesystemPath<64> path("/lfs");
+    const FilesystemPath<64> path("/lfs");
 
     zassert_true(path.parent_path().String() == "/");
 }
 
 ZTEST(filesystem_path, test_parent_path_of_empty_is_empty) {
-    FilesystemPath<64> path;
+    const FilesystemPath<64> path;
 
     zassert_true(path.parent_path().String().Empty());
 }
@@ -152,7 +152,7 @@ ZTEST(filesystem_path, test_parent_path_does_not_modify_source) {
 }
 
 ZTEST(filesystem_path, test_parent_path_is_repeatable) {
-    FilesystemPath<64> path("/lfs/sensors/config.json");
+    const FilesystemPath<64> path("/lfs/sensors/config.json");
 
     zassert_true(path.parent_path().parent_path().String() == "/lfs");
     zassert_true(path.parent_path().parent_path().parent_path().String() == "/");

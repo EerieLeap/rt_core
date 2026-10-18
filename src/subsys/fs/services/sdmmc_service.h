@@ -19,16 +19,16 @@ using eerie_leap::subsys::threading::Thread;
 
 class SdmmcService : public FsService, public IThread {
 private:
-    static constexpr int k_stack_size_ = CONFIG_EERIE_LEAP_FS_SD_THREAD_STACK_SIZE;
-    static constexpr int k_priority_ = 2;
+    static constexpr int K_STACK_SIZE = CONFIG_EERIE_LEAP_FS_SD_THREAD_STACK_SIZE;
+    static constexpr int K_PRIORITY = 2;
     std::unique_ptr<Thread> thread_;
 
     const char* disk_name_;
-    atomic_t sd_card_present_;
-    k_sem sd_monitor_stop_sem_;
-    atomic_t monitor_running_;
+    atomic_t sd_card_present_{ ATOMIC_INIT(0) };
+    k_sem sd_monitor_stop_sem_{};
+    atomic_t monitor_running_{ ATOMIC_INIT(0) };
 
-    mutable k_mutex handler_mutex_;
+    mutable k_mutex handler_mutex_{};
     std::function<bool()> is_sd_card_present_handler_;
 
     void ThreadEntry() override;
@@ -39,7 +39,11 @@ private:
 
 public:
     SdmmcService(fs_mount_t* mountpoint, const char* disk_name);
-    ~SdmmcService();
+    ~SdmmcService() override;
+    SdmmcService(const SdmmcService&) = delete;
+    SdmmcService& operator=(const SdmmcService&) = delete;
+    SdmmcService(SdmmcService&&) = delete;
+    SdmmcService& operator=(SdmmcService&&) = delete;
 
     bool Initialize() override;
     void RegisterIsSdCardPresentHandler(std::function<bool()> handler);

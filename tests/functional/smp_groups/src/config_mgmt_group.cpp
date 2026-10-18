@@ -53,7 +53,7 @@ struct Reports {
         k_tid_t thread;
     };
 
-    k_mutex lock;
+    k_mutex lock{};
     std::vector<Entry> entries;
 
     Reports() {
@@ -95,6 +95,11 @@ public:
         zassert_true(group->Initialize());
         group->Register();
     }
+
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
 
     ~Harness() {
         group.reset();
@@ -215,7 +220,7 @@ ZTEST_F(smp_config_group, test_crc_describes_the_current_configuration) {
     Harness& harness = *fixture->harness;
     harness.canbus->stored = Pattern(1500, 7);
 
-    auto response = harness.Crc(CANBUS);
+    const auto response = harness.Crc(CANBUS);
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("type"), CANBUS);
@@ -236,7 +241,7 @@ ZTEST_F(smp_config_group, test_chunked_read_returns_the_configuration) {
     harness.canbus->stored = Pattern(3000, 3);
 
     uint32_t crc = 0;
-    auto data = harness.ReadAll(CANBUS, &crc);
+    const auto data = harness.ReadAll(CANBUS, &crc);
 
     zassert_true(data == harness.canbus->stored);
     zassert_equal(crc, Crc(harness.canbus->stored));
@@ -277,19 +282,21 @@ ZTEST_F(smp_config_group, test_chunked_write_applies_the_configuration) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(2500, 11);
 
-    auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
+    const auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
     zassert_true(first.IsOk());
     zassert_equal(first.Value("off"), WRITE_CHUNK_SIZE);
     zassert_not_equal(first.Value("tok"), 0);
 
     const uint32_t token = first.Value("tok");
-    auto second = harness.WriteNext(
+    const auto second = harness.WriteNext(
         CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE, WRITE_CHUNK_SIZE)
     );
     zassert_true(second.IsOk());
     zassert_equal(harness.canbus->apply_count, 0, "Nothing is applied before the last chunk");
 
-    auto last = harness.WriteNext(CANBUS, 2 * WRITE_CHUNK_SIZE, token, std::span(data).subspan(2 * WRITE_CHUNK_SIZE));
+    const auto last = harness.WriteNext(
+        CANBUS, 2 * WRITE_CHUNK_SIZE, token, std::span(data).subspan(2 * WRITE_CHUNK_SIZE)
+    );
     zassert_true(last.IsOk());
     zassert_equal(last.Value("off"), data.size());
     zassert_equal(harness.canbus->apply_count, 1);
@@ -311,7 +318,7 @@ ZTEST_F(smp_config_group, test_rejected_configuration_reports_apply_failed) {
     const Bytes data = Pattern(1200, 4);
     harness.canbus->reject = true;
 
-    auto response = harness.WriteAll(CANBUS, data, Crc(data));
+    const auto response = harness.WriteAll(CANBUS, data, Crc(data));
     AssertError(response, Error::APPLY_FAILED);
     zassert_false(response.Has("msg"), "Without a reason there is no msg");
     zassert_equal(harness.canbus->apply_count, 1);
@@ -362,13 +369,15 @@ ZTEST_F(smp_config_group, test_second_writer_is_busy_until_the_owner_restarts) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(2000, 8);
 
-    auto owner = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
+    const auto owner = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
     zassert_true(owner.IsOk());
     const uint32_t token = owner.Value("tok");
 
     AssertError(harness.WriteFirst(UI, Pattern(10, 1), 10, 0), Error::BUSY);
 
-    auto restarted = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data), token);
+    const auto restarted = harness.WriteFirst(
+        CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data), token
+    );
     zassert_true(restarted.IsOk(), "The owner may restart with its token");
     zassert_not_equal(restarted.Value("tok"), token, "A restart opens a new session");
 }
@@ -378,11 +387,11 @@ ZTEST_F(smp_config_group, test_a_repeated_first_request_gets_the_sessions_token)
     const Bytes data = Pattern(2000, 13);
     const auto first_chunk = std::span(data).first(WRITE_CHUNK_SIZE);
 
-    auto first = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
+    const auto first = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
     zassert_true(first.IsOk());
 
     // The answer got lost, so the client sends the same request again.
-    auto repeated = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
+    const auto repeated = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
     zassert_true(repeated.IsOk(), "A repeat of the first request is not BUSY");
     zassert_equal(repeated.Value("off"), WRITE_CHUNK_SIZE);
     zassert_equal(repeated.Value("tok"), first.Value("tok"));
@@ -403,7 +412,7 @@ ZTEST_F(smp_config_group, test_only_an_exact_repeat_of_the_first_request_gets_th
     const Bytes data = Pattern(2000, 14);
     const auto first_chunk = std::span(data).first(WRITE_CHUNK_SIZE);
 
-    auto first = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
+    const auto first = harness.WriteFirst(CANBUS, first_chunk, data.size(), Crc(data));
     zassert_true(first.IsOk());
 
     Bytes other_chunk(first_chunk.begin(), first_chunk.end());
@@ -427,7 +436,7 @@ ZTEST_F(smp_config_group, test_wrong_token_is_rejected) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(2000, 6);
 
-    auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
+    const auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
     const uint32_t token = first.Value("tok");
 
     AssertError(
@@ -443,14 +452,14 @@ ZTEST_F(smp_config_group, test_wrong_offset_reports_where_to_resume) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(1500, 9);
 
-    auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
+    const auto first = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
     const uint32_t token = first.Value("tok");
 
-    auto wrong = harness.WriteNext(CANBUS, 100, token, std::span(data).subspan(100, 10));
+    const auto wrong = harness.WriteNext(CANBUS, 100, token, std::span(data).subspan(100, 10));
     AssertError(wrong, Error::BAD_OFFSET);
     zassert_equal(wrong.Value("off"), WRITE_CHUNK_SIZE);
 
-    auto resumed = harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE));
+    const auto resumed = harness.WriteNext(CANBUS, WRITE_CHUNK_SIZE, token, std::span(data).subspan(WRITE_CHUNK_SIZE));
     zassert_true(resumed.IsOk(), "The session survives a wrong offset");
     zassert_true(harness.canbus->stored == data);
 }
@@ -467,7 +476,7 @@ ZTEST_F(smp_config_group, test_idle_session_times_out) {
     Harness& harness = *fixture->harness;
     const Bytes data = Pattern(2000, 12);
 
-    auto stale = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
+    const auto stale = harness.WriteFirst(CANBUS, std::span(data).first(WRITE_CHUNK_SIZE), data.size(), Crc(data));
     const uint32_t token = stale.Value("tok");
 
     k_msleep(CONFIG_EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS + 100);
@@ -483,7 +492,7 @@ ZTEST_F(smp_config_group, test_unregistered_group_is_not_supported) {
     Harness& harness = *fixture->harness;
     harness.group->Unregister();
 
-    auto response = harness.client.Read(SmpGroupId::CONFIG, Id(Command::LIST));
+    const auto response = harness.client.Read(SmpGroupId::CONFIG, Id(Command::LIST));
 
     zassert_equal(response.Value("rc"), MGMT_ERR_ENOTSUP);
 }

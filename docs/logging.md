@@ -235,7 +235,7 @@ the destructor: whoever requests keeps the supervisor alive or goes first.
 
 | Method | Meaning |
 | --- | --- |
-| `RequestStart(target_uid)`, `RequestStop(target_uid)` | Record the wanted state and return, from any thread. The latest request wins. `target_uid` is the CDMP UID of the unit to start or stop; `ILoggingControl::kAllUnits` (0) is every unit that can log, this one included in the writer role. The supervisor ignores it: routing is `WriterLoggingControl`'s. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
+| `RequestStart(target_uid)`, `RequestStop(target_uid)` | Record the wanted state and return, from any thread. The latest request wins. `target_uid` is the CDMP UID of the unit to start or stop; `ILoggingControl::ALL_UNITS` (0) is every unit that can log, this one included in the writer role. The supervisor ignores it: routing is `WriterLoggingControl`'s. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
 | `HandleLoggingCommand(is_start)` | The CDMP `LOGGING` command another unit sent (see [The `LOGGING` command](#the-logging-command)). Whether this unit accepts it: the answer is `SUCCESS` if so, else `FAILURE`. A unit that logs takes it as a request; a unit without a writer serves only a stop. |
 | `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. For a shell's status and for tests: a trigger never reads it. |
 
@@ -258,7 +258,7 @@ The build picks the implementation (`EERIE_LEAP_DOMAIN_LOGGING`):
 | Writer | `WriterLoggingControl` (`control/writer_logging_control.h`): `LogWriterSupervisor` (see [Supervision](#supervision)) for this unit, and a `RemoteLoggingControl` in `Peer` mode for the others. Every unit with a writer can start and stop the other units too. | rt_daq |
 | Remote | `RemoteLoggingControl`: a request becomes the CDMP `LOGGING` command. | rt_gauge |
 
-`WriterLoggingControl` routes by target and holds no state or thread: `kAllUnits` is this unit's
+`WriterLoggingControl` routes by target and holds no state or thread: `ALL_UNITS` is this unit's
 writer and one broadcast (so a trigger on a unit that logs starts every other unit too), this unit's
 own UID (`LoggingController::GetUnitUid()`) is the writer alone, and any other UID is a unicast
 through the network half. Without a COM service there is no network half: only the writer is served,
@@ -270,7 +270,7 @@ stop also tells the network half to drop its wanted starts.
 `RemoteLoggingControl` (`control/remote_logging_control.h`) is the control of a unit without a log
 writer.
 
-- **Targets.** A request names its target. `kAllUnits` is one broadcast, whatever the device table
+- **Targets.** A request names its target. `ALL_UNITS` is one broadcast, whatever the device table
   holds. A UID is one unicast to the device ID of the unit with that UID, looked up through
   `ICdmpNetworkInfo` when the command is sent: the unit must be online and `CanLog()` (its
   features carry `LOGGING`; `control/logging_unit.h` is the one place that says so). The control keeps one wanted
@@ -448,7 +448,7 @@ work, does the following in this order:
 1. Makes the triggers take the next first value of each as a baseline. For a sensors update it
    also withdraws the triggers whose sensor is gone (see [Triggers](#triggers)). This is
    `LoggingController`'s update handler.
-2. Calls `RequestStop(kAllUnits)` on the unit's `ILoggingControl`.
+2. Calls `RequestStop(ALL_UNITS)` on the unit's `ILoggingControl`.
 3. Where the control does not send the stop itself, queues the `LOGGING` stop broadcast on the
    configuration work queue. In both roles the control sends it: the writer's network half, the
    remote control. Several stores before it runs send one stop.
@@ -471,7 +471,7 @@ writer again. The broadcast leaves before a CAN reconfiguration stops the COM se
 
 | | Writer role (rt_daq) | Remote role (rt_gauge) | No logging controller |
 | --- | --- | --- | --- |
-| The unit's own stop | `RequestStop(kAllUnits)` on the writer control: the supervisor stops the writer for good and clears the wanted state, and the network half sends the stop. | `RequestStop()` on the remote control: the wanted start is cleared at once, and its task sends the `LOGGING` stop. | None. |
+| The unit's own stop | `RequestStop(ALL_UNITS)` on the writer control: the supervisor stops the writer for good and clears the wanted state, and the network half sends the stop. | `RequestStop()` on the remote control: the wanted start is cleared at once, and its task sends the `LOGGING` stop. | None. |
 | The broadcast | One broadcast, sent by the writer's network half (a `RemoteLoggingControl` in `Peer` mode). | Sent by the remote control. | The update stop's task: a unit without an SD card still tells the units that log, since its sensors feed their files. |
 | Received `LOGGING` stop | `RequestStop()` on the supervisor, and the network half drops its wanted starts. | Drops the wanted starts. | No handler. |
 

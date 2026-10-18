@@ -29,14 +29,14 @@ namespace eerie_leap::subsys::device_tree {
 
 class DtFs {
 private:
-    static fs_mount_t* int_fs_mp_;
+    static fs_mount_t* int_fs_mp;
 
-    static fs_mount_t* sd_fs_mp_;
+    static fs_mount_t* sd_fs_mp;
 #ifdef CONFIG_SDMMC_SUBSYS
-    static sdhc_host_props sd_host_props_;
+    static sdhc_host_props sd_host_props;
 #endif
-    static uint32_t sd_relative_addr_;
-    static const char* sd_disk_name_;
+    static uint32_t sd_relative_addr;
+    static const char* sd_disk_name;
 
     DtFs() = default;
 
@@ -52,13 +52,13 @@ public:
     static bool IsSdCardPresent();
 
     static fs_mount_t* GetInternalFsMp() {
-        return int_fs_mp_;
+        return int_fs_mp;
     }
     static fs_mount_t* GetSdFsMp() {
-        return sd_fs_mp_;
+        return sd_fs_mp;
     }
     static const char* GetSdDiskName() {
-        return sd_disk_name_;
+        return sd_disk_name;
     }
 };
 

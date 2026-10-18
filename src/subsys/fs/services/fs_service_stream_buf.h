@@ -12,8 +12,8 @@ namespace eerie_leap::subsys::fs::services {
 class FsServiceStreamBuf : public std::streambuf {
 private:
     IFsService* fs_service_;
-    struct fs_file_t file_;
-    bool file_opened_;
+    struct fs_file_t file_{};
+    bool file_opened_{ false };
 
     static constexpr size_t PATH_BUFFER_SIZE = 256;
     static constexpr size_t BUFFER_SIZE = 4096;
@@ -50,8 +50,8 @@ public:
         Append
     };
 
-    FsServiceStreamBuf(IFsService* fs_service, const std::string_view relative_path, OpenMode mode);
-    ~FsServiceStreamBuf();
+    FsServiceStreamBuf(IFsService* fs_service, std::string_view relative_path, OpenMode mode);
+    ~FsServiceStreamBuf() override;
 
     /** Flushes the put area and closes the file; true only when both succeeded. */
     bool close();

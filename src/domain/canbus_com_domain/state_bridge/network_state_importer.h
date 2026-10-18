@@ -35,9 +35,9 @@ template<NetworkStateDescriptor TDescriptor>
 class NetworkStateImporter {
 public:
     using Descriptor = TDescriptor;
-    using State = typename TDescriptor::State;
-    using Channel = typename TDescriptor::Channel;
-    using EventMessage = typename Channel::EventMessage;
+    using State = TDescriptor::State;
+    using Channel = TDescriptor::Channel;
+    using EventMessage = Channel::EventMessage;
 
 private:
     std::shared_ptr<INetworkStateTransport> transport_;
@@ -87,6 +87,9 @@ public:
     explicit NetworkStateImporter(std::shared_ptr<INetworkStateTransport> transport) :
         transport_(std::move(transport)) {
 
+        // In the body, not the initializer list: the handler may run on the CDMP work queue as soon as it
+        // is registered, so every member it touches has to be constructed by then.
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): see above.
         handler_id_ = transport_->RegisterStateHandler(
             TDescriptor::STATE_TYPE, [this](CanbusComStateType /*state_type*/) {
                 OnStatesChanged();

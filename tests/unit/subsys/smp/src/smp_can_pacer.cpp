@@ -23,7 +23,7 @@ constexpr uint32_t FRAME_TIME_NS = SmpCanFrameFormat().GetFrameTimeNs(BITRATE);
 constexpr uint32_t FRAMES_PER_SECOND = 781;
 
 SmpCanPacer MakePacer() {
-    return SmpCanPacer(FRAME_TIME_NS, SHARE, BURST);
+    return { FRAME_TIME_NS, SHARE, BURST };
 }
 
 uint32_t SendAvailable(SmpCanPacer& pacer) {
@@ -78,10 +78,12 @@ ZTEST(smp_can_pacer, test_wait_for_several_frames) {
     pacer.Reset(0);
     SendAvailable(pacer);
 
-    zassert_equal(pacer.GetWaitUs(4), 4 * 1280);
-    zassert_equal(pacer.GetWaitUs(100), BURST * 1280, "Never waits for more than the bucket holds");
+    zassert_equal(pacer.GetWaitUs(4), 4LL * 1280);
+    zassert_equal(
+        pacer.GetWaitUs(100), static_cast<int64_t>(BURST) * 1280, "Never waits for more than the bucket holds"
+    );
 
-    pacer.Update(4 * 1280);
+    pacer.Update(4LL * 1280);
     zassert_equal(pacer.GetWaitUs(4), 0);
     zassert_equal(SendAvailable(pacer), 4);
 }
@@ -128,7 +130,7 @@ ZTEST(smp_can_pacer, test_default_pacer_never_sends) {
 }
 
 ZTEST(smp_can_pacer, test_invalid_parameters_are_rejected) {
-    auto rejects = [](uint32_t frame_time_ns, uint8_t share, uint32_t burst) {
+    const auto rejects = [](uint32_t frame_time_ns, uint8_t share, uint32_t burst) {
         try {
             SmpCanPacer pacer(frame_time_ns, share, burst);
             (void)pacer;

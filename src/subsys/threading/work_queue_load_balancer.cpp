@@ -19,7 +19,7 @@ void WorkQueueLoadBalancer::AddThread(std::shared_ptr<WorkQueueThread> thread) {
 }
 
 void WorkQueueLoadBalancer::OnWorkComplete(WorkQueueThread& thread, uint32_t execution_time_ms) {
-    k_work_q* work_queue = thread.GetWorkQueue();
+    const k_work_q* work_queue = thread.GetWorkQueue();
 
     k_mutex_lock(&balancer_mutex_, K_FOREVER);
 
@@ -43,22 +43,22 @@ std::shared_ptr<WorkQueueThread> WorkQueueLoadBalancer::GetLeastLoadedQueue() {
         return nullptr;
     }
 
-    uint64_t now = k_uptime_get();
+    const uint64_t now = k_uptime_get();
     int min_score = INT_MAX;
     size_t least_loaded_index = 0;
 
     for(size_t i = 0; i < work_queue_threads_.size(); i++) {
         // Decay old load over time
-        uint64_t time_delta = now - thread_metrics_[i].last_update_ms;
+        const uint64_t time_delta = now - thread_metrics_[i].last_update_ms;
         if(time_delta > 1000) { // Decay after 1 second
             atomic_set(&thread_metrics_[i].total_load_ms, atomic_get(&thread_metrics_[i].total_load_ms) / 2);
             thread_metrics_[i].last_update_ms = now;
         }
 
         // Score = pending items * avg_time_per_item
-        int pending = atomic_get(&thread_metrics_[i].pending_items);
-        int total_load = atomic_get(&thread_metrics_[i].total_load_ms);
-        int score = pending * 10 + total_load; // Weight pending items more
+        const int pending = atomic_get(&thread_metrics_[i].pending_items);
+        const int total_load = atomic_get(&thread_metrics_[i].total_load_ms);
+        const int score = pending * 10 + total_load; // Weight pending items more
 
         if(score < min_score) {
             min_score = score;

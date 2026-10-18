@@ -43,11 +43,11 @@ using namespace eerie_leap::subsys::expression_engine;
 
 ZTEST_SUITE(sensors_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
-    auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
+static std::vector<std::shared_ptr<Sensor>> SensorsConfigurationManagerSetupTestSensors() {
+    const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
+    const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
-    auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
+    const auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
 
     sensor_1->metadata.name = "Sensor 1";
     sensor_1->metadata.unit = "km/h";
@@ -60,11 +60,11 @@ std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSens
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
-        { 3.3, 200.0 } };
-    auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
+    const std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 },
+        { 2.5, 162.0 }, { 3.3, 200.0 } };
+    const auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
-    auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
+    const auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
 
     sensor_2->metadata.name = "Sensor 2";
     sensor_2->metadata.unit = "km/h";
@@ -77,7 +77,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSens
     sensor_2->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
     sensor_2->configuration.expression = "x * 4 + 1.6";
 
-    auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
+    const auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
 
     sensor_3->metadata.name = "Sensor 3";
     sensor_3->metadata.unit = "km/h";
@@ -88,7 +88,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSens
     sensor_3->configuration.sampling_rate_ms = 2000;
     sensor_3->configuration.expression = "sensor_1 + 8.34";
 
-    auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
+    const auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
 
     sensor_4->metadata.name = "Sensor 4";
     sensor_4->metadata.unit = "km/h";
@@ -107,7 +107,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_configuration_manager_SetupTestSens
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_successfully_saved) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -115,53 +115,51 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
         "sensors_config", fs_service
     );
 
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::move(cbor_sensors_configuration_service), nullptr, 16, 16
     );
 
-    auto sensors = sensors_configuration_manager_SetupTestSensors();
+    auto sensors = SensorsConfigurationManagerSetupTestSensors();
     sensors_configuration_manager->Update(sensors);
 
-    auto saved_sensors = sensors_configuration_manager->Get();
+    const auto saved_sensors = sensors_configuration_manager->Get();
 
     zassert_equal(saved_sensors->size(), sensors.size());
 
-    for(size_t i = 0; i < sensors.size(); ++i) {
+    for(auto& sensor : sensors) {
         std::shared_ptr<Sensor> saved_sensor = nullptr;
-        for(size_t j = 0; j < saved_sensors->size(); ++j) {
-            if(strcmp(saved_sensors->at(j)->id.c_str(), sensors[i]->id.c_str()) == 0) {
-                saved_sensor = saved_sensors->at(j);
+        for(auto& j : *saved_sensors) {
+            if(strcmp(j->id.c_str(), sensor->id.c_str()) == 0) {
+                saved_sensor = j;
                 break;
             }
         }
         zassert_true(saved_sensor != nullptr);
 
-        zassert_true(saved_sensor->metadata.name == sensors[i]->metadata.name);
-        zassert_true(saved_sensor->metadata.unit == sensors[i]->metadata.unit);
-        zassert_true(saved_sensor->metadata.description == sensors[i]->metadata.description);
+        zassert_true(saved_sensor->metadata.name == sensor->metadata.name);
+        zassert_true(saved_sensor->metadata.unit == sensor->metadata.unit);
+        zassert_true(saved_sensor->metadata.description == sensor->metadata.description);
 
-        zassert_true(saved_sensor->configuration.type == sensors[i]->configuration.type);
-        if(saved_sensor->configuration.channel.has_value() && sensors[i]->configuration.channel.has_value()) {
-            zassert_true(saved_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value());
+        zassert_true(saved_sensor->configuration.type == sensor->configuration.type);
+        if(saved_sensor->configuration.channel.has_value() && sensor->configuration.channel.has_value()) {
+            zassert_true(saved_sensor->configuration.channel.value() == sensor->configuration.channel.value());
         } else {
             zassert_true(
-                !saved_sensor->configuration.channel.has_value() && !sensors[i]->configuration.channel.has_value()
+                !saved_sensor->configuration.channel.has_value() && !sensor->configuration.channel.has_value()
             );
         }
-        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensor->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.interpolation_method == sensor->configuration.interpolation_method);
         zassert_true(
-            saved_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method
+            saved_sensor->configuration.calibration_table.size() == sensor->configuration.calibration_table.size()
         );
-        zassert_true(
-            saved_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size()
-        );
-        zassert_true(saved_sensor->configuration.expression == sensors[i]->configuration.expression);
+        zassert_true(saved_sensor->configuration.expression == sensor->configuration.expression);
     }
 }
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_and_Load) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -173,7 +171,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
         std::move(cbor_sensors_configuration_service), nullptr, 16, 16
     );
 
-    auto sensors = sensors_configuration_manager_SetupTestSensors();
+    auto sensors = SensorsConfigurationManagerSetupTestSensors();
     // Nothing reads sensor_4.
     sensors[3]->is_enabled = false;
     zassert_true(sensors_configuration_manager->Update(sensors));
@@ -186,48 +184,46 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
         std::move(cbor_sensors_configuration_service), nullptr, 16, 16
     );
 
-    auto saved_sensors = sensors_configuration_manager->Get();
+    const auto saved_sensors = sensors_configuration_manager->Get();
 
     zassert_equal(saved_sensors->size(), sensors.size());
 
-    for(size_t i = 0; i < sensors.size(); ++i) {
+    for(auto& sensor : sensors) {
         std::shared_ptr<Sensor> saved_sensor = nullptr;
-        for(size_t j = 0; j < saved_sensors->size(); ++j) {
-            if(strcmp(saved_sensors->at(j)->id.c_str(), sensors[i]->id.c_str()) == 0) {
-                saved_sensor = saved_sensors->at(j);
+        for(auto& j : *saved_sensors) {
+            if(strcmp(j->id.c_str(), sensor->id.c_str()) == 0) {
+                saved_sensor = j;
                 break;
             }
         }
         zassert_true(saved_sensor != nullptr);
 
-        zassert_equal(saved_sensor->is_enabled, sensors[i]->is_enabled, "%s", sensors[i]->id.c_str());
+        zassert_equal(saved_sensor->is_enabled, sensor->is_enabled, "%s", sensor->id.c_str());
 
-        zassert_true(saved_sensor->metadata.name == sensors[i]->metadata.name);
-        zassert_true(saved_sensor->metadata.unit == sensors[i]->metadata.unit);
-        zassert_true(saved_sensor->metadata.description == sensors[i]->metadata.description);
+        zassert_true(saved_sensor->metadata.name == sensor->metadata.name);
+        zassert_true(saved_sensor->metadata.unit == sensor->metadata.unit);
+        zassert_true(saved_sensor->metadata.description == sensor->metadata.description);
 
-        zassert_true(saved_sensor->configuration.type == sensors[i]->configuration.type);
-        if(saved_sensor->configuration.channel.has_value() && sensors[i]->configuration.channel.has_value()) {
-            zassert_true(saved_sensor->configuration.channel.value() == sensors[i]->configuration.channel.value());
+        zassert_true(saved_sensor->configuration.type == sensor->configuration.type);
+        if(saved_sensor->configuration.channel.has_value() && sensor->configuration.channel.has_value()) {
+            zassert_true(saved_sensor->configuration.channel.value() == sensor->configuration.channel.value());
         } else {
             zassert_true(
-                !saved_sensor->configuration.channel.has_value() && !sensors[i]->configuration.channel.has_value()
+                !saved_sensor->configuration.channel.has_value() && !sensor->configuration.channel.has_value()
             );
         }
-        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensors[i]->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.sampling_rate_ms == sensor->configuration.sampling_rate_ms);
+        zassert_true(saved_sensor->configuration.interpolation_method == sensor->configuration.interpolation_method);
         zassert_true(
-            saved_sensor->configuration.interpolation_method == sensors[i]->configuration.interpolation_method
+            saved_sensor->configuration.calibration_table.size() == sensor->configuration.calibration_table.size()
         );
-        zassert_true(
-            saved_sensor->configuration.calibration_table.size() == sensors[i]->configuration.calibration_table.size()
-        );
-        zassert_true(saved_sensor->configuration.expression == sensors[i]->configuration.expression);
+        zassert_true(saved_sensor->configuration.expression == sensor->configuration.expression);
     }
 }
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_valid_sensor_id) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -235,14 +231,14 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
         "sensors_config", fs_service
     );
 
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::move(cbor_sensors_configuration_service), nullptr, 16, 16
     );
 
-    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
-    auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
+    const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
+    const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
-    auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
+    const auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
 
     sensor_1->metadata.name = "Sensor 1";
     sensor_1->metadata.unit = "km/h";
@@ -254,7 +250,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     sensor_1->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
 
-    auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "_sensor_2");
+    const auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "_sensor_2");
 
     sensor_2->metadata.name = "Sensor 2";
     sensor_2->metadata.unit = "km/h";
@@ -266,7 +262,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     sensor_2->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_2->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
 
-    auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "_");
+    const auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "_");
 
     sensor_3->metadata.name = "Sensor 3";
     sensor_3->metadata.unit = "km/h";
@@ -278,15 +274,15 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     sensor_3->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_3->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
 
-    std::vector<std::shared_ptr<Sensor>> sensors{ sensor_1, sensor_2, sensor_3 };
+    const std::vector<std::shared_ptr<Sensor>> sensors{ sensor_1, sensor_2, sensor_3 };
 
-    for(auto sensor : sensors)
+    for(const auto& sensor : sensors)
         sensors_configuration_manager->Update({ sensor });
 }
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_config_invalid_sensor_id) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -294,14 +290,14 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
         "sensors_config", fs_service
     );
 
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::move(cbor_sensors_configuration_service), nullptr, 16, 16
     );
 
-    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
-    auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
+    const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
+    const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
-    auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "1_sensor_1");
+    const auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "1_sensor_1");
 
     sensor_1->metadata.name = "Sensor 1";
     sensor_1->metadata.unit = "km/h";
@@ -313,7 +309,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     sensor_1->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
 
-    auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "#sensor_2");
+    const auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "#sensor_2");
 
     sensor_2->metadata.name = "Sensor 2";
     sensor_2->metadata.unit = "km/h";
@@ -325,7 +321,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     sensor_2->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_2->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
 
-    auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "3");
+    const auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "3");
 
     sensor_3->metadata.name = "Sensor 3";
     sensor_3->metadata.unit = "km/h";
@@ -337,9 +333,9 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
     sensor_3->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_3->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
 
-    std::vector<std::shared_ptr<Sensor>> sensors{ sensor_1, sensor_2, sensor_3 };
+    const std::vector<std::shared_ptr<Sensor>> sensors{ sensor_1, sensor_2, sensor_3 };
 
-    for(auto sensor : sensors)
+    for(const auto& sensor : sensors)
         zassert_false(
             sensors_configuration_manager->Update({ sensor }), "Invalid sensor configuration update expected to fail."
         );
@@ -347,11 +343,11 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_Save_confi
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_empty_configuration_is_kept_in_memory) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16
     );
 
@@ -366,7 +362,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_empty_conf
 
 ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_rejected_stored_configuration_is_kept) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
@@ -376,7 +372,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_rejected_s
     zassert_true(fs_service->CreateDirectory("config"));
     zassert_true(fs_service->WriteFile("config/sensors_config.cbor", stored.data(), stored.size()));
 
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16
     );
 
@@ -391,7 +387,7 @@ ZTEST(sensors_configuration_manager, test_SensorsConfigurationManager_rejected_s
     );
 
     // A valid update replaces it as usual.
-    zassert_true(sensors_configuration_manager->Update(sensors_configuration_manager_SetupTestSensors()));
+    zassert_true(sensors_configuration_manager->Update(SensorsConfigurationManagerSetupTestSensors()));
     zassert_true(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
     zassert_not_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), stored.size());
 }
@@ -403,11 +399,11 @@ ZTEST(
     test_SensorsConfigurationManager_stored_configuration_without_conditioning_is_kept
 ) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
-    auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "button");
+    const auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "button");
     button->configuration.type = SensorType::PHYSICAL_INDICATOR;
     button->configuration.channel = 3;
     button->configuration.debounce_ms = 0x1234;
@@ -428,7 +424,7 @@ ZTEST(
     zassert_true(fs_service->CreateDirectory("config"));
     zassert_true(fs_service->WriteFile("config/sensors_config.cbor", bytes.data(), bytes.size()));
 
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16
     );
 
@@ -447,7 +443,7 @@ ZTEST(
     zassert_true(sensors_configuration_manager->GetCborConfigurationInfo().is_applied);
     zassert_equal(fs_service->GetFileSize("config/sensors_config.cbor").value_or(0), bytes.size() + 4);
 
-    auto reloaded = std::make_shared<SensorsConfigurationManager>(
+    const auto reloaded = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16
     );
     zassert_false(reloaded->IsStoredConfigurationRejected());
@@ -458,7 +454,7 @@ ZTEST(
 
 namespace {
 
-std::shared_ptr<Sensor> sensors_configuration_manager_MakeCanSensor(std::string_view signal_name) {
+std::shared_ptr<Sensor> SensorsConfigurationManagerMakeCanSensor(std::string_view signal_name) {
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "engine_rpm");
     sensor->configuration.type = SensorType::CANBUS_ANALOG;
     sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 0, 0x100, signal_name);
@@ -468,14 +464,14 @@ std::shared_ptr<Sensor> sensors_configuration_manager_MakeCanSensor(std::string_
 
 // Bus 0 with message 0x100, which has one signal.
 std::shared_ptr<const CanbusConfiguration>
-sensors_configuration_manager_MakeCanbusConfiguration(std::string_view signal_name, bool is_message_enabled = true) {
+SensorsConfigurationManagerMakeCanbusConfiguration(std::string_view signal_name, bool is_message_enabled = true) {
 
     auto configuration = std::make_shared<CanbusConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
 
     CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
     channel.bus_channel = 0;
 
-    auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
+    const auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
     message->frame_id = 0x100;
     message->is_enabled = is_message_enabled;
 
@@ -484,7 +480,7 @@ sensors_configuration_manager_MakeCanbusConfiguration(std::string_view signal_na
     signal.SetName(signal_name);
     message->signal_configurations.emplace_back(std::move(signal));
 
-    channel.message_configurations.emplace_back(std::move(message));
+    channel.message_configurations.emplace_back(message);
     configuration->channel_configurations.emplace(0, std::move(channel));
 
     return configuration;
@@ -494,20 +490,20 @@ sensors_configuration_manager_MakeCanbusConfiguration(std::string_view signal_na
 
 ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_signal_the_unit_does_not_have) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
     // What a client sends, written where nothing checks it against a CAN bus configuration.
-    auto client = std::make_shared<SensorsConfigurationManager>(
+    const auto client = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config_client", fs_service), nullptr, 16,
         16
     );
-    zassert_true(client->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
+    zassert_true(client->Update({ SensorsConfigurationManagerMakeCanSensor("rpm") }));
     const auto cbor = client->GetCborConfiguration();
 
-    auto canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("speed");
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    auto canbus_configuration = SensorsConfigurationManagerMakeCanbusConfiguration("speed");
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
         [&canbus_configuration] {
             return canbus_configuration;
@@ -529,13 +525,13 @@ ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_s
         "Without a CAN bus configuration there are no channels"
     );
 
-    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm");
+    canbus_configuration = SensorsConfigurationManagerMakeCanbusConfiguration("rpm");
     zassert_true(sensors_configuration_manager->ApplyCborConfiguration(cbor, reason));
     zassert_equal(sensors_configuration_manager->Get()->size(), 1);
 
     // The stored configuration still loads once the CAN bus configuration has lost the signal.
-    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("speed");
-    auto reloaded = std::make_shared<SensorsConfigurationManager>(
+    canbus_configuration = SensorsConfigurationManagerMakeCanbusConfiguration("speed");
+    const auto reloaded = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
         [&canbus_configuration] {
             return canbus_configuration;
@@ -545,30 +541,30 @@ ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_s
     zassert_equal(reloaded->Get()->size(), 1);
 
     // The unit's own updates are not checked against it either.
-    zassert_true(reloaded->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
+    zassert_true(reloaded->Update({ SensorsConfigurationManagerMakeCanSensor("rpm") }));
 }
 
 ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_signal_of_a_disabled_message) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
     // What a client sends: the sensor enabled, then the same sensor disabled.
-    auto client = std::make_shared<SensorsConfigurationManager>(
+    const auto client = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config_client", fs_service), nullptr, 16,
         16
     );
-    zassert_true(client->Update({ sensors_configuration_manager_MakeCanSensor("rpm") }));
+    zassert_true(client->Update({ SensorsConfigurationManagerMakeCanSensor("rpm") }));
     const auto enabled_cbor = client->GetCborConfiguration();
 
-    auto disabled_sensor = sensors_configuration_manager_MakeCanSensor("rpm");
+    const auto disabled_sensor = SensorsConfigurationManagerMakeCanSensor("rpm");
     disabled_sensor->is_enabled = false;
     zassert_true(client->Update({ disabled_sensor }));
     const auto disabled_cbor = client->GetCborConfiguration();
 
-    auto canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm", false);
-    auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
+    auto canbus_configuration = SensorsConfigurationManagerMakeCanbusConfiguration("rpm", false);
+    const auto sensors_configuration_manager = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
         [&canbus_configuration] {
             return canbus_configuration;
@@ -589,12 +585,12 @@ ZTEST(sensors_configuration_manager, test_ApplyCborConfiguration_refuses_a_CAN_s
     zassert_equal(sensors_configuration_manager->Get()->size(), 1);
     zassert_false(sensors_configuration_manager->Get()->front()->is_enabled);
 
-    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm");
+    canbus_configuration = SensorsConfigurationManagerMakeCanbusConfiguration("rpm");
     zassert_true(sensors_configuration_manager->ApplyCborConfiguration(enabled_cbor, reason));
 
     // The stored configuration still loads once the message is disabled.
-    canbus_configuration = sensors_configuration_manager_MakeCanbusConfiguration("rpm", false);
-    auto reloaded = std::make_shared<SensorsConfigurationManager>(
+    canbus_configuration = SensorsConfigurationManagerMakeCanbusConfiguration("rpm", false);
+    const auto reloaded = std::make_shared<SensorsConfigurationManager>(
         std::make_unique<CborConfigurationService<CborSensorsConfig>>("sensors_config", fs_service), nullptr, 16, 16,
         [&canbus_configuration] {
             return canbus_configuration;

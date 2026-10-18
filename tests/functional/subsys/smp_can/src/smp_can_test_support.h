@@ -94,7 +94,7 @@ inline Bytes MakeEchoRequest(std::string_view text, uint8_t sequence) {
 }
 
 inline bool Contains(const Bytes& data, const Bytes& part) {
-    return std::search(data.begin(), data.end(), part.begin(), part.end()) != data.end();
+    return !std::ranges::search(data, part).empty();
 }
 
 inline bool IsEchoResponse(const std::optional<Bytes>& packet, std::string_view text, uint8_t sequence) {
@@ -330,8 +330,15 @@ public:
         zassert_true(peer_handler_id_ > 0, "Peer filter rejected: %d", peer_handler_id_);
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     ~Harness() {
-        (*canbus)->RemoveFrameReceivedHandler(peer_handler_id_);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(Canbus* live_bus = canbus->Get(); live_bus != nullptr)
+            live_bus->RemoveFrameReceivedHandler(peer_handler_id_);
         transport.reset();
         work_queue.reset();
         canbus.reset();

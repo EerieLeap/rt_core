@@ -33,7 +33,7 @@ inline void ResetLoopbackDevice(void*) {
 inline CanbusConfig
 MakeConfig(CanbusType type = CanbusType::CLASSICAL_CAN, uint32_t bitrate = 500000, uint32_t data_bitrate = 0) {
 
-    return CanbusConfig(LoopbackDevice(), type, bitrate, data_bitrate, CAN_MODE_LOOPBACK);
+    return { LoopbackDevice(), type, bitrate, data_bitrate, CAN_MODE_LOOPBACK };
 }
 
 inline std::unique_ptr<Canbus>
@@ -74,7 +74,7 @@ public:
 
     [[nodiscard]] size_t Count() {
         k_mutex_lock(&lock_, K_FOREVER);
-        size_t count = frames_.size();
+        const size_t count = frames_.size();
         k_mutex_unlock(&lock_);
 
         return count;

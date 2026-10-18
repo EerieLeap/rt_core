@@ -38,7 +38,7 @@ public:
         time_service_(std::move(time_service)),
         runtime_(&runtime) {}
 
-    virtual ~SensorReaderBase() = default;
+    ~SensorReaderBase() override = default;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::sensor_readers

@@ -19,13 +19,14 @@ using eerie_leap::subsys::event_bus::Event;
 using eerie_leap::subsys::event_bus::EventChannel;
 using eerie_leap::subsys::event_bus::EventPayload;
 using eerie_leap::subsys::event_bus::IEventBus;
-using eerie_leap::subsys::event_bus::k_max_payload_entries;
+using eerie_leap::subsys::event_bus::MAX_PAYLOAD_ENTRIES;
 
 // Replaces the global allocation functions for this test binary so every allocation is counted.
 namespace {
 
 size_t g_allocations = 0;
 
+// NOLINTBEGIN(cppcoreguidelines-no-malloc): the replacement allocation functions wrap malloc and free
 void* CountedAllocate(size_t size) {
     g_allocations++;
 
@@ -64,6 +65,7 @@ void operator delete(void* pointer, size_t) noexcept {
 void operator delete[](void* pointer, size_t) noexcept {
     std::free(pointer);
 }
+// NOLINTEND(cppcoreguidelines-no-malloc)
 
 namespace {
 
@@ -103,9 +105,9 @@ ZTEST(allocation_free_publish, test_publish_queue_and_dispatch_do_not_allocate) 
 
     AnySubscription subscription = CreateScopedSubscription(
         channel, ProbeEventType::DataUpdated, [&](const ProbeEvent& event) {
-            if(auto it = event.payload.find(ProbePayloadType::SensorId); it != event.payload.end())
+            if(const auto* it = event.payload.find(ProbePayloadType::SensorId); it != event.payload.end())
                 last_id = std::get<uint32_t>(it->second);
-            if(auto it = event.payload.find(ProbePayloadType::Value); it != event.payload.end())
+            if(const auto* it = event.payload.find(ProbePayloadType::Value); it != event.payload.end())
                 last_value = std::get<float>(it->second);
 
             delivered++;
@@ -126,8 +128,8 @@ ZTEST(allocation_free_publish, test_publish_queue_and_dispatch_do_not_allocate) 
         channel.PublishAsync(
             { .source_id = 1,
                 .type = ProbeEventType::DataUpdated,
-                .payload = { { ProbePayloadType::SensorId, uint32_t{ 100 + i } },
-                    { ProbePayloadType::Value, static_cast<float>(i) } } }
+                .payload = {
+                    { ProbePayloadType::SensorId, 100 + i }, { ProbePayloadType::Value, static_cast<float>(i) } } }
         );
         zassert_true(channel.DrainOne());
     }
@@ -185,11 +187,11 @@ ZTEST(allocation_free_publish, test_inline_payload_keeps_map_semantics) {
 
     zassert_true(payload.emplace(ProbePayloadType::SensorId, uint32_t{ 3 }).second);
     zassert_equal(payload.size(), 2U);
-    zassert_true(payload.find(ProbePayloadType::SensorId) != payload.end());
+    zassert_true(payload.contains(ProbePayloadType::SensorId));
     zassert_equal(payload.erase(ProbePayloadType::Value), 1U);
     zassert_equal(payload.size(), 1U);
-    zassert_true(payload.find(ProbePayloadType::Value) == payload.end());
+    zassert_false(payload.contains(ProbePayloadType::Value));
     zassert_equal(std::get<uint32_t>(payload.begin()->second), 3U, "The remaining entry moved up");
 
-    zassert_equal(k_max_payload_entries, 6U);
+    zassert_equal(MAX_PAYLOAD_ENTRIES, 6U);
 }

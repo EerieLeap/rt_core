@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <memory_resource>
 #include <vector>
@@ -51,28 +52,28 @@ public:
             h[i] = table[i + 1].voltage - table[i].voltage;
 
         for(size_t i = 1; i < n - 1; ++i)
-            alpha[i] = (3.0f / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a)
-                - (3.0f / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
+            alpha[i] = (3.0F / h[i]) * (coefficients_[i + 1].a - coefficients_[i].a)
+                - (3.0F / h[i - 1]) * (coefficients_[i].a - coefficients_[i - 1].a);
 
-        l[0] = 1.0f;
-        mu[0] = 0.0f;
-        z[0] = 0.0f;
+        l[0] = 1.0F;
+        mu[0] = 0.0F;
+        z[0] = 0.0F;
 
         for(size_t i = 1; i < n - 1; ++i) {
-            l[i] = 2.0f * (table[i + 1].voltage - table[i - 1].voltage) - h[i - 1] * mu[i - 1];
+            l[i] = 2.0F * (table[i + 1].voltage - table[i - 1].voltage) - h[i - 1] * mu[i - 1];
             mu[i] = h[i] / l[i];
             z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
         }
 
-        l[n - 1] = 1.0f;
-        z[n - 1] = 0.0f;
-        coefficients_[n - 1].c = 0.0f;
+        l[n - 1] = 1.0F;
+        z[n - 1] = 0.0F;
+        coefficients_[n - 1].c = 0.0F;
 
-        for(int j = n - 2; j >= 0; --j) {
+        for(auto j = static_cast<int>(n) - 2; j >= 0; --j) {
             coefficients_[j].c = z[j] - mu[j] * coefficients_[j + 1].c;
             coefficients_[j].b = (coefficients_[j + 1].a - coefficients_[j].a) / h[j]
-                - h[j] * (coefficients_[j + 1].c + 2.0f * coefficients_[j].c) / 3.0f;
-            coefficients_[j].d = (coefficients_[j + 1].c - coefficients_[j].c) / (3.0f * h[j]);
+                - h[j] * (coefficients_[j + 1].c + 2.0F * coefficients_[j].c) / 3.0F;
+            coefficients_[j].d = (coefficients_[j + 1].c - coefficients_[j].c) / (3.0F * h[j]);
         }
     }
 
@@ -86,9 +87,7 @@ public:
                 return table.back().value;
         }
 
-        auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
-            return val < d.voltage;
-        });
+        const auto it = std::ranges::upper_bound(table, voltage, std::less<>{}, &CalibrationData::voltage);
 
         // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
         const size_t last_segment = table.size() - 2;
@@ -96,17 +95,17 @@ public:
             ? 0
             : std::min(static_cast<size_t>(std::distance(table.begin(), it)) - 1, last_segment);
 
-        float dx = voltage - table[i].voltage;
+        const float dx = voltage - table[i].voltage;
 
         return coefficients_[i].a + coefficients_[i].b * dx + coefficients_[i].c * dx * dx
             + coefficients_[i].d * dx * dx * dx;
     }
 
-    const std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
+    std::shared_ptr<std::pmr::vector<CalibrationData>> GetCalibrationTable() const override {
         return calibration_table_;
     }
 
-    const InterpolationMethod GetInterpolationMethod() const override {
+    InterpolationMethod GetInterpolationMethod() const override {
         return INTERPOLATION_METHOD;
     }
 };

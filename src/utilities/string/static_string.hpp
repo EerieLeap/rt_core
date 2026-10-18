@@ -20,7 +20,7 @@ public:
     explicit StaticString(std::string_view str) {
         assert(str.size() <= N && "StaticString: input exceeds capacity");
         const size_t count = std::min(str.size(), N);
-        std::copy_n(str.data(), count, data_.data());
+        str.copy(data_.data(), count);
         size_ = count;
     }
 

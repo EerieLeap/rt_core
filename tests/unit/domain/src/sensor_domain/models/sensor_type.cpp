@@ -10,19 +10,19 @@ ZTEST_SUITE(sensor_type, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-constexpr std::array all_types = { SensorType::NONE, SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG,
+constexpr std::array ALL_TYPES = { SensorType::NONE, SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG,
     SensorType::PHYSICAL_INDICATOR, SensorType::VIRTUAL_INDICATOR, SensorType::CANBUS_RAW, SensorType::CANBUS_ANALOG,
     SensorType::CANBUS_INDICATOR, SensorType::USER_ANALOG, SensorType::USER_INDICATOR };
 
 } // namespace
 
 ZTEST(sensor_type, test_persisted_type_ids_are_unchanged) {
-    for(size_t i = 0; i < all_types.size(); ++i)
-        zassert_equal(static_cast<uint32_t>(all_types[i]), i);
+    for(size_t i = 0; i < ALL_TYPES.size(); ++i)
+        zassert_equal(static_cast<uint32_t>(ALL_TYPES[i]), i);
 }
 
 ZTEST(sensor_type, test_defined_types_are_valid) {
-    for(auto type : all_types)
+    for(const auto type : ALL_TYPES)
         zassert_true(IsSensorTypeValid(type));
 }
 

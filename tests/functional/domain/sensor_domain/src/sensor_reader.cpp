@@ -64,11 +64,11 @@ using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensors_reader, NULL, NULL, NULL, NULL, NULL);
 
-std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
-    std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 5.0 } };
-    auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
+static std::vector<std::shared_ptr<Sensor>> SensorsReaderGetTestSensors() {
+    const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 5.0 } };
+    const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
-    auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
+    const auto sensor_1 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
 
     sensor_1->metadata.name = "Sensor 1";
     sensor_1->metadata.unit = "km/h";
@@ -81,11 +81,11 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_1->configuration.calibration_table.assign(calibration_data_1_ptr->begin(), calibration_data_1_ptr->end());
     sensor_1->configuration.expression = "x * 2 + sensor_2 + 1";
 
-    std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 }, { 2.5, 162.0 },
-        { 3.3, 200.0 } };
-    auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
+    const std::pmr::vector<CalibrationData> calibration_data_2{ { 0.0, 0.0 }, { 1.0, 29.0 }, { 2.0, 111.0 },
+        { 2.5, 162.0 }, { 3.3, 200.0 } };
+    const auto calibration_data_2_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_2);
 
-    auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
+    const auto sensor_2 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_2");
 
     sensor_2->metadata.name = "Sensor 2";
     sensor_2->metadata.unit = "km/h";
@@ -98,7 +98,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_2->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
     sensor_2->configuration.expression = "x * 4 + 1.6";
 
-    auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
+    const auto sensor_3 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_3");
 
     sensor_3->metadata.name = "Sensor 3";
     sensor_3->metadata.unit = "km/h";
@@ -109,7 +109,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_3->configuration.sampling_rate_ms = 2000;
     sensor_3->configuration.expression = "sensor_1 + 8.34";
 
-    auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
+    const auto sensor_4 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_4");
 
     sensor_4->metadata.name = "Sensor 4";
     sensor_4->metadata.unit = "";
@@ -121,7 +121,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     sensor_4->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
     sensor_4->configuration.calibration_table.assign(calibration_data_2_ptr->begin(), calibration_data_2_ptr->end());
 
-    auto sensor_5 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_5");
+    const auto sensor_5 = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_5");
 
     sensor_5->metadata.name = "Sensor 5";
     sensor_5->metadata.unit = "";
@@ -136,17 +136,17 @@ std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     return sensors;
 }
 
-AdcConfiguration sensors_reader_GetTestConfiguration() {
-    std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
+static AdcConfiguration SensorsReaderGetTestConfiguration() {
+    const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
-    auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
+    const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
         adc_calibration_data_samples
     );
-    auto adc_calibrator = std::make_shared<AdcCalibrator>(
+    const auto adc_calibrator = std::make_shared<AdcCalibrator>(
         InterpolationMethod::LINEAR, adc_calibration_data_samples_ptr
     );
 
-    auto adc_channel_configuration = std::make_shared<AdcChannelConfiguration>(adc_calibrator);
+    const auto adc_channel_configuration = std::make_shared<AdcChannelConfiguration>(adc_calibrator);
 
     std::vector<std::shared_ptr<AdcChannelConfiguration>> channel_configurations;
     channel_configurations.reserve(8);
@@ -162,7 +162,7 @@ AdcConfiguration sensors_reader_GetTestConfiguration() {
     return adc_configuration;
 }
 
-struct sensors_reader_HelperInstances {
+struct SensorsReaderHelperInstances {
     std::shared_ptr<ITimeService> time_service;
     std::shared_ptr<IAdcManager> adc_manager; // Owns the ADCs the sample set points at.
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
@@ -171,35 +171,34 @@ struct sensors_reader_HelperInstances {
     std::shared_ptr<std::vector<std::shared_ptr<ISensorReader>>> sensor_readers;
 };
 
-sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
-    auto time_provider = std::make_shared<BootElapsedTimeProvider>();
-    auto rtc_provider = std::make_shared<RtcProvider>();
-    auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
+static SensorsReaderHelperInstances SensorsReaderGetReadingInstances() {
+    const auto time_provider = std::make_shared<BootElapsedTimeProvider>();
+    const auto rtc_provider = std::make_shared<RtcProvider>();
+    const auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
 
     AdcFactory adc_factory(nullptr);
-    auto adc_manager = adc_factory.Create();
+    const auto adc_manager = adc_factory.Create();
     adc_manager->Initialize();
 
-    auto gpio = std::make_shared<GpioSimulator>();
+    const auto gpio = std::make_shared<GpioSimulator>();
     gpio->Initialize();
 
-    auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
-    auto sensors = sensors_reader_GetTestSensors();
+    const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
+    const auto sensors = SensorsReaderGetTestSensors();
 
     // The builder lays out the frame's slots and binds the expressions, as the processing service does.
-    auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
-                          .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
-    generation->adc_configuration = std::make_shared<AdcConfiguration>(sensors_reader_GetTestConfiguration());
+    const auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
+                                .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
+    generation->adc_configuration = std::make_shared<AdcConfiguration>(SensorsReaderGetTestConfiguration());
 
     // Analog readers reserve their slots in the sample set, as in a rate group.
-    auto adc_samples = std::make_shared<AdcSampleSet>();
+    const auto adc_samples = std::make_shared<AdcSampleSet>();
     RateGroupBuildContext context{ .adc_samples = *adc_samples,
         .adc_configuration = generation->adc_configuration.get() };
     SensorReaderFactory sensor_reader_factory(time_service, gpio, adc_manager);
 
-    auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
-    for(size_t i = 0; i < generation->runtimes.size(); i++) {
-        const auto& runtime = generation->runtimes[i];
+    const auto sensor_readers = std::make_shared<std::vector<std::shared_ptr<ISensorReader>>>();
+    for(const auto& runtime : generation->runtimes) {
         std::shared_ptr<ISensorReader> sensor_reader;
 
         if(runtime.sensor->configuration.type == SensorType::PHYSICAL_ANALOG) {
@@ -219,7 +218,7 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
 
     adc_samples->Seal();
 
-    return sensors_reader_HelperInstances{ .time_service = time_service,
+    return SensorsReaderHelperInstances{ .time_service = time_service,
         .adc_manager = adc_manager,
         .sensor_readings_frame = sensor_readings_frame,
         .generation = generation,
@@ -228,26 +227,26 @@ sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
 }
 
 ZTEST(sensors_reader, test_Read) {
-    auto helper = sensors_reader_GetReadingInstances();
+    const auto helper = SensorsReaderGetReadingInstances();
 
-    auto sensor_readings_frame = helper.sensor_readings_frame;
-    auto sensor_readers = helper.sensor_readers;
+    const auto sensor_readings_frame = helper.sensor_readings_frame;
+    const auto sensor_readers = helper.sensor_readers;
 
-    std::vector<std::string> sensor_names{ "sensor_1", "sensor_2", "sensor_3", "sensor_4", "sensor_5" };
+    const std::vector<std::string> sensor_names{ "sensor_1", "sensor_2", "sensor_3", "sensor_4", "sensor_5" };
 
-    for(auto& sensor_name : sensor_names) {
-        auto sensor_hash = StringHelpers::GetHash(sensor_name);
+    for(const auto& sensor_name : sensor_names) {
+        const auto sensor_hash = StringHelpers::GetHash(sensor_name);
         zassert_false(sensor_readings_frame->HasReading(sensor_hash));
     }
 
     helper.adc_samples->Acquire();
     const TickContext tick{ helper.time_service->GetCurrentTime() };
 
-    for(size_t i = 0; i < sensor_readers->size(); i++)
-        sensor_readings_frame->AddOrUpdateReading(sensor_readers->at(i)->Read(tick));
+    for(auto& i : *sensor_readers)
+        sensor_readings_frame->AddOrUpdateReading(i->Read(tick));
 
-    for(auto& sensor_name : sensor_names) {
-        auto sensor_hash = StringHelpers::GetHash(sensor_name);
+    for(const auto& sensor_name : sensor_names) {
+        const auto sensor_hash = StringHelpers::GetHash(sensor_name);
         zassert_true(sensor_readings_frame->HasReading(sensor_hash));
     }
 
@@ -257,7 +256,7 @@ ZTEST(sensors_reader, test_Read) {
     zassert_equal(reading_2.status, ReadingStatus::INTERPOLATED);
     zassert_true(reading_2.value.has_value());
     zassert_true(reading_2.timestamp.has_value());
-    zassert_between_inclusive(reading_2.value.value(), 0.0f, 200.0f);
+    zassert_between_inclusive(reading_2.value.value(), 0.0F, 200.0F);
 
     auto reading_1_opt = sensor_readings_frame->TryGetReading("sensor_1");
     zassert_true(reading_1_opt.has_value());
@@ -265,11 +264,11 @@ ZTEST(sensors_reader, test_Read) {
     zassert_equal(reading_1.status, ReadingStatus::INTERPOLATED);
     zassert_true(reading_1.value.has_value());
     zassert_true(reading_1.timestamp.has_value());
-    zassert_between_inclusive(reading_1.value.value(), 0.0f, 5.0f);
+    zassert_between_inclusive(reading_1.value.value(), 0.0F, 5.0F);
 
     auto reading_3_opt = sensor_readings_frame->TryGetReading("sensor_3");
     zassert_true(reading_3_opt.has_value());
-    auto& reading_3 = reading_3_opt.value();
+    const auto& reading_3 = reading_3_opt.value();
     zassert_equal(reading_3.status, ReadingStatus::UNINITIALIZED);
     zassert_true(reading_3.timestamp.has_value());
     zassert_false(reading_3.value.has_value());
@@ -284,7 +283,7 @@ ZTEST(sensors_reader, test_Read) {
 
     auto reading_5_opt = sensor_readings_frame->TryGetReading("sensor_5");
     zassert_true(reading_5_opt.has_value());
-    auto& reading_5 = reading_5_opt.value();
+    const auto& reading_5 = reading_5_opt.value();
     zassert_equal(reading_5.status, ReadingStatus::UNINITIALIZED);
     zassert_true(reading_5.timestamp.has_value());
     zassert_false(reading_5.value.has_value());
@@ -322,34 +321,34 @@ public:
 
 ZTEST(sensors_reader, test_PhysicalAnalog_rebuilt_reader_takes_the_new_adc_samples) {
     DtFs::InitInternalFs();
-    auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
+    const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
 
     fs_service->Format();
 
-    auto recording_adc = std::make_shared<RecordingAdc>();
-    auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ recording_adc });
+    const auto recording_adc = std::make_shared<RecordingAdc>();
+    const auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ recording_adc });
     adc_manager->Initialize();
 
     auto adc_configuration_manager = std::make_shared<AdcConfigurationManager>(
         std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service), adc_manager
     );
 
-    auto adc_configuration = sensors_reader_GetTestConfiguration();
+    auto adc_configuration = SensorsReaderGetTestConfiguration();
     adc_configuration.samples = 40;
     zassert_true(adc_configuration_manager->Update(adc_configuration));
 
-    auto time_service = std::make_shared<TimeService>(
+    const auto time_service = std::make_shared<TimeService>(
         std::make_shared<BootElapsedTimeProvider>(), std::make_shared<RtcProvider>()
     );
 
-    auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
+    const auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "sensor_1");
     sensor->configuration.type = SensorType::PHYSICAL_ANALOG;
     sensor->configuration.channel = 0;
     sensor->configuration.sampling_rate_ms = 1000;
     sensor->configuration.interpolation_method = InterpolationMethod::LINEAR;
     sensor->configuration.calibration_table = { { 0.0F, 0.0F }, { 3.3F, 5.0F } };
 
-    auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
+    const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
     auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
                           .Build(
                               std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(
@@ -362,7 +361,7 @@ ZTEST(sensors_reader, test_PhysicalAnalog_rebuilt_reader_takes_the_new_adc_sampl
     SensorReaderFactory sensor_reader_factory(time_service, nullptr, adc_manager);
     std::unique_ptr<AdcSampleSet> adc_samples;
     std::unique_ptr<ISensorReader> reader;
-    auto build_reader = [&] {
+    const auto build_reader = [&] {
         reader = nullptr;
         adc_samples = std::make_unique<AdcSampleSet>();
 
@@ -393,7 +392,7 @@ namespace {
 
 // One analog sensor on channel 1 of a scripted four-channel ADC, its reader built the way a rate
 // group builds it, against a configuration made by hand.
-struct sensors_reader_AnalogReader {
+struct SensorsReaderAnalogReader {
     std::shared_ptr<TimeService> time_service;
     std::shared_ptr<processing_test_support::FakeAdc> adc;
     std::shared_ptr<SensorGeneration> generation;
@@ -401,21 +400,21 @@ struct sensors_reader_AnalogReader {
     std::unique_ptr<ISensorReader> reader;
 };
 
-sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(std::shared_ptr<AdcCalibrator> calibrator) {
-    sensors_reader_AnalogReader fixture;
+SensorsReaderAnalogReader SensorsReaderMakeAnalogReader(const std::shared_ptr<AdcCalibrator>& calibrator) {
+    SensorsReaderAnalogReader fixture;
 
     fixture.time_service = processing_test_support::MakeTimeService();
     fixture.adc = std::make_shared<processing_test_support::FakeAdc>(4);
-    auto adc_manager = processing_test_support::MakeAdcManager(fixture.adc);
+    const auto adc_manager = processing_test_support::MakeAdcManager(fixture.adc);
 
-    auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
+    const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
     fixture.generation =
         SensorPipelineBuilder(nullptr, sensor_readings_frame)
             .Build(
                 std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(std::vector<std::shared_ptr<Sensor>>{
                     processing_test_support::MakeAnalogSensor("analog", 1, 100) })
             );
-    fixture.generation->adc_configuration = processing_test_support::MakeAdcConfiguration(4, 8, std::move(calibrator));
+    fixture.generation->adc_configuration = processing_test_support::MakeAdcConfiguration(4, 8, calibrator);
 
     fixture.adc_samples = std::make_unique<AdcSampleSet>();
     RateGroupBuildContext context{ .adc_samples = *fixture.adc_samples,
@@ -433,7 +432,7 @@ sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(std::shared_ptr<AdcC
 } // namespace
 
 ZTEST(sensors_reader, test_Read_analog_reports_a_failed_sample) {
-    auto fixture = sensors_reader_MakeAnalogReader(
+    auto fixture = SensorsReaderMakeAnalogReader(
         processing_test_support::MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
     );
     fixture.adc->failing_channel = 1;
@@ -455,7 +454,7 @@ ZTEST(sensors_reader, test_Read_analog_reports_a_failed_sample) {
 
 ZTEST(sensors_reader, test_Read_analog_calibrates_a_valid_sample) {
     // Identity range, and a calibration that recorded 2.5 V for a true 5 V input: 2 V at the pin is 4 V.
-    auto fixture = sensors_reader_MakeAnalogReader(
+    auto fixture = SensorsReaderMakeAnalogReader(
         processing_test_support::MakeCalibrator(
             { { 0.0F, 0.0F }, { 5.0F, 2.5F } }, { .adc_max_v = 5.0F, .sensor_max_v = 5.0F }
         )
@@ -484,14 +483,14 @@ ZTEST(sensors_reader, test_Read_analog_calibrates_a_valid_sample) {
 // The PM board's split: global channel 0 on a one-channel ADC, global channels 1-3 on a second
 // ADC. The sample set keeps the channel each sensor is configured with, not the ADC-local one.
 ZTEST(sensors_reader, test_Create_analog_reserves_the_configured_global_channel) {
-    auto time_service = processing_test_support::MakeTimeService();
-    auto unit_1 = std::make_shared<processing_test_support::FakeAdc>(1);
-    auto unit_2 = std::make_shared<processing_test_support::FakeAdc>(3);
-    auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ unit_1, unit_2 });
+    const auto time_service = processing_test_support::MakeTimeService();
+    const auto unit_1 = std::make_shared<processing_test_support::FakeAdc>(1);
+    const auto unit_2 = std::make_shared<processing_test_support::FakeAdc>(3);
+    const auto adc_manager = std::make_shared<AdcManager>(std::vector<std::shared_ptr<IAdc>>{ unit_1, unit_2 });
     zassert_true(adc_manager->Initialize());
 
-    auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
-    auto generation =
+    const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
+    const auto generation =
         SensorPipelineBuilder(nullptr, sensor_readings_frame)
             .Build(
                 std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(std::vector<std::shared_ptr<Sensor>>{

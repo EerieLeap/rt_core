@@ -60,7 +60,11 @@ std::unique_ptr<ISensorReader>
 SensorReaderFactory::CreatePhysicalAnalog(const SensorRuntime& runtime, RateGroupBuildContext& context) {
 
     const Sensor& sensor = runtime.GetSensor();
-    const int channel = sensor.configuration.channel.value();
+    const auto& configured_channel = sensor.configuration.channel;
+    if(!configured_channel.has_value())
+        throw std::invalid_argument("Sensor " + std::string(sensor.id) + ": no channel.");
+
+    const int channel = static_cast<int>(*configured_channel);
 
     const AdcChannelHandle handle = adc_manager_->Resolve(channel);
 

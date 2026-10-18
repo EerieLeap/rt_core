@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <utility>
 
 #include <zephyr/logging/log.h>
@@ -15,7 +16,7 @@ void CdmpStatusMachine::SetStatus(CdmpDeviceStatus new_status, bool force) {
     if(new_status == status_)
         return;
 
-    CdmpDeviceStatus old_status = status_;
+    const CdmpDeviceStatus old_status = status_;
 
     if(!force && !CanTransitionTo(new_status)) {
         LOG_WRN(
@@ -36,13 +37,11 @@ CdmpDeviceStatus CdmpStatusMachine::GetCurrentStatus() const {
 
 int CdmpStatusMachine::RegisterStatusChangeHandler(StatusChangeCallback callback) {
     int max_id = 0;
-    for(const auto& [id, _] : status_change_callbacks_) {
-        if(id > max_id)
-            max_id = id;
-    }
-    int new_id = max_id + 1;
+    for(const auto& [id, _] : status_change_callbacks_)
+        max_id = std::max(max_id, id);
+    const int new_id = max_id + 1;
 
-    status_change_callbacks_[new_id] = callback;
+    status_change_callbacks_[new_id] = std::move(callback);
     return new_id;
 }
 
@@ -51,13 +50,13 @@ void CdmpStatusMachine::UnregisterStatusChangeHandler(int callback_id) {
 }
 
 bool CdmpStatusMachine::CanTransitionTo(CdmpDeviceStatus new_status) const {
-    auto current_status = GetCurrentStatus();
+    const auto current_status = GetCurrentStatus();
 
     return IsValidTransition(current_status, new_status);
 }
 
 bool CdmpStatusMachine::IsOperational() const {
-    auto current_status = GetCurrentStatus();
+    const auto current_status = GetCurrentStatus();
 
     return current_status == CdmpDeviceStatus::ONLINE || current_status == CdmpDeviceStatus::CLAIMING;
 }
@@ -67,7 +66,7 @@ void CdmpStatusMachine::NotifyStatusChange(CdmpDeviceStatus old_status, CdmpDevi
         callback(old_status, new_status);
 }
 
-bool CdmpStatusMachine::IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatus to) const {
+bool CdmpStatusMachine::IsValidTransition(CdmpDeviceStatus from, CdmpDeviceStatus to) {
     switch(from) {
         case CdmpDeviceStatus::OFFLINE:
             return to == CdmpDeviceStatus::INIT || to == CdmpDeviceStatus::ERROR;

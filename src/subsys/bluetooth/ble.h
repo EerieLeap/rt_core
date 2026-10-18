@@ -29,32 +29,29 @@ public:
     using PairingFinishedHandler = std::function<void()>;
 
 private:
-    static AdBuffer ad_;
-    static AdBuffer sd_;
-    static const bt_le_adv_param* advertising_params_;
+    static AdBuffer ad;
+    static AdBuffer sd;
+    static const bt_le_adv_param* advertising_params;
 
-    // Guards active_conn_: it is written from the BT RX workqueue (conn callbacks)
+    // Guards active_conn: it is written from the BT RX workqueue (conn callbacks)
     // and read from the system workqueue (deferred handlers below).
-    static k_mutex conn_mutex_;
-    static bt_conn* active_conn_;
+    static k_mutex conn_mutex;
+    static bt_conn* active_conn;
 
-    static k_work_delayable adv_restart_work_;
-    static k_work_delayable connected_cb_work_;
-    static k_work_delayable security_update_work_;
-    static k_work_delayable data_length_update_work_;
-    static k_work_delayable pairing_started_work_;
-    static k_work_delayable pairing_finished_work_;
+    static k_work_delayable adv_restart_work;
+    static k_work_delayable connected_cb_work;
+    static k_work_delayable security_update_work;
+    static k_work_delayable data_length_update_work;
+    static k_work_delayable pairing_started_work;
+    static k_work_delayable pairing_finished_work;
 
-    static std::unordered_map<int, ConnectedHandler> connected_handlers_;
-    static std::unordered_map<int, DisconnectedHandler> disconnected_handlers_;
-    static std::unordered_map<int, PairingStartedHandler> pairing_started_handlers_;
-    static std::unordered_map<int, PairingFinishedHandler> pairing_finished_handlers_;
+    static std::unordered_map<int, ConnectedHandler> connected_handlers;
+    static std::unordered_map<int, DisconnectedHandler> disconnected_handlers;
+    static std::unordered_map<int, PairingStartedHandler> pairing_started_handlers;
+    static std::unordered_map<int, PairingFinishedHandler> pairing_finished_handlers;
 
     Ble() = default;
     ~Ble() = default;
-
-    Ble(const Ble&) = delete;
-    Ble& operator=(const Ble&) = delete;
 
     static int StartAdvertising();
 
@@ -76,11 +73,14 @@ private:
     static void PairingFinishedWorkHandler(struct k_work* work);
 
 public:
+    Ble(const Ble&) = delete;
+    Ble& operator=(const Ble&) = delete;
+
     static bool Initialize();
     static bool Start();
 
-    static void UpdateAdvertisingData(AdBuffer&& ad);
-    static void UpdateScanResponseData(AdBuffer&& sd);
+    static void UpdateAdvertisingData(AdBuffer&& new_ad);
+    static void UpdateScanResponseData(AdBuffer&& new_sd);
 
     // Returns a new reference to the active connection, or nullptr. Caller must bt_conn_unref().
     static bt_conn* AcquireActiveConn();

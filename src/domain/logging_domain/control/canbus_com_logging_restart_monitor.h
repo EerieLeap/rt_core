@@ -117,7 +117,7 @@ private:
 
     // The slot: SetRestartHandler() swaps it under the lock, a report copies it under the lock and
     // calls it outside, so a handler replaced during its call finishes that call.
-    mutable k_mutex handler_lock_;
+    mutable k_mutex handler_lock_{};
     std::shared_ptr<const RestartHandler> handler_;
 
     // The CDMP work queue only, as in NetworkStateImporter. The records are a member so that they

@@ -1,3 +1,6 @@
+#include <array>
+#include <cstdio>
+
 #include "domain/canbus_domain/processors/script_processor.h"
 #include "domain/script_domain/utilities/global_fuctions_registry.h"
 
@@ -29,7 +32,7 @@ CanbusSchedulerService::CanbusSchedulerService(
 
 bool CanbusSchedulerService::DoInitialize() {
     work_queue_thread_ = std::make_unique<WorkQueueThread>(
-        "canbus_scheduler_service", thread_stack_size_, thread_priority_
+        "canbus_scheduler_service", THREAD_STACK_SIZE, THREAD_PRIORITY
     );
 
     return work_queue_thread_->Initialize();
@@ -46,19 +49,24 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
         auto can_frame_data = task->can_frame_builder->Build(*task->message_configuration);
 
         for(const auto& processor : *task->can_frame_processors) {
-            auto processed_data = processor->Process(*task->message_configuration, can_frame_data);
+            const auto processed_data = processor->Process(*task->message_configuration, can_frame_data);
 
             if(!processed_data.empty())
                 can_frame_data = processed_data;
         }
 
-        if(can_frame_data.size() > 0)
+        if(!can_frame_data.empty())
             (*task->canbus)->SendFrame(task->frame_id, can_frame_data);
 
-        LOG_HEXDUMP_DBG(
-            can_frame_data.data(), static_cast<uint32_t>(can_frame_data.size()),
-            ("Can frame " + std::to_string(task->message_configuration->frame_id)).c_str()
+#if defined(CONFIG_LOG) && CONFIG_LOG_DEFAULT_LEVEL >= LOG_LEVEL_DBG
+        // The log macro keeps the pointer past its first statement, so the text outlives the call. Built only
+        // when debug logging is compiled in: this runs for every frame sent.
+        std::array<char, 32> title{};
+        snprintf(
+            title.data(), title.size(), "Can frame %u", static_cast<unsigned>(task->message_configuration->frame_id)
         );
+        LOG_HEXDUMP_DBG(can_frame_data.data(), static_cast<uint32_t>(can_frame_data.size()), title.data());
+#endif
     } catch(const std::exception& e) {
         LOG_DBG("Error processing Frame ID: %d, Error: %s", task->message_configuration->frame_id, e.what());
     }
@@ -70,7 +78,7 @@ std::unique_ptr<CanbusTask> CanbusSchedulerService::CreateTask(
     uint8_t bus_channel,
     std::shared_ptr<CanMessageConfiguration> message_configuration
 ) {
-    auto canbus = canbus_service_->GetCanbus(bus_channel);
+    const auto canbus = canbus_service_->GetCanbus(bus_channel);
     const auto* channel_configuration = canbus_service_->GetChannelConfiguration(bus_channel);
     if(canbus == nullptr || channel_configuration == nullptr) {
         LOG_ERR("Failed to create task for Frame ID: %d", message_configuration->frame_id);
@@ -111,7 +119,7 @@ void CanbusSchedulerService::CancelTasks() {
 }
 
 bool CanbusSchedulerService::DoStart() {
-    auto canbus_configuration = canbus_configuration_manager_->Get();
+    const auto canbus_configuration = canbus_configuration_manager_->Get();
 
     for(const auto& [bus_channel, channel_configuration] : canbus_configuration->channel_configurations) {
         for(const auto& message_configuration : channel_configuration.message_configurations) {
@@ -164,7 +172,7 @@ bool CanbusSchedulerService::DoResume() {
 }
 
 void CanbusSchedulerService::InitializeScript(const CanMessageConfiguration& message_configuration) {
-    auto lua_script = message_configuration.lua_script;
+    const auto lua_script = message_configuration.lua_script;
 
     if(lua_script == nullptr)
         return;

@@ -6,8 +6,8 @@
 
 #include "utilities/memory/heap_allocator.h"
 
-using eerie_leap::utilities::memory::ext_unique_ptr;
 using eerie_leap::utilities::memory::ExtString;
+using eerie_leap::utilities::memory::ExtUniquePtr;
 using eerie_leap::utilities::memory::ExtVector;
 using eerie_leap::utilities::memory::HeapAllocator;
 using eerie_leap::utilities::memory::make_shared_ext;
@@ -32,6 +32,10 @@ struct Tracked {
         ++live;
         ++constructed;
     }
+
+    Tracked& operator=(const Tracked&) = delete;
+    Tracked(Tracked&&) = delete;
+    Tracked& operator=(Tracked&&) = delete;
 
     ~Tracked() {
         --live;
@@ -62,6 +66,7 @@ ZTEST(heap_allocator, test_allocate_and_deallocate) {
     uint32_t* block = allocator.allocate(8);
 
     zassert_not_null(block);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): address arithmetic for an alignment check
     zassert_equal(reinterpret_cast<uintptr_t>(block) % alignof(uint32_t), 0);
 
     for(uint32_t i = 0; i < 8; ++i)
@@ -151,7 +156,7 @@ ZTEST(heap_allocator, test_reallocate_null_allocates) {
 ZTEST(heap_allocator, test_is_stateless_and_always_equal) {
     HeapAllocator<uint32_t> a;
     HeapAllocator<uint32_t> b;
-    HeapAllocator<uint8_t> rebound(a);
+    const HeapAllocator<uint8_t> rebound(a);
 
     zassert_true(a == b);
     zassert_false(a != b);
@@ -165,8 +170,10 @@ ZTEST(heap_allocator, test_is_stateless_and_always_equal) {
 ZTEST(heap_allocator, test_works_with_std_vector) {
     std::vector<int, HeapAllocator<int>> values;
 
-    for(int i = 0; i < 256; ++i)
+    for(int i = 0; i < 256; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): the case lets the vector grow through the allocator
         values.push_back(i);
+    }
 
     zassert_equal(values.size(), 256);
     zassert_equal(values.front(), 0);
@@ -194,7 +201,7 @@ ZTEST(heap_allocator, test_ExtString) {
     text.append(" plus more");
 
     zassert_equal(text.size(), strlen("a string long enough to require heap storage plus more"));
-    zassert_true(text.compare("a string long omit") != 0);
+    zassert_true(text != "a string long omit");
     zassert_mem_equal(text.data(), "a string long enough", 20);
 }
 
@@ -202,13 +209,14 @@ ZTEST(heap_allocator, test_make_shared_ext) {
     ResetTracked();
 
     {
-        auto tracked = make_shared_ext<Tracked>(7);
+        const auto tracked = make_shared_ext<Tracked>(7);
 
         zassert_not_null(tracked.get());
         zassert_equal(tracked->value, 7);
         zassert_equal(Tracked::live, 1);
 
-        auto copy = tracked;
+        // NOLINTNEXTLINE(performance-unnecessary-copy-initialization): the copy is the second owner the case counts
+        const auto copy = tracked;
         zassert_equal(copy.use_count(), 2);
         zassert_equal(Tracked::live, 1);
     }
@@ -220,7 +228,7 @@ ZTEST(heap_allocator, test_make_unique_ext) {
     ResetTracked();
 
     {
-        ext_unique_ptr<Tracked> tracked = make_unique_ext<Tracked>(11);
+        ExtUniquePtr<Tracked> tracked = make_unique_ext<Tracked>(11);
 
         zassert_not_null(tracked.get());
         zassert_equal(tracked->value, 11);
@@ -236,6 +244,7 @@ ZTEST(heap_allocator, test_make_unique_ext_is_movable) {
     auto source = make_unique_ext<Tracked>(3);
     auto target = std::move(source);
 
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move): a moved-from unique_ptr is null
     zassert_is_null(source.get());
     zassert_equal(target->value, 3);
     zassert_equal(Tracked::live, 1);
@@ -247,7 +256,7 @@ ZTEST(heap_allocator, test_make_unique_ext_is_movable) {
 ZTEST(heap_allocator, test_make_unique_ext_rethrows_constructor_failure) {
     bool threw = false;
     try {
-        auto value = make_unique_ext<ThrowingCtor>();
+        const auto value = make_unique_ext<ThrowingCtor>();
         (void)value;
     } catch(const std::runtime_error&) {
         threw = true;
@@ -257,7 +266,7 @@ ZTEST(heap_allocator, test_make_unique_ext_rethrows_constructor_failure) {
 }
 
 ZTEST(heap_allocator, test_ext_deleter_ignores_null) {
-    ext_unique_ptr<Tracked> empty;
+    const ExtUniquePtr<Tracked> empty;
 
     zassert_is_null(empty.get());
 }

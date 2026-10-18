@@ -23,7 +23,11 @@ SensorReaderPhysicalIndicator::SensorReaderPhysicalIndicator(
 SensorReading SensorReaderPhysicalIndicator::Read(const TickContext& tick) {
     SensorReading reading = CreateReading(tick);
 
-    reading.value = gpio_->ReadChannel(GetSensor().configuration.channel.value()) ? 1.0F : 0.0F;
+    const auto& channel = GetSensor().configuration.channel;
+    if(!channel.has_value())
+        throw std::runtime_error("Physical indicator sensor has no channel.");
+
+    reading.value = gpio_->ReadChannel(static_cast<int>(*channel)) ? 1.0F : 0.0F;
     reading.raw_value = reading.value;
     reading.status = ReadingStatus::RAW;
 

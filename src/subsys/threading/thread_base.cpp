@@ -16,7 +16,6 @@ ThreadBase::ThreadBase(
     k_stack_size_(stack_size),
     // Priority 0 is preemptive, so a cooperative thread has to settle for -1.
     k_priority_(is_cooperative ? -std::max(std::abs(priority), 1) : std::abs(priority)),
-    stack_area_(nullptr),
     name_(std::move(name)) {}
 
 ThreadBase::~ThreadBase() {

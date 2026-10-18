@@ -38,8 +38,13 @@ public:
         }
     }
 
+    BalancedQueues(const BalancedQueues&) = delete;
+    BalancedQueues& operator=(const BalancedQueues&) = delete;
+    BalancedQueues(BalancedQueues&&) = delete;
+    BalancedQueues& operator=(BalancedQueues&&) = delete;
+
     ~BalancedQueues() {
-        for(auto& queue_thread : queue_threads_)
+        for(const auto& queue_thread : queue_threads_)
             queue_thread->Stop();
     }
 
@@ -61,7 +66,7 @@ ZTEST(work_queue_load_balancer, test_GetLeastLoadedQueue_returns_nothing_without
 ZTEST(work_queue_load_balancer, test_AddThread_rejects_a_queue_that_is_not_running) {
     BalancedQueues queues(2);
 
-    auto unstarted = std::make_shared<WorkQueueThread>("wq_lb_unstarted", STACK_SIZE, PRIORITY);
+    const auto unstarted = std::make_shared<WorkQueueThread>("wq_lb_unstarted", STACK_SIZE, PRIORITY);
     bool threw = false;
 
     try {
@@ -80,7 +85,7 @@ ZTEST(work_queue_load_balancer, test_AddThread_rejects_a_queue_that_is_not_runni
 
 ZTEST(work_queue_load_balancer, test_OnWorkComplete_ignores_an_unregistered_queue) {
     BalancedQueues queues(2);
-    auto outsider = MakeQueueThread("wq_lb_outsider");
+    const auto outsider = MakeQueueThread("wq_lb_outsider");
 
     queues.balancer.OnWorkComplete(*outsider, 5000);
 

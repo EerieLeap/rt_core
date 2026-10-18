@@ -67,9 +67,9 @@ public:
     [[nodiscard]] std::shared_ptr<CanMessageConfiguration>
     GetMessageConfiguration(uint8_t bus_channel, uint32_t frame_id) const;
 
-    int RegisterConfigurationResetHandler(CanbusServiceUpdatedHandler handler);
+    int RegisterConfigurationResetHandler(const CanbusServiceUpdatedHandler& handler);
     bool UnregisterConfigurationResetHandler(int handler_id);
-    int RegisterConfigurationUpdatedHandler(CanbusServiceUpdatedHandler handler);
+    int RegisterConfigurationUpdatedHandler(const CanbusServiceUpdatedHandler& handler);
     bool UnregisterConfigurationUpdatedHandler(int handler_id);
 };
 

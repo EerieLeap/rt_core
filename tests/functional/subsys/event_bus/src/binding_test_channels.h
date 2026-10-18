@@ -46,8 +46,8 @@ enum class BindingPayloadType : uint32_t {
     Flag = 2
 };
 
-inline constexpr int k_binding_bus_stack_size = 8192;
-inline constexpr uint32_t k_binding_test_source = 0xB1D0;
+inline constexpr int BINDING_BUS_STACK_SIZE = 8192;
+inline constexpr uint32_t BINDING_TEST_SOURCE = 0xB1D0;
 
 class BindingTestChannel : public EventChannel<BindingEventType, BindingPayloadType> {
 public:
@@ -82,7 +82,7 @@ public:
 class BindingTestEventBus : public EventBus {
 public:
     BindingTestEventBus() :
-        EventBus("binding_test_bus", k_binding_bus_stack_size) {}
+        EventBus("binding_test_bus", BINDING_BUS_STACK_SIZE) {}
 };
 
 // Declaration order matters: the bus is destroyed first, so ~EventBus detaches channels that are
@@ -150,7 +150,7 @@ public:
 // Dispatches on the calling thread, so a test needs no waits.
 inline void PublishSync(BindingTestChannel& channel, BindingEventType type, BindingTestChannel::PayloadMap payload) {
 
-    channel.Publish({ .source_id = k_binding_test_source, .type = type, .payload = std::move(payload) });
+    channel.Publish({ .source_id = BINDING_TEST_SOURCE, .type = type, .payload = std::move(payload) });
 }
 
 } // namespace event_binding_tests

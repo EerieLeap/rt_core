@@ -13,7 +13,7 @@ struct LoggingControlConfiguration {
 
     // Each trigger is a subscription on its channel, so the validator caps them. The cap is also the
     // schema's 0*16 (logging_control_config.cddl) and the codec's; the parser asserts they agree.
-    static constexpr size_t kMaxTriggers = 16;
+    static constexpr size_t MAX_TRIGGERS = 16;
 
     // Default: none.
     std::pmr::vector<LoggingTrigger> triggers;

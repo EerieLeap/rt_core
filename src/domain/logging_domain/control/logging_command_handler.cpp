@@ -39,6 +39,7 @@ LoggingCommandHandler::LoggingCommandHandler(
 
             bool is_accepted = false;
             guard->Dispatch([&] {
+                // NOLINTNEXTLINE(bugprone-lambda-function-name): the message names the command; the prefix only names the lambda.
                 LOG_DBG("Logging %s command received.", command->IsStart() ? "start" : "stop");
 
                 is_accepted = control->HandleLoggingCommand(command->IsStart());

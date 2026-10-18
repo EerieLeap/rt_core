@@ -78,8 +78,8 @@ void CanRouteTable::Dispatch(
             const auto value = CanSignalCodec::Decode(*binding.signal, frame.data);
 
             if(value.has_value()) {
-                reading.value = value.value();
-                reading.raw_value = value.value();
+                reading.value = value;
+                reading.raw_value = value;
             } else {
                 reading.SetError(ReadingError::READER_FAILED);
             }

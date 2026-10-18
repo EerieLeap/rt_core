@@ -49,7 +49,7 @@ int NetworkMgmtGroup::HandleDevices(smp_streamer* ctxt) {
         && zcbor_list_start_encode(zse, count);
 
     for(size_t i = offset; ok && i < count; i++) {
-        if(static_cast<size_t>(zse->payload_end - zse->payload) < DEVICE_ENTRY_SIZE)
+        if(std::cmp_less(zse->payload_end - zse->payload, DEVICE_ENTRY_SIZE))
             break;
 
         const auto& device = devices_[i];

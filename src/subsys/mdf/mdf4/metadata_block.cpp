@@ -12,7 +12,7 @@ std::string MetadataBlock::EscapeXml(std::string_view text) {
     std::string escaped;
     escaped.reserve(text.size());
 
-    for(char character : text) {
+    for(const char character : text) {
         switch(character) {
             case '&':
                 escaped += "&amp;";
@@ -49,7 +49,7 @@ std::string MetadataBlock::EscapeXml(std::string_view text) {
 }
 
 void MetadataBlock::SetText(const std::string& block_id, const std::string& text) {
-    std::string xml_string = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    std::string xml_string = R"(<?xml version="1.0" encoding="UTF-8"?>)";
     xml_string += "<" + block_id + "comment>";
     xml_string += text;
     xml_string += "</" + block_id + "comment>";

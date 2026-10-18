@@ -52,12 +52,12 @@ bool SensorsConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t
     return true;
 }
 
-pmr_unique_ptr<CborSensorsConfig>
+PmrUniquePtr<CborSensorsConfig>
 SensorsConfigurationManager::Serialize(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     return cbor_parser_.Serialize(sensors, gpio_channel_count_, adc_channel_count_);
 }
 
-pmr_unique_ptr<std::vector<std::shared_ptr<Sensor>>>
+PmrUniquePtr<std::vector<std::shared_ptr<Sensor>>>
 SensorsConfigurationManager::Deserialize(const CborSensorsConfig& cbor_config) {
     return make_unique_pmr<std::vector<std::shared_ptr<Sensor>>>(
         Mrm::GetExtPmr(),

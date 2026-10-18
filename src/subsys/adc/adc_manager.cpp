@@ -16,7 +16,7 @@ AdcManager::AdcManager(std::vector<std::shared_ptr<IAdc>> adcs) :
 }
 
 bool AdcManager::Initialize() {
-    for(auto& adc : adcs_) {
+    for(const auto& adc : adcs_) {
         if(!adc->Initialize()) {
             LOG_ERR("ADC initialization failed.");
             return false;

@@ -38,6 +38,7 @@ namespace {
 
 std::atomic<bool> g_fail_allocations{ false };
 
+// NOLINTBEGIN(cppcoreguidelines-no-malloc): the replacement allocation functions wrap malloc and free
 void* Allocate(size_t size) {
     if(g_fail_allocations.load())
         throw std::bad_alloc();
@@ -79,13 +80,14 @@ void operator delete(void* pointer, size_t) noexcept {
 void operator delete[](void* pointer, size_t) noexcept {
     std::free(pointer);
 }
+// NOLINTEND(cppcoreguidelines-no-malloc)
 
 namespace {
 
-constexpr int k_helper_priority = 5;
+constexpr int HELPER_PRIORITY = 5;
 
 // Extensions live in static storage: a provider keeps only the span.
-constexpr std::array<std::string_view, 2> kImageExtensions = { ".bin", ".png" };
+constexpr std::array<std::string_view, 2> IMAGE_EXTENSIONS = { ".bin", ".png" };
 
 K_THREAD_STACK_DEFINE(referrer_helper_stack, 4096);
 k_thread referrer_helper;
@@ -96,7 +98,7 @@ MakeProvider(AssetKind kind, std::string_view name, std::shared_ptr<AssetStore> 
         .kind = kind,
         .name = name,
         .store = std::move(store),
-        .extensions = kImageExtensions,
+        .extensions = IMAGE_EXTENSIONS,
         .access = static_cast<uint8_t>(ToMask(AssetAccess::READ) | ToMask(AssetAccess::WRITE)),
         .max_size = 4096,
     };
@@ -106,8 +108,8 @@ MakeProvider(AssetKind kind, std::string_view name, std::shared_ptr<AssetStore> 
 // thread without unwinding, never leaves the helper running on a dead stack frame.
 struct BlockedReferrer {
     AssetsManager manager;
-    k_sem entered;
-    k_sem release;
+    k_sem entered{};
+    k_sem release{};
 
     BlockedReferrer() {
         k_sem_init(&entered, 0, 1);
@@ -116,9 +118,11 @@ struct BlockedReferrer {
 };
 
 void AskIfReferenced(void* holder, void*, void*) {
-    std::unique_ptr<std::shared_ptr<BlockedReferrer>> state(static_cast<std::shared_ptr<BlockedReferrer>*>(holder));
+    const std::unique_ptr<std::shared_ptr<BlockedReferrer>> state(
+        static_cast<std::shared_ptr<BlockedReferrer>*>(holder)
+    );
 
-    (*state)->manager.IsReferenced("anything.lua");
+    static_cast<void>((*state)->manager.IsReferenced("anything.lua"));
 }
 
 } // namespace
@@ -155,7 +159,7 @@ ZTEST(assets_manager, test_has_access_tests_the_bit_of_the_operation) {
 
 ZTEST(assets_manager, test_register_and_find_return_the_provider) {
     AssetsManager manager;
-    auto store = MakeUnavailableStore("ui_assets/images");
+    const auto store = MakeUnavailableStore("ui_assets/images");
 
     zassert_true(manager.Register(MakeProvider(AssetKind::IMAGES, "images", store)));
 
@@ -165,7 +169,7 @@ ZTEST(assets_manager, test_register_and_find_return_the_provider) {
     zassert_true(provider->kind == AssetKind::IMAGES);
     zassert_true(provider->name == "images");
     zassert_true(provider->store == store);
-    zassert_equal(provider->extensions.size(), kImageExtensions.size());
+    zassert_equal(provider->extensions.size(), IMAGE_EXTENSIONS.size());
     zassert_true(provider->extensions[0] == ".bin");
     zassert_true(provider->extensions[1] == ".png");
     zassert_true(HasAccess(provider->access, AssetAccess::READ));
@@ -188,8 +192,8 @@ ZTEST(assets_manager, test_find_of_a_kind_that_is_not_registered_is_null) {
 
 ZTEST(assets_manager, test_registering_a_kind_twice_is_refused) {
     AssetsManager manager;
-    auto first_store = MakeUnavailableStore("first");
-    auto second_store = MakeUnavailableStore("second");
+    const auto first_store = MakeUnavailableStore("first");
+    const auto second_store = MakeUnavailableStore("second");
 
     zassert_true(manager.Register(MakeProvider(AssetKind::SENSOR_SCRIPTS, "sensor_scripts", first_store)));
     zassert_false(manager.Register(MakeProvider(AssetKind::SENSOR_SCRIPTS, "other_name", second_store)));
@@ -286,7 +290,7 @@ ZTEST(assets_manager, test_get_providers_is_ordered_by_kind) {
 // A widget that found its provider keeps drawing from it while a controller unregisters the kind.
 ZTEST(assets_manager, test_a_found_provider_stays_usable_after_unregister) {
     AssetsManager manager;
-    auto store = MakeUnavailableStore("ui_assets/images");
+    const auto store = MakeUnavailableStore("ui_assets/images");
 
     zassert_true(manager.Register(MakeProvider(AssetKind::IMAGES, "images", store)));
 
@@ -512,7 +516,7 @@ ZTEST(assets_manager, test_a_referrer_may_change_the_referrers_while_it_runs) {
 // A referrer that is stuck, say behind the LVGL lock, must not hold up whoever needs the registry:
 // widgets call Find() under the LVGL lock, so a registry lock held across a referrer could deadlock.
 ZTEST(assets_manager, test_referrers_run_without_the_registry_lock) {
-    auto state = std::make_shared<BlockedReferrer>();
+    const auto state = std::make_shared<BlockedReferrer>();
     BlockedReferrer* blocked = state.get();
 
     blocked->manager.AddReferrer(blocked, [blocked](std::string_view) {
@@ -526,7 +530,7 @@ ZTEST(assets_manager, test_referrers_run_without_the_registry_lock) {
 
     k_thread_create(
         &referrer_helper, referrer_helper_stack, K_THREAD_STACK_SIZEOF(referrer_helper_stack), AskIfReferenced,
-        new std::shared_ptr<BlockedReferrer>(state), nullptr, nullptr, k_helper_priority, 0, K_NO_WAIT
+        new std::shared_ptr<BlockedReferrer>(state), nullptr, nullptr, HELPER_PRIORITY, 0, K_NO_WAIT
     );
 
     zassert_ok(k_sem_take(&blocked->entered, K_SECONDS(2)), "The helper never reached the referrer");

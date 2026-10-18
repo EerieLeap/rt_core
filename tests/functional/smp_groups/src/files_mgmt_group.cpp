@@ -74,6 +74,11 @@ public:
         UseCard(card);
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     ~Harness() {
         group.reset();
         work_queue.reset();
@@ -180,7 +185,7 @@ ZTEST_F(smp_files_group, test_empty_request_lists_the_root) {
     zassert_equal(without_body.entries.size(), 2);
     zassert_str_equal(without_body.entry_texts[0].at("name").c_str(), "scripts");
 
-    auto empty_map = harness.client.Read(SmpGroupId::FILES, LIST);
+    const auto empty_map = harness.client.Read(SmpGroupId::FILES, LIST);
 
     zassert_true(empty_map.IsOk());
     zassert_equal(empty_map.entries.size(), 2);
@@ -189,6 +194,7 @@ ZTEST_F(smp_files_group, test_empty_request_lists_the_root) {
 ZTEST_F(smp_files_group, test_a_large_directory_is_paged) {
     Harness& harness = *fixture->harness;
     std::vector<DirectoryEntry> files;
+    files.reserve(60);
     for(size_t i = 0; i < 60; i++)
         files.push_back(File(NameOfLength(i, 40), 1000 + i));
     harness.card->directories["scripts"] = files;
@@ -208,6 +214,7 @@ ZTEST_F(smp_files_group, test_a_large_directory_is_paged) {
 ZTEST_F(smp_files_group, test_long_names_fit_the_response) {
     Harness& harness = *fixture->harness;
     std::vector<DirectoryEntry> files;
+    files.reserve(10);
     for(size_t i = 0; i < 10; i++)
         files.push_back(File(NameOfLength(i, 255), i));
     harness.card->directories["scripts"] = files;
@@ -239,7 +246,7 @@ ZTEST_F(smp_files_group, test_offset_past_the_end_lists_nothing) {
     Harness& harness = *fixture->harness;
     harness.card->directories["scripts"] = { File("a.lua", 1), File("b.lua", 2), File("c.lua", 3) };
 
-    auto response = harness.List("scripts", 10);
+    const auto response = harness.List("scripts", 10);
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("total"), 3);
@@ -251,7 +258,7 @@ ZTEST_F(smp_files_group, test_an_empty_directory_has_no_entries) {
     Harness& harness = *fixture->harness;
     harness.card->directories["scripts"] = {};
 
-    auto response = harness.List("scripts");
+    const auto response = harness.List("scripts");
 
     zassert_true(response.IsOk());
     zassert_equal(response.Value("total"), 0);
@@ -333,7 +340,7 @@ ZTEST_F(smp_files_group, test_a_listing_that_cannot_be_stored_is_no_memory) {
 ZTEST_F(smp_files_group, test_a_malformed_request_is_invalid) {
     Harness& harness = *fixture->harness;
 
-    auto response = harness.client.Read(SmpGroupId::FILES, LIST, CborMap().Put("dir", 7).Build());
+    const auto response = harness.client.Read(SmpGroupId::FILES, LIST, CborMap().Put("dir", 7).Build());
 
     zassert_equal(response.Value("rc"), MGMT_ERR_EINVAL);
 }
@@ -342,7 +349,7 @@ ZTEST_F(smp_files_group, test_unregistered_group_is_not_supported) {
     Harness& harness = *fixture->harness;
     harness.group->Unregister();
 
-    auto response = harness.List("scripts");
+    const auto response = harness.List("scripts");
 
     zassert_equal(response.Value("rc"), MGMT_ERR_ENOTSUP, "As firmware without the group answers");
 }

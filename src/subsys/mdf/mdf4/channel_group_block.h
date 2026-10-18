@@ -51,7 +51,11 @@ private:
 
 public:
     ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id);
-    virtual ~ChannelGroupBlock();
+    ~ChannelGroupBlock() override;
+    ChannelGroupBlock(const ChannelGroupBlock&) = delete;
+    ChannelGroupBlock& operator=(const ChannelGroupBlock&) = delete;
+    ChannelGroupBlock(ChannelGroupBlock&&) = delete;
+    ChannelGroupBlock& operator=(ChannelGroupBlock&&) = delete;
 
     uint16_t GetFlags() const;
     uint64_t GetRecordId() const;
@@ -85,7 +89,7 @@ public:
     /** Appends @p next_block to the end of the chain this block belongs to. */
     void LinkBlock(std::shared_ptr<ChannelGroupBlock> next_block);
     void UnlinkNext();
-    void AddSourceInformation(std::shared_ptr<SourceInformationBlock> source_information);
+    void AddSourceInformation(const std::shared_ptr<SourceInformationBlock>& source_information);
     /** Throws for VlsdChannel on a group with invalidation bytes: see SetInvalidationBytes(). */
     void SetFlags(uint16_t flags);
     /**
@@ -94,7 +98,7 @@ public:
      */
     void SetInvalidationBytes(uint32_t invalidation_bytes);
     void SetPathSeparator(uint16_t path_separator);
-    void SetName(std::shared_ptr<TextBlock> name);
+    void SetName(const std::shared_ptr<TextBlock>& name);
     void SetComment(std::shared_ptr<MetadataBlock> comment);
 };
 

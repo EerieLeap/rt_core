@@ -46,10 +46,10 @@ public:
     }
 };
 
-constexpr uint8_t kBus = 0;
-constexpr uint32_t kSignalsFrameId = 0x100;
-constexpr uint32_t kRawFrameId = 0x200;
-constexpr size_t kSignalCount = 16;
+constexpr uint8_t K_BUS = 0;
+constexpr uint32_t SIGNALS_FRAME_ID = 0x100;
+constexpr uint32_t RAW_FRAME_ID = 0x200;
+constexpr size_t SIGNAL_COUNT = 16;
 
 struct Fixture {
     std::shared_ptr<CanMessageConfiguration> message;
@@ -62,14 +62,14 @@ struct Fixture {
         return [this](
                    uint8_t bus, uint32_t frame_id, uint32_t signal_name_hash
                ) -> std::shared_ptr<const CanSignalConfiguration> {
-            if(bus != kBus || frame_id != message->frame_id)
+            if(bus != K_BUS || frame_id != message->frame_id)
                 return nullptr;
 
             const auto* signal = message->TryGetSignal(signal_name_hash);
             if(signal == nullptr)
                 return nullptr;
 
-            return std::shared_ptr<const CanSignalConfiguration>(message, signal);
+            return { message, signal };
         };
     }
 };
@@ -81,10 +81,10 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
     auto* mr = Mrm::GetDefaultPmr();
 
     fixture.message = make_shared_pmr<CanMessageConfiguration>(mr);
-    fixture.message->frame_id = kSignalsFrameId;
+    fixture.message->frame_id = SIGNALS_FRAME_ID;
     fixture.message->message_size = 8;
 
-    for(size_t i = 0; i < kSignalCount; i++) {
+    for(size_t i = 0; i < SIGNAL_COUNT; i++) {
         CanSignalConfiguration signal(std::allocator_arg, mr);
         signal.start_bit = i * 4;
         signal.size_bits = 4;
@@ -93,19 +93,19 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
         fixture.message->signal_configurations.push_back(std::move(signal));
     }
 
-    for(size_t i = 0; i < kSignalCount; i++) {
-        auto sensor = std::make_shared<Sensor>(std::allocator_arg, mr, "can_" + std::to_string(i));
+    for(size_t i = 0; i < SIGNAL_COUNT; i++) {
+        const auto sensor = std::make_shared<Sensor>(std::allocator_arg, mr, "can_" + std::to_string(i));
         sensor->configuration.type = SensorType::CANBUS_ANALOG;
         sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(
-            mr, kBus, kSignalsFrameId, "sig_" + std::to_string(i)
+            mr, K_BUS, SIGNALS_FRAME_ID, "sig_" + std::to_string(i)
         );
         sensor->configuration.UpdateConnectionString();
         fixture.sensors.push_back(sensor);
     }
 
-    auto raw = std::make_shared<Sensor>(std::allocator_arg, mr, "raw");
+    const auto raw = std::make_shared<Sensor>(std::allocator_arg, mr, "raw");
     raw->configuration.type = SensorType::CANBUS_RAW;
-    raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(mr, kBus, kRawFrameId);
+    raw->configuration.canbus_source = make_unique_pmr<CanbusSource>(mr, K_BUS, RAW_FRAME_ID);
     raw->configuration.UpdateConnectionString();
     fixture.sensors.push_back(raw);
 
@@ -124,7 +124,7 @@ Fixture MakeFixture(std::initializer_list<std::string_view> disabled_ids = {}) {
 } // namespace
 
 ZTEST(can_route_table, test_Build_groups_the_sensors_of_a_frame_into_one_route) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
@@ -135,16 +135,16 @@ ZTEST(can_route_table, test_Build_groups_the_sensors_of_a_frame_into_one_route) 
     const CanRoute* signals = nullptr;
     const CanRoute* raw = nullptr;
     for(const auto& route : routes) {
-        if(route.frame_id == kSignalsFrameId)
+        if(route.frame_id == SIGNALS_FRAME_ID)
             signals = &route;
-        if(route.frame_id == kRawFrameId)
+        if(route.frame_id == RAW_FRAME_ID)
             raw = &route;
     }
 
     zassert_not_null(signals);
     zassert_not_null(raw);
-    zassert_equal(signals->bus_channel, kBus);
-    zassert_equal(signals->bindings.size(), kSignalCount, "No limit on signals per frame");
+    zassert_equal(signals->bus_channel, K_BUS);
+    zassert_equal(signals->bindings.size(), SIGNAL_COUNT, "No limit on signals per frame");
     zassert_equal(raw->bindings.size(), 1);
     zassert_is_null(raw->bindings[0].signal, "A raw sensor has no signal to decode");
 
@@ -153,7 +153,7 @@ ZTEST(can_route_table, test_Build_groups_the_sensors_of_a_frame_into_one_route) 
 }
 
 ZTEST(can_route_table, test_Build_leaves_out_a_sensor_whose_signal_is_not_configured) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, [](uint8_t, uint32_t, uint32_t) {
@@ -161,19 +161,19 @@ ZTEST(can_route_table, test_Build_leaves_out_a_sensor_whose_signal_is_not_config
     });
 
     zassert_equal(table.GetRoutes().size(), 1, "Only the raw sensor needs no signal");
-    zassert_equal(table.GetRoutes()[0].frame_id, kRawFrameId);
+    zassert_equal(table.GetRoutes()[0].frame_id, RAW_FRAME_ID);
 }
 
 ZTEST(can_route_table, test_Build_leaves_out_disabled_sensors) {
-    auto fixture = MakeFixture({ "can_3", "raw" });
+    const auto fixture = MakeFixture({ "can_3", "raw" });
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
 
     const auto routes = table.GetRoutes();
     zassert_equal(routes.size(), 1, "A disabled raw sensor gets no route");
-    zassert_equal(routes[0].frame_id, kSignalsFrameId);
-    zassert_equal(routes[0].bindings.size(), kSignalCount - 1, "A disabled signal sensor is not decoded");
+    zassert_equal(routes[0].frame_id, SIGNALS_FRAME_ID);
+    zassert_equal(routes[0].bindings.size(), SIGNAL_COUNT - 1, "A disabled signal sensor is not decoded");
 
     for(const auto& binding : routes[0].bindings)
         zassert_true(
@@ -182,22 +182,22 @@ ZTEST(can_route_table, test_Build_leaves_out_disabled_sensors) {
 }
 
 ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
 
     const CanRoute* signals = nullptr;
     for(const auto& route : table.GetRoutes())
-        if(route.frame_id == kSignalsFrameId)
+        if(route.frame_id == SIGNALS_FRAME_ID)
             signals = &route;
 
     // Nibble i holds the value i, little-endian.
     CanFrame frame;
-    frame.id = kSignalsFrameId;
+    frame.id = SIGNALS_FRAME_ID;
     frame.data = { 0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE };
 
-    std::array<std::optional<float>, kSignalCount> values;
+    std::array<std::optional<float>, SIGNAL_COUNT> values;
     size_t readings = 0;
 
     CanRouteTable::Dispatch(
@@ -214,8 +214,8 @@ ZTEST(can_route_table, test_Dispatch_decodes_every_signal_of_the_frame_once) {
         }
     );
 
-    zassert_equal(readings, kSignalCount, "One reading per sensor on the frame");
-    for(size_t i = 0; i < kSignalCount; i++) {
+    zassert_equal(readings, SIGNAL_COUNT, "One reading per sensor on the frame");
+    for(size_t i = 0; i < SIGNAL_COUNT; i++) {
         zassert_true(values[i].has_value(), "Signal %zu was not decoded", i);
         zassert_equal(
             values[i].value(), static_cast<float>(i), "Signal %zu decoded to %f", i,
@@ -232,11 +232,11 @@ ZTEST(can_route_table, test_Dispatch_hands_a_raw_sensor_the_frame_itself) {
 
     const CanRoute* raw = nullptr;
     for(const auto& route : table.GetRoutes())
-        if(route.frame_id == kRawFrameId)
+        if(route.frame_id == RAW_FRAME_ID)
             raw = &route;
 
     CanFrame frame;
-    frame.id = kRawFrameId;
+    frame.id = RAW_FRAME_ID;
     frame.data = { 1, 2, 3 };
 
     size_t readings = 0;
@@ -261,13 +261,13 @@ ZTEST(can_route_table, test_Dispatch_hands_a_raw_sensor_the_frame_itself) {
 }
 
 ZTEST(can_route_table, test_Dispatch_ignores_an_empty_frame) {
-    auto fixture = MakeFixture();
+    const auto fixture = MakeFixture();
 
     CanRouteTable table;
     table.Build(*fixture.generation, fixture.Resolver());
 
     CanFrame frame;
-    frame.id = kSignalsFrameId;
+    frame.id = SIGNALS_FRAME_ID;
 
     size_t readings = 0;
     for(const auto& route : table.GetRoutes())

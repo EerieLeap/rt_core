@@ -3,18 +3,15 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 SourceInformationBlock::SourceInformationBlock(SourceType source_type, BusType bus_type) :
-    BlockBase("SI") {
+    BlockBase("SI"),
+    source_type_(source_type),
+    bus_type_(bus_type) {}
 
-    source_type_ = source_type;
-    bus_type_ = bus_type;
-    flags_ = 0;
-}
-
-void SourceInformationBlock::SetName(std::shared_ptr<TextBlock> name) {
+void SourceInformationBlock::SetName(const std::shared_ptr<TextBlock>& name) {
     links_.SetLink(LinkType::TextName, name);
 }
 
-void SourceInformationBlock::SetPath(std::shared_ptr<TextBlock> path) {
+void SourceInformationBlock::SetPath(const std::shared_ptr<TextBlock>& path) {
     links_.SetLink(LinkType::TextPath, path);
 }
 
@@ -33,9 +30,8 @@ std::unique_ptr<uint8_t[]> SourceInformationBlock::Serialize() const {
     offset += sizeof(uint8_t);
 
     std::memcpy(buffer.get() + offset, &flags_, sizeof(flags_));
-    offset += sizeof(flags_);
 
-    offset += 5; // reserved_1_
+    // reserved_1_: 5 bytes, left zero by the memset in SerializeBase().
 
     return buffer;
 }

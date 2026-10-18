@@ -61,19 +61,19 @@ using eerie_leap::utilities::memory::Mrm;
 
 // A script a configuration refers to, and what the controllers register. The suite's one volume serves
 // as the SD card and as the internal file system.
-inline constexpr const char* kSensorScript = "scripts/sensors/a.lua";
-inline constexpr const char* kSensorScriptName = "a.lua";
-inline constexpr const char* kDisabledSensorScript = "scripts/sensors/d.lua";
-inline constexpr const char* kOtherSensorScriptName = "other.lua";
+inline constexpr const char* SENSOR_SCRIPT = "scripts/sensors/a.lua";
+inline constexpr const char* SENSOR_SCRIPT_NAME = "a.lua";
+inline constexpr const char* DISABLED_SENSOR_SCRIPT = "scripts/sensors/d.lua";
+inline constexpr const char* OTHER_SENSOR_SCRIPT_NAME = "other.lua";
 // In the CAN scripts' directory, though a sensor refers to it.
-inline constexpr const char* kSensorScriptInCanDirectory = "scripts/can/c.lua";
-inline constexpr const char* kCanScript = "scripts/can/a.lua";
-inline constexpr const char* kCanScriptName = "a.lua";
-inline constexpr const char* kDisabledCanScript = "scripts/can/d.lua";
+inline constexpr const char* SENSOR_SCRIPT_IN_CAN_DIRECTORY = "scripts/can/c.lua";
+inline constexpr const char* CAN_SCRIPT = "scripts/can/a.lua";
+inline constexpr const char* CAN_SCRIPT_NAME = "a.lua";
+inline constexpr const char* DISABLED_CAN_SCRIPT = "scripts/can/d.lua";
 // In the sensor scripts' directory, though a CAN message refers to it.
-inline constexpr const char* kCanScriptInSensorDirectory = "scripts/sensors/s.lua";
+inline constexpr const char* CAN_SCRIPT_IN_SENSOR_DIRECTORY = "scripts/sensors/s.lua";
 
-inline constexpr uint8_t kAllScriptAccess = ToMask(AssetAccess::READ) | ToMask(AssetAccess::WRITE)
+inline constexpr uint8_t ALL_SCRIPT_ACCESS = ToMask(AssetAccess::READ) | ToMask(AssetAccess::WRITE)
     | ToMask(AssetAccess::DELETE);
 
 // The suite's volume as the SD card: every call goes to the real one, except IsAvailable(), which
@@ -216,7 +216,7 @@ inline std::unique_ptr<SensorsController> MakeSensorsController(
 
 // Initializes with @p sensors already stored, so that the controller's update handler does not fire.
 inline int InitializeWithSensors(SensorsController& controller, std::vector<std::shared_ptr<Sensor>> sensors) {
-    return controller.Initialize([&sensors](auto manager) {
+    return controller.Initialize([&sensors](const auto& manager) {
         zassert_true(manager->Update(sensors), "The sensors were not stored");
     });
 }
@@ -271,7 +271,7 @@ MakeCanbusController(const Rig& rig, std::shared_ptr<IFsService> sd_fs_service, 
 
 // Initializes with @p specs already stored, so that the controller's update handler does not fire.
 inline int InitializeWithMessages(CanbusController& controller, std::initializer_list<CanMessageSpec> specs) {
-    return controller.Initialize([specs](auto manager) {
+    return controller.Initialize([specs](const auto& manager) {
         StoreCanConfiguration(*manager, specs);
     });
 }

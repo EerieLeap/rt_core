@@ -15,7 +15,7 @@ using eerie_leap::subsys::threading::ScopedMutex;
 // call finishes that call, and a call allocates nothing.
 class ConfigurationService::StoredHandlerSlot {
 private:
-    k_mutex mutex_;
+    k_mutex mutex_{};
     std::shared_ptr<const ConfigurationStoredHandler> handler_;
 
 public:
@@ -69,7 +69,7 @@ std::pmr::vector<uint8_t> ConfigurationService::GetCborConfiguration(Type type) 
 }
 
 StoredCborInfo ConfigurationService::GetCborConfigurationInfo(Type type) const {
-    auto it = cbor_configuration_managers_.find(type);
+    const auto it = cbor_configuration_managers_.find(type);
 
     return it != cbor_configuration_managers_.end() ? it->second.manager->GetCborConfigurationInfo() : StoredCborInfo{};
 }
@@ -101,7 +101,7 @@ bool ConfigurationService::IsRegistered(Type type) const {
 }
 
 size_t ConfigurationService::GetMaxCborSize(Type type) const {
-    auto it = cbor_configuration_managers_.find(type);
+    const auto it = cbor_configuration_managers_.find(type);
 
     return it != cbor_configuration_managers_.end() ? it->second.max_cbor_size : 0;
 }
@@ -115,7 +115,7 @@ size_t ConfigurationService::GetRegisteredTypes(std::span<Type> types) const {
         types[count++] = type;
     }
 
-    std::sort(types.begin(), types.begin() + count);
+    std::ranges::sort(types.first(count));
 
     return count;
 }
