@@ -88,8 +88,9 @@ Checks: >
 
 WarningsAsErrors: ''
 HeaderFilterRegex: '.*/(src|tests|include/eerie_leap|libs/eerie_memory)/.*'
-# Build output (twister mirrors the source tree, so its generated headers sit under tests/) is never ours.
-ExcludeHeaderFilterRegex: '.*/(configuration/cbor/cbor_[a-z_]+_config|libs/nameof|zephyr_lua|fixtures/golden_file\.h|twister-out[^/]*|include/generated)(/.*)?'
+# Build output (twister mirrors the source tree, so its generated headers sit under tests/) is never ours,
+# and neither is LVGL (rt_gauge), whose headers sit under lvgl/src/.
+ExcludeHeaderFilterRegex: '.*/(configuration/cbor/cbor_[a-z_]+_config|libs/nameof|zephyr_lua|fixtures/golden_file\.h|twister-out[^/]*|include/generated|lib/gui/lvgl)(/.*)?'
 SystemHeaders: false
 FormatStyle: file
 # GCC-only flags of the Zephyr command lines that clang rejects.
