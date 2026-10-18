@@ -230,7 +230,7 @@ ZTEST(logging_controller_remote, test_AStoredConfigurationRebuildsTheTriggersAnd
     zassert_false(F().peer.WaitForBroadcast(NO_FRAME_TIMEOUT_MS).has_value(), "No triggers, nothing to start");
 
     // The SMP path: a client stores the configuration, and the apply runs on the configuration queue.
-    QueuedApply apply(configuration_service, ConfigurationService::Type::LoggingControl, k_trigger_on_ab);
+    QueuedApply apply(configuration_service, ConfigurationService::Type::LoggingControl, TRIGGER_ON_AB);
     zassert_true(apply.WaitForSuccess(), "The configuration is stored");
 
     zassert_true(IsStart(F().peer.WaitForBroadcast()), "The rebuilt trigger sees a switch that is on");

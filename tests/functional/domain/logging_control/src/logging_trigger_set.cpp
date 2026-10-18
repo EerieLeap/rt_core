@@ -313,7 +313,7 @@ const LoggingTriggerSet::SelectorResolver K_UNKNOWN = [](const EventBinding&) {
     return false;
 };
 
-// Polls @p predicate every 2 ms until it holds or k_wait_ms passed.
+// Polls @p predicate every 2 ms until it holds or WAIT_MS passed.
 template<typename TPredicate>
 [[nodiscard]] bool Eventually(TPredicate predicate) {
     const int64_t deadline = k_uptime_get() + WAIT_MS;

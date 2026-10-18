@@ -30,7 +30,7 @@ using eerie_leap::subsys::threading::ServiceState;
 
 namespace {
 
-// Bounds a call that must not wait for the writer: one that does waits a held tick of kHoldMs.
+// Bounds a call that must not wait for the writer: one that does waits a held tick of HOLD_MS.
 constexpr int64_t NO_WAIT_MS = ProbeLogger::HOLD_MS / 2;
 
 // A rig whose every tick offers a reading, and a probe per start: a session fails at the next tick
