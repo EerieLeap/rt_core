@@ -230,8 +230,8 @@ public:
         Kind kind;
         k_tid_t thread;
         std::string thread_name;
-        // What the request named; kAllUnits for a received command.
-        uint32_t target_uid = kAllUnits;
+        // What the request named; ALL_UNITS for a received command.
+        uint32_t target_uid = ALL_UNITS;
 
         bool operator==(const Request& other) const {
             return kind == other.kind;
@@ -260,7 +260,7 @@ private:
 
     std::shared_ptr<Context> context_ = std::make_shared<Context>();
 
-    void Record(Kind kind, uint32_t target_uid = kAllUnits) {
+    void Record(Kind kind, uint32_t target_uid = ALL_UNITS) {
         {
             ScopedMutex guard(context_->lock);
             context_->requests.push_back({ kind, k_current_get(), CurrentThreadName(), target_uid });

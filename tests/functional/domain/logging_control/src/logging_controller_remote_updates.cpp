@@ -96,7 +96,7 @@ struct Fixture {
 
     // The unit wants logging: the start goes out and a logging unit shares that it logs.
     void WantLogging() {
-        controller->GetControl()->RequestStart(kAllUnits);
+        controller->GetControl()->RequestStart(ALL_UNITS);
         const auto start = peer.WaitForBroadcast();
         zassert_true(IsStart(start), "The start goes out");
         zassert_true(peer.WaitForOwnAnswer(*start), "and the unit's own handler is done with it");

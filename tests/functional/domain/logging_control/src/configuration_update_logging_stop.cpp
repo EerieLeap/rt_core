@@ -260,7 +260,7 @@ ZTEST(configuration_update_logging_stop, test_DestructionClearsTheHandlerAndWait
     F().Start();
     F().control->HoldRequests();
 
-    // The store runs on the queue, inside the report, which the control holds in RequestStop(kAllUnits).
+    // The store runs on the queue, inside the report, which the control holds in RequestStop(ALL_UNITS).
     TestConfigQueue()->Run([manager = F().manager] {
         (void)manager->Update(TriggersOn({ "a" }));
     });

@@ -346,7 +346,7 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
     // The raised_publisher_stack scenario exists to run this case: a build that does not raise the
     // stack, or does not fill the stacks for the measurement below, fails here instead of skipping.
     static_assert(
-        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= kThrowingFilterStackSize,
+        CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE >= THROWING_FILTER_STACK_SIZE,
         "the raised_publisher_stack scenario must raise the publisher stack"
     );
     static_assert(
@@ -415,7 +415,7 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
         "publisher stack: %zu of %d bytes unused after the unwind\n", least_unused->load(),
         CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE
     );
-    zassert_true(least_unused->load() >= kPublisherStackMargin, "the publisher stack is nearly used up by the unwind");
+    zassert_true(least_unused->load() >= PUBLISHER_STACK_MARGIN, "the publisher stack is nearly used up by the unwind");
 #endif
 }
 
