@@ -57,7 +57,8 @@ private:
 
     std::optional<WorkQueueTask<CanbusController>> reconfigure_task_;
     // Whether this controller registered the CAN scripts with assets_manager_, and so unregisters them.
-    bool is_assets_registered_ = false;
+    // Read only with CONFIG_EERIE_LEAP_ASSETS.
+    [[maybe_unused]] bool is_assets_registered_ = false;
 
     void Reconfigure();
     // Serves the CAN scripts as an asset kind. With CONFIG_EERIE_LEAP_ASSETS, a manager and an SD
@@ -77,6 +78,12 @@ public:
         std::shared_ptr<AssetsManager> assets_manager = nullptr
     );
     ~CanbusController();
+
+    // The reconfigure task and the registered handlers refer to it.
+    CanbusController(const CanbusController&) = delete;
+    CanbusController& operator=(const CanbusController&) = delete;
+    CanbusController(CanbusController&&) = delete;
+    CanbusController& operator=(CanbusController&&) = delete;
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();

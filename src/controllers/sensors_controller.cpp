@@ -311,7 +311,7 @@ void SensorsController::EmulateReadings() {
         SensorReading reading(sensor.get());
         reading.source = ReadingSource::PROCESSING;
         reading.status = ReadingStatus::PROCESSED;
-        reading.value = (Rng::Get<uint32_t>() / static_cast<float>(UINT32_MAX)) * 100.0F;
+        reading.value = (static_cast<float>(Rng::Get<uint32_t>()) / static_cast<float>(UINT32_MAX)) * 100.0F;
 
         sensor_readings_frame_->AddOrUpdateReading(reading);
     }

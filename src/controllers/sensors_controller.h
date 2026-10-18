@@ -85,7 +85,8 @@ private:
     // Set by Start(); a restart that failed leaves the service stopped, but a later apply retries it.
     std::atomic<bool> is_processing_requested_ = false;
     // Whether this controller registered the sensor scripts with assets_manager_, and so unregisters them.
-    bool is_assets_registered_ = false;
+    // Read only with CONFIG_EERIE_LEAP_ASSETS.
+    [[maybe_unused]] bool is_assets_registered_ = false;
 
     void RestartProcessing();
     // Serves the sensor scripts as an asset kind. With CONFIG_EERIE_LEAP_ASSETS, a manager and an SD
@@ -112,6 +113,12 @@ public:
         std::shared_ptr<AssetsManager> assets_manager = nullptr
     );
     ~SensorsController();
+
+    // The restart task and the registered handlers refer to it.
+    SensorsController(const SensorsController&) = delete;
+    SensorsController& operator=(const SensorsController&) = delete;
+    SensorsController(SensorsController&&) = delete;
+    SensorsController& operator=(SensorsController&&) = delete;
 
     int Initialize(const ConfigurationSetup& setup_test_configuration = nullptr);
     int Start();

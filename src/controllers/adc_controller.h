@@ -68,6 +68,12 @@ public:
     );
     ~AdcController();
 
+    // The registered handlers and the calibration group refer to it.
+    AdcController(const AdcController&) = delete;
+    AdcController& operator=(const AdcController&) = delete;
+    AdcController(AdcController&&) = delete;
+    AdcController& operator=(AdcController&&) = delete;
+
     int Initialize();
 
     /**

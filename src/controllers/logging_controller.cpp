@@ -43,7 +43,6 @@ namespace eerie_leap::controllers {
 
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
-using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::subsys::event_bus::EventBinding;
@@ -627,7 +626,7 @@ void LoggingController::StopLogWriter() {
         );
     } else {
         // A stack semaphore: the wait has no timeout, and the job gives it before this returns.
-        k_sem done;
+        k_sem done{};
         k_sem_init(&done, 0, 1);
 
         try {
