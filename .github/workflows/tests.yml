@@ -72,10 +72,9 @@ jobs:
           set -o pipefail
           scripts/tidy.sh --changed origin/${{ github.base_ref }} -p twister-out/native_sim_native 2>&1 | tee tidy-report.txt
 
-      # Report only until every source is clean.
+      # Every source is clean: any warning fails the job.
       - name: Lint all sources
         if: github.event_name != 'pull_request'
-        continue-on-error: true
         working-directory: rt_core
         run: |
           set -o pipefail
