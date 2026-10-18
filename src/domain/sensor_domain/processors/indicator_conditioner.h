@@ -55,7 +55,7 @@ private:
     bool has_pending_ = false;    // The raw input differs from input_ and its window runs.
     int64_t deadline_ = 0;        // Uptime ticks at which it settles.
     int64_t remaining_ticks_ = 0; // What was left of the window when processing paused.
-    SensorReading held_{};        // The latest reading carrying the pending value.
+    SensorReading held_;          // The latest reading carrying the pending value.
     ReadingPipeline* pipeline_ = nullptr;
     const runtime::SensorRuntime* runtime_ = nullptr;
 

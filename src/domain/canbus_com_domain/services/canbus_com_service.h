@@ -51,6 +51,7 @@ using eerie_leap::domain::canbus_domain::services::CanbusService;
  * shares state records with them through CDMP's state service, which keeps this unit's records across
  * the stop and start of every reconfiguration and announces them when the node is back ONLINE.
  */
+// NOLINTNEXTLINE(misc-multiple-inheritance): ISmpForwarder is pure virtual, and INetworkStateTransport adds only an inline overload to its pure interface; ServiceBase holds the only state.
 class CanbusComService : public ServiceBase<>, public ISmpForwarder, public INetworkStateTransport {
 private:
     std::shared_ptr<CanbusService> canbus_service_;
@@ -88,6 +89,9 @@ public:
 
     CanbusComService(std::shared_ptr<CanbusService> canbus_service);
     ~CanbusComService() override;
+
+    CanbusComService(const CanbusComService&) = delete;
+    CanbusComService& operator=(const CanbusComService&) = delete;
 
     /** @brief The features as heartbeats and discovery responses send them now. Any thread. */
     [[nodiscard]] uint16_t GetFeatures() const;
@@ -161,7 +165,7 @@ public:
             return;
 
         cdmp_service_->GetCommandService()->RegisterCommandHandler(
-            std::to_underlying(command_code), [callback](uint8_t _, std::span<const uint8_t> data) {
+            std::to_underlying(command_code), [callback](uint8_t /*device_id*/, std::span<const uint8_t> data) {
                 const bool result = callback(data.empty() ? std::nullopt : std::optional<TRequest>(data));
 
                 return CdmpCommandResult{ result ? CdmpResultCode::SUCCESS : CdmpResultCode::FAILURE, {} };
@@ -177,7 +181,7 @@ public:
             return;
 
         cdmp_service_->GetCommandService()->RegisterCommandHandler(
-            std::to_underlying(command_code), [callback](uint8_t _, std::span<const uint8_t> data) {
+            std::to_underlying(command_code), [callback](uint8_t /*device_id*/, std::span<const uint8_t> data) {
                 auto result = callback(data.empty() ? std::nullopt : std::optional<TRequest>(data));
 
                 if(result.has_value()) {
@@ -209,7 +213,7 @@ public:
 
         SendCommand(
             command,
-            [callback](uint8_t _, const CdmpResultCode result_code, std::span<const uint8_t> data) {
+            [callback](uint8_t /*device_id*/, const CdmpResultCode result_code, std::span<const uint8_t> data) {
                 callback(
                     result_code == CdmpResultCode::SUCCESS,
                     result_code == CdmpResultCode::SUCCESS ? std::optional<TResponse>(data) : std::nullopt

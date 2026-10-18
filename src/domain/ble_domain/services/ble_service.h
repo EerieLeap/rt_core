@@ -23,7 +23,7 @@ using eerie_leap::subsys::smp::ble::SmpBleRouter;
 /** @brief Advertising, pairing and the access point: SMP routed to this and other units, and live data. */
 class BleService {
 private:
-    static std::unique_ptr<BleService> instance_;
+    static std::unique_ptr<BleService> instance;
 
     std::shared_ptr<SensorsProcessingService> sensors_processing_service_;
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
@@ -35,12 +35,12 @@ private:
     // Whether pairing paused the processing service; both pairing handlers run on the system work queue.
     bool is_processing_paused_ = false;
 
-    static bool is_initialized_;
+    static bool is_initialized;
 
     static std::vector<uint8_t> GetManufacturerData();
 
-    void ConfigureAdvertisingData() const;
-    void ConfigureScanResponseData() const;
+    static void ConfigureAdvertisingData();
+    static void ConfigureScanResponseData();
     void PairingStarted();
     void PairingFinished();
     bool InitializeAccessPoint();
@@ -52,7 +52,12 @@ private:
     );
 
 public:
+    ~BleService() = default;
+
+    BleService(const BleService&) = delete;
     BleService& operator=(const BleService&) = delete;
+    BleService(BleService&&) = delete;
+    BleService& operator=(BleService&&) = delete;
 
     /**
      * @param sensor_readings_frame Source of the live values.

@@ -20,12 +20,12 @@ pmr_unique_ptr<CborLoggingConfig> LoggingConfigurationCborParser::Serialize(cons
     logging_config->max_log_size_mb = configuration.max_log_size_mb;
 
     for(const auto& [sensor_id, sensor_configuration] : configuration.sensor_configurations) {
-        CborSensorLoggingConfig sensor_logging_config{ .sensor_id_hash = sensor_id,
+        const CborSensorLoggingConfig sensor_logging_config{ .sensor_id_hash = sensor_id,
             .is_enabled = sensor_configuration.is_enabled,
             .log_raw_value = sensor_configuration.log_raw_value,
             .log_only_new_data = sensor_configuration.log_only_new_data };
 
-        logging_config->CborSensorLoggingConfig_m.push_back(std::move(sensor_logging_config));
+        logging_config->CborSensorLoggingConfig_m.push_back(sensor_logging_config);
     }
 
     return logging_config;
@@ -43,7 +43,7 @@ LoggingConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const
             .log_only_new_data = sensor_logging_config.log_only_new_data };
 
         configuration->sensor_configurations.emplace(
-            sensor_logging_config.sensor_id_hash, std::move(sensor_logging_configuration)
+            sensor_logging_config.sensor_id_hash, sensor_logging_configuration
         );
     }
 

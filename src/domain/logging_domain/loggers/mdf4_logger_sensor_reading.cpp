@@ -70,13 +70,14 @@ size_t SkipDigits(std::string_view text, size_t pos) {
 }
 
 // Nothing when the expression holds anything outside the formula subset.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one scanner over the formula subset, one branch per token class; splitting it would pass the cursor and token list through every part.
 std::optional<std::vector<FormulaToken>> TokenizeFormula(std::string_view expression) {
     std::vector<FormulaToken> tokens;
 
     for(size_t pos = SkipSpaces(expression, 0); pos < expression.size(); pos = SkipSpaces(expression, pos)) {
         const size_t begin = pos;
         const char c = expression[pos];
-        FormulaToken::Kind kind;
+        auto kind = FormulaToken::Kind::Input; // Every branch below sets it or returns.
 
         if(IsIdentifierStart(c)) {
             while(pos < expression.size() && IsIdentifierChar(expression[pos]))
@@ -249,13 +250,13 @@ std::optional<std::string> Mdf4LoggerSensorReading::ToMdfFormula(std::string_vie
         const auto& exponent = tokens->at(i + 2);
         const int factor_count = exponent.text[0] - '0';
 
-        formula += "(";
+        formula += '(';
         for(int factor = 0; factor < factor_count; factor++) {
             if(factor > 0)
                 formula += " * ";
             formula += token_text(token);
         }
-        formula += ")";
+        formula += ')';
 
         pos = exponent.begin + exponent.text.size();
         i += 2;

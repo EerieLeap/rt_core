@@ -34,7 +34,7 @@ private:
     // The controller sets and clears the handler while a store on another thread may be calling it.
     // A store copies the pointer under the lock and calls it outside, so a cleared handler finishes
     // the call it started on its own reference, and a call allocates nothing.
-    k_mutex handler_mutex_;
+    k_mutex handler_mutex_{};
     std::shared_ptr<const ConfigurationUpdatedHandler> configuration_updated_handler_;
 
     // Logs what the handler throws: the configuration is stored by then.

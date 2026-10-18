@@ -60,8 +60,8 @@ concept NetworkStateDescriptor =
     && std::semiregular<typename T::State>
     && std::equality_comparable<typename T::State>
     && requires(
-        const typename T::Channel::EventMessage& event,
-        const typename T::State& state,
+        const T::Channel::EventMessage& event,
+        const T::State& state,
         std::span<const typename T::State> states
     ) {
            { T::Channel::GetInstance() } -> std::same_as<typename T::Channel&>;

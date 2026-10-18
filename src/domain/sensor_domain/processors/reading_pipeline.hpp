@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <vector>
@@ -80,8 +81,7 @@ public:
             processor->Process(runtime, reading);
         }
 
-        if(reading.status < ReadingStatus::PROCESSED)
-            reading.status = ReadingStatus::PROCESSED;
+        reading.status = std::max(reading.status, ReadingStatus::PROCESSED);
     }
 
     // Runs the stages, conditions an indicator, commits the reading, and evaluates the sensors

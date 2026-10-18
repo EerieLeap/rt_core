@@ -30,9 +30,10 @@ void SensorsOrderResolver::AddSensor(const std::shared_ptr<Sensor>& sensor) {
         dependencies_.try_emplace(sensor->id, std::unordered_set<std::string>());
     }
 
-    sensors_.try_emplace(sensor->id, std::move(sensor));
+    sensors_.try_emplace(sensor->id, sensor);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): depth-first search of the sensor dependency graph; the depth is at most the number of sensors.
 bool SensorsOrderResolver::HasCyclicDependency(
     std::string_view sensor_id,
     std::unordered_set<std::string_view>& visited,
@@ -63,6 +64,7 @@ bool SensorsOrderResolver::HasCyclicDependency(
     return false;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): depth-first walk of the sensor dependency graph, which GetProcessingOrder() has found acyclic; the depth is at most the number of sensors.
 void SensorsOrderResolver::ResolveDependencies(
     std::string_view sensor_id,
     std::unordered_set<std::string_view>& visited,
@@ -85,11 +87,8 @@ std::vector<std::shared_ptr<Sensor>> SensorsOrderResolver::GetProcessingOrder() 
     std::unordered_set<std::string_view> temp;
 
     for(const auto& [sensor_id, _] : sensors_) {
-        if(!visited.contains(sensor_id)) {
-            if(HasCyclicDependency(sensor_id, visited, temp)) {
-                throw std::runtime_error("Cyclic dependency detected in sensor " + std::string(sensor_id) + ".");
-            }
-        }
+        if(!visited.contains(sensor_id) && HasCyclicDependency(sensor_id, visited, temp))
+            throw std::runtime_error("Cyclic dependency detected in sensor " + std::string(sensor_id) + ".");
     }
 
     visited.clear();

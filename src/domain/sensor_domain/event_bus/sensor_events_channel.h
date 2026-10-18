@@ -13,10 +13,10 @@ using eerie_leap::subsys::event_bus::EventChannel;
 
 class SensorEventsChannel : public EventChannel<SensorEventType, SensorPayloadType> {
 private:
-    static constexpr size_t k_max_queued_events = 128;
+    static constexpr size_t K_MAX_QUEUED_EVENTS = 128;
 
     SensorEventsChannel() :
-        EventChannel("sensor_events", k_max_queued_events) {}
+        EventChannel("sensor_events", K_MAX_QUEUED_EVENTS) {}
 
 public:
     static SensorEventsChannel& GetInstance() {

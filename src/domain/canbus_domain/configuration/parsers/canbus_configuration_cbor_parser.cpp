@@ -148,12 +148,13 @@ CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const 
             channel_configuration.message_configurations.push_back(std::move(message_configuration));
         }
 
-        const bool res = configuration->channel_configurations
-                             .emplace(channel_configuration.bus_channel, std::move(channel_configuration))
-                             .second;
+        // Read before the move: the duplicate message names the channel, which the moved-from value may not.
+        const auto bus_channel = channel_configuration.bus_channel;
+        const bool res =
+            configuration->channel_configurations.emplace(bus_channel, std::move(channel_configuration)).second;
 
         if(!res)
-            throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(channel_configuration.bus_channel));
+            throw std::runtime_error("Duplicate CAN bus channel " + std::to_string(bus_channel));
     }
 
     // Narrowing would turn 256 into channel 0.

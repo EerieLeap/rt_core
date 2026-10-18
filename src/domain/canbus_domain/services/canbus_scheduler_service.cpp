@@ -1,3 +1,6 @@
+#include <array>
+#include <cstdio>
+
 #include "domain/canbus_domain/processors/script_processor.h"
 #include "domain/script_domain/utilities/global_fuctions_registry.h"
 
@@ -29,7 +32,7 @@ CanbusSchedulerService::CanbusSchedulerService(
 
 bool CanbusSchedulerService::DoInitialize() {
     work_queue_thread_ = std::make_unique<WorkQueueThread>(
-        "canbus_scheduler_service", thread_stack_size_, thread_priority_
+        "canbus_scheduler_service", THREAD_STACK_SIZE, THREAD_PRIORITY
     );
 
     return work_queue_thread_->Initialize();
@@ -55,10 +58,15 @@ WorkQueueTaskResult CanbusSchedulerService::ProcessCanbusWorkTask(CanbusTask* ta
         if(!can_frame_data.empty())
             (*task->canbus)->SendFrame(task->frame_id, can_frame_data);
 
-        LOG_HEXDUMP_DBG(
-            can_frame_data.data(), static_cast<uint32_t>(can_frame_data.size()),
-            ("Can frame " + std::to_string(task->message_configuration->frame_id)).c_str()
+#if defined(CONFIG_LOG) && CONFIG_LOG_DEFAULT_LEVEL >= LOG_LEVEL_DBG
+        // The log macro keeps the pointer past its first statement, so the text outlives the call. Built only
+        // when debug logging is compiled in: this runs for every frame sent.
+        std::array<char, 32> title{};
+        snprintf(
+            title.data(), title.size(), "Can frame %u", static_cast<unsigned>(task->message_configuration->frame_id)
         );
+        LOG_HEXDUMP_DBG(can_frame_data.data(), static_cast<uint32_t>(can_frame_data.size()), title.data());
+#endif
     } catch(const std::exception& e) {
         LOG_DBG("Error processing Frame ID: %d, Error: %s", task->message_configuration->frame_id, e.what());
     }

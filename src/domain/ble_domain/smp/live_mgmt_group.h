@@ -54,6 +54,9 @@ private:
 public:
     explicit LiveMgmtGroup(std::shared_ptr<LiveDataService> live_data_service);
     ~LiveMgmtGroup();
+
+    LiveMgmtGroup(const LiveMgmtGroup&) = delete;
+    LiveMgmtGroup& operator=(const LiveMgmtGroup&) = delete;
 };
 
 } // namespace eerie_leap::domain::ble_domain::smp

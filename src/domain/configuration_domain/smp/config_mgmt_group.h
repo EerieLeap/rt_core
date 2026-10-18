@@ -70,16 +70,20 @@ private:
         SNAPSHOT,
     };
 
+    // Types have no zero value; the placeholder is never read, because the readers of a session or
+    // snapshot check its token or is_valid first, and a Job names its type when it is made.
+    static constexpr ConfigurationService::Type NO_TYPE = ConfigurationService::Type::System;
+
     struct Job {
-        JobKind kind;
-        ConfigurationService::Type type;
+        JobKind kind = JobKind::STAGE;
+        ConfigurationService::Type type = NO_TYPE;
         uint32_t size = 0;
         uint32_t crc = 0;
         Error result = Error::UNKNOWN;
     };
 
     struct WriteSession {
-        ConfigurationService::Type type{};
+        ConfigurationService::Type type = NO_TYPE;
         uint32_t token = 0; // 0 while no session is open
         uint32_t crc = 0;
         size_t received = 0;
@@ -88,7 +92,7 @@ private:
     };
 
     struct ReadSnapshot {
-        ConfigurationService::Type type{};
+        ConfigurationService::Type type = NO_TYPE;
         bool is_valid = false;
         uint32_t crc = 0;
         std::pmr::vector<uint8_t> data;
@@ -118,7 +122,7 @@ private:
     int HandleWrite(smp_streamer* ctxt);
 
     /** @param message Sent as `msg`, unless empty. */
-    int Fail(smp_streamer* ctxt, Error error, std::string_view message = {});
+    static int Fail(smp_streamer* ctxt, Error error, std::string_view message = {});
     /** @param token The session's token, which answers its first chunk; 0 leaves it out. */
     static int RespondToWrite(smp_streamer* ctxt, size_t received, uint32_t token);
     bool IsKnownType(uint32_t type) const;
@@ -144,6 +148,9 @@ public:
         std::shared_ptr<WorkQueueThread> config_work_queue_thread
     );
     ~ConfigMgmtGroup();
+
+    ConfigMgmtGroup(const ConfigMgmtGroup&) = delete;
+    ConfigMgmtGroup& operator=(const ConfigMgmtGroup&) = delete;
 
     /** @brief Creates the work queue tasks; needs a running work queue. Call before Register(). */
     bool Initialize();

@@ -187,7 +187,7 @@ void CanbusConfigurationValidator::ValidateMessageScriptPath(
 }
 
 void CanbusConfigurationValidator::ValidateMessageName(const CanChannelConfiguration& channel_configuration) {
-    static constexpr std::string_view valid_symbols = "_";
+    static constexpr std::string_view VALID_SYMBOLS = "_";
 
     for(const auto& message_configuration : channel_configuration.message_configurations) {
         if(message_configuration->name.empty())
@@ -201,14 +201,14 @@ void CanbusConfigurationValidator::ValidateMessageName(const CanChannelConfigura
                 "Name cannot be longer than 32 characters."
             );
 
-        if(!std::isalpha(message_configuration->name[0]) && !valid_symbols.contains(message_configuration->name[0]))
+        if(std::isalpha(message_configuration->name[0]) == 0 && !VALID_SYMBOLS.contains(message_configuration->name[0]))
             InvalidCanMessageConfiguration(
                 channel_configuration.bus_channel, message_configuration->frame_id,
                 "Name must start with a letter or an underscore."
             );
 
         if(!std::ranges::all_of(message_configuration->name, [](char c) {
-               return std::isalnum(c) || valid_symbols.contains(c);
+               return std::isalnum(c) || VALID_SYMBOLS.contains(c);
            })) {
 
             InvalidCanMessageConfiguration(
@@ -327,7 +327,7 @@ void CanbusConfigurationValidator::ValidateSignalName(
     const CanMessageConfiguration& message_configuration,
     uint8_t bus_channel
 ) {
-    static constexpr std::string_view valid_symbols = "_";
+    static constexpr std::string_view VALID_SYMBOLS = "_";
     std::unordered_set<std::string_view> signal_names;
 
     for(const auto& signal : message_configuration.signal_configurations) {
@@ -349,14 +349,14 @@ void CanbusConfigurationValidator::ValidateSignalName(
                 bus_channel, message_configuration.frame_id, signal.name, "Name cannot be longer than 32 characters."
             );
 
-        if(!std::isalpha(signal.name[0]) && !valid_symbols.contains(signal.name[0]))
+        if(std::isalpha(signal.name[0]) == 0 && !VALID_SYMBOLS.contains(signal.name[0]))
             InvalidCanSignalConfiguration(
                 bus_channel, message_configuration.frame_id, signal.name,
                 "Name must start with a letter or an underscore."
             );
 
         if(!std::ranges::all_of(signal.name, [](char c) {
-               return std::isalnum(c) || valid_symbols.contains(c);
+               return std::isalnum(c) || VALID_SYMBOLS.contains(c);
            })) {
 
             InvalidCanSignalConfiguration(

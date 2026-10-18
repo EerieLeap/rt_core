@@ -25,7 +25,7 @@ LiveDataService::LiveDataService(
 LiveDataService::~LiveDataService() {
     Unsubscribe();
 
-    k_work_sync sync;
+    k_work_sync sync{};
     k_work_cancel_delayable_sync(&sample_work_.work, &sync);
 }
 

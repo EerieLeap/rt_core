@@ -50,7 +50,7 @@ SensorReading SensorReaderUserValueType::Read(const TickContext& tick) {
         throw std::runtime_error("Failed to call create_sensor_value function");
     }
 
-    if(!lua_isnumber(state, -1)) {
+    if(lua_isnumber(state, -1) == 0) {
         lua_pop(state, 1);
         script.host->CollectStep();
         throw std::runtime_error("create_sensor_value function didn't return a number.");

@@ -6,7 +6,6 @@
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/byteorder.h>
 
 #include "domain/system_domain/models/product_info.h"
 #include "subsys/bluetooth/ble.h"
@@ -22,8 +21,8 @@ using namespace eerie_leap::domain::system_domain::models;
 
 LOG_MODULE_REGISTER(ble_service_logger);
 
-std::unique_ptr<BleService> BleService::instance_;
-bool BleService::is_initialized_ = false;
+std::unique_ptr<BleService> BleService::instance;
+bool BleService::is_initialized = false;
 
 BleService::BleService(
     std::shared_ptr<SensorsProcessingService> sensors_processing_service,
@@ -40,22 +39,22 @@ BleService& BleService::Create(
     std::shared_ptr<ISmpForwarder> smp_forwarder
 ) {
 
-    instance_.reset(new BleService(
+    instance.reset(new BleService(
         std::move(sensors_processing_service), std::move(sensor_readings_frame), std::move(smp_forwarder)
     ));
 
-    return *instance_;
+    return *instance;
 }
 
 BleService& BleService::GetInstance() {
-    if(!instance_)
+    if(!instance)
         throw std::runtime_error("BleService instance not created. Call Create() first.");
 
-    return *instance_;
+    return *instance;
 }
 
 bool BleService::Initialize() {
-    if(is_initialized_)
+    if(is_initialized)
         return true;
 
     if(!Ble::Initialize()) {
@@ -63,7 +62,7 @@ bool BleService::Initialize() {
         return false;
     }
 
-    is_initialized_ = true;
+    is_initialized = true;
 
     ConfigureAdvertisingData();
     ConfigureScanResponseData();
@@ -126,13 +125,13 @@ bool BleService::InitializeAccessPoint() {
 }
 
 bool BleService::Start() const {
-    if(!is_initialized_)
+    if(!is_initialized)
         return false;
 
     return Ble::Start();
 }
 
-void BleService::ConfigureAdvertisingData() const {
+void BleService::ConfigureAdvertisingData() {
     BtDataBuilder ad_builder;
     // Flags: general discoverable, no BR/EDR
     const std::vector<uint8_t> flags = { BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR };
@@ -150,7 +149,7 @@ void BleService::ConfigureAdvertisingData() const {
     Ble::UpdateAdvertisingData(ad_builder.Build());
 }
 
-void BleService::ConfigureScanResponseData() const {
+void BleService::ConfigureScanResponseData() {
     BtDataBuilder sd_builder;
     // Full device name
     sd_builder.Add(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1);
@@ -182,31 +181,25 @@ std::vector<uint8_t> BleService::GetManufacturerData() {
     std::vector<uint8_t> manufacturer_data;
     manufacturer_data.reserve(7);
 
-    // Bluetooth SIG Company ID - must be first 2 bytes, little-endian
+    // All multi-byte fields are little-endian, whatever the byte order of the CPU.
+    const auto append_le16 = [&manufacturer_data](uint16_t value) {
+        manufacturer_data.push_back(static_cast<uint8_t>(value & 0xFFU));
+        manufacturer_data.push_back(static_cast<uint8_t>(value >> 8U));
+    };
+
+    // Bluetooth SIG Company ID - must be first 2 bytes
     // 0xFFFF = reserved for internal use / testing
-    constexpr uint16_t company_id = 0xFFFF;
-    const uint16_t company_id_le = sys_cpu_to_le16(company_id);
-    const auto* cid = reinterpret_cast<const uint8_t*>(&company_id_le);
-    manufacturer_data.insert(manufacturer_data.end(), cid, cid + sizeof(company_id_le));
+    constexpr uint16_t COMPANY_ID = 0xFFFF;
+    append_le16(COMPANY_ID);
 
-    // Product ID (2 bytes, little-endian)
-    constexpr uint16_t product_id_le = sys_cpu_to_le16(ProductInfo::product_id);
-    const auto* product_id_ptr = reinterpret_cast<const uint8_t*>(&product_id_le);
-    manufacturer_data.insert(manufacturer_data.end(), product_id_ptr, product_id_ptr + sizeof(product_id_le));
+    // Product ID (2 bytes)
+    append_le16(ProductInfo::product_id);
 
-    // Product features (2 bytes, little-endian)
-    constexpr uint16_t product_features_le = sys_cpu_to_le16(ProductInfo::features);
-    const auto* product_features_ptr = reinterpret_cast<const uint8_t*>(&product_features_le);
-    manufacturer_data.insert(
-        manufacturer_data.end(), product_features_ptr, product_features_ptr + sizeof(product_features_le)
-    );
+    // Product features (2 bytes)
+    append_le16(ProductInfo::features);
 
     // Product revision (1 byte)
-    constexpr uint8_t product_revision_le = ProductInfo::revision;
-    const auto* product_revision_ptr = &product_revision_le;
-    manufacturer_data.insert(
-        manufacturer_data.end(), product_revision_ptr, product_revision_ptr + sizeof(product_revision_le)
-    );
+    manufacturer_data.push_back(ProductInfo::revision);
 
     return manufacturer_data;
 }

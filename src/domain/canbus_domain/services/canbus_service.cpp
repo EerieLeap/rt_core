@@ -221,7 +221,7 @@ void CanbusService::BitrateUpdated(uint8_t bus_channel, uint32_t bitrate) const 
 
 int CanbusService::RegisterConfigurationResetHandler(const CanbusServiceUpdatedHandler& handler) {
     const int handler_id = configuration_reset_next_handler_id_++;
-    configuration_reset_handlers_.try_emplace(handler_id, std::move(handler));
+    configuration_reset_handlers_.try_emplace(handler_id, handler);
 
     return handler_id;
 }
@@ -232,7 +232,7 @@ bool CanbusService::UnregisterConfigurationResetHandler(int handler_id) {
 
 int CanbusService::RegisterConfigurationUpdatedHandler(const CanbusServiceUpdatedHandler& handler) {
     const int handler_id = configuration_updated_next_handler_id_++;
-    configuration_updated_handlers_.try_emplace(handler_id, std::move(handler));
+    configuration_updated_handlers_.try_emplace(handler_id, handler);
 
     return handler_id;
 }

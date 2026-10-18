@@ -29,7 +29,7 @@ private:
     std::shared_ptr<TConfiguration> configuration_;
     // Get() runs on any thread (CDMP, shell, the log writer's start) while an apply replaces the
     // pointer on the configuration work queue; copying a shared_ptr that is being assigned is a race.
-    mutable k_mutex configuration_mutex_;
+    mutable k_mutex configuration_mutex_{};
 
     // Set while the stored configuration could not be applied and an unsaved default stands in for it.
     bool is_stored_configuration_rejected_ = false;
@@ -38,7 +38,7 @@ private:
 
     // Set from any thread; a store copies it under the lock and calls it outside, so a handler cleared
     // during its call finishes that call, and a call allocates nothing.
-    mutable k_mutex stored_handler_mutex_;
+    mutable k_mutex stored_handler_mutex_{};
     std::shared_ptr<const StoredHandler> stored_handler_;
 
     // Both validate; Deserialize must accept everything Serialize produces.
@@ -79,7 +79,9 @@ private:
 
     // Serializes, parses back and saves, then adopts what was parsed.
     bool Store(const TConfiguration& configuration) {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         std::shared_ptr<TConfiguration> updated_configuration;
 
@@ -104,7 +106,9 @@ private:
     // After a successful store. Logs what the handler throws: the configuration is stored by then, and
     // the store must not turn into a failure a client retries.
     void NotifyStored() {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         std::shared_ptr<const StoredHandler> handler;
         {
@@ -144,7 +148,9 @@ protected:
     // over it would destroy the user's configuration. A default is created in memory instead and
     // GetCborConfigurationInfo() reports the stored one as not applied.
     bool LoadOrCreateDefault() {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         try {
             if(Get(true) != nullptr) {
@@ -203,7 +209,9 @@ protected:
 
     // Keeps the given instance, so it is validated only once; callers must not modify it afterwards.
     bool Adopt(std::shared_ptr<TConfiguration> configuration) {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         try {
             auto cbor_config = Serialize(*configuration);
@@ -270,7 +278,9 @@ public:
     using ICborConfigurationManager::ApplyCborConfiguration;
 
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
-        LOG_MODULE_DECLARE(configuration_manager_logger);
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
         const auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
         if(cbor_config == nullptr) {

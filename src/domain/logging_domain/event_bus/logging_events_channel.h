@@ -14,10 +14,10 @@ using eerie_leap::subsys::event_bus::EventChannel;
 
 class LoggingEventsChannel : public EventChannel<LoggingEventType, LoggingPayloadType> {
 private:
-    static constexpr size_t k_max_queued_events = 8;
+    static constexpr size_t K_MAX_QUEUED_EVENTS = 8;
 
     LoggingEventsChannel() :
-        EventChannel("logging_events", k_max_queued_events) {}
+        EventChannel("logging_events", K_MAX_QUEUED_EVENTS) {}
 
 public:
     static LoggingEventsChannel& GetInstance() {

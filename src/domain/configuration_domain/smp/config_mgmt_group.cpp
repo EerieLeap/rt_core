@@ -109,7 +109,8 @@ bool ConfigMgmtGroup::Initialize() {
 }
 
 int ConfigMgmtGroup::HandleList(smp_streamer* ctxt) {
-    std::array<Type, MAX_TYPES> types{};
+    // GetRegisteredTypes() fills the first `count` entries, and only those are read.
+    std::array<Type, MAX_TYPES> types{}; // NOLINT(bugprone-invalid-enum-default-initialization): see above.
     const size_t count = configuration_service_->GetRegisteredTypes(types);
 
     zcbor_state_t* zse = ctxt->writer->zs;
@@ -203,6 +204,7 @@ int ConfigMgmtGroup::HandleRead(smp_streamer* ctxt) {
             && zcbor_uint32_put(zse, snapshot_.crc);
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor takes the byte string as char.
     const char* chunk_data = chunk > 0 ? reinterpret_cast<const char*>(snapshot_.data.data() + offset) : "";
     ok = ok && zcbor_tstr_put_lit(zse, "data") && zcbor_bstr_encode_ptr(zse, chunk_data, chunk);
 
@@ -311,7 +313,7 @@ int ConfigMgmtGroup::HandleWrite(smp_streamer* ctxt) {
             return Fail(ctxt, Error::TOO_LARGE);
         }
 
-        std::copy_n(data.value, data.len, session_.data.begin() + session_.received);
+        std::copy_n(data.value, data.len, session_.data.data() + session_.received);
         session_.received += data.len;
         session_.last_activity_ms = k_uptime_get();
 
@@ -358,10 +360,17 @@ bool ConfigMgmtGroup::IsKnownType(uint32_t type) const {
 }
 
 void ConfigMgmtGroup::OnActivity() {
+    if(!idle_task_.has_value())
+        return;
+
     idle_task_->Reschedule(K_MSEC(SESSION_TIMEOUT_MS));
 }
 
 ConfigMgmtGroup::Error ConfigMgmtGroup::RunJob(Job& job) {
+    // Initialize() has not created the tasks, or failed to.
+    if(!job_task_.has_value())
+        return Error::UNKNOWN;
+
     job_ = &job;
     job_task_->Schedule();
     k_sem_take(&job_done_, K_FOREVER);

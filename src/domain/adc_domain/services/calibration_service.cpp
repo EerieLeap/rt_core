@@ -45,7 +45,7 @@ bool CalibrationService::Initialize() {
         return true;
 
     auto work_queue_thread = std::make_unique<WorkQueueThread>(
-        "calibration_service", thread_stack_size_, thread_priority_
+        "calibration_service", THREAD_STACK_SIZE, THREAD_PRIORITY
     );
     if(!work_queue_thread->Initialize()) {
         LOG_ERR("Failed to initialize the calibration work queue.");
@@ -121,7 +121,7 @@ bool CalibrationService::Start(int channel) {
 bool CalibrationService::Stop() {
     ScopedMutex guard(job_mutex_);
 
-    if(!is_running_)
+    if(!is_running_ || !job_.has_value())
         return false;
 
     // The job reschedules itself, so it is cancelled until it is idle.

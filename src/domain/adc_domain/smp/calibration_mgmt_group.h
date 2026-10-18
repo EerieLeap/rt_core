@@ -60,6 +60,9 @@ public:
      */
     CalibrationMgmtGroup(std::shared_ptr<CalibrationService> calibration_service, int channel_count);
     ~CalibrationMgmtGroup();
+
+    CalibrationMgmtGroup(const CalibrationMgmtGroup&) = delete;
+    CalibrationMgmtGroup& operator=(const CalibrationMgmtGroup&) = delete;
 };
 
 } // namespace eerie_leap::domain::adc_domain::smp

@@ -44,7 +44,7 @@ void ScriptProcessor::Process(const SensorRuntime& runtime, SensorReading& readi
         return;
     }
 
-    if(lua_isnumber(state, -1))
+    if(lua_isnumber(state, -1) != 0)
         reading.value = static_cast<float>(lua_tonumber(state, -1));
 
     lua_pop(state, 1);

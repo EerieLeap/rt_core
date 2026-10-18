@@ -35,9 +35,9 @@ template<NetworkStateDescriptor TDescriptor>
 class NetworkStateImporter {
 public:
     using Descriptor = TDescriptor;
-    using State = typename TDescriptor::State;
-    using Channel = typename TDescriptor::Channel;
-    using EventMessage = typename Channel::EventMessage;
+    using State = TDescriptor::State;
+    using Channel = TDescriptor::Channel;
+    using EventMessage = Channel::EventMessage;
 
 private:
     std::shared_ptr<INetworkStateTransport> transport_;

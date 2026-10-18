@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <exception>
 #include <stdexcept>
 
@@ -68,12 +69,10 @@ bool SensorsProcessingService::DoInitialize() {
         return false;
     }
 
-    for(const auto& processing_service : processing_services_) {
-        if(!processing_service->Initialize())
-            return false;
-    }
-
-    return true;
+    // Stops at the first service that fails to initialize.
+    return std::ranges::all_of(processing_services_, [](const auto& processing_service) {
+        return processing_service->Initialize();
+    });
 }
 
 bool SensorsProcessingService::DoStart() {

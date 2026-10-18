@@ -17,7 +17,6 @@
 
 namespace eerie_leap::domain::logging_domain::control {
 
-using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
 using eerie_leap::subsys::event_bus::SubscribeEventBinding;
 

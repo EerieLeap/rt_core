@@ -37,9 +37,9 @@ template<NetworkStateDescriptor TDescriptor>
 class NetworkStateExporter {
 public:
     using Descriptor = TDescriptor;
-    using State = typename TDescriptor::State;
-    using Channel = typename TDescriptor::Channel;
-    using EventMessage = typename Channel::EventMessage;
+    using State = TDescriptor::State;
+    using Channel = TDescriptor::Channel;
+    using EventMessage = Channel::EventMessage;
 
 private:
     // Shared with the subscription, whose handler a dispatch that began before the exporter

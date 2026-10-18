@@ -99,6 +99,9 @@ public:
     );
     ~FilesMgmtGroup();
 
+    FilesMgmtGroup(const FilesMgmtGroup&) = delete;
+    FilesMgmtGroup& operator=(const FilesMgmtGroup&) = delete;
+
     /** @brief Creates the work queue task; needs a running work queue. Call before Register(). */
     bool Initialize();
 };

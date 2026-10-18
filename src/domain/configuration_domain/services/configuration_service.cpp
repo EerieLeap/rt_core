@@ -15,7 +15,7 @@ using eerie_leap::subsys::threading::ScopedMutex;
 // call finishes that call, and a call allocates nothing.
 class ConfigurationService::StoredHandlerSlot {
 private:
-    k_mutex mutex_;
+    k_mutex mutex_{};
     std::shared_ptr<const ConfigurationStoredHandler> handler_;
 
 public:
@@ -115,7 +115,7 @@ size_t ConfigurationService::GetRegisteredTypes(std::span<Type> types) const {
         types[count++] = type;
     }
 
-    std::sort(types.begin(), types.begin() + count);
+    std::ranges::sort(types.first(count));
 
     return count;
 }

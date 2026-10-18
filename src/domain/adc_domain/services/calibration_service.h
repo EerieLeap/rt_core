@@ -43,8 +43,8 @@ public:
     };
 
 private:
-    static constexpr int thread_stack_size_ = 4096;
-    static constexpr int thread_priority_ = 6;
+    static constexpr int THREAD_STACK_SIZE = 4096;
+    static constexpr int THREAD_PRIORITY = 6;
 
     std::shared_ptr<ITimeService> time_service_;
     std::shared_ptr<IAdcManager> adc_manager_;
@@ -57,7 +57,7 @@ private:
 
     // Serializes Start(), Stop() and SetServiceToPause(); the job never takes it, so Stop() can
     // wait for the job.
-    k_mutex job_mutex_;
+    k_mutex job_mutex_{};
     // Written under job_mutex_, read without it so a status query never waits for a sample.
     std::atomic<bool> is_running_ = false;
 
@@ -67,7 +67,7 @@ private:
     AdcSample sample_;
     AdcSampleRequest request_;
 
-    mutable k_mutex result_mutex_;
+    mutable k_mutex result_mutex_{};
     std::optional<Result> latest_;
     // The channel of the running or last job; latest_ always belongs to it.
     std::optional<int> job_channel_;

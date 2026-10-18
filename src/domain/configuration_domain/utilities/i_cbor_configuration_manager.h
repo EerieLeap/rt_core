@@ -36,6 +36,7 @@ public:
     // For ConfigurationService::RegisterCborConfigurationManager(); nullptr clears it, and a manager
     // reports to the last service that set it. Callable from any thread. A manager that cannot report
     // ignores it, so only a manager registered with the unit's ConfigurationService reports.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take the handler by value to keep it.
     virtual void SetStoredHandler(StoredHandler handler) {
         (void)handler;
     }
@@ -56,7 +57,7 @@ protected:
         while(length > 0 && length < message.size() && (static_cast<uint8_t>(message[length]) & 0xC0) == 0x80)
             length--;
 
-        std::copy_n(message.data(), length, reason.data());
+        std::ranges::copy(message.substr(0, length), reason.begin());
         reason[length] = '\0';
     }
 };

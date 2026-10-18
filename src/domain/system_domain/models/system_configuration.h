@@ -25,7 +25,10 @@ struct SystemConfiguration {
     SystemConfiguration& operator=(const SystemConfiguration&) = delete;
 
     SystemConfiguration(SystemConfiguration&&) noexcept = default;
+    SystemConfiguration& operator=(SystemConfiguration&&) = delete;
+    ~SystemConfiguration() = default;
 
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved): only numbers are copied, and a number has nothing to move.
     SystemConfiguration(SystemConfiguration&& other, [[maybe_unused]] allocator_type alloc) :
         device_id(other.device_id),
         build_number(other.build_number) {}

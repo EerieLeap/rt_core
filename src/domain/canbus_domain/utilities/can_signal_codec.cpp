@@ -24,7 +24,7 @@ uint64_t CanSignalCodec::SignalMask(uint32_t size_bits) {
 }
 
 template<typename TBitHandler>
-void CanSignalCodec::ForEachSignalBit(const CanSignalConfiguration& signal, TBitHandler&& handler) {
+void CanSignalCodec::ForEachSignalBit(const CanSignalConfiguration& signal, const TBitHandler& handler) {
     if(signal.byte_order == CanSignalByteOrder::LITTLE_ENDIAN_INTEL) {
         for(uint32_t i = 0; i < signal.size_bits; ++i)
             handler(signal.start_bit + i, i);
@@ -66,7 +66,7 @@ std::optional<float> CanSignalCodec::Decode(const CanSignalConfiguration& signal
     double physical = 0.0;
     if(signal.is_signed) {
         const uint64_t sign_mask = 1ULL << (signal.size_bits - 1);
-        if(raw & sign_mask)
+        if((raw & sign_mask) != 0)
             raw |= ~SignalMask(signal.size_bits);
 
         physical = static_cast<double>(static_cast<int64_t>(raw));

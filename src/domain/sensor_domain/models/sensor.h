@@ -30,8 +30,9 @@ struct Sensor {
         configuration(std::allocator_arg, alloc) {}
 
     Sensor(const Sensor&) = delete;
-    Sensor& operator=(const Sensor&) noexcept = default;
-    Sensor& operator=(Sensor&&) noexcept = default;
+    // Not assignable: the configuration holds an allocator, which cannot be assigned.
+    Sensor& operator=(const Sensor&) = delete;
+    Sensor& operator=(Sensor&&) = delete;
     Sensor(Sensor&&) noexcept = default;
     ~Sensor() = default;
 

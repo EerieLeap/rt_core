@@ -180,7 +180,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
 
     SensorsOrderResolver order_resolver;
 
-    for(auto& sensor : stored_sensors) {
+    for(const auto& sensor : stored_sensors) {
         auto& configuration = sensor->configuration;
 
         // Interpolators binary search the table, and an imported one may be stored unordered. Its
@@ -192,7 +192,7 @@ std::vector<std::shared_ptr<Sensor>> SensorsCborParser::Deserialize(
         // The validator has parsed the text, so this does not throw.
         configuration.UnwrapConnectionString();
 
-        order_resolver.AddSensor(std::move(sensor));
+        order_resolver.AddSensor(sensor);
     }
 
     // Refuses a dependency cycle.

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -55,29 +56,29 @@ private:
         ReadingError error = ReadingError::NONE;
         ReadingSource source = ReadingSource::NONE;
 
-        static constexpr uint8_t kHasValue = 1U << 0;
-        static constexpr uint8_t kHasRawValue = 1U << 1;
-        static constexpr uint8_t kHasVoltage = 1U << 2;
-        static constexpr uint8_t kHasTimestamp = 1U << 3;
+        static constexpr uint8_t K_HAS_VALUE = 1U << 0;
+        static constexpr uint8_t K_HAS_RAW_VALUE = 1U << 1;
+        static constexpr uint8_t K_HAS_VOLTAGE = 1U << 2;
+        static constexpr uint8_t K_HAS_TIMESTAMP = 1U << 3;
 
         static Record Pack(const SensorReading& reading) {
             Record record;
 
             if(reading.value.has_value()) {
                 record.value = *reading.value;
-                record.flags |= kHasValue;
+                record.flags |= K_HAS_VALUE;
             }
             if(reading.raw_value.has_value()) {
                 record.raw_value = *reading.raw_value;
-                record.flags |= kHasRawValue;
+                record.flags |= K_HAS_RAW_VALUE;
             }
             if(reading.voltage.has_value()) {
                 record.voltage = *reading.voltage;
-                record.flags |= kHasVoltage;
+                record.flags |= K_HAS_VOLTAGE;
             }
             if(reading.timestamp.has_value()) {
                 record.timestamp = reading.timestamp->time_since_epoch().count();
-                record.flags |= kHasTimestamp;
+                record.flags |= K_HAS_TIMESTAMP;
             }
 
             record.status = reading.status;
@@ -90,13 +91,13 @@ private:
         SensorReading Unpack(const Sensor* sensor) const {
             SensorReading reading(sensor);
 
-            if(flags & kHasValue)
+            if((flags & K_HAS_VALUE) != 0)
                 reading.value = value;
-            if(flags & kHasRawValue)
+            if((flags & K_HAS_RAW_VALUE) != 0)
                 reading.raw_value = raw_value;
-            if(flags & kHasVoltage)
+            if((flags & K_HAS_VOLTAGE) != 0)
                 reading.voltage = voltage;
-            if(flags & kHasTimestamp) {
+            if((flags & K_HAS_TIMESTAMP) != 0) {
                 reading.timestamp = std::chrono::system_clock::time_point(
                     std::chrono::system_clock::duration(timestamp)
                 );
@@ -146,9 +147,9 @@ private:
     uint32_t raw_can_dropped_ = 0;
 
     // Holds across the record copies; nothing allocates while it is held after Configure().
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
 
-    static constexpr float kNoValue = std::numeric_limits<float>::quiet_NaN();
+    static constexpr float K_NO_VALUE = std::numeric_limits<float>::quiet_NaN();
 
     static uint32_t GetSensorIdHash(std::string_view sensor_id) {
         return StringHelpers::GetHash(sensor_id);
@@ -159,11 +160,7 @@ private:
     }
 
     std::optional<SensorSlot> FindSlotLocked(uint32_t sensor_id_hash) const {
-        const auto it = std::lower_bound(
-            index_.begin(), index_.end(), sensor_id_hash, [](const IndexEntry& entry, uint32_t hash) {
-                return entry.sensor_id_hash < hash;
-            }
-        );
+        const auto it = std::ranges::lower_bound(index_, sensor_id_hash, std::less<>{}, &IndexEntry::sensor_id_hash);
 
         if(it == index_.end() || it->sensor_id_hash != sensor_id_hash)
             return std::nullopt;
@@ -184,7 +181,7 @@ private:
             slot.is_updated = false;
         }
 
-        std::ranges::fill(values_, kNoValue);
+        std::ranges::fill(values_, K_NO_VALUE);
 
         for(auto& can_frame : can_frames_)
             can_frame = CanFrame{};
@@ -216,6 +213,8 @@ public:
         k_mutex_init(&lock_);
     }
 
+    ~SensorReadingsFrame() = default;
+
     SensorReadingsFrame(const SensorReadingsFrame&) = delete;
     SensorReadingsFrame(SensorReadingsFrame&&) = delete;
     SensorReadingsFrame& operator=(const SensorReadingsFrame&) = delete;
@@ -235,7 +234,7 @@ public:
 
         slots_.assign(count, Slot{});
         sensors_.resize(count);
-        values_.assign(count, kNoValue);
+        values_.assign(count, K_NO_VALUE);
         index_.resize(count);
 
         size_t can_frame_count = 0;
@@ -309,12 +308,9 @@ public:
     [[nodiscard]] bool AreValuesAvailable(std::span<const SensorSlot> slots) const {
         ScopedMutex guard(lock_);
 
-        for(const auto slot : slots) {
-            if(!IsValidLocked(slot) || std::isnan(values_[slot.index]))
-                return false;
-        }
-
-        return true;
+        return std::ranges::all_of(slots, [this](SensorSlot slot) {
+            return IsValidLocked(slot) && !std::isnan(values_[slot.index]);
+        });
     }
 
     /**
@@ -375,11 +371,11 @@ public:
             return false;
 
         slot.latest.value = value;
-        slot.latest.flags |= Record::kHasValue;
+        slot.latest.flags |= Record::K_HAS_VALUE;
 
         if(slot.has_processed) {
             slot.processed.value = value;
-            slot.processed.flags |= Record::kHasValue;
+            slot.processed.flags |= Record::K_HAS_VALUE;
             slot.is_updated = true;
             values_[slot_index->index] = value;
         }

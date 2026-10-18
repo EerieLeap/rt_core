@@ -10,10 +10,10 @@ using eerie_leap::subsys::event_bus::EventBus;
 
 class SensorEventBus : public EventBus {
 private:
-    static constexpr int k_stack_size = 4096;
+    static constexpr int K_STACK_SIZE = 4096;
 
     SensorEventBus() :
-        EventBus("sensor_event_bus", k_stack_size) {
+        EventBus("sensor_event_bus", K_STACK_SIZE) {
         RegisterChannel(SensorEventsChannel::GetInstance());
     }
 

@@ -84,13 +84,13 @@ void SensorValidator::ValidateId(const std::vector<std::shared_ptr<Sensor>>& sen
         if(sensor_id.empty())
             InvalidSensorConfiguration(sensor_id, "Sensor ID cannot be empty.");
 
-        static constexpr std::string_view valid_symbols = "_";
+        static constexpr std::string_view VALID_SYMBOLS = "_";
 
-        if(!std::isalpha(sensor_id[0]) && !valid_symbols.contains(sensor_id[0]))
+        if(std::isalpha(sensor_id[0]) == 0 && !VALID_SYMBOLS.contains(sensor_id[0]))
             InvalidSensorConfiguration(sensor_id, "Sensor ID must start with a letter or an underscore.");
 
         if(!std::ranges::all_of(sensor_id, [](char c) {
-               return std::isalnum(c) || valid_symbols.contains(c);
+               return std::isalnum(c) || VALID_SYMBOLS.contains(c);
            })) {
 
             InvalidSensorConfiguration(sensor_id, "Sensor ID must contain only letters, digits, and underscores.");

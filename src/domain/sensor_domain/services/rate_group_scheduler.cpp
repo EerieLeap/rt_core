@@ -20,7 +20,8 @@ namespace eerie_leap::domain::sensor_domain::services {
 
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::sensor_readers;
-using eerie_leap::subsys::adc::AdcError;
+using eerie_leap::subsys::adc::
+    AdcError; // NOLINT(misc-unused-using-decls): used by the statistics build (CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS)
 using eerie_leap::subsys::threading::ScopedMutex;
 
 LOG_MODULE_DECLARE(processing_service_logger);
@@ -182,7 +183,7 @@ WorkQueueTaskResult RateGroupScheduler::ProcessTick(RateGroupScheduler* schedule
 }
 
 WorkQueueTaskResult RateGroupScheduler::Tick() {
-    if(!atomic_get(&is_running_))
+    if(atomic_get(&is_running_) == 0)
         return { .reschedule = false };
 
     const int64_t now = k_uptime_ticks();
@@ -222,7 +223,7 @@ WorkQueueTaskResult RateGroupScheduler::Tick() {
 #endif
 
     // Stop() started while the groups ran: leave nothing behind for its cancel to chase.
-    if(!atomic_get(&is_running_))
+    if(atomic_get(&is_running_) == 0)
         return { .reschedule = false };
 
     // A deadline that passed while the groups ran is clamped to the next tick by the kernel.
@@ -273,6 +274,7 @@ void RateGroupScheduler::RunGroup(RateGroup& group) {
         pipeline_->Process(runtime, reading);
 
         if(reading.HasError())
+            // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): ToString() returns string literals, which are null-terminated.
             LOG_DBG("Sensor %s: %s", runtime.GetSensor().id.c_str(), ToString(reading.error).data());
     }
 

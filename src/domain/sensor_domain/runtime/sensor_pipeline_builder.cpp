@@ -33,7 +33,7 @@ SensorPipelineBuilder::SensorPipelineBuilder(
     sd_fs_service_(std::move(sd_fs_service)),
     sensor_readings_frame_(std::move(sensor_readings_frame)) {}
 
-void SensorPipelineBuilder::BuildInterpolator(SensorRuntime& runtime) const {
+void SensorPipelineBuilder::BuildInterpolator(SensorRuntime& runtime) {
     const auto& configuration = runtime.sensor->configuration;
     if(!configuration.HasInterpolation())
         return;
@@ -156,7 +156,7 @@ void SensorPipelineBuilder::BuildScript(SensorGeneration& generation, SensorRunt
 void SensorPipelineBuilder::BuildConditioner(
     SensorRuntime& runtime,
     std::span<const IndicatorSwitchState> switch_states
-) const {
+) {
     const auto& sensor = *runtime.sensor;
     const auto& configuration = sensor.configuration;
     if(configuration.GetTraits().value_kind != SensorValueKind::INDICATOR || !configuration.HasConditioning())
@@ -192,7 +192,7 @@ void SensorPipelineBuilder::BindWrittenValue(SensorRuntime& runtime) const {
 }
 
 // Slots follow the configuration order, so a slot index is also the runtime's index.
-void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) const {
+void SensorPipelineBuilder::LinkDependents(SensorGeneration& generation) {
     auto& runtimes = generation.runtimes;
     const size_t count = runtimes.size();
 
@@ -243,7 +243,11 @@ std::shared_ptr<SensorGeneration> SensorPipelineBuilder::Build(
     for(const auto& sensor : *generation->sensors) {
         SensorRuntime runtime;
         runtime.sensor = sensor;
-        runtime.slot = sensor_readings_frame_->FindSlot(sensor->id_hash).value();
+        const auto slot = sensor_readings_frame_->FindSlot(sensor->id_hash);
+        if(!slot.has_value())
+            throw std::logic_error("Sensor " + std::string(sensor->id) + " has no slot in the readings frame.");
+
+        runtime.slot = *slot;
 
         // A disabled sensor keeps its slot, so lookups by its ID still resolve, but with NONE no
         // source reads it and nothing executable is built for it.

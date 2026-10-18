@@ -44,7 +44,7 @@ LoggingControlConfigurationCborParser::Serialize(const LoggingControlConfigurati
         else if(const auto* flag = std::get_if<bool>(&binding.selector_value))
             cbor_trigger.selector_value = *flag;
 
-        cbor_config->CborLoggingTriggerConfig_m.push_back(std::move(cbor_trigger));
+        cbor_config->CborLoggingTriggerConfig_m.push_back(cbor_trigger);
     }
 
     return cbor_config;

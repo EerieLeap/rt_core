@@ -52,8 +52,8 @@ public:
     using LoggerFactory = std::function<std::shared_ptr<ILogger<SensorReading>>()>;
 
 private:
-    static constexpr int thread_stack_size_ = CONFIG_EERIE_LEAP_LOG_WRITER_STACK_SIZE;
-    static constexpr int thread_priority_ = 8;
+    static constexpr int THREAD_STACK_SIZE = CONFIG_EERIE_LEAP_LOG_WRITER_STACK_SIZE;
+    static constexpr int THREAD_PRIORITY = 8;
     std::unique_ptr<WorkQueueThread> work_queue_thread_;
     std::optional<threading::WorkQueueTask<LogWriterTask>> work_queue_task_;
 
@@ -68,7 +68,7 @@ private:
 
     // The file the writer has open, for IsOpenFile() on other threads. Held for a copy or a compare
     // of the path, never across file I/O.
-    mutable k_mutex open_file_mutex_;
+    mutable k_mutex open_file_mutex_{};
     StaticString<LogFileNaming::PATH_MAX_LENGTH> open_file_path_;
 
     // Set by a tick that ended the session, cleared by the next Start().

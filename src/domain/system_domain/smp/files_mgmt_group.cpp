@@ -86,9 +86,14 @@ int FilesMgmtGroup::HandleList(smp_streamer* ctxt) {
     if(sd_fs_service_ == nullptr || !sd_fs_service_->IsAvailable())
         return Fail(ctxt, Error::NO_CARD);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands the text over as bytes.
     const std::string_view path(reinterpret_cast<const char*>(directory.value), directory.len);
     if(IsBadPath(path))
         return Fail(ctxt, Error::BAD_PATH);
+
+    // Initialize() has not created the task, or failed to.
+    if(!job_task_.has_value())
+        return Fail(ctxt, Error::UNKNOWN);
 
     job_directory_ = path;
     job_offset_ = offset;

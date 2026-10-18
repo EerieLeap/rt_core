@@ -27,18 +27,16 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
     const auto traits = runtime.GetSensor().configuration.GetTraits();
 
     try {
-        switch(traits.source) {
-            case SensorSourceKind::GPIO:
-                if(gpio_ == nullptr)
-                    return nullptr;
-
-                return std::make_unique<GpioSensorReader>(
-                    time_service_, runtime, std::move(process_sensor_callback), std::move(work_queue_thread), gpio_
-                );
-
-            default:
+        if(traits.source == SensorSourceKind::GPIO) {
+            if(gpio_ == nullptr)
                 return nullptr;
+
+            return std::make_unique<GpioSensorReader>(
+                time_service_, runtime, std::move(process_sensor_callback), std::move(work_queue_thread), gpio_
+            );
         }
+
+        return nullptr;
     } catch(const std::runtime_error& e) {
         LOG_ERR("Failed to create ISR sensor reader: %s", e.what());
         return nullptr;

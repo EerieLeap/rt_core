@@ -281,7 +281,8 @@ void LogWriterSupervisor::RequestStart(uint32_t /*target_uid*/) {
     }
 
     state_->pending_request = Request::Start;
-    task_->Reschedule(K_NO_WAIT);
+    if(task_.has_value())
+        task_->Reschedule(K_NO_WAIT);
 }
 
 void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
@@ -291,7 +292,8 @@ void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
     }
 
     state_->pending_request = Request::Stop;
-    task_->Reschedule(K_NO_WAIT);
+    if(task_.has_value())
+        task_->Reschedule(K_NO_WAIT);
 }
 
 bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
@@ -431,7 +433,8 @@ void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessa
         return;
 
     failure_reason_ = reason;
-    task_->Reschedule(K_NO_WAIT);
+    if(task_.has_value())
+        task_->Reschedule(K_NO_WAIT);
 }
 
 } // namespace eerie_leap::domain::logging_domain::services

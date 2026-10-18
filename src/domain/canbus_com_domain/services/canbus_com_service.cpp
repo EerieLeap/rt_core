@@ -204,7 +204,7 @@ void CanbusComService::SendCommand(ICanbusComCommand& command, const CommandAckC
     if(callback) {
         cdmp_service_->GetCommandService()->SendCommand(
             device_id, std::to_underlying(command.GetCommandCode()), command.GetData(),
-            [callback](uint8_t _, const CdmpResultCode result_code, std::span<const uint8_t> data) {
+            [callback](uint8_t /*device_id*/, const CdmpResultCode result_code, std::span<const uint8_t> /*data*/) {
                 callback(result_code == CdmpResultCode::SUCCESS);
             }
         );

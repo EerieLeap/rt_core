@@ -52,8 +52,9 @@ struct SensorConfiguration {
         alloc_(alloc) {}
 
     SensorConfiguration(const SensorConfiguration&) = delete;
-    SensorConfiguration& operator=(const SensorConfiguration&) noexcept = default;
-    SensorConfiguration& operator=(SensorConfiguration&&) noexcept = default;
+    // Not assignable: the allocator member cannot be assigned.
+    SensorConfiguration& operator=(const SensorConfiguration&) = delete;
+    SensorConfiguration& operator=(SensorConfiguration&&) = delete;
     SensorConfiguration(SensorConfiguration&&) noexcept = default;
     ~SensorConfiguration() = default;
 
@@ -93,9 +94,9 @@ struct SensorConfiguration {
 
         if(sampling_rate_ms.has_value())
             return SensorReadingUpdateMethod::SCHEDULER;
-        else if(traits.source == SensorSourceKind::EXPRESSION)
+        if(traits.source == SensorSourceKind::EXPRESSION)
             return SensorReadingUpdateMethod::DEPENDENT;
-        else if(traits.is_isr_driven)
+        if(traits.is_isr_driven)
             return SensorReadingUpdateMethod::ISR;
 
         return SensorReadingUpdateMethod::NONE;
