@@ -19,11 +19,11 @@ public:
         const auto millis = duration_cast<std::chrono::milliseconds>(duration - secs).count();
 
         std::time_t time_sec = std::chrono::system_clock::to_time_t(tp);
-        std::tm timeinfo{};
-        localtime_r(&time_sec, &timeinfo);
+        // NOLINTNEXTLINE(concurrency-mt-unsafe): the ESP32 picolibc configuration declares no localtime_r.
+        const std::tm* timeinfo = std::localtime(&time_sec);
 
         char buffer[32];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
 
         const std::string formatted_time = std::string(buffer);
         return formatted_time + "." + std::to_string(millis);
