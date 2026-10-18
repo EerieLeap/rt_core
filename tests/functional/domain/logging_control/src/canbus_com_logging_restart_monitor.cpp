@@ -42,13 +42,15 @@ constexpr uint32_t THIRD_UID = 0x55555555;
 constexpr uint8_t NO_SPACE = static_cast<uint8_t>(LoggingStatusReason::NoSpace);
 
 // The record the peer's status takes: {active}, or {inactive, reason}.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes ACTIVE = { 0x01 };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes STOPPED = { 0x00, 0x00 };
 
 // What the recording handler saw: the device IDs it was called with, in order.
 struct Reports {
-    k_mutex lock;
-    k_sem received;
+    k_mutex lock{};
+    k_sem received{};
     std::deque<uint8_t> device_ids;
     // The handler throws after it recorded the call.
     bool is_throwing = false;
@@ -137,7 +139,7 @@ struct Fixture {
         harness.SendAsPeer(HEARTBEAT, HeartbeatFrame(device_id, Digest(records), LOGGER_FEATURES));
     }
 
-    std::optional<uint8_t> WaitForReport(int timeout_ms = k_wait_ms) {
+    std::optional<uint8_t> WaitForReport(int timeout_ms = WAIT_MS) {
         if(k_sem_take(&reports->received, Ms(timeout_ms)) != 0)
             return std::nullopt;
 
@@ -717,7 +719,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AHandlerThatThrowsDoesNotSkipTheH
         ztest_test_skip();
 
     struct Heartbeats {
-        k_sem received;
+        k_sem received{};
         Heartbeats() {
             k_sem_init(&received, 0, K_SEM_MAX_LIMIT);
         }
@@ -735,7 +737,7 @@ ZTEST(canbus_com_logging_restart_monitor, test_AHandlerThatThrowsDoesNotSkipTheH
     SendRestart(F().harness, PEER_ID, PEER_UID, { { LOGGING_STATUS_CODE, 1, STOPPED } });
     zassert_true(F().WaitForReport().has_value(), "The handler was called, and threw");
     zassert_equal(
-        k_sem_take(&heartbeats->received, Ms(k_wait_ms)), 0,
+        k_sem_take(&heartbeats->received, Ms(WAIT_MS)), 0,
         "The handler registered after the monitor's still saw the heartbeat"
     );
 

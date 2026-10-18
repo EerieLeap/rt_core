@@ -18,8 +18,8 @@ namespace {
 
 using TestEvent = Event<TestEventType, TestPayloadType>;
 
-constexpr uint32_t k_source_one = 0xA001;
-constexpr uint32_t k_source_two = 0xA002;
+constexpr uint32_t SOURCE_ONE = 0xA001;
+constexpr uint32_t SOURCE_TWO = 0xA002;
 
 struct SourceFilter {
     uint32_t source_id;
@@ -32,7 +32,7 @@ struct SourceFilter {
 struct MissingCallOperator {};
 
 struct NonBooleanFilter {
-    std::string operator()(const TestEvent&) const {
+    std::string_view operator()(const TestEvent&) const {
         return "no";
     }
 };
@@ -53,14 +53,14 @@ ZTEST_SUITE(event_bus_event_filter, NULL, NULL, NULL, NULL, NULL);
 ZTEST(event_bus_event_filter, test_AcceptAllFilter_accepts_every_event) {
     const AcceptAllFilter<TestEventType, TestPayloadType> filter;
 
-    zassert_true(filter(MakeEvent(TestEventType::Alpha, k_source_one)));
-    zassert_true(filter(MakeEvent(TestEventType::Beta, k_source_two)));
+    zassert_true(filter(MakeEvent(TestEventType::Alpha, SOURCE_ONE)));
+    zassert_true(filter(MakeEvent(TestEventType::Beta, SOURCE_TWO)));
     zassert_true(filter(MakeEvent(TestEventType::Gamma, 0)));
 }
 
 ZTEST(event_bus_event_filter, test_a_custom_filter_selects_events_by_source) {
-    const SourceFilter filter{ k_source_one };
+    const SourceFilter filter{ SOURCE_ONE };
 
-    zassert_true(filter(MakeEvent(TestEventType::Alpha, k_source_one)));
-    zassert_false(filter(MakeEvent(TestEventType::Alpha, k_source_two)));
+    zassert_true(filter(MakeEvent(TestEventType::Alpha, SOURCE_ONE)));
+    zassert_false(filter(MakeEvent(TestEventType::Alpha, SOURCE_TWO)));
 }

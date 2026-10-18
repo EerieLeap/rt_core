@@ -31,7 +31,7 @@ constexpr int SYNC_TIMEOUT_MS = 2000;
 ZTEST_SUITE(configuration_service, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(configuration_service, test_CborSystemConfig_Save_config_successfully_saved) {
-    CborSystemConfig system_config;
+    CborSystemConfig system_config{};
     memset(&system_config, 0, sizeof(system_config));
 
     system_config.device_id = 12;
@@ -50,7 +50,7 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_config_successfully_save
 }
 
 ZTEST(configuration_service, test_CborSystemConfig_Load_config_successfully_saved_and_loaded) {
-    CborSystemConfig system_config;
+    CborSystemConfig system_config{};
     memset(&system_config, 0, sizeof(system_config));
 
     system_config.device_id = 14;
@@ -74,7 +74,7 @@ ZTEST(configuration_service, test_CborSystemConfig_Load_config_successfully_save
 }
 
 ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_are_delegated_to_the_supplied_work_queue) {
-    CborSystemConfig system_config;
+    CborSystemConfig system_config{};
     memset(&system_config, 0, sizeof(system_config));
 
     system_config.device_id = 21;
@@ -105,7 +105,7 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_are_delegated_t
 }
 
 ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock_on_their_own_work_queue) {
-    CborSystemConfig system_config;
+    CborSystemConfig system_config{};
     memset(&system_config, 0, sizeof(system_config));
 
     system_config.device_id = 33;
@@ -127,7 +127,7 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_and_Load_do_not_deadlock
 
     bool saved = false;
     std::optional<LoadedConfig<CborSystemConfig>> loaded_config;
-    k_sem done;
+    k_sem done{};
     k_sem_init(&done, 0, K_SEM_MAX_LIMIT);
 
     // Save and Load hand their work to this very queue, so waiting for it from a
@@ -169,11 +169,11 @@ void SaveFromAnotherThread(void* context, void*, void*) {
 } // namespace
 
 ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_not_wait_for_a_thread_waiting_for_it) {
-    CborSystemConfig queue_config;
+    CborSystemConfig queue_config{};
     memset(&queue_config, 0, sizeof(queue_config));
     queue_config.device_id = 41;
 
-    CborSystemConfig thread_config;
+    CborSystemConfig thread_config{};
     memset(&thread_config, 0, sizeof(thread_config));
     thread_config.device_id = 42;
 
@@ -192,9 +192,9 @@ ZTEST(configuration_service, test_CborSystemConfig_Save_on_the_work_queue_does_n
     );
 
     bool queue_saved = false;
-    k_sem started;
-    k_sem release;
-    k_sem done;
+    k_sem started{};
+    k_sem release{};
+    k_sem done{};
     k_sem_init(&started, 0, 1);
     k_sem_init(&release, 0, 1);
     k_sem_init(&done, 0, 1);

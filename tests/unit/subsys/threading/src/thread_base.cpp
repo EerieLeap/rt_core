@@ -152,6 +152,7 @@ ZTEST(thread_base, test_InitializeStack_honours_the_stack_alignment) {
 
     thread.InitializeStack();
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): address arithmetic for a stack alignment check
     zassert_equal(reinterpret_cast<uintptr_t>(thread.GetStack()) % Z_KERNEL_STACK_OBJ_ALIGN, 0);
 }
 

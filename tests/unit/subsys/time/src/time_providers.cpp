@@ -15,12 +15,12 @@ using namespace eerie_leap::subsys::time;
 namespace {
 
 // The RTC is not backed by hardware yet; RtcProvider offsets uptime by this fixed epoch.
-constexpr auto kRtcEpoch = milliseconds(1761106217000);
+constexpr auto RTC_EPOCH = milliseconds(1761106217000);
 
 // k_msleep only guarantees a lower bound, and QEMU targets built with icount
 // sleep let the guest clock follow the (shared) host clock while idle, so the
 // upper bounds below only have to catch a mis-scaled clock.
-constexpr auto kSleepSlack = 100ms;
+constexpr auto SLEEP_SLACK = 100ms;
 
 // Two readings around a busy wait shorter than a millisecond: a provider truncated to whole
 // milliseconds reports 0 or 1 ms, one at the kernel tick's resolution the wait itself.
@@ -60,7 +60,7 @@ ZTEST(boot_elapsed_time_provider, test_GetTime_returns_valid_elapsed_time) {
     const auto current_time2 = time_provider->GetTime();
 
     zassert_true(current_time2 - current_time1 >= 1ms);
-    zassert_true(current_time2 - current_time1 <= kSleepSlack);
+    zassert_true(current_time2 - current_time1 <= SLEEP_SLACK);
 }
 
 ZTEST(boot_elapsed_time_provider, test_GetTime_tracks_the_kernel_uptime) {
@@ -94,7 +94,7 @@ ZTEST(boot_elapsed_time_provider, test_GetTime_advances_by_the_slept_amount) {
     const auto after = time_provider.GetTime();
 
     zassert_true(after - before >= 20ms);
-    zassert_true(after - before <= 20ms + kSleepSlack);
+    zassert_true(after - before <= 20ms + SLEEP_SLACK);
 }
 
 ZTEST(boot_elapsed_time_provider, test_independent_instances_agree) {
@@ -109,7 +109,7 @@ ZTEST_SUITE(rtc_provider, NULL, NULL, NULL, NULL, NULL);
 ZTEST(rtc_provider, test_GetTime_is_at_or_after_the_rtc_epoch) {
     const std::shared_ptr<ITimeProvider> time_provider = std::make_shared<RtcProvider>();
 
-    zassert_true(TimeHelpers::ToMilliseconds(time_provider->GetTime()) >= kRtcEpoch);
+    zassert_true(TimeHelpers::ToMilliseconds(time_provider->GetTime()) >= RTC_EPOCH);
 }
 
 ZTEST(rtc_provider, test_GetTime_offsets_the_boot_elapsed_time_by_the_epoch) {
@@ -118,7 +118,7 @@ ZTEST(rtc_provider, test_GetTime_offsets_the_boot_elapsed_time_by_the_epoch) {
 
     const auto offset = rtc_provider.GetTime() - boot_provider.GetTime();
 
-    zassert_true(abs(offset - kRtcEpoch) <= 10ms);
+    zassert_true(abs(offset - RTC_EPOCH) <= 10ms);
 }
 
 ZTEST(rtc_provider, test_GetTime_is_monotonic) {
@@ -142,7 +142,7 @@ ZTEST(rtc_provider, test_GetTime_advances_by_the_slept_amount) {
     const auto after = rtc_provider.GetTime();
 
     zassert_true(after - before >= 20ms);
-    zassert_true(after - before <= 20ms + kSleepSlack);
+    zassert_true(after - before <= 20ms + SLEEP_SLACK);
 }
 
 ZTEST(rtc_provider, test_GetTime_is_ahead_of_the_boot_elapsed_time) {

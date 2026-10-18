@@ -211,18 +211,18 @@ ZTEST_F(smp_can_transport, test_unbound_transport_ignores_requests) {
 
 ZTEST_F(smp_can_transport, test_rebind_moves_to_the_new_address) {
     Harness& harness = *fixture->harness;
-    constexpr uint8_t new_address = OWN_ADDRESS + 1;
+    constexpr uint8_t NEW_ADDRESS = OWN_ADDRESS + 1;
 
-    zassert_true(harness.transport->Bind(new_address));
-    zassert_equal(harness.transport->GetAddress(), new_address);
+    zassert_true(harness.transport->Bind(NEW_ADDRESS));
+    zassert_equal(harness.transport->GetAddress(), NEW_ADDRESS);
 
     harness.SendPacket(FIRST_PEER, MakeEchoRequest("old", 17), OWN_ADDRESS);
     zassert_false(harness.peers.WaitPacket(FIRST_PEER, 300).has_value(), "The old address is released");
 
-    harness.SendPacket(FIRST_PEER, MakeEchoRequest("new", 18), new_address);
+    harness.SendPacket(FIRST_PEER, MakeEchoRequest("new", 18), NEW_ADDRESS);
     const auto response = harness.peers.WaitPacket(FIRST_PEER);
     zassert_true(IsEchoResponse(response, "new", 18));
-    zassert_equal(harness.peers.GetLastSource(), new_address, "The response comes from the new address");
+    zassert_equal(harness.peers.GetLastSource(), NEW_ADDRESS, "The response comes from the new address");
 }
 
 ZTEST_F(smp_can_transport, test_invalid_addresses_are_rejected) {

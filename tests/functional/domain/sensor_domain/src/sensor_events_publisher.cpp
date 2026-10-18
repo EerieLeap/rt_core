@@ -27,13 +27,13 @@ namespace {
 // The publisher stack the throwing filter case needs. With a throwing filter the publisher thread
 // peaked at 1.5 KiB on qemu_cortex_a9, 5.9 on qemu_malta, 6.4 on qemu_cortex_a53 and 7.8 on
 // qemu_riscv64, so 8192 would leave about 236 bytes there.
-constexpr int kThrowingFilterStackSize = 12288;
+constexpr int THROWING_FILTER_STACK_SIZE = 12288;
 
 // Stack the publisher thread must still have unused once a throw has been unwound. On every QEMU
 // board but qemu_riscv64 (which has a guard below the stack) only the stack sentinel checks the
 // stack, and it misses a frame that jumps past it, so a pass alone does not show that the stack
 // was enough.
-constexpr size_t kPublisherStackMargin = 512;
+[[maybe_unused]] constexpr size_t PUBLISHER_STACK_MARGIN = 512;
 
 // A frame of [a, b, c, d, sentinel] and a started publisher over it, stopped before anything goes.
 // The sensor ids are the case's own: a failed case ends without running its destructors, and the
@@ -63,6 +63,11 @@ struct Rig {
         zassert_true(publisher->Initialize());
         zassert_true(publisher->Start());
     }
+
+    Rig(const Rig&) = delete;
+    Rig& operator=(const Rig&) = delete;
+    Rig(Rig&&) = delete;
+    Rig& operator=(Rig&&) = delete;
 
     // A case may already have destroyed the publisher.
     ~Rig() {
@@ -350,7 +355,7 @@ ZTEST(sensor_events_publisher, test_a_filter_that_throws_rejects_its_sensor_and_
     );
 #else
     if(!IS_ENABLED(CONFIG_ARCH_POSIX)
-        && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < kThrowingFilterStackSize)
+        && CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE < THROWING_FILTER_STACK_SIZE)
         ztest_test_skip();
 #endif
 
@@ -436,20 +441,20 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     // takes a second batch. Every sensor is accepted, so each round also fills the acceptance
     // cache and clears it when the next key finds it full. The k_count events of a tick fit
     // sensor_events' 128-event queue.
-    static constexpr size_t k_count = SensorLimits::kMaxCount + 1;
-    static constexpr size_t k_sentinel = k_count - 1;
+    static constexpr size_t K_COUNT = SensorLimits::kMaxCount + 1;
+    static constexpr size_t SENTINEL = K_COUNT - 1;
 
     struct Deliveries {
-        std::array<uint32_t, k_count> sorted_hashes{};
-        std::array<std::atomic<int>, k_count> counts{}; // By sensor.
+        std::array<uint32_t, K_COUNT> sorted_hashes{};
+        std::array<std::atomic<int>, K_COUNT> counts{}; // By sensor.
         Recorder sentinel;
     };
 
     const auto deliveries = std::make_shared<Deliveries>();
 
     std::vector<std::shared_ptr<Sensor>> sensors;
-    sensors.reserve(k_count);
-    for(size_t i = 0; i < k_count; i++) {
+    sensors.reserve(K_COUNT);
+    for(size_t i = 0; i < K_COUNT; i++) {
         sensors.push_back(MakeSensor("drain_" + std::to_string(i)));
         deliveries->sorted_hashes[i] = sensors.back()->id_hash;
     }
@@ -471,12 +476,12 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
         [deliveries](const SensorEventsChannel::EventMessage& event) {
             // Sensor i commits i.
             const auto index = static_cast<size_t>(std::get<float>(event.payload.at(SensorPayloadType::Value)));
-            if(index >= k_count)
+            if(index >= K_COUNT)
                 return;
 
             deliveries->counts[index].fetch_add(1);
 
-            if(index == k_sentinel)
+            if(index == SENTINEL)
                 deliveries->sentinel.Record(static_cast<float>(index));
         }
     );
@@ -489,7 +494,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     for(int round = 1; round <= 2; round++) {
         zassert_true(publisher->Pause());
 
-        for(size_t i = 0; i < k_count; i++)
+        for(size_t i = 0; i < K_COUNT; i++)
             frame->AddOrUpdateReading(MakeReading(*sensors[i], static_cast<float>(i)));
 
         const int64_t resumed_at = k_uptime_get();
@@ -497,7 +502,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
         zassert_true(deliveries->sentinel.WaitForDelivery(), "round %d", round);
         const int64_t elapsed_ms = k_uptime_get() - resumed_at;
 
-        for(size_t i = 0; i < k_count; i++)
+        for(size_t i = 0; i < K_COUNT; i++)
             zassert_equal(deliveries->counts[i].load(), round, "sensor %zu, round %d", i, round);
 
         // native_sim's clock moves only while every thread waits, so a second tick would show as

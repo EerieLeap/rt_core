@@ -45,8 +45,8 @@ namespace {
 // native_sim declares two emulated ADCs (four channels, then two). QEMU targets declare a third
 // one whose channel states no resolution, which rt_core's ADC Initialize() rejects, so there the
 // controller must fail to initialize; the smp scenario leaves it out (RT_CORE_TEST_NO_FAILING_ADC).
-constexpr bool kDtHasFailingAdc = DT_NODE_EXISTS(DT_ALIAS(adc2));
-constexpr size_t kDtChannelCount = 6;
+constexpr bool DT_HAS_FAILING_ADC = DT_NODE_EXISTS(DT_ALIAS(adc2));
+constexpr size_t DT_CHANNEL_COUNT = 6;
 
 struct Fixture {
     std::shared_ptr<FsService> fs_service;
@@ -70,12 +70,12 @@ void ExpectDefaultConfiguration(const AdcController& controller) {
     const auto configuration = controller.GetConfigurationManager()->Get();
     zassert_not_null(configuration.get());
     zassert_equal(configuration->samples, AdcDefaultConfiguration::SAMPLES);
-    zassert_equal(configuration->channel_configurations->size(), kDtChannelCount);
+    zassert_equal(configuration->channel_configurations->size(), DT_CHANNEL_COUNT);
 
     const auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());
     const auto& default_table = *default_calibrator->GetCalibrationTable();
 
-    for(size_t i = 0; i < kDtChannelCount; i++) {
+    for(size_t i = 0; i < DT_CHANNEL_COUNT; i++) {
         const auto& calibrator = configuration->channel_configurations->at(i)->calibrator;
         zassert_not_null(calibrator.get(), "channel %zu", i);
         zassert_equal(
@@ -102,7 +102,7 @@ ZTEST(adc_controller, test_Initialize_registers_a_default_configuration_sized_to
     AdcController controller(fixture.fs_service, fixture.work_queue, configuration_service, nullptr);
     zassert_is_null(controller.GetManager().get());
 
-    if constexpr(kDtHasFailingAdc) {
+    if constexpr(DT_HAS_FAILING_ADC) {
         // main() treats this as fatal.
         zassert_equal(controller.Initialize(), -1);
         zassert_is_null(controller.GetManager().get());
@@ -114,7 +114,7 @@ ZTEST(adc_controller, test_Initialize_registers_a_default_configuration_sized_to
     zassert_equal(controller.Initialize(), 0);
 
     zassert_not_null(controller.GetManager().get());
-    zassert_equal(controller.GetManager()->GetChannelCount(), kDtChannelCount);
+    zassert_equal(controller.GetManager()->GetChannelCount(), static_cast<size_t>(DT_CHANNEL_COUNT));
     zassert_not_null(controller.GetConfigurationManager().get());
     zassert_equal(controller.GetConfigurationManager()->GetAdcManager().get(), controller.GetManager().get());
 
@@ -134,7 +134,7 @@ ZTEST(adc_controller, test_Initialize_without_a_configuration_service) {
 
     AdcController controller(fixture.fs_service, fixture.work_queue, nullptr, nullptr);
 
-    if constexpr(kDtHasFailingAdc) {
+    if constexpr(DT_HAS_FAILING_ADC) {
         zassert_equal(controller.Initialize(), -1);
         zassert_is_null(controller.GetManager().get());
         return;
@@ -160,7 +160,7 @@ ZTEST(adc_controller, test_Initialize_creates_the_calibration_service) {
         if(is_registered_first)
             controller.RegisterPausedService(paused_service);
 
-        if constexpr(kDtHasFailingAdc) {
+        if constexpr(DT_HAS_FAILING_ADC) {
             zassert_equal(controller.Initialize(), -1);
             zassert_is_null(controller.GetCalibrationService().get());
             return;
@@ -175,10 +175,10 @@ ZTEST(adc_controller, test_Initialize_creates_the_calibration_service) {
         zassert_not_null(calibration_service.get());
 
         zassert_false(
-            calibration_service->Start(static_cast<int>(kDtChannelCount)), "A channel the unit does not have"
+            calibration_service->Start(static_cast<int>(DT_CHANNEL_COUNT)), "A channel the unit does not have"
         );
         zassert_true(
-            calibration_service->Start(static_cast<int>(kDtChannelCount) - 1), "The last channel, on the second ADC"
+            calibration_service->Start(static_cast<int>(DT_CHANNEL_COUNT) - 1), "The last channel, on the second ADC"
         );
         zassert_true(paused_service->IsPaused(), "registered first: %d", is_registered_first);
         zassert_true(calibration_service->Stop());
@@ -235,7 +235,7 @@ void AssertNotServed(SmpTestClient& client, const char* message) {
 ZTEST(adc_controller, test_the_calibration_group_lives_with_the_controller) {
     // The smp scenario leaves the failing ADC out on every board (RT_CORE_TEST_NO_FAILING_ADC); a
     // build that keeps it fails here, so the case cannot go missing as a skip.
-    static_assert(!kDtHasFailingAdc, "the smp scenario must build without the ADC that fails to initialize");
+    static_assert(!DT_HAS_FAILING_ADC, "the smp scenario must build without the ADC that fails to initialize");
 
     const auto fixture = MakeFixture();
     SmpTestClient client;
@@ -251,14 +251,14 @@ ZTEST(adc_controller, test_the_calibration_group_lives_with_the_controller) {
             controller.RegisterPausedService(paused_service);
             AssertError(Read(client), Error::NOT_RUNNING);
 
-            AssertError(Start(client, static_cast<uint32_t>(kDtChannelCount)), Error::BAD_CHANNEL);
-            zassert_true(Start(client, static_cast<uint32_t>(kDtChannelCount) - 1).IsOk(), "round %d", round);
+            AssertError(Start(client, static_cast<uint32_t>(DT_CHANNEL_COUNT)), Error::BAD_CHANNEL);
+            zassert_true(Start(client, static_cast<uint32_t>(DT_CHANNEL_COUNT) - 1).IsOk(), "round %d", round);
             zassert_true(controller.GetCalibrationService()->IsRunning());
             zassert_true(paused_service->IsPaused());
 
             const auto running = Read(client);
             zassert_true(running.IsOk());
-            zassert_equal(running.Value("channel"), kDtChannelCount - 1);
+            zassert_equal(running.Value("channel"), DT_CHANNEL_COUNT - 1);
             zassert_true(running.Flag("running"));
 
             zassert_true(Stop(client).IsOk());

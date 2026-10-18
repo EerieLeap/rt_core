@@ -89,21 +89,21 @@ ZTEST(mdf_serialization, test_NextChainIsLaidOutAfterTheChildren) {
     second->SetNext(third);
 
     const auto end = root->ResolveAddress(0);
-    zassert_equal(end, 6 * BLOCK_HEADER_SIZE);
+    zassert_equal(end, 6ULL * BLOCK_HEADER_SIZE);
 
     const std::vector<std::shared_ptr<TestBlock>> expected_order{ root, first, first_child, second, second_child,
         third };
     for(size_t i = 0; i < expected_order.size(); i++) {
         zassert_equal(
-            expected_order[i]->GetAddress(), i * BLOCK_HEADER_SIZE, "block %s is not at position %zu",
-            expected_order[i]->GetId().c_str(), i
+            expected_order[i]->GetAddress(), static_cast<uint64_t>(i) * BLOCK_HEADER_SIZE,
+            "block %s is not at position %zu", expected_order[i]->GetId().c_str(), i
         );
     }
 
     auto stream = MakeStream();
     zassert_equal(root->WriteToStream(stream), end, "every block of the chain is written once");
 
-    const auto data = stream.str();
+    const auto data = stream.Str();
     for(const auto& block : expected_order) {
         zassert_equal(
             BlockId(AsBytes(data), block->GetAddress()), "##" + block->GetId(),
@@ -134,7 +134,7 @@ ZTEST(mdf_serialization, test_ChainTraversalsTerminateOnAChildThatIsAlsoASibling
 
     auto stream = MakeStream();
     head->WriteToStream(stream);
-    zassert_equal(stream.str().size(), 3 * BLOCK_HEADER_SIZE, "no block is written twice");
+    zassert_equal(stream.Str().size(), 3 * BLOCK_HEADER_SIZE, "no block is written twice");
 
     head->Reset();
     zassert_false(last->IsSerialized(), "the reset reaches the end of the chain");
@@ -160,7 +160,7 @@ ZTEST(mdf_serialization, test_WriteToStreamPlacesEveryBlockAtItsResolvedAddress)
     auto stream = MakeStream();
     const auto bytes_written = root->WriteToStream(stream);
 
-    const auto data = stream.str();
+    const auto data = stream.Str();
     zassert_equal(bytes_written, data.size(), "the reported size must match what reached the stream");
     zassert_equal(data.size(), 4 * BLOCK_HEADER_SIZE, "the shared block is written exactly once");
 
@@ -206,7 +206,7 @@ ZTEST(mdf_serialization, test_ResetTerminatesOnCircularReferences) {
     auto stream = MakeStream();
     first->WriteToStream(stream);
 
-    zassert_equal(stream.str().size(), 2 * BLOCK_HEADER_SIZE, "a cycle must not write a block twice");
+    zassert_equal(stream.Str().size(), 2 * BLOCK_HEADER_SIZE, "a cycle must not write a block twice");
 
     first->Reset();
 
@@ -232,7 +232,7 @@ ZTEST(mdf_serialization, test_ResolveAndWriteCanBeRepeated) {
     root->ResolveAddress(0);
     root->WriteToStream(second_stream);
 
-    zassert_equal(first_stream.str(), second_stream.str(), "rewriting the tree must be deterministic");
+    zassert_equal(first_stream.Str(), second_stream.Str(), "rewriting the tree must be deterministic");
 }
 
 ZTEST(mdf_serialization, test_WriteToStreamThrowsOnShortWrite) {
@@ -280,7 +280,7 @@ ZTEST(mdf_serialization, test_RewriteToStreamPatchesInPlace) {
     data_block->SetDataSizeBytes(records.size());
     zassert_equal(data_block->RewriteToStream(stream), BLOCK_HEADER_SIZE, "only the header is rewritten");
 
-    const auto data = stream.str();
+    const auto data = stream.Str();
     zassert_equal(data.size(), bytes_written + records.size(), "patching must not grow the stream");
     zassert_equal(
         Read<uint64_t>(AsBytes(data), data_block->GetAddress() + BLOCK_LENGTH_OFFSET),
@@ -312,7 +312,7 @@ ZTEST(mdf_serialization, test_BlockLinksTrackFixedAndExtraLinks) {
     BlockLinks<TestLink, 2> links;
 
     zassert_equal(links.Count(), 2);
-    zassert_equal(links.GetLinksSizeBytes(), 2 * LINK_SIZE);
+    zassert_equal(links.GetLinksSizeBytes(), 2ULL * LINK_SIZE);
     zassert_is_null(links.GetLink(TestLink::First).get());
 
     const auto first = MakeBlock("AA");
@@ -321,7 +321,7 @@ ZTEST(mdf_serialization, test_BlockLinksTrackFixedAndExtraLinks) {
 
     links.AddExtraLink(MakeBlock("BB"));
     zassert_equal(links.Count(), 3, "extra links are appended after the fixed ones");
-    zassert_equal(links.GetLinksSizeBytes(), 3 * LINK_SIZE);
+    zassert_equal(links.GetLinksSizeBytes(), 3ULL * LINK_SIZE);
     zassert_equal(links.GetLinks().size(), 3);
 }
 

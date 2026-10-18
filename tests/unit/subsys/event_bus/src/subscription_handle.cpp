@@ -54,7 +54,8 @@ ZTEST(event_bus_subscription_handle, test_moving_a_handle_transfers_the_validity
     zassert_true(moved.IsValid());
     zassert_equal(moved.GetId(), static_cast<size_t>(5));
     zassert_equal(moved.GetEventType(), TestEventType::Gamma);
-    zassert_false(source.IsValid()); // NOLINT(bugprone-use-after-move) - the moved-from handle must be released
+    // NOLINTNEXTLINE(bugprone-use-after-move, clang-analyzer-cplusplus.Move): the moved-from handle must be released
+    zassert_false(source.IsValid());
 }
 
 ZTEST(event_bus_subscription_handle, test_moving_an_invalidated_handle_keeps_the_destination_invalid) {

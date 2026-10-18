@@ -19,8 +19,8 @@ constexpr int IDLE_TIMEOUT_MS = 50;
 // Blocks inside the entry point so the test can observe a live thread.
 class BlockingWorker : public IThread {
 private:
-    k_sem entered_;
-    k_sem resume_;
+    k_sem entered_{};
+    k_sem resume_{};
     atomic_t entries_{ ATOMIC_INIT(0) };
     atomic_t exits_{ ATOMIC_INIT(0) };
 
@@ -93,7 +93,7 @@ public:
         if(throw_std_exception_)
             throw std::runtime_error("boom");
 
-        throw 42;
+        throw 42; // NOLINT(bugprone-std-exception-baseclass): the case is about a thread entry that throws something that is not a std::exception
     }
 
     [[nodiscard]] int Entries() const {

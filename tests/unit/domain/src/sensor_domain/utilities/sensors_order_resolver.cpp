@@ -21,7 +21,7 @@ using namespace eerie_leap::domain::sensor_domain::utilities;
 
 ZTEST_SUITE(sensors_order_resolver, NULL, NULL, NULL, NULL, NULL);
 
-static std::shared_ptr<Sensor> sensors_order_resolver_MakeSensor(std::string_view id, const char* expression) {
+static std::shared_ptr<Sensor> SensorsOrderResolverMakeSensor(std::string_view id, const char* expression) {
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
 
     sensor->configuration.type = SensorType::VIRTUAL_ANALOG;
@@ -34,7 +34,7 @@ static std::shared_ptr<Sensor> sensors_order_resolver_MakeSensor(std::string_vie
     return sensor;
 }
 
-static int sensors_order_resolver_IndexOf(const std::vector<std::shared_ptr<Sensor>>& sensors, std::string_view id) {
+static int SensorsOrderResolverIndexOf(const std::vector<std::shared_ptr<Sensor>>& sensors, std::string_view id) {
     for(size_t i = 0; i < sensors.size(); ++i)
         if(sensors[i]->id == id)
             return static_cast<int>(i);
@@ -42,7 +42,7 @@ static int sensors_order_resolver_IndexOf(const std::vector<std::shared_ptr<Sens
     return -1;
 }
 
-static bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::shared_ptr<Sensor>>& sensors) {
+static bool SensorsOrderResolverDependenciesComeFirst(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     for(size_t i = 0; i < sensors.size(); ++i) {
         if(!sensors[i]->configuration.HasExpression())
             continue;
@@ -53,7 +53,7 @@ static bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::
         zassert_true(expression_evaluator.has_value());
 
         for(const std::string_view variable : expression_evaluator->GetVariableNames()) {
-            const int position = sensors_order_resolver_IndexOf(sensors, std::string(variable));
+            const int position = SensorsOrderResolverIndexOf(sensors, variable);
             if(position < 0 || std::cmp_greater_equal(position, i))
                 return false;
         }
@@ -62,7 +62,7 @@ static bool sensors_order_resolver_DependenciesComeFirst(const std::vector<std::
     return true;
 }
 
-static std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> SensorsOrderResolverGetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -146,7 +146,7 @@ static std::vector<std::shared_ptr<Sensor>> sensors_order_resolver_GetTestSensor
 }
 
 ZTEST(sensors_order_resolver, test_GetProcessingOrder) {
-    auto sensors = sensors_order_resolver_GetTestSensors();
+    auto sensors = SensorsOrderResolverGetTestSensors();
 
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
 
@@ -175,7 +175,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder) {
 }
 
 ZTEST(sensors_order_resolver, test_GetProcessingOrder_missing_dependency) {
-    auto sensors = sensors_order_resolver_GetTestSensors();
+    auto sensors = SensorsOrderResolverGetTestSensors();
 
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
 
@@ -193,7 +193,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_missing_dependency) {
 }
 
 ZTEST(sensors_order_resolver, test_GetProcessingOrder_has_cyclic_dependency) {
-    auto sensors = sensors_order_resolver_GetTestSensors();
+    auto sensors = SensorsOrderResolverGetTestSensors();
 
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
 
@@ -214,7 +214,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_has_cyclic_dependency) {
 
 ZTEST(sensors_order_resolver, test_GetProcessingOrder_rejects_self_dependency) {
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_a", "sensor_a + 1"));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_a", "sensor_a + 1"));
 
     bool threw = false;
     try {
@@ -229,8 +229,8 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_rejects_self_dependency) {
 ZTEST(sensors_order_resolver, test_AddSensor_ignores_duplicate_ids) {
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
 
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_a", nullptr));
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_a", nullptr));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_a", nullptr));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_a", nullptr));
 
     auto ordered_sensors = sensors_order_resolver->GetProcessingOrder();
 
@@ -240,7 +240,7 @@ ZTEST(sensors_order_resolver, test_AddSensor_ignores_duplicate_ids) {
 
 ZTEST(sensors_order_resolver, test_expression_variable_x_is_not_a_dependency) {
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_a", "x * 2 + 1"));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_a", "x * 2 + 1"));
 
     auto ordered_sensors = sensors_order_resolver->GetProcessingOrder();
 
@@ -251,21 +251,21 @@ ZTEST(sensors_order_resolver, test_expression_variable_x_is_not_a_dependency) {
 ZTEST(sensors_order_resolver, test_GetProcessingOrder_resolves_diamond_dependencies) {
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
 
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_d", "sensor_b + sensor_c"));
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_b", "sensor_a * 2"));
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_c", "sensor_a + 1"));
-    sensors_order_resolver->AddSensor(sensors_order_resolver_MakeSensor("sensor_a", nullptr));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_d", "sensor_b + sensor_c"));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_b", "sensor_a * 2"));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_c", "sensor_a + 1"));
+    sensors_order_resolver->AddSensor(SensorsOrderResolverMakeSensor("sensor_a", nullptr));
 
     const auto ordered_sensors = sensors_order_resolver->GetProcessingOrder();
 
     zassert_equal(ordered_sensors.size(), 4);
-    zassert_true(sensors_order_resolver_DependenciesComeFirst(ordered_sensors));
-    zassert_equal(sensors_order_resolver_IndexOf(ordered_sensors, "sensor_a"), 0);
-    zassert_equal(sensors_order_resolver_IndexOf(ordered_sensors, "sensor_d"), 3);
+    zassert_true(SensorsOrderResolverDependenciesComeFirst(ordered_sensors));
+    zassert_equal(SensorsOrderResolverIndexOf(ordered_sensors, "sensor_a"), 0);
+    zassert_equal(SensorsOrderResolverIndexOf(ordered_sensors, "sensor_d"), 3);
 }
 
 ZTEST(sensors_order_resolver, test_GetProcessingOrder_returns_each_sensor_once) {
-    auto sensors = sensors_order_resolver_GetTestSensors();
+    auto sensors = SensorsOrderResolverGetTestSensors();
 
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
     for(const auto index : { 0, 1, 2, 3 })
@@ -274,7 +274,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_returns_each_sensor_once) 
     const auto ordered_sensors = sensors_order_resolver->GetProcessingOrder();
 
     zassert_equal(ordered_sensors.size(), 4);
-    zassert_true(sensors_order_resolver_DependenciesComeFirst(ordered_sensors));
+    zassert_true(SensorsOrderResolverDependenciesComeFirst(ordered_sensors));
 
     std::unordered_set<std::string> seen;
     for(const auto& sensor : ordered_sensors)
@@ -284,7 +284,7 @@ ZTEST(sensors_order_resolver, test_GetProcessingOrder_returns_each_sensor_once) 
 }
 
 ZTEST(sensors_order_resolver, test_GetProcessingOrder_is_repeatable) {
-    auto sensors = sensors_order_resolver_GetTestSensors();
+    auto sensors = SensorsOrderResolverGetTestSensors();
 
     const auto sensors_order_resolver = std::make_shared<SensorsOrderResolver>();
     for(const auto index : { 0, 1, 2, 3 })

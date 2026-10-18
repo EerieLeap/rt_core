@@ -44,29 +44,29 @@ ZTEST_SUITE(log_writer_timing, NULL, NULL, ResetAfterTest, NULL, NULL);
 // the kernel's rounding of a relative timeout up to the next tick edge added to every period.
 // Absolute deadlines add neither.
 ZTEST(log_writer_timing, test_TwentyMillisecondTicksKeepTheirPhase) {
-    constexpr int64_t interval_ms = 20;
-    constexpr size_t ticks = 100;
+    constexpr int64_t INTERVAL_MS = 20;
+    constexpr size_t TICKS = 100;
 
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors, false);
-    StoreLoggingConfiguration(rig, interval_ms);
+    StoreLoggingConfiguration(rig, INTERVAL_MS);
     const auto probe = AttachProbe(rig, *sensors[0]);
 
-    const int64_t interval_ticks = MsToTicks(interval_ms);
+    const int64_t interval_ticks = MsToTicks(INTERVAL_MS);
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    k_sleep(K_TIMEOUT_ABS_TICKS(start_ticks + static_cast<int64_t>(ticks) * interval_ticks + interval_ticks / 2));
+    k_sleep(K_TIMEOUT_ABS_TICKS(start_ticks + static_cast<int64_t>(TICKS) * interval_ticks + interval_ticks / 2));
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
     const auto& times = probe->tick_times;
-    zassert_true(times.size() >= ticks, "%zu ticks in %zu intervals", times.size(), ticks);
+    zassert_true(times.size() >= TICKS, "%zu ticks in %zu intervals", times.size(), TICKS);
     zassert_true(
         std::abs(times[0] - (start_ticks + interval_ticks)) <= 1,
         "the first tick is one interval after Start(), not %lld ticks", static_cast<long long>(times[0] - start_ticks)
     );
 
     // No drift: every tick on the phase the first one set, within one kernel tick.
-    for(size_t i = 1; i < ticks; i++) {
+    for(size_t i = 1; i < TICKS; i++) {
         const int64_t deviation = times[i] - times[0] - static_cast<int64_t>(i) * interval_ticks;
         zassert_true(
             std::abs(deviation) <= 1, "tick %zu is %lld kernel ticks off the phase", i,
@@ -74,11 +74,11 @@ ZTEST(log_writer_timing, test_TwentyMillisecondTicksKeepTheirPhase) {
         );
     }
 
-    const int64_t total_ticks = times[ticks - 1] - times[0];
-    const int64_t expected_ticks = static_cast<int64_t>(ticks - 1) * interval_ticks;
+    const int64_t total_ticks = times[TICKS - 1] - times[0];
+    const int64_t expected_ticks = static_cast<int64_t>(TICKS - 1) * interval_ticks;
     zassert_true(
         std::abs(total_ticks - expected_ticks) <= 1, "mean period %lld/%zu kernel ticks, %lld expected per tick",
-        static_cast<long long>(total_ticks), ticks - 1, static_cast<long long>(interval_ticks)
+        static_cast<long long>(total_ticks), TICKS - 1, static_cast<long long>(interval_ticks)
     );
 
     const auto stats = rig.log_writer_service->GetStats();
@@ -88,11 +88,11 @@ ZTEST(log_writer_timing, test_TwentyMillisecondTicksKeepTheirPhase) {
 // A drain that empties a full raw queue may have left frames behind: the next tick comes a quarter
 // of an interval later, and the ones after it an interval apart again.
 ZTEST(log_writer_timing, test_AFullDrainBringsTheNextTickForward) {
-    constexpr int64_t interval_ms = 200;
+    constexpr int64_t INTERVAL_MS = 200;
 
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors, false);
-    StoreLoggingConfiguration(rig, interval_ms);
+    StoreLoggingConfiguration(rig, INTERVAL_MS);
     const auto probe = AttachProbe(rig, *sensors[0]);
 
     const int64_t start_ticks = k_uptime_ticks();
@@ -110,15 +110,15 @@ ZTEST(log_writer_timing, test_AFullDrainBringsTheNextTickForward) {
     const auto& times = probe->tick_times;
     zassert_equal(times.size(), 3, "ticks at 200, 250 and 450 ms (got %zu)", times.size());
     zassert_true(
-        std::abs(times[0] - start_ticks - MsToTicks(interval_ms)) <= 1, "the first tick is one interval after Start()"
+        std::abs(times[0] - start_ticks - MsToTicks(INTERVAL_MS)) <= 1, "the first tick is one interval after Start()"
     );
     zassert_true(
-        std::abs(times[1] - times[0] - MsToTicks(interval_ms / 4)) <= 1,
+        std::abs(times[1] - times[0] - MsToTicks(INTERVAL_MS / 4)) <= 1,
         "the tick after a full drain comes a quarter interval later, not %lld kernel ticks",
         static_cast<long long>(times[1] - times[0])
     );
     zassert_true(
-        std::abs(times[2] - times[1] - MsToTicks(interval_ms)) <= 1,
+        std::abs(times[2] - times[1] - MsToTicks(INTERVAL_MS)) <= 1,
         "the next one an interval later, not %lld kernel ticks", static_cast<long long>(times[2] - times[1])
     );
 }

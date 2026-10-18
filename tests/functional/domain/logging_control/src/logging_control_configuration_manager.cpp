@@ -103,12 +103,15 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
 using Bytes = std::vector<uint8_t>;
 
 // {Sensors, DataUpdated, Value, selector SensorId = "ab"}
-const Bytes k_valid = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const Bytes K_VALID = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
 // A trigger on channel 99, which names no channel, without a selector.
-const Bytes k_unknown_channel = { 0x9F, 0x9F, 0x9F, 0x18, 0x63, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const Bytes UNKNOWN_CHANNEL = { 0x9F, 0x9F, 0x9F, 0x18, 0x63, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
 // The same as the first with the selector a float64 (1.0), which cannot select.
-const Bytes k_float_selector = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0xFB, 0x3F, 0xF0, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const Bytes FLOAT_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0xFB, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
 
 } // namespace
 
@@ -156,20 +159,20 @@ ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefuse
 
     std::array<char, 128> reason{};
     zassert_false(
-        manager->ApplyCborConfiguration(k_unknown_channel, reason), "Stored CBOR that names no channel is refused"
+        manager->ApplyCborConfiguration(UNKNOWN_CHANNEL, reason), "Stored CBOR that names no channel is refused"
     );
     zassert_not_null(std::strstr(reason.data(), "unknown event channel"), "with the reason: %s", reason.data());
     AssertSame(good, *manager->Get());
 
     reason = {};
     zassert_false(
-        manager->ApplyCborConfiguration(k_float_selector, reason), "A selector that cannot select does not decode"
+        manager->ApplyCborConfiguration(FLOAT_SELECTOR, reason), "A selector that cannot select does not decode"
     );
     zassert_not_null(std::strstr(reason.data(), "Malformed CBOR"), "with the reason: %s", reason.data());
     AssertSame(good, *manager->Get());
     zassert_equal(manager->GetCborConfigurationInfo().crc, stored.crc);
 
-    zassert_true(manager->ApplyCborConfiguration(k_valid), "Valid CBOR applies");
+    zassert_true(manager->ApplyCborConfiguration(K_VALID), "Valid CBOR applies");
     zassert_equal(manager->Get()->triggers.size(), 1);
     const auto& binding = manager->Get()->triggers[0].binding;
     zassert_equal(binding.channel, EventChannelId::Sensors);
@@ -202,7 +205,7 @@ ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEach
     k_sem_init(done.get(), 0, 1);
     const auto is_applied = std::make_shared<std::atomic<bool>>(false);
     TestConfigQueue()->Run([manager, done, is_applied] {
-        is_applied->store(manager->ApplyCborConfiguration(k_valid));
+        is_applied->store(manager->ApplyCborConfiguration(K_VALID));
         k_sem_give(done.get());
     });
     zassert_equal(k_sem_take(done.get(), K_SECONDS(5)), 0);
@@ -222,9 +225,9 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
     const auto manager = MakeManager(FormattedFs());
 
     struct Signals {
-        k_sem entered;
-        k_sem release;
-        k_sem stored;
+        k_sem entered{};
+        k_sem release{};
+        k_sem stored{};
         std::atomic<int> calls = 0;
         std::atomic<bool> is_stored = false;
     };
@@ -254,8 +257,7 @@ ZTEST(logging_control_configuration_manager, test_AHandlerClearedDuringItsCallFi
     manager->RegisterConfigurationUpdatedHandler(nullptr);
     const int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms < k_no_wait_ms, "clearing the handler waited %lld ms for its call",
-        static_cast<long long>(elapsed_ms)
+        elapsed_ms < NO_WAIT_MS, "clearing the handler waited %lld ms for its call", static_cast<long long>(elapsed_ms)
     );
     zassert_false(weak_sentinel.expired(), "the call in progress must keep its handler alive");
 
@@ -285,14 +287,14 @@ ZTEST(logging_control_configuration_manager, test_AHandlerThatThrowsDoesNotFailT
     zassert_equal(calls->load(), 1);
     zassert_equal(manager->Get()->triggers.size(), 1, "and is in use");
 
-    zassert_true(manager->ApplyCborConfiguration(k_valid), "An apply reports the same");
+    zassert_true(manager->ApplyCborConfiguration(K_VALID), "An apply reports the same");
     zassert_equal(calls->load(), 2);
 
     // Not a std::exception.
     manager->RegisterConfigurationUpdatedHandler([calls] {
         (*calls)++;
 
-        throw 7;
+        throw 7; // NOLINT(bugprone-std-exception-baseclass): the case is about a handler that throws something that is not a std::exception
     });
     zassert_true(manager->Update(MakeConfiguration({ SensorTrigger("b") })));
     zassert_equal(calls->load(), 3);

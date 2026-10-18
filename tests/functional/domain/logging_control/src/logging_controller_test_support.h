@@ -109,20 +109,21 @@ using fake_gpio_test::FakeGpio;
 inline constexpr uint8_t LOGGING_CODE = std::to_underlying(CanbusComCommandCode::LOGGING);
 inline constexpr uint8_t LOGGING_STATUS_CODE = std::to_underlying(CanbusComStateType::LOGGING_STATUS);
 
-inline constexpr const char* kControllerToolId = "rt_core_controller";
+inline constexpr const char* CONTROLLER_TOOL_ID = "rt_core_controller";
 
 // The transaction IDs of the peer's commands start here, so none equals one the unit uses (they start
 // at 1): the unit hears its own broadcasts on the loopback bus and answers them with its own IDs.
-inline constexpr uint8_t kPeerFirstTransaction = 0x80;
+inline constexpr uint8_t PEER_FIRST_TRANSACTION = 0x80;
 
 // Stored LoggingControl configuration {Sensors, DataUpdated, Value, SensorId "ab"}, as a client
 // sends it over SMP (the golden bytes of the configuration suites).
-inline const std::vector<uint8_t> k_trigger_on_ab = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62,
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+inline const std::vector<uint8_t> TRIGGER_ON_AB = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62,
     0x00, 0xFF, 0xFF, 0xFF };
 
 // Polls @p predicate every 2 ms until it holds or @p timeout_ms passed.
 template<typename TPredicate>
-[[nodiscard]] bool WaitUntil(TPredicate predicate, int timeout_ms = k_wait_ms) {
+[[nodiscard]] bool WaitUntil(TPredicate predicate, int timeout_ms = WAIT_MS) {
     const int64_t deadline = k_uptime_get() + timeout_ms;
     while(!predicate()) {
         if(k_uptime_get() >= deadline)
@@ -439,13 +440,15 @@ struct Parts {
 // The controller of whichever role the binary is built for: the remote role ignores what only the
 // writer uses.
 inline std::unique_ptr<LoggingController> MakeController(const ControllerRig& rig, Parts parts) {
+    std::shared_ptr<IFsService> log_volume = std::move(parts.log_volume);
+    if(log_volume == nullptr && parts.has_log_volume)
+        log_volume = rig.fs_service;
+
     return std::make_unique<LoggingController>(
         parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service, std::move(parts.queue),
         std::move(parts.configuration_service), parts.has_sensors_manager ? rig.sensors_manager : nullptr,
-        std::move(parts.com), parts.has_publisher ? rig.publisher : nullptr,
-        parts.log_volume != nullptr ? std::move(parts.log_volume)
-                                    : (parts.has_log_volume ? std::shared_ptr<IFsService>(rig.fs_service) : nullptr),
-        parts.has_time_service ? rig.time_service : nullptr, parts.has_frame ? rig.frame : nullptr, kControllerToolId,
+        std::move(parts.com), parts.has_publisher ? rig.publisher : nullptr, std::move(log_volume),
+        parts.has_time_service ? rig.time_service : nullptr, parts.has_frame ? rig.frame : nullptr, CONTROLLER_TOOL_ID,
         std::move(parts.assets_manager)
     );
 }
@@ -458,8 +461,8 @@ inline std::unique_ptr<LoggingController> MakeController(const ControllerRig& ri
 class SensorProbe {
 private:
     struct Context {
-        k_mutex lock;
-        k_sem received;
+        k_mutex lock{};
+        k_sem received{};
         std::deque<float> values;
 
         Context() {
@@ -490,7 +493,7 @@ public:
     }
 
     // The next delivery of @p expected, skipping other values; each call consumes what it reads.
-    [[nodiscard]] bool WaitForValue(float expected, int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitForValue(float expected, int timeout_ms = WAIT_MS) {
         const int64_t deadline = k_uptime_get() + timeout_ms;
 
         while(true) {
@@ -651,8 +654,9 @@ public:
             fs_service, TestConfigQueue(), configuration_service, time_service, frame, nullptr, gpio, nullptr,
             adc_configuration_manager
         );
+        // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
         zassert_equal(
-            sensors_controller->Initialize([&first_sensors, &hook](auto manager) {
+            sensors_controller->Initialize([&first_sensors, &hook](const auto& manager) {
                 zassert_true(manager->Update(first_sensors), "The sensors were not stored");
                 if(hook)
                     hook(manager);
@@ -678,13 +682,13 @@ public:
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     // Before StartProcessing(), once the controller is initialized: the writer, as the composition
     // root registers it, so a restart of processing stops and starts it.
-    void Register(const LoggingController& controller) {
+    void Register(const LoggingController& controller) const {
         zassert_not_null(controller.GetDependentService().get(), "The controller has its dependent");
         sensors_controller->RegisterDependentService(controller.GetDependentService());
     }
 #endif
 
-    void StartProcessing() {
+    void StartProcessing() const {
         zassert_equal(sensors_controller->Start(), 0, "Processing starts");
     }
 
@@ -727,10 +731,10 @@ public:
 inline std::unique_ptr<LoggingController> MakeController(const ProcessingRig& rig, Parts parts) {
     return std::make_unique<LoggingController>(
         parts.fs_service != nullptr ? std::move(parts.fs_service) : rig.fs_service, std::move(parts.queue),
-        parts.uses_own_service ? std::move(parts.configuration_service) : rig.configuration_service,
+        parts.uses_own_service ? parts.configuration_service : rig.configuration_service,
         parts.has_sensors_manager ? rig.sensors_manager : nullptr, std::move(parts.com),
         parts.has_publisher ? rig.publisher : nullptr, parts.has_log_volume ? rig.fs_service : nullptr,
-        parts.has_time_service ? rig.time_service : nullptr, parts.has_frame ? rig.frame : nullptr, kControllerToolId,
+        parts.has_time_service ? rig.time_service : nullptr, parts.has_frame ? rig.frame : nullptr, CONTROLLER_TOOL_ID,
         std::move(parts.assets_manager)
     );
 }
@@ -742,8 +746,8 @@ inline std::unique_ptr<LoggingController> MakeController(const ProcessingRig& ri
 class HeldStore {
 private:
     struct Context {
-        k_sem stored;
-        k_sem release;
+        k_sem stored{};
+        k_sem release{};
         std::vector<bool> results;
 
         Context() {
@@ -779,12 +783,17 @@ public:
         });
     }
 
+    HeldStore(const HeldStore&) = delete;
+    HeldStore& operator=(const HeldStore&) = delete;
+    HeldStore(HeldStore&&) = delete;
+    HeldStore& operator=(HeldStore&&) = delete;
+
     ~HeldStore() {
         Release();
     }
 
     // Returns once the stores are done and the queue is held.
-    [[nodiscard]] bool WaitUntilStored(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitUntilStored(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->stored, Ms(timeout_ms)) == 0;
     }
 
@@ -805,7 +814,7 @@ public:
 class QueuedApply {
 private:
     struct Context {
-        k_sem done;
+        k_sem done{};
         bool result = false;
 
         Context() {
@@ -830,7 +839,7 @@ public:
     }
 
     // Whether the apply ran and succeeded.
-    [[nodiscard]] bool WaitForSuccess(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitForSuccess(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->done, Ms(timeout_ms)) == 0 && context_->result;
     }
 };
@@ -842,7 +851,7 @@ class Peer {
 private:
     Harness& harness_;
     uint8_t next_version_ = 1;
-    uint8_t next_transaction_ = kPeerFirstTransaction;
+    uint8_t next_transaction_ = PEER_FIRST_TRANSACTION;
 
 public:
     explicit Peer(Harness& harness) :
@@ -870,16 +879,16 @@ public:
     }
 
     // The unit's next LOGGING broadcast (from its remote control), or nothing in time.
-    std::optional<RecordedFrame> WaitForBroadcast(int timeout_ms = k_wait_ms) {
+    std::optional<RecordedFrame> WaitForBroadcast(int timeout_ms = WAIT_MS) {
         return harness_.bus.Wait(COMMAND, logging_restart_test::IsLoggingBroadcastFrame, timeout_ms);
     }
 
     // The next LOGGING command to any unit, or to @p device_id alone.
-    std::optional<RecordedFrame> WaitForCommand(int timeout_ms = k_wait_ms) {
+    std::optional<RecordedFrame> WaitForCommand(int timeout_ms = WAIT_MS) {
         return harness_.bus.Wait(COMMAND, logging_restart_test::IsLoggingCommandFrame, timeout_ms);
     }
 
-    std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = k_wait_ms) {
+    std::optional<RecordedFrame> WaitForCommandTo(uint8_t device_id, int timeout_ms = WAIT_MS) {
         return harness_.bus.Wait(
             COMMAND,
             [device_id](const Bytes& bytes) {
@@ -891,7 +900,7 @@ public:
 
     // The unit's next notification of its LOGGING_STATUS record that carries @p data, skipping
     // resends of the older ones; acknowledges each, so the unit stops resending it.
-    bool WaitForRecord(const Bytes& data, int timeout_ms = k_wait_ms) {
+    bool WaitForRecord(const Bytes& data, int timeout_ms = WAIT_MS) {
         const int64_t deadline = k_uptime_get() + timeout_ms;
 
         while(true) {
@@ -998,8 +1007,8 @@ public:
 
 private:
     struct Inbox {
-        k_sem received;
-        k_mutex lock;
+        k_sem received{};
+        k_mutex lock{};
         std::deque<Entry> entries;
 
         Inbox() {
@@ -1035,7 +1044,7 @@ public:
         zassert_not_null(subscription_.get(), "The status log's subscription was refused.");
     }
 
-    std::optional<Entry> WaitForEntry(int timeout_ms = k_wait_ms) {
+    std::optional<Entry> WaitForEntry(int timeout_ms = WAIT_MS) {
         if(k_sem_take(&inbox_->received, Ms(timeout_ms)) != 0)
             return std::nullopt;
 

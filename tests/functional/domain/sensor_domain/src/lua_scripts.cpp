@@ -35,6 +35,7 @@ ZTEST_SUITE(lua_scripts, NULL, NULL, NULL, NULL, NULL);
 namespace {
 
 std::span<const uint8_t> Bytes(std::string_view text) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the script loader takes bytes, the script is text
     return { reinterpret_cast<const uint8_t*>(text.data()), text.size() };
 }
 

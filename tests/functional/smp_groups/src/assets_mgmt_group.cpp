@@ -33,7 +33,6 @@ using namespace assets_group_test;
 
 using eerie_leap::subsys::assets::AssetAccess;
 using eerie_leap::subsys::assets::AssetKind;
-using eerie_leap::subsys::assets::AssetProvider;
 using eerie_leap::subsys::assets::AssetReader;
 using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::assets::AssetStore;
@@ -218,6 +217,11 @@ public:
 
         StartGroup();
     }
+
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
 
     ~Harness() {
         // A test that failed on the way must not leave the writes after it failing.
@@ -2397,7 +2401,7 @@ ZTEST_F(smp_assets_group, test_write_larger_than_the_volume_is_no_space) {
 
 ZTEST_F(smp_assets_group, test_write_into_a_nearly_full_volume_is_no_space) {
     Harness& harness = *fixture->harness;
-    constexpr uint64_t NEARLY_FULL = 24 * 1024;
+    constexpr uint64_t NEARLY_FULL = 24ULL * 1024;
     const Bytes old_data = Pattern(100, 1);
     harness.ReregisterImages(1000000);
     harness.Put("images/a.bin", old_data);
@@ -2504,7 +2508,7 @@ ZTEST_F(smp_assets_group, test_a_request_to_write_without_its_keys_is_invalid) {
     const std::span<const uint8_t> chunk(data);
     const uint8_t write_command = std::to_underlying(Command::WRITE);
 
-    const auto client_write = [&harness, write_command](const Bytes& body) {
+    const auto client_write = [&harness](const Bytes& body) {
         return harness.client.Write(SmpGroupId::ASSETS, write_command, body);
     };
 

@@ -24,12 +24,12 @@ namespace {
 
 // The PM board's split: global channel 0 is the only channel of the first ADC, global channels
 // 1-3 are channels 0-2 of the second.
-struct processing_stats_PmLayout {
+struct ProcessingStatsPmLayout {
     FakeAdc unit_1{ 1 };
     FakeAdc unit_2{ 3 };
     AdcSampleSet adc_samples;
 
-    processing_stats_PmLayout() {
+    ProcessingStatsPmLayout() {
         unit_1.volts_base = 0.898F;
         unit_2.volts_base = 0.0F;
         unit_2.volts_step = 0.25F;
@@ -45,7 +45,7 @@ struct processing_stats_PmLayout {
 } // namespace
 
 ZTEST(processing_stats, test_FormatChannels_names_channels_by_their_global_index) {
-    const processing_stats_PmLayout layout;
+    const ProcessingStatsPmLayout layout;
     std::array<char, 128> line{};
 
     const size_t next = RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);
@@ -55,7 +55,7 @@ ZTEST(processing_stats, test_FormatChannels_names_channels_by_their_global_index
 }
 
 ZTEST(processing_stats, test_FormatChannels_reports_a_failed_channel_by_errno) {
-    processing_stats_PmLayout layout;
+    ProcessingStatsPmLayout layout;
     layout.unit_2.failing_channel = 2;
     layout.adc_samples.Acquire();
     std::array<char, 128> line{};
@@ -83,7 +83,7 @@ ZTEST(processing_stats, test_FormatChannels_rounds_to_the_millivolt) {
 }
 
 ZTEST(processing_stats, test_FormatChannels_wraps_on_whole_channels) {
-    const processing_stats_PmLayout layout;
+    const ProcessingStatsPmLayout layout;
 
     // " ch0 0.898 V" is 12 characters: two do not fit with the terminator, one does.
     std::array<char, 24> line{};
@@ -104,7 +104,7 @@ ZTEST(processing_stats, test_FormatChannels_wraps_on_whole_channels) {
 }
 
 ZTEST(processing_stats, test_FormatChannels_cuts_a_channel_the_line_cannot_hold) {
-    const processing_stats_PmLayout layout;
+    const ProcessingStatsPmLayout layout;
     std::array<char, 8> line{};
 
     const size_t next = RateGroupScheduler::FormatChannels(layout.adc_samples, 0, line);
@@ -116,7 +116,7 @@ ZTEST(processing_stats, test_FormatChannels_cuts_a_channel_the_line_cannot_hold)
 ZTEST(processing_stats, test_FormatChannels_of_a_set_without_channels_is_empty) {
     AdcSampleSet adc_samples;
     adc_samples.Seal();
-    std::array<char, 16> line;
+    std::array<char, 16> line{};
     line.fill('x');
 
     zassert_equal(RateGroupScheduler::FormatChannels(adc_samples, 0, line), 0);

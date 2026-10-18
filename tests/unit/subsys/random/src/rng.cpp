@@ -23,13 +23,13 @@ constexpr int FILL_ROUNDS = 16;
 
 // The payload sits between two guard regions so an overrun in either direction is caught.
 struct GuardedBuffer {
-    std::array<uint8_t, GUARD_LEN + MAX_PAYLOAD + GUARD_LEN> storage;
+    std::array<uint8_t, GUARD_LEN + MAX_PAYLOAD + GUARD_LEN> storage{};
 
     GuardedBuffer() {
         storage.fill(GUARD);
     }
 
-    uint8_t* payload() {
+    uint8_t* Payload() {
         return storage.data() + GUARD_LEN;
     }
 
@@ -75,11 +75,11 @@ size_t FindUnwrittenByte(bool secure) {
 
     // A byte landing on the guard value in every round is a ~2^-128 event.
     for(int round = 0; round < FILL_ROUNDS; ++round) {
-        std::fill_n(buffer.payload(), MAX_PAYLOAD, GUARD);
-        Rng::Get(buffer.payload(), MAX_PAYLOAD, secure);
+        std::fill_n(buffer.Payload(), MAX_PAYLOAD, GUARD);
+        Rng::Get(buffer.Payload(), MAX_PAYLOAD, secure);
 
         for(size_t i = 0; i < MAX_PAYLOAD; ++i)
-            written[i] = written[i] || buffer.payload()[i] != GUARD;
+            written[i] = written[i] || buffer.Payload()[i] != GUARD;
     }
 
     auto* first_unwritten = std::ranges::find(written, false);
@@ -132,12 +132,12 @@ ZTEST(rng, test_Get_secure_writes_every_requested_byte) {
 }
 
 ZTEST(rng, test_Get_does_not_write_outside_the_requested_length) {
-    constexpr size_t lengths[] = { 1, 2, 3, 4, 5, 7, 8, 15, 16, 33, MAX_PAYLOAD };
+    constexpr size_t LENGTHS[] = { 1, 2, 3, 4, 5, 7, 8, 15, 16, 33, MAX_PAYLOAD };
 
-    for(const auto length : lengths) {
+    for(const auto length : LENGTHS) {
         GuardedBuffer buffer;
 
-        Rng::Get(buffer.payload(), length);
+        Rng::Get(buffer.Payload(), length);
 
         zassert_true(buffer.GuardsIntact(length), "guards clobbered for length %u", (unsigned int)length);
     }
@@ -147,7 +147,7 @@ ZTEST(rng, test_Get_with_zero_length_writes_nothing) {
     GuardedBuffer buffer;
     auto expected = buffer.storage;
 
-    Rng::Get(buffer.payload(), 0);
+    Rng::Get(buffer.Payload(), 0);
 
     zassert_mem_equal(buffer.storage.data(), expected.data(), expected.size());
 }

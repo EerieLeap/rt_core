@@ -126,7 +126,7 @@ ZTEST(fs_service, test_OpenFile) {
 
     zassert_true(WriteText("test_OpenFile.txt", "abcdef"));
 
-    struct fs_file_t file;
+    struct fs_file_t file{};
     zassert_equal(fs_service->OpenFile("test_OpenFile.txt", FS_O_READ, &file), 0);
 
     std::array<char, 6> buffer = {};
@@ -139,7 +139,7 @@ ZTEST(fs_service, test_OpenFile) {
 ZTEST(fs_service, test_OpenFile_rejects_invalid_arguments) {
     auto* fs_service = GetFsService();
 
-    struct fs_file_t file;
+    struct fs_file_t file{};
 
     zassert_equal(fs_service->OpenFile("test_OpenFile.txt", FS_O_READ, nullptr), -EINVAL);
     zassert_equal(fs_service->OpenFile("../test_OpenFile.txt", FS_O_READ, &file), -EINVAL);
@@ -212,6 +212,7 @@ ZTEST(fs_service, test_ReadFile) {
     const bool read_result = fs_service->ReadFile(file_path, read_buffer.data(), read_buffer.size(), read_size);
     zassert_true(read_result);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): reads a struct back out of a raw byte buffer
     const auto test_data_read = *reinterpret_cast<TestData*>(read_buffer.data());
 
     zassert_str_equal(test_data_read.str.c_str(), test_data.str.c_str());
@@ -539,7 +540,7 @@ ZTEST(fs_service, test_Delete) {
     for(const auto& name : dir_files)
         dir_files_set.insert(name);
     zassert_equal(dir_files_set.count("test_Delete_file_1.txt"), 1);
-    zassert_equal(dir_files_set.count("test_Delete_file_2.txt"), 0);
+    zassert_false(dir_files_set.contains("test_Delete_file_2.txt"));
     zassert_equal(dir_files_set.count("test_Delete_file_3.txt"), 1);
 
     fs_service->DeleteFile("test_Delete_file_4.txt");
@@ -550,7 +551,7 @@ ZTEST(fs_service, test_Delete) {
     for(const auto& name : core_files)
         core_files_set.insert(name);
     zassert_equal(core_files_set.count(dir_path), 1);
-    zassert_equal(core_files_set.count("test_Delete_file_4.txt"), 0);
+    zassert_false(core_files_set.contains("test_Delete_file_4.txt"));
 }
 
 ZTEST(fs_service, test_DeleteFile_fails_for_missing_file) {

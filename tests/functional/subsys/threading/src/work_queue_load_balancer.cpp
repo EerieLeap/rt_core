@@ -38,6 +38,11 @@ public:
         }
     }
 
+    BalancedQueues(const BalancedQueues&) = delete;
+    BalancedQueues& operator=(const BalancedQueues&) = delete;
+    BalancedQueues(BalancedQueues&&) = delete;
+    BalancedQueues& operator=(BalancedQueues&&) = delete;
+
     ~BalancedQueues() {
         for(const auto& queue_thread : queue_threads_)
             queue_thread->Stop();

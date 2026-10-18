@@ -222,10 +222,10 @@ ZTEST(rate_group_scheduler, test_SetGroups_reports_the_period_the_group_runs_at)
     );
 
     // 429 496 730 ms is 4 294 967 300 ticks at 10 000 ticks/s, which a 32-bit conversion wraps to 4.
-    constexpr int kLongPeriodMs = 429496730;
+    constexpr int LONG_PERIOD_MS = 429496730;
 
     std::vector<std::unique_ptr<RateGroup>> groups;
-    for(const int period_ms : { 20, 25, kLongPeriodMs }) {
+    for(const int period_ms : { 20, 25, LONG_PERIOD_MS }) {
         groups.push_back(std::make_unique<RateGroup>());
         groups.back()->period_ms = period_ms;
     }
@@ -243,9 +243,9 @@ ZTEST(rate_group_scheduler, test_SetGroups_reports_the_period_the_group_runs_at)
     if(CONFIG_SYS_CLOCK_TICKS_PER_SEC == 100)
         zassert_equal(stats[1].period_us, 30000, "Rounded up to the next 10 ms tick");
 
-    zassert_equal(stats[2].period_ms, kLongPeriodMs);
+    zassert_equal(stats[2].period_ms, LONG_PERIOD_MS);
     zassert_equal(
-        stats[2].period_us, static_cast<uint64_t>(kLongPeriodMs) * 1000, "The long period runs every %llu us",
+        stats[2].period_us, static_cast<uint64_t>(LONG_PERIOD_MS) * 1000, "The long period runs every %llu us",
         static_cast<unsigned long long>(stats[2].period_us)
     );
 }
@@ -269,43 +269,43 @@ ZTEST_SUITE(scheduler_timing, NULL, NULL, NULL, NULL, NULL);
 // with a tick shorter than the work (the ESP32's 100 us) it is 20 + 5 + 0.1 ms. Either way the tick
 // and the round-up added to every period. Absolute deadlines add neither.
 ZTEST(scheduler_timing, test_delivered_period_equals_the_configured_period) {
-    constexpr int kPeriodMs = 20;
-    constexpr size_t kTicks = 100;
+    constexpr int PERIOD_MS = 20;
+    constexpr size_t TICK_COUNT = 100;
 
-    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("timed", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("timed", "1", PERIOD_MS) });
     rig.recorder->costly_sensor_id_hash = StringHelpers::GetHash("timed");
     rig.recorder->cost_us = 5000;
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.scheduler_service->Start());
-    SleepUntil(start_ticks, kPeriodMs * kTicks + kPeriodMs / 2);
+    SleepUntil(start_ticks, PERIOD_MS * TICK_COUNT + PERIOD_MS / 2);
     zassert_true(rig.scheduler_service->Pause());
 
     const auto stats = rig.scheduler_service->GetRateGroupStats();
     const auto timestamps = rig.recorder->GetTimestamps("timed");
     zassert_true(rig.scheduler_service->Stop());
 
-    zassert_equal(timestamps.size(), kTicks, "%zu ticks", timestamps.size());
+    zassert_equal(timestamps.size(), TICK_COUNT, "%zu ticks", timestamps.size());
     zassert_equal(
-        timestamps.front(), TicksToMs(start_ticks + k_ms_to_ticks_ceil32(kPeriodMs)),
+        timestamps.front(), TicksToMs(start_ticks + k_ms_to_ticks_ceil32(PERIOD_MS)),
         "The first tick is one period after Start()"
     );
 
     int64_t max_deviation_ms = 0;
     for(size_t i = 1; i < timestamps.size(); i++) {
         const int64_t period_ms = timestamps[i] - timestamps[i - 1];
-        max_deviation_ms = std::max(max_deviation_ms, std::abs(period_ms - kPeriodMs));
+        max_deviation_ms = std::max(max_deviation_ms, std::abs(period_ms - PERIOD_MS));
     }
 
     const int64_t total_ms = timestamps.back() - timestamps.front();
     zassert_equal(
-        total_ms, kPeriodMs * static_cast<int64_t>(kTicks - 1), "Mean period %lld/%zu ms", total_ms, kTicks - 1
+        total_ms, PERIOD_MS * static_cast<int64_t>(TICK_COUNT - 1), "Mean period %lld/%zu ms", total_ms, TICK_COUNT - 1
     );
     zassert_true(max_deviation_ms <= TicksToMs(1), "Max deviation %lld ms", max_deviation_ms);
     zassert_equal(max_deviation_ms, 0, "native_sim has no jitter to explain one");
 
     zassert_equal(stats.size(), 1);
-    zassert_equal(stats[0].ticks, kTicks);
+    zassert_equal(stats[0].ticks, TICK_COUNT);
     zassert_equal(stats[0].overruns, 0);
     zassert_true(
         stats[0].last_us >= 5000 && stats[0].max_us < 10000, "Tick last %u us, max %u us", stats[0].last_us,
@@ -316,9 +316,9 @@ ZTEST(scheduler_timing, test_delivered_period_equals_the_configured_period) {
 // A 30 ms tick in a 20 ms group: each tick ends past the next deadline, which is skipped and
 // counted, and the group runs again on its own phase, two periods after the last start.
 ZTEST(scheduler_timing, test_overruns_are_counted_and_the_phase_is_kept) {
-    constexpr int kPeriodMs = 20;
+    constexpr int PERIOD_MS = 20;
 
-    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("overrun", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("overrun", "1", PERIOD_MS) });
     rig.recorder->costly_sensor_id_hash = StringHelpers::GetHash("overrun");
     rig.recorder->cost_us = 30000;
 
@@ -339,17 +339,17 @@ ZTEST(scheduler_timing, test_overruns_are_counted_and_the_phase_is_kept) {
     zassert_true(stats[0].max_us >= 30000, "Tick max %u us", stats[0].max_us);
 
     // Every start on the phase Start() set: a whole number of periods from the first deadline.
-    const int64_t phase_ms = TicksToMs(start_ticks + k_ms_to_ticks_ceil32(kPeriodMs));
+    const int64_t phase_ms = TicksToMs(start_ticks + k_ms_to_ticks_ceil32(PERIOD_MS));
     zassert_equal(timestamps.front(), phase_ms);
     for(size_t i = 0; i < timestamps.size(); i++)
         zassert_equal(
-            (timestamps[i] - phase_ms) % kPeriodMs, 0, "tick %zu at %lld ms is off the phase", i, timestamps[i]
+            (timestamps[i] - phase_ms) % PERIOD_MS, 0, "tick %zu at %lld ms is off the phase", i, timestamps[i]
         );
 
     for(size_t i = 1; i < timestamps.size(); i++)
         zassert_equal(
-            timestamps[i] - timestamps[i - 1], 2 * kPeriodMs, "tick %zu: the missed deadline is skipped, not run late",
-            i
+            timestamps[i] - timestamps[i - 1], 2LL * PERIOD_MS,
+            "tick %zu: the missed deadline is skipped, not run late", i
         );
 }
 
@@ -405,12 +405,12 @@ ZTEST(scheduler_timing, test_faster_groups_run_first_at_coincident_deadlines) {
 
 // Two sensors on channel 0 share one slot: one request per tick, `samples` conversions, not twice.
 ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
-    constexpr uint16_t kSamples = 8;
+    constexpr uint16_t K_SAMPLES = 8;
 
     const auto adc = MakeEmulator();
     const auto adc_manager = MakeAdcManager(adc);
     const auto adc_configuration = MakeAdcConfiguration(
-        adc_manager->GetChannelCount(), kSamples, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
+        adc_manager->GetChannelCount(), K_SAMPLES, MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
     );
 
     const auto rig = MakeSchedulerRig(
@@ -439,7 +439,7 @@ ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
 
     zassert_equal(after.requests - before.requests, stats[0].ticks, "One Sample() per tick");
     zassert_equal(
-        after.conversions - before.conversions, stats[0].ticks * kSamples, "%u conversions in %u ticks",
+        after.conversions - before.conversions, stats[0].ticks * K_SAMPLES, "%u conversions in %u ticks",
         after.conversions - before.conversions, stats[0].ticks
     );
     zassert_equal(after.errors, before.errors);
@@ -451,10 +451,10 @@ ZTEST(scheduler_timing, test_one_sample_per_channel_per_tick) {
 // A pause cancels the tick; a resume starts every group on a fresh phase one period out, so the
 // paused time is neither run nor counted as overruns.
 ZTEST(scheduler_timing, test_pause_and_resume_realign_the_deadlines) {
-    constexpr int kPeriodMs = 20;
+    constexpr int PERIOD_MS = 20;
 
-    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("paused", "1", kPeriodMs) });
-    const k_ticks_t period_ticks = k_ms_to_ticks_ceil32(kPeriodMs);
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("paused", "1", PERIOD_MS) });
+    const k_ticks_t period_ticks = k_ms_to_ticks_ceil32(PERIOD_MS);
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.scheduler_service->Start());
@@ -490,7 +490,7 @@ ZTEST(scheduler_timing, test_pause_and_resume_realign_the_deadlines) {
         "The first tick after the resume is one period out"
     );
     for(size_t i = commits_at_pause + 1; i < commits.size(); i++)
-        zassert_equal(commits[i].timestamp_ms - commits[i - 1].timestamp_ms, kPeriodMs);
+        zassert_equal(commits[i].timestamp_ms - commits[i - 1].timestamp_ms, PERIOD_MS);
 
     zassert_equal(stats.at(0).ticks, 15);
     zassert_equal(stats.at(0).overruns, 0, "The pause is not an overrun");
@@ -503,12 +503,12 @@ namespace {
 // starts it again with the first tick after the restart throwing out of the pipeline, which the
 // dispatcher must retry rather than take as the end of every group.
 void HaltDuringTickThenRestart(bool is_stop) {
-    constexpr int kPeriodMs = 20;
+    constexpr int PERIOD_MS = 20;
 
-    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("halted", "1", kPeriodMs) });
+    const auto rig = MakeSchedulerRig({ MakeVirtualSensor("halted", "1", PERIOD_MS) });
     rig.recorder->costly_sensor_id_hash = StringHelpers::GetHash("halted");
     rig.recorder->cost_us = 15000;
-    const k_ticks_t period_ticks = k_ms_to_ticks_ceil32(kPeriodMs);
+    const k_ticks_t period_ticks = k_ms_to_ticks_ceil32(PERIOD_MS);
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.scheduler_service->Start());
@@ -566,10 +566,10 @@ void HaltDuringTickThenRestart(bool is_stop) {
         "The first tick after the restart is one period out"
     );
     for(size_t i = 2; i < commits.size(); i++)
-        zassert_equal(commits[i].timestamp_ms - commits[i - 1].timestamp_ms, kPeriodMs);
+        zassert_equal(commits[i].timestamp_ms - commits[i - 1].timestamp_ms, PERIOD_MS);
 
     // The tick that threw is not counted; a stop rebuilt the groups, a pause kept the tick before it.
-    zassert_equal(stats.at(0).ticks, is_stop ? 4 : 1 + 4);
+    zassert_equal(stats.at(0).ticks, is_stop ? 4U : 1U + 4U);
     zassert_equal(stats.at(0).overruns, 0);
 }
 

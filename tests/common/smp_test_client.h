@@ -35,7 +35,7 @@ using Bytes = std::vector<uint8_t>;
 class CborMap {
 private:
     std::array<uint8_t, CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE> buffer_{};
-    zcbor_state_t states_[4];
+    zcbor_state_t states_[4]{};
 
 public:
     CborMap() {
@@ -51,6 +51,7 @@ public:
     CborMap& Put(std::string_view key, std::span<const uint8_t> value) {
         zassert_true(
             zcbor_tstr_encode_ptr(states_, key.data(), key.size())
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
             && zcbor_bstr_encode_ptr(states_, reinterpret_cast<const char*>(value.data()), value.size())
         );
         return *this;
@@ -176,6 +177,7 @@ inline bool DecodeEntry(
         if(!zcbor_tstr_decode(zsd, &key))
             return false;
 
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
         const std::string name(reinterpret_cast<const char*>(key.value), key.len);
 
         if(flags != nullptr && MajorType(zsd) == 7) {
@@ -197,6 +199,7 @@ inline bool DecodeEntry(
                 if(!zcbor_tstr_decode(zsd, &item))
                     return false;
 
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
                 items.emplace_back(reinterpret_cast<const char*>(item.value), item.len);
             }
 
@@ -211,6 +214,7 @@ inline bool DecodeEntry(
             if(!zcbor_tstr_decode(zsd, &value))
                 return false;
 
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
             (*texts)[name] = std::string(reinterpret_cast<const char*>(value.value), value.len);
             continue;
         }
@@ -225,6 +229,7 @@ inline bool DecodeEntry(
     return zcbor_map_end_decode(zsd);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one flat decoder that mirrors the response layout; splitting it would only scatter the zcbor state handling
 inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
     // Deep enough for the response map, a list, its maps and their lists.
     ZCBOR_STATE_D(zsd, 5, body.data(), body.size(), 1, 0);
@@ -237,6 +242,7 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
         if(!zcbor_tstr_decode(zsd, &key))
             return false;
 
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
         const std::string name(reinterpret_cast<const char*>(key.value), key.len);
 
         if(name == "err") {
@@ -271,6 +277,7 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                 zcbor_string value{};
                 if(!zcbor_tstr_decode(zsd, &value))
                     return false;
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
                 response.texts[name] = std::string(reinterpret_cast<const char*>(value.value), value.len);
                 break;
             }
@@ -328,7 +335,7 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
 // Stands in for an SMP client: injects requests into MCUmgr and captures the responses.
 class SmpTestClient {
 private:
-    static inline SmpTestClient* instance_ = nullptr;
+    static inline SmpTestClient* instance = nullptr;
 
     smp_transport transport_{};
     k_sem received_{};
@@ -337,7 +344,7 @@ private:
     uint8_t sequence_ = 0;
 
     static int Output(net_buf* packet) {
-        SmpTestClient* client = instance_;
+        SmpTestClient* client = instance;
         if(client != nullptr) {
             k_mutex_lock(&client->lock_, K_FOREVER);
             client->response_.assign(packet->data, packet->data + packet->len);
@@ -356,13 +363,18 @@ public:
         k_mutex_init(&lock_);
         transport_.functions.output = Output;
         zassert_equal(smp_transport_init(&transport_), 0);
-        instance_ = this;
+        instance = this;
     }
 
+    SmpTestClient(const SmpTestClient&) = delete;
+    SmpTestClient& operator=(const SmpTestClient&) = delete;
+    SmpTestClient(SmpTestClient&&) = delete;
+    SmpTestClient& operator=(SmpTestClient&&) = delete;
+
     ~SmpTestClient() {
-        k_work_sync sync;
+        k_work_sync sync{};
         k_work_cancel_sync(&transport_.work, &sync);
-        instance_ = nullptr;
+        instance = nullptr;
     }
 
     std::optional<Response> Send(SmpOperation operation, SmpGroupId group, uint8_t command, const Bytes& body) {

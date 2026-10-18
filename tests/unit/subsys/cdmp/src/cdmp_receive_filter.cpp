@@ -44,7 +44,7 @@ public:
 };
 
 struct FrameCounter {
-    k_sem received;
+    k_sem received{};
 
     FrameCounter() {
         k_sem_init(&received, 0, K_SEM_MAX_LIMIT);
@@ -99,9 +99,17 @@ struct ReceiveFilterFixture {
         probe.Configure(canbus);
     }
 
+    ReceiveFilterFixture(const ReceiveFilterFixture&) = delete;
+    ReceiveFilterFixture& operator=(const ReceiveFilterFixture&) = delete;
+    ReceiveFilterFixture(ReceiveFilterFixture&&) = delete;
+    ReceiveFilterFixture& operator=(ReceiveFilterFixture&&) = delete;
+
     ~ReceiveFilterFixture() {
-        for(const int handler_id : handler_ids)
-            (*canbus)->RemoveFrameReceivedHandler(handler_id);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(Canbus* live_bus = canbus->Get(); live_bus != nullptr) {
+            for(const int handler_id : handler_ids)
+                live_bus->RemoveFrameReceivedHandler(handler_id);
+        }
     }
 
     int Keep(int handler_id) {

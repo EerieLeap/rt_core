@@ -12,7 +12,7 @@ using namespace eerie_leap::domain::canbus_domain::utilities;
 
 ZTEST_SUITE(can_signal_codec, NULL, NULL, NULL, NULL, NULL);
 
-static CanSignalConfiguration can_signal_codec_CreateSignal(
+static CanSignalConfiguration CanSignalCodecCreateSignal(
     uint32_t start_bit,
     uint32_t size_bits,
     CanSignalByteOrder byte_order,
@@ -34,7 +34,7 @@ static CanSignalConfiguration can_signal_codec_CreateSignal(
 }
 
 ZTEST(can_signal_codec, test_DecodeLittleEndianUnsigned) {
-    const auto signal = can_signal_codec_CreateSignal(8, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
+    const auto signal = CanSignalCodecCreateSignal(8, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
     std::array<uint8_t, 8> data = { 0x00, 0x34, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
@@ -44,7 +44,7 @@ ZTEST(can_signal_codec, test_DecodeLittleEndianUnsigned) {
 }
 
 ZTEST(can_signal_codec, test_DecodeBigEndianUnsigned) {
-    const auto signal = can_signal_codec_CreateSignal(7, 16, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA, false);
+    const auto signal = CanSignalCodecCreateSignal(7, 16, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA, false);
     std::array<uint8_t, 8> data = { 0x12, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
@@ -54,7 +54,7 @@ ZTEST(can_signal_codec, test_DecodeBigEndianUnsigned) {
 }
 
 ZTEST(can_signal_codec, test_DecodeSignedIsSignExtended) {
-    const auto signal = can_signal_codec_CreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, true);
+    const auto signal = CanSignalCodecCreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, true);
     std::array<uint8_t, 8> data = { 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
@@ -64,9 +64,7 @@ ZTEST(can_signal_codec, test_DecodeSignedIsSignExtended) {
 }
 
 ZTEST(can_signal_codec, test_DecodeAppliesFactorAndOffset) {
-    const auto signal = can_signal_codec_CreateSignal(
-        0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false, 0.5F, -40.0F
-    );
+    const auto signal = CanSignalCodecCreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false, 0.5F, -40.0F);
     std::array<uint8_t, 8> data = { 100, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     auto value = CanSignalCodec::Decode(signal, data);
@@ -76,7 +74,7 @@ ZTEST(can_signal_codec, test_DecodeAppliesFactorAndOffset) {
 }
 
 ZTEST(can_signal_codec, test_EncodeLittleEndianWritesOnlySignalBits) {
-    const auto signal = can_signal_codec_CreateSignal(8, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
+    const auto signal = CanSignalCodecCreateSignal(8, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
     std::array<uint8_t, 8> data = { 0xAA, 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 0x00 };
 
     zassert_true(CanSignalCodec::Encode(signal, 0x1234, data));
@@ -88,7 +86,7 @@ ZTEST(can_signal_codec, test_EncodeLittleEndianWritesOnlySignalBits) {
 }
 
 ZTEST(can_signal_codec, test_EncodeBigEndianWritesOnlySignalBits) {
-    const auto signal = can_signal_codec_CreateSignal(7, 16, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA, false);
+    const auto signal = CanSignalCodecCreateSignal(7, 16, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA, false);
     std::array<uint8_t, 8> data = { 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     zassert_true(CanSignalCodec::Encode(signal, 0x1234, data));
@@ -102,7 +100,7 @@ ZTEST(can_signal_codec, test_EncodeDecodeRoundTrip) {
     const std::array byte_orders = { CanSignalByteOrder::LITTLE_ENDIAN_INTEL, CanSignalByteOrder::BIG_ENDIAN_MOTOROLA };
 
     for(const auto byte_order : byte_orders) {
-        const auto signal = can_signal_codec_CreateSignal(
+        const auto signal = CanSignalCodecCreateSignal(
             byte_order == CanSignalByteOrder::BIG_ENDIAN_MOTOROLA ? 15 : 8, 12, byte_order, true, 0.25F, -100.0F
         );
 
@@ -118,7 +116,7 @@ ZTEST(can_signal_codec, test_EncodeDecodeRoundTrip) {
 }
 
 ZTEST(can_signal_codec, test_EncodeSaturatesOutOfRangeValues) {
-    const auto signal = can_signal_codec_CreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
+    const auto signal = CanSignalCodecCreateSignal(0, 8, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
     std::array<uint8_t, 8> data = {};
 
     zassert_true(CanSignalCodec::Encode(signal, 1000.0F, data));
@@ -129,7 +127,7 @@ ZTEST(can_signal_codec, test_EncodeSaturatesOutOfRangeValues) {
 }
 
 ZTEST(can_signal_codec, test_RejectsSignalExceedingData) {
-    const auto signal = can_signal_codec_CreateSignal(56, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
+    const auto signal = CanSignalCodecCreateSignal(56, 16, CanSignalByteOrder::LITTLE_ENDIAN_INTEL, false);
     std::array<uint8_t, 8> data = {};
 
     zassert_false(CanSignalCodec::IsLayoutValid(signal, data.size()));

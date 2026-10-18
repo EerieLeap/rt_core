@@ -25,7 +25,7 @@ using namespace eerie_leap::domain::sensor_domain::utilities;
 
 ZTEST_SUITE(sensor_readings_frame, NULL, NULL, NULL, NULL, NULL);
 
-static std::vector<std::shared_ptr<Sensor>> sensor_readings_frame_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> SensorReadingsFrameGetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -102,7 +102,7 @@ SensorReading MakeReading(
 } // namespace
 
 ZTEST(sensor_readings_frame, test_SensorReading_is_trivially_copyable_and_carries_its_hash) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
 
     const SensorReading reading(sensors[1].get());
 
@@ -116,7 +116,7 @@ ZTEST(sensor_readings_frame, test_SensorReading_is_trivially_copyable_and_carrie
 }
 
 ZTEST(sensor_readings_frame, test_AddOrUpdateReading) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -148,7 +148,7 @@ ZTEST(sensor_readings_frame, test_AddOrUpdateReading) {
 }
 
 ZTEST(sensor_readings_frame, test_AddOrUpdateReading_ignores_unset_source) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -160,7 +160,7 @@ ZTEST(sensor_readings_frame, test_AddOrUpdateReading_ignores_unset_source) {
 }
 
 ZTEST(sensor_readings_frame, test_isr_and_processing_readings_share_one_slot) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -181,7 +181,7 @@ ZTEST(sensor_readings_frame, test_isr_and_processing_readings_share_one_slot) {
 }
 
 ZTEST(sensor_readings_frame, test_TryGetReading_hash_and_id_overloads_agree) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -202,7 +202,7 @@ ZTEST(sensor_readings_frame, test_TryGetReading_hash_and_id_overloads_agree) {
 }
 
 ZTEST(sensor_readings_frame, test_processed_reading_without_a_value_has_no_value) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -216,7 +216,7 @@ ZTEST(sensor_readings_frame, test_processed_reading_without_a_value_has_no_value
 }
 
 ZTEST(sensor_readings_frame, test_failed_update_keeps_last_processed_value) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -238,7 +238,7 @@ ZTEST(sensor_readings_frame, test_failed_update_keeps_last_processed_value) {
 }
 
 ZTEST(sensor_readings_frame, test_SnapshotLoggableReadings_reports_a_latest_error) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -295,7 +295,7 @@ ZTEST(sensor_readings_frame, test_SnapshotLoggableReadings_reports_a_latest_erro
 }
 
 ZTEST(sensor_readings_frame, test_SnapshotProcessedReadings_copies_every_processed_reading) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -328,7 +328,7 @@ ZTEST(sensor_readings_frame, test_SnapshotProcessedReadings_copies_every_process
 }
 
 ZTEST(sensor_readings_frame, test_TakeProcessedReadings_returns_each_update_once) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     std::array<SensorReading, 4> taken;
@@ -360,7 +360,7 @@ ZTEST(sensor_readings_frame, test_TakeProcessedReadings_returns_each_update_once
 }
 
 ZTEST(sensor_readings_frame, test_TakeProcessedReadings_keeps_what_does_not_fit_pending) {
-    const auto sensors = sensor_readings_frame_GetTestSensors();
+    const auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     for(const auto& sensor : sensors)
@@ -375,7 +375,7 @@ ZTEST(sensor_readings_frame, test_TakeProcessedReadings_keeps_what_does_not_fit_
 }
 
 ZTEST(sensor_readings_frame, test_MarkProcessedReadingsUpdated_makes_every_processed_reading_pending_again) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -405,7 +405,7 @@ ZTEST(sensor_readings_frame, test_MarkProcessedReadingsUpdated_makes_every_proce
 }
 
 ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     // A slot exists before the first reading, so an evaluator never binds a null pointer.
@@ -439,7 +439,7 @@ ZTEST(sensor_readings_frame, test_GetReadingValuePtr) {
 }
 
 ZTEST(sensor_readings_frame, test_GetReadingValues_reads_each_hash_in_order) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -466,7 +466,7 @@ ZTEST(sensor_readings_frame, test_GetReadingValues_reads_each_hash_in_order) {
 }
 
 ZTEST(sensor_readings_frame, test_can_frame_is_stored_apart_from_the_reading) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
 
     // Only a raw CAN sensor gets a frame slot.
     const auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
@@ -502,7 +502,7 @@ ZTEST(sensor_readings_frame, test_can_frame_is_stored_apart_from_the_reading) {
 }
 
 ZTEST(sensor_readings_frame, test_disabled_sensor_keeps_its_slot_without_a_value) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     sensors[1]->is_enabled = false;
     const auto sensor_readings_frame = MakeFrame(sensors);
 
@@ -557,7 +557,7 @@ ZTEST(sensor_readings_frame, test_disabled_raw_can_sensor_has_no_frame_store) {
 }
 
 ZTEST(sensor_readings_frame, test_ClearReadings) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     zassert_equal(sensor_readings_frame->GetProcessedReadingCount(), 0);
@@ -591,7 +591,7 @@ ZTEST(sensor_readings_frame, test_ClearReadings) {
 }
 
 ZTEST(sensor_readings_frame, test_ClearProcessedReadings) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     sensor_readings_frame->AddOrUpdateReading(
@@ -608,7 +608,7 @@ ZTEST(sensor_readings_frame, test_ClearProcessedReadings) {
 }
 
 ZTEST(sensor_readings_frame, test_Configure_lays_out_one_slot_per_sensor) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = std::make_shared<SensorReadingsFrame>();
 
     zassert_equal(sensor_readings_frame->GetGeneration(), 0);
@@ -632,7 +632,7 @@ ZTEST(sensor_readings_frame, test_Configure_lays_out_one_slot_per_sensor) {
 }
 
 ZTEST(sensor_readings_frame, test_readings_of_unconfigured_sensors_are_ignored) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame({ sensors[0], sensors[1] });
 
     zassert_true(sensor_readings_frame->AddOrUpdateReading(
@@ -648,7 +648,7 @@ ZTEST(sensor_readings_frame, test_readings_of_unconfigured_sensors_are_ignored) 
 }
 
 ZTEST(sensor_readings_frame, test_Configure_again_starts_a_new_generation) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     const float* value_ptr = sensor_readings_frame->GetReadingValuePtr("sensor_2");
@@ -670,7 +670,7 @@ ZTEST(sensor_readings_frame, test_Configure_again_starts_a_new_generation) {
 }
 
 ZTEST(sensor_readings_frame, test_AreValuesAvailable) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
     const auto sensor_readings_frame = MakeFrame(sensors);
 
     const std::array<SensorSlot, 2> slots = { sensor_readings_frame->FindSlot(sensors[0]->id_hash).value(),
@@ -693,7 +693,7 @@ ZTEST(sensor_readings_frame, test_AreValuesAvailable) {
 }
 
 ZTEST(sensor_readings_frame, test_raw_can_frames_are_queued_for_the_log_writer) {
-    auto sensors = sensor_readings_frame_GetTestSensors();
+    auto sensors = SensorReadingsFrameGetTestSensors();
 
     const auto raw = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "raw");
     raw->configuration.type = SensorType::CANBUS_RAW;

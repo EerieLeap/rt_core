@@ -227,7 +227,7 @@ ZTEST(mdf_file, test_OutputMatchesTheGoldenFile) {
     auto file = MakeStream();
     WriteGoldenFile(file);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
 
 #ifdef CONFIG_ARCH_POSIX
     const std::string_view dump_dir;
@@ -257,7 +257,7 @@ ZTEST(mdf_file, test_OutputMatchesTheGoldenFile) {
 // nest a call per group or per channel. Only the QEMU targets can catch a regression here: native_sim
 // runs Zephyr threads on large host stacks, where the old recursive code passed this test too.
 ZTEST(mdf_file, test_DeepChainsSerializeAndDestroyIteratively) {
-    constexpr size_t group_count = 1000;
+    constexpr size_t GROUP_COUNT = 1000;
 
     std::vector<uint64_t> group_addresses;
     std::vector<uint64_t> channel_addresses;
@@ -267,7 +267,7 @@ ZTEST(mdf_file, test_DeepChainsSerializeAndDestroyIteratively) {
         Mdf4File mdf_file({ .record_id_size_bytes = 2 });
 
         std::vector<std::shared_ptr<mdf4::ChannelGroupBlock>> groups;
-        for(size_t i = 0; i < group_count; i++) {
+        for(size_t i = 0; i < GROUP_COUNT; i++) {
             const auto group = mdf_file.CreateChannelGroup(i + 1, "group_" + std::to_string(i));
             mdf_file.CreateDataChannel(group, MdfDataType::Float32, "value", "bar");
             groups.push_back(group);
@@ -275,7 +275,7 @@ ZTEST(mdf_file, test_DeepChainsSerializeAndDestroyIteratively) {
 
         auto file = MakeStream();
         const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
-        file_bytes = file.str();
+        file_bytes = file.Str();
         zassert_equal(file_bytes.size(), header_bytes_written, "the header is everything that was written");
 
         for(const auto& group : groups) {
@@ -288,9 +288,9 @@ ZTEST(mdf_file, test_DeepChainsSerializeAndDestroyIteratively) {
     }
 
     const auto data = AsBytes(file_bytes);
-    zassert_equal(group_addresses.size(), group_count);
+    zassert_equal(group_addresses.size(), GROUP_COUNT);
     zassert_equal(
-        channel_addresses.size(), 2 * group_count, "every group has the master channel and one value channel"
+        channel_addresses.size(), 2 * GROUP_COUNT, "every group has the master channel and one value channel"
     );
 
     for(size_t i = 0; i < group_addresses.size(); i++) {
@@ -310,7 +310,7 @@ ZTEST(mdf_file, test_DeepChainsSerializeAndDestroyIteratively) {
     // A chain built outside a file is released by its head alone.
     auto data_group = std::make_shared<mdf4::DataGroupBlock>(2);
     std::weak_ptr<mdf4::ChannelGroupBlock> last_group;
-    for(size_t i = 0; i < group_count; i++) {
+    for(size_t i = 0; i < GROUP_COUNT; i++) {
         auto group = std::make_shared<mdf4::ChannelGroupBlock>(2, i + 1);
         last_group = group;
         data_group->AddChannelGroup(std::move(group));
@@ -372,20 +372,20 @@ ZTEST(mdf_file, test_WriteAndFinalize) {
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
     zassert_true(header_bytes_written > ID_BLOCK_SIZE);
 
-    constexpr uint64_t value_record_count = 10;
-    for(uint64_t i = 0; i < value_record_count; i++) {
+    constexpr uint64_t VALUE_RECORD_COUNT = 10;
+    for(uint64_t i = 0; i < VALUE_RECORD_COUNT; i++) {
         std::array<MdfValue, 2> values{ static_cast<double>(i) * 0.1, i * i };
         mdf_file.WriteDataRecordToStream(channel_group_1, file, values);
     }
 
-    for(uint64_t i = 0; i < value_record_count; i++) {
+    for(uint64_t i = 0; i < VALUE_RECORD_COUNT; i++) {
         std::array<MdfValue, 2> values{ static_cast<double>(i) * 0.1, static_cast<float>(i) };
         mdf_file.WriteDataRecordToStream(channel_group_2, file, values);
     }
 
-    constexpr uint64_t can_record_count = 10;
-    constexpr size_t can_payload_size = 8;
-    for(uint64_t i = 0; i < can_record_count; i++) {
+    constexpr uint64_t CAN_RECORD_COUNT = 10;
+    constexpr size_t CAN_PAYLOAD_SIZE = 8;
+    for(uint64_t i = 0; i < CAN_RECORD_COUNT; i++) {
         CanFrame can_frame{ .id = 0x18FF1234,
             .is_extended = true,
             .is_transmit = false,
@@ -396,15 +396,15 @@ ZTEST(mdf_file, test_WriteAndFinalize) {
         mdf_file.WriteCanbusDataRecordToStream(channel_group_3, file, can_frame, static_cast<double>(i) * 0.1, 1);
     }
 
-    zassert_equal(channel_group_1->GetCycleCount(), value_record_count);
-    zassert_equal(channel_group_2->GetCycleCount(), value_record_count);
-    zassert_equal(channel_group_3->GetCycleCount(), can_record_count);
-    zassert_equal(vlsd_channel_group_3->GetCycleCount(), can_record_count);
-    zassert_equal(vlsd_channel_group_3->GetVlsdDataSizeBytes(), can_record_count * can_payload_size);
+    zassert_equal(channel_group_1->GetCycleCount(), VALUE_RECORD_COUNT);
+    zassert_equal(channel_group_2->GetCycleCount(), VALUE_RECORD_COUNT);
+    zassert_equal(channel_group_3->GetCycleCount(), CAN_RECORD_COUNT);
+    zassert_equal(vlsd_channel_group_3->GetCycleCount(), CAN_RECORD_COUNT);
+    zassert_equal(vlsd_channel_group_3->GetVlsdDataSizeBytes(), CAN_RECORD_COUNT * CAN_PAYLOAD_SIZE);
 
     mdf_file.FinalizeToStream(file);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     // File identifier is switched to finalized and the unfinalized flags are cleared.
@@ -419,10 +419,10 @@ ZTEST(mdf_file, test_WriteAndFinalize) {
         data_block_address + BLOCK_HEADER_SIZE, header_bytes_written, "DT block is not the last header block"
     );
 
-    const uint64_t expected_record_bytes = value_record_count * (RECORD_ID_SIZE + channel_group_1->GetDataSizeBytes())
-        + value_record_count * (RECORD_ID_SIZE + channel_group_2->GetDataSizeBytes())
-        + can_record_count * (RECORD_ID_SIZE + channel_group_3->GetDataSizeBytes())
-        + can_record_count * (RECORD_ID_SIZE + VLSD_LENGTH_SIZE + can_payload_size);
+    const uint64_t expected_record_bytes = VALUE_RECORD_COUNT * (RECORD_ID_SIZE + channel_group_1->GetDataSizeBytes())
+        + VALUE_RECORD_COUNT * (RECORD_ID_SIZE + channel_group_2->GetDataSizeBytes())
+        + CAN_RECORD_COUNT * (RECORD_ID_SIZE + channel_group_3->GetDataSizeBytes())
+        + CAN_RECORD_COUNT * (RECORD_ID_SIZE + VLSD_LENGTH_SIZE + CAN_PAYLOAD_SIZE);
 
     zassert_equal(RECORD_ID_SIZE + channel_group_3->GetDataSizeBytes(), CAN_RECORD_SIZE);
 
@@ -451,7 +451,7 @@ ZTEST(mdf_file, test_CanFdFrameEncoding) {
     mdf_file.WriteCanbusDataRecordToStream(channel_group, file, can_frame, 1.5, 2);
     mdf_file.FinalizeToStream(file);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     const size_t record = header_bytes_written + VlsdRecordSize(12) + RECORD_ID_SIZE;
 
@@ -496,7 +496,7 @@ ZTEST(mdf_file, test_VlsdPayloadIsWrittenBeforeItsFrame) {
     for(const size_t payload_size : payload_sizes)
         mdf_file.WriteCanbusDataRecordToStream(can_group, file, MakeCanFrame(payload_size), 0.0, 1);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     size_t position = header_bytes_written;
@@ -535,13 +535,13 @@ ZTEST(mdf_file, test_UnfinalizedFileIsMarkedAsSuch) {
     }
 
     // Never finalized, as would happen after a power loss.
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     zassert_mem_equal(data.data(), "UnFinMF ", 8);
 
-    constexpr uint32_t expected_flags = 0x01 | 0x04 | 0x20;
+    constexpr uint32_t EXPECTED_FLAGS = 0x01 | 0x04 | 0x20;
     zassert_equal(
-        Read<uint32_t>(data, ID_STANDARD_FLAGS_OFFSET) & 0xFFFFU, expected_flags, "unfinalized flags must be set"
+        Read<uint32_t>(data, ID_STANDARD_FLAGS_OFFSET) & 0xFFFFU, EXPECTED_FLAGS, "unfinalized flags must be set"
     );
 }
 
@@ -770,8 +770,8 @@ ZTEST(mdf_file, test_CreateDataChannelKeepsTheRecordWithinTheWriterLimits) {
         message = error.what();
     }
     zassert_true(
-        message.find("65") != std::string::npos,
-        "a 65 byte record must be rejected with its size in the message (got \"%s\")", message.c_str()
+        message.contains("65"), "a 65 byte record must be rejected with its size in the message (got \"%s\")",
+        message.c_str()
     );
     zassert_equal(channel_group->GetChannels().size(), 7, "a rejected channel is not added");
 
@@ -805,8 +805,7 @@ ZTEST(mdf_file, test_CreateDataChannelCountsTheInvalidationByte) {
         message = error.what();
     }
     zassert_true(
-        message.find("65") != std::string::npos,
-        "the invalidation byte must count towards the record size (got \"%s\")", message.c_str()
+        message.contains("65"), "the invalidation byte must count towards the record size (got \"%s\")", message.c_str()
     );
     zassert_equal(
         without_bits->GetInvalidationBytes(), 0, "a rejected channel must not leave an invalidation byte behind"
@@ -869,8 +868,8 @@ ZTEST(mdf_file, test_InvalidationBitsLayoutAndRecords) {
     auto file = MakeStream();
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
 
-    constexpr size_t record_size = RECORD_ID_SIZE + TIME_SIZE + 3 * 4 + 1;
-    zassert_equal(mdf_file.GetRecordWriter(group).GetRecordSizeBytes(), record_size);
+    constexpr size_t RECORD_SIZE = RECORD_ID_SIZE + TIME_SIZE + 3 * 4 + 1;
+    zassert_equal(mdf_file.GetRecordWriter(group).GetRecordSizeBytes(), RECORD_SIZE);
 
     const std::array<MdfValue, 4> raw_invalid{ 0.5, 1.5F, 0.0F, int32_t{ -2 } };
     const std::array<MdfValue, 4> value_invalid{ 0.75, 0.0F, 2.0F, int32_t{ 7 } };
@@ -882,17 +881,17 @@ ZTEST(mdf_file, test_InvalidationBitsLayoutAndRecords) {
     mdf_file.WriteDataRecordToStream(group, file, all_valid);
     mdf_file.FinalizeToStream(file);
 
-    const std::array<uint8_t, 4 * record_size> expected{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 0x00,
+    const std::array<uint8_t, 4 * RECORD_SIZE> expected{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 0x00,
         0x00, 0xC0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0xFE, 0xFF, 0xFF, 0xFF, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0xE8, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x07, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF4, 0x3F, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x80,
         0x40, 0x01, 0x00, 0x00, 0x00, 0x00 };
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     zassert_equal(
-        data.size(), header_bytes_written + expected.size(), "four records of %zu bytes follow the header", record_size
+        data.size(), header_bytes_written + expected.size(), "four records of %zu bytes follow the header", RECORD_SIZE
     );
     for(size_t i = 0; i < expected.size(); i++) {
         zassert_equal(
@@ -995,7 +994,7 @@ ZTEST(mdf_file, test_RecordWritersAreBuiltWithTheHeader) {
     can_writer.Write(first, MakeCanFrame(8), 0.5, 1);
     mdf_file.FinalizeToStream(first);
 
-    const auto file_bytes = first.str();
+    const auto file_bytes = first.Str();
     const auto data = AsBytes(file_bytes);
     const auto data_block_address = FindDataBlockAddress(data);
     zassert_equal(
@@ -1042,7 +1041,7 @@ ZTEST(mdf_file, test_CanDlcFollowsTheIso11898Table) {
 
         mdf_file.WriteCanbusDataRecordToStream(can_group, file, MakeCanFrame(test_case.payload_size), 0.0, 1);
 
-        const auto file_bytes = file.str();
+        const auto file_bytes = file.Str();
         const auto data = AsBytes(file_bytes);
         const auto record = header_bytes_written + VlsdRecordSize(test_case.payload_size) + RECORD_ID_SIZE;
 
@@ -1072,7 +1071,7 @@ ZTEST(mdf_file, test_RejectsAnOversizedCanPayload) {
 
     mdf_file.WriteCanbusDataRecordToStream(can_group, file, can_frame, 0.0, 1);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     const auto record = header_bytes_written + VlsdRecordSize(64) + RECORD_ID_SIZE;
 
@@ -1100,7 +1099,7 @@ ZTEST(mdf_file, test_ExtendedAndStandardIdsAreMaskedToTheirWidth) {
     extended.is_extended = true;
     mdf_file.WriteCanbusDataRecordToStream(can_group, file, extended, 0.0, 1);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     const auto record_size = RECORD_ID_SIZE + can_group->GetDataSizeBytes();
     const auto vlsd_record_size = VlsdRecordSize(1);
@@ -1110,7 +1109,7 @@ ZTEST(mdf_file, test_ExtendedAndStandardIdsAreMaskedToTheirWidth) {
     zassert_equal(standard_pack & 0x1FFFFFFFU, 0x7FFU, "an 11 bit id is masked");
     zassert_equal(standard_pack >> 29, 0, "IDE and the reserved bits stay clear");
 
-    const auto extended_offset = header_bytes_written + 2 * vlsd_record_size + record_size + RECORD_ID_SIZE + CAN_ID;
+    const auto extended_offset = header_bytes_written + 2ULL * vlsd_record_size + record_size + RECORD_ID_SIZE + CAN_ID;
     const auto extended_pack = Read<uint32_t>(data, extended_offset);
     zassert_equal(extended_pack & 0x1FFFFFFFU, 0x1FFFFFFFU, "a 29 bit id is masked");
     zassert_equal((extended_pack >> 29) & 0x3U, 0, "the reserved bits stay clear");
@@ -1145,14 +1144,14 @@ ZTEST(mdf_file, test_HeaderCanBeRewrittenForANewFile) {
     write_file(second, 3);
 
     // Rotating to a new file must restart every counter, not continue the previous one.
-    zassert_equal(first.str(), second.str(), "a rotated file must be byte identical for identical content");
+    zassert_equal(first.Str(), second.Str(), "a rotated file must be byte identical for identical content");
     zassert_equal(channel_group->GetCycleCount(), 3);
     zassert_equal(can_group->GetCycleCount(), 3);
-    zassert_equal(vlsd_channel_group->GetVlsdDataSizeBytes(), 3 * 8);
+    zassert_equal(vlsd_channel_group->GetVlsdDataSizeBytes(), 3ULL * 8);
 
     auto third = MakeStream();
     write_file(third, 5);
-    zassert_true(third.str().size() > first.str().size(), "more records must produce a larger file");
+    zassert_true(third.Str().size() > first.Str().size(), "more records must produce a larger file");
 }
 
 ZTEST(mdf_file, test_FinalizeRequiresAWrittenHeader) {
@@ -1195,7 +1194,7 @@ ZTEST(mdf_file, test_FinalizeSyncsBeforeAndAfterTheIdentifier) {
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(stream);
     zassert_true(stream.Snapshots().empty(), "writing the header must not sync");
 
-    const auto header_bytes = stream.str();
+    const auto header_bytes = stream.Str();
     const auto data_block_address = FindDataBlockAddress(AsBytes(header_bytes));
     zassert_equal(
         data_block_address + BLOCK_HEADER_SIZE, header_bytes_written, "DT block not found at the end of the header"
@@ -1209,8 +1208,8 @@ ZTEST(mdf_file, test_FinalizeSyncsBeforeAndAfterTheIdentifier) {
     );
     stream.SetChannelGroupAddress(channel_group_address);
 
-    constexpr uint64_t record_count = 4;
-    for(uint64_t i = 0; i < record_count; i++) {
+    constexpr uint64_t RECORD_COUNT = 4;
+    for(uint64_t i = 0; i < RECORD_COUNT; i++) {
         std::array<MdfValue, 2> values{ static_cast<double>(i), static_cast<float>(i) };
         mdf_file.WriteDataRecordToStream(channel_group, stream, values);
     }
@@ -1221,7 +1220,7 @@ ZTEST(mdf_file, test_FinalizeSyncsBeforeAndAfterTheIdentifier) {
     zassert_equal(snapshots.size(), 2, "finalize must sync exactly twice: before and after the identifier");
 
     const uint64_t expected_data_block_length = BLOCK_HEADER_SIZE
-        + record_count * (RECORD_ID_SIZE + channel_group->GetDataSizeBytes());
+        + RECORD_COUNT * (RECORD_ID_SIZE + channel_group->GetDataSizeBytes());
 
     zassert_equal(
         snapshots[0].identifier, std::string("UnFinMF "), "at the first sync the file must still be marked unfinalized"
@@ -1231,14 +1230,14 @@ ZTEST(mdf_file, test_FinalizeSyncsBeforeAndAfterTheIdentifier) {
         "at the first sync the DT length must already cover the records"
     );
     zassert_equal(
-        snapshots[0].cycle_count, record_count, "at the first sync the CG cycle count must already be patched"
+        snapshots[0].cycle_count, RECORD_COUNT, "at the first sync the CG cycle count must already be patched"
     );
 
     zassert_equal(snapshots[1].identifier, std::string("MDF     "), "at the second sync the identifier must be final");
     zassert_equal(
         snapshots[1].data_block_length, expected_data_block_length, "the DT length must not change between the syncs"
     );
-    zassert_equal(snapshots[1].cycle_count, record_count, "the CG cycle count must not change between the syncs");
+    zassert_equal(snapshots[1].cycle_count, RECORD_COUNT, "the CG cycle count must not change between the syncs");
 }
 
 ZTEST(mdf_file, test_FinalizeThrowsWhenTheSyncFails) {
@@ -1260,7 +1259,7 @@ ZTEST(mdf_file, test_FinalizeThrowsWhenTheSyncFails) {
         "a sync that fails must surface as an I/O failure, not as a finalized file"
     );
 
-    const auto file_bytes = stream.str();
+    const auto file_bytes = stream.Str();
     zassert_mem_equal(
         file_bytes.data(), "UnFinMF ", 8, "the identifier must not flip when the lengths could not be synced first"
     );
@@ -1281,7 +1280,7 @@ ZTEST(mdf_file, test_DataGroupIsSharedByEveryChannelGroup) {
     const auto header_bytes_written = mdf_file.WriteHeaderToStream(file);
 
     // Everything hangs off the single data group, whose DT block closes the header.
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     zassert_equal(FindDataBlockAddress(data) + BLOCK_HEADER_SIZE, header_bytes_written);
     zassert_equal(mdf_file.GetDataGroup()->GetDataBlock()->GetAddress() + BLOCK_HEADER_SIZE, header_bytes_written);
@@ -1310,7 +1309,7 @@ ZTEST(mdf_file, test_Float64MasterChannelLayout) {
     std::array<MdfValue, 2> values{ 1.5, 2.5F };
     zassert_equal(mdf_file.WriteDataRecordToStream(channel_group, file, values), RECORD_ID_SIZE + TIME_SIZE + 4);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
     const auto record = header_bytes_written + RECORD_ID_SIZE;
 
@@ -1354,7 +1353,7 @@ ZTEST(mdf_file, test_Float32TimeOptionKeepsTheOldWidth) {
 
     mdf_file.WriteCanbusDataRecordToStream(can_group, file, MakeCanFrame(8), 1.5, 1);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     const auto value_record = header_bytes_written + RECORD_ID_SIZE;
@@ -1393,12 +1392,12 @@ ZTEST(mdf_file, test_VlsdOffsetWidthFollowsTheOption) {
         mdf_file.WriteCanbusDataRecordToStream(can_group, file, MakeCanFrame(8), 0.0, 1);
         mdf_file.WriteCanbusDataRecordToStream(can_group, file, MakeCanFrame(8), 0.1, 1);
 
-        const auto file_bytes = file.str();
+        const auto file_bytes = file.Str();
         const auto data = AsBytes(file_bytes);
 
         const size_t record_size = RECORD_ID_SIZE + TIME_SIZE + frame_size;
         const size_t vlsd_record_size = VlsdRecordSize(8);
-        zassert_equal(data.size(), header_bytes_written + 2 * (record_size + vlsd_record_size));
+        zassert_equal(data.size(), header_bytes_written + 2ULL * (record_size + vlsd_record_size));
 
         const auto first_offset = header_bytes_written + vlsd_record_size + RECORD_ID_SIZE + CAN_DATA_BYTES;
         const auto second_offset = first_offset + record_size + vlsd_record_size;
@@ -1433,7 +1432,7 @@ ZTEST(mdf_file, test_CanDataFrameMemberOffsetsAndBitFields) {
         .data = std::vector<uint8_t>(12, 0x5A) };
     mdf_file.WriteCanbusDataRecordToStream(can_group, file, can_frame, 0.25, 3);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     const auto parent = can_group->GetChannels().at(1);
@@ -1449,6 +1448,7 @@ ZTEST(mdf_file, test_CanDataFrameMemberOffsetsAndBitFields) {
         std::string("CAN_DataFrame")
     );
 
+    // NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding): positional table rows; reordering the fields would scramble them
     const struct {
         const char* name;
         uint32_t byte_offset;
@@ -1525,7 +1525,7 @@ ZTEST(mdf_file, test_HeaderCommentCarriesCommonProperties) {
     auto bare_stream = MakeStream();
     bare_file.WriteHeaderToStream(bare_stream);
 
-    const auto bare_bytes = bare_stream.str();
+    const auto bare_bytes = bare_stream.Str();
     zassert_equal(
         ReadLink(AsBytes(bare_bytes), ID_BLOCK_SIZE, HD_COMMENT_LINK), 0, "without a comment hd_md_comment stays NIL"
     );
@@ -1538,7 +1538,7 @@ ZTEST(mdf_file, test_HeaderCommentCarriesCommonProperties) {
     auto file = MakeStream();
     mdf_file.WriteHeaderToStream(file);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     zassert_equal(BlockId(data, ID_BLOCK_SIZE), std::string("##HD"));
@@ -1566,7 +1566,7 @@ ZTEST(mdf_file, test_FileHistoryToolFields) {
     auto file = MakeStream();
     mdf_file.WriteHeaderToStream(file);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     const auto file_history_address = ReadLink(data, ID_BLOCK_SIZE, HD_FILE_HISTORY_LINK);
@@ -1600,7 +1600,7 @@ ZTEST(mdf_file, test_ChannelAndGroupCommentsAreLinked) {
     auto file = MakeStream();
     mdf_file.WriteHeaderToStream(file);
 
-    const auto file_bytes = file.str();
+    const auto file_bytes = file.Str();
     const auto data = AsBytes(file_bytes);
 
     const auto group_address = static_cast<size_t>(channel_group->GetAddress());

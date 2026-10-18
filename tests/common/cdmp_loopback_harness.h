@@ -273,8 +273,13 @@ public:
         if(!canbus_)
             return;
 
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        Canbus* live_bus = canbus_->Get();
+        if(live_bus == nullptr)
+            return;
+
         for(const int handler_id : recorder_handler_ids_)
-            (*canbus_)->RemoveFrameReceivedHandler(handler_id);
+            live_bus->RemoveFrameReceivedHandler(handler_id);
     }
 
     void SendAsPeer(uint32_t offset, const Bytes& frame) {

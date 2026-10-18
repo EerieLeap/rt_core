@@ -318,10 +318,10 @@ ZTEST(fs_service_stream_buf, test_operations_fail_after_close) {
 }
 
 // The tests below exercise the put area, so they assume the default (non-zero) buffer size.
-static constexpr size_t kWriteBufferSize = CONFIG_EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE;
+static constexpr size_t WRITE_BUFFER_SIZE = CONFIG_EERIE_LEAP_FS_STREAM_WRITE_BUFFER_SIZE;
 
 ZTEST(fs_service_stream_buf, test_buffered_writes_reach_the_file_on_sync) {
-    if(kWriteBufferSize == 0)
+    if(WRITE_BUFFER_SIZE == 0)
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
@@ -346,7 +346,7 @@ ZTEST(fs_service_stream_buf, test_buffered_writes_reach_the_file_on_sync) {
 }
 
 ZTEST(fs_service_stream_buf, test_close_flushes_the_put_area) {
-    if(kWriteBufferSize == 0)
+    if(WRITE_BUFFER_SIZE == 0)
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
@@ -363,14 +363,14 @@ ZTEST(fs_service_stream_buf, test_close_flushes_the_put_area) {
 }
 
 ZTEST(fs_service_stream_buf, test_write_larger_than_the_buffer_is_written_directly) {
-    if(kWriteBufferSize == 0)
+    if(WRITE_BUFFER_SIZE == 0)
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
     const std::string file_path = "test_direct_write.bin";
 
     auto head = MakeText(10);
-    auto body = MakeText(kWriteBufferSize + 1);
+    auto body = MakeText(WRITE_BUFFER_SIZE + 1);
 
     FsServiceStreamBuf stream_buf(fs_service, file_path, OpenMode::Write);
 
@@ -392,7 +392,7 @@ ZTEST(fs_service_stream_buf, test_write_larger_than_the_buffer_is_written_direct
 }
 
 ZTEST(fs_service_stream_buf, test_seek_flushes_before_moving) {
-    if(kWriteBufferSize == 0)
+    if(WRITE_BUFFER_SIZE == 0)
         ztest_test_skip();
 
     auto* fs_service = GetFsService();
@@ -437,7 +437,7 @@ ZTEST(fs_service_stream_buf, test_unbuffered_when_the_buffer_size_is_zero) {
     zassert_equal(stream_buf.sputc('d'), 'd', "sputc must accept the byte whether buffered or not");
     zassert_equal(stream_buf.GetBytesWritten(), 4, "every accepted byte counts as written");
 
-    if(kWriteBufferSize == 0)
+    if(WRITE_BUFFER_SIZE == 0)
         zassert_equal(stream_buf.GetWriteCallCount(), 2, "without a buffer every write goes straight to the file");
     else
         zassert_equal(stream_buf.GetWriteCallCount(), 0, "with a buffer nothing reaches the file before a flush");
@@ -449,7 +449,7 @@ ZTEST(fs_service_stream_buf, test_unbuffered_when_the_buffer_size_is_zero) {
 // Fills the volume with a separate file until a write fails, then checks that a buffered stream
 // reports the write it cannot complete instead of crashing or pretending.
 ZTEST(fs_service_stream_buf, test_short_write_on_a_full_volume_is_reported) {
-    if(kWriteBufferSize == 0)
+    if(WRITE_BUFFER_SIZE == 0)
         ztest_test_skip();
 
     auto* fs_service = GetFsService();

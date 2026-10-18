@@ -29,7 +29,7 @@ public:
         return TimeHelpers::FromMilliseconds(current);
     }
 
-    int calls() const {
+    int Calls() const {
         return calls_;
     }
 
@@ -74,8 +74,8 @@ ZTEST(time_service, test_GetCurrentTime_only_queries_the_rtc_provider) {
 
     fixture.service->GetCurrentTime();
 
-    zassert_equal(fixture.rtc_provider->calls(), 1);
-    zassert_equal(fixture.boot_provider->calls(), 0);
+    zassert_equal(fixture.rtc_provider->Calls(), 1);
+    zassert_equal(fixture.boot_provider->Calls(), 0);
 }
 
 ZTEST(time_service, test_GetTimeSinceBoot_only_queries_the_boot_provider) {
@@ -83,8 +83,8 @@ ZTEST(time_service, test_GetTimeSinceBoot_only_queries_the_boot_provider) {
 
     fixture.service->GetTimeSinceBoot();
 
-    zassert_equal(fixture.boot_provider->calls(), 1);
-    zassert_equal(fixture.rtc_provider->calls(), 0);
+    zassert_equal(fixture.boot_provider->Calls(), 1);
+    zassert_equal(fixture.rtc_provider->Calls(), 0);
 }
 
 ZTEST(time_service, test_Initialize_does_not_query_the_providers) {
@@ -92,8 +92,8 @@ ZTEST(time_service, test_Initialize_does_not_query_the_providers) {
 
     fixture.service->Initialize();
 
-    zassert_equal(fixture.rtc_provider->calls(), 0);
-    zassert_equal(fixture.boot_provider->calls(), 0);
+    zassert_equal(fixture.rtc_provider->Calls(), 0);
+    zassert_equal(fixture.boot_provider->Calls(), 0);
 }
 
 ZTEST(time_service, test_values_are_not_cached_between_calls) {
@@ -103,8 +103,8 @@ ZTEST(time_service, test_values_are_not_cached_between_calls) {
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetCurrentTime()).count(), 1005);
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetTimeSinceBoot()).count(), 10);
     zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetTimeSinceBoot()).count(), 15);
-    zassert_equal(fixture.rtc_provider->calls(), 2);
-    zassert_equal(fixture.boot_provider->calls(), 2);
+    zassert_equal(fixture.rtc_provider->Calls(), 2);
+    zassert_equal(fixture.boot_provider->Calls(), 2);
 }
 
 ZTEST(time_service, test_the_same_provider_can_back_both_clocks) {
@@ -113,7 +113,7 @@ ZTEST(time_service, test_the_same_provider_can_back_both_clocks) {
 
     zassert_equal(TimeHelpers::ToMilliseconds(service->GetCurrentTime()).count(), 500);
     zassert_equal(TimeHelpers::ToMilliseconds(service->GetTimeSinceBoot()).count(), 500);
-    zassert_equal(provider->calls(), 2);
+    zassert_equal(provider->Calls(), 2);
 }
 
 ZTEST(time_service, test_service_keeps_the_providers_alive) {

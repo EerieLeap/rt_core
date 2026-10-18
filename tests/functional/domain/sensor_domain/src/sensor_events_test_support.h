@@ -58,18 +58,18 @@ using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::utilities::memory::Mrm;
 
 // A failure bound only; nothing waits on time to synchronise.
-inline constexpr int k_wait_ms = 1000;
+inline constexpr int WAIT_MS = 1000;
 
 // The values one subscriber received, in order. Written on the bus thread and read by the test,
 // and held by its handler through a shared_ptr, so a late delivery never reaches a dead frame.
 class Recorder {
 public:
-    static constexpr size_t k_capacity = 32;
+    static constexpr size_t CAPACITY = 32;
 
 private:
-    mutable k_mutex mutex_;
-    k_sem delivered_;
-    std::array<float, k_capacity> values_{};
+    mutable k_mutex mutex_{};
+    k_sem delivered_{};
+    std::array<float, CAPACITY> values_{};
     size_t count_ = 0; // Every delivery, also past the capacity.
 
 public:
@@ -80,12 +80,13 @@ public:
 
     Recorder(const Recorder&) = delete;
     Recorder& operator=(const Recorder&) = delete;
+    ~Recorder() = default;
 
     void Record(float value) {
         {
             ScopedMutex guard(mutex_);
 
-            if(count_ < k_capacity)
+            if(count_ < CAPACITY)
                 values_[count_] = value;
 
             count_++;
@@ -95,7 +96,7 @@ public:
     }
 
     bool WaitForDelivery() {
-        return k_sem_take(&delivered_, K_MSEC(k_wait_ms)) == 0;
+        return k_sem_take(&delivered_, K_MSEC(WAIT_MS)) == 0;
     }
 
     size_t Count() const {
@@ -107,7 +108,7 @@ public:
     std::optional<float> At(size_t index) const {
         ScopedMutex guard(mutex_);
 
-        if(index >= count_ || index >= k_capacity)
+        if(index >= count_ || index >= CAPACITY)
             return std::nullopt;
 
         return values_[index];

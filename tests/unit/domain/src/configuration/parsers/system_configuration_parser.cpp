@@ -10,7 +10,7 @@ using namespace eerie_leap::domain::system_domain::configuration::parsers;
 
 ZTEST_SUITE(system_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
-static SystemConfiguration system_configuration_parser_GetTestConfiguration() {
+static SystemConfiguration SystemConfigurationParserGetTestConfiguration() {
     SystemConfiguration system_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     system_configuration.device_id = 8765;
     system_configuration.build_number = 12345;
@@ -18,7 +18,7 @@ static SystemConfiguration system_configuration_parser_GetTestConfiguration() {
     return system_configuration;
 }
 
-static void system_configuration_parser_CompareSystemConfigurations(
+static void SystemConfigurationParserCompareSystemConfigurations(
     SystemConfiguration& system_configuration,
     SystemConfiguration& deserialized_system_configuration
 ) {
@@ -30,12 +30,12 @@ static void system_configuration_parser_CompareSystemConfigurations(
 ZTEST(system_configuration_parser, test_CborSerializeDeserialize) {
     SystemConfigurationCborParser system_configuration_cbor_parser;
 
-    auto system_configuration = system_configuration_parser_GetTestConfiguration();
+    auto system_configuration = SystemConfigurationParserGetTestConfiguration();
 
     const auto serialized_system_configuration = system_configuration_cbor_parser.Serialize(system_configuration);
     auto deserialized_system_configuration = system_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_system_configuration.get()
     );
 
-    system_configuration_parser_CompareSystemConfigurations(system_configuration, *deserialized_system_configuration);
+    SystemConfigurationParserCompareSystemConfigurations(system_configuration, *deserialized_system_configuration);
 }

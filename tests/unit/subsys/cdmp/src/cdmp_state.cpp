@@ -190,11 +190,11 @@ struct StateFixture {
 
         // The services may share one block filter for their IDs, which a different filter over the
         // same IDs would overlap, so the recorder registers the same filters and sorts by ID.
-        constexpr std::array recorded_offsets{ CdmpCanIdManager::COMMAND_OFFSET, CdmpCanIdManager::STATE_CHANGE_OFFSET,
+        constexpr std::array RECORDED_OFFSETS{ CdmpCanIdManager::COMMAND_OFFSET, CdmpCanIdManager::STATE_CHANGE_OFFSET,
             CdmpCanIdManager::STATE_CHANGE_RESPONSE_OFFSET };
 
         std::vector<CanFilter> filters;
-        for(const uint32_t offset : recorded_offsets) {
+        for(const uint32_t offset : RECORDED_OFFSETS) {
             const CanFilter filter = can_id_manager->GetReceiveFilter(
                 CanId::Standard(can_id_manager->GetBaseCanId() + offset)
             );
@@ -204,9 +204,9 @@ struct StateFixture {
 
         for(const CanFilter& filter : filters) {
             const int handler_id = (*canbus)->RegisterFrameReceivedHandler(
-                filter, [this, recorded_offsets](const CanFrame& frame) {
+                filter, [this, RECORDED_OFFSETS](const CanFrame& frame) {
                     const uint32_t offset = frame.id - can_id_manager->GetBaseCanId();
-                    if(std::ranges::find(recorded_offsets, offset) != recorded_offsets.end())
+                    if(std::ranges::find(RECORDED_OFFSETS, offset) != RECORDED_OFFSETS.end())
                         bus_frames.Add(offset, frame);
                 }
             );
@@ -218,9 +218,17 @@ struct StateFixture {
             service->Configure(canbus);
     }
 
+    StateFixture(const StateFixture&) = delete;
+    StateFixture& operator=(const StateFixture&) = delete;
+    StateFixture(StateFixture&&) = delete;
+    StateFixture& operator=(StateFixture&&) = delete;
+
     ~StateFixture() {
-        for(const int handler_id : bus_handler_ids)
-            (*canbus)->RemoveFrameReceivedHandler(handler_id);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(Canbus* live_bus = canbus->Get(); live_bus != nullptr) {
+            for(const int handler_id : bus_handler_ids)
+                live_bus->RemoveFrameReceivedHandler(handler_id);
+        }
 
         // Queued work must run while the services exist; after the stop it does nothing.
         for(ICdmpCanbusService* service : Services())
@@ -234,7 +242,7 @@ struct StateFixture {
 
     /** @brief Returns once the work queued so far has run. */
     void DrainQueue() {
-        k_sem done;
+        k_sem done{};
         k_sem_init(&done, 0, 1);
         work_queue->Run([&done] {
             k_sem_give(&done);
@@ -915,7 +923,7 @@ ZTEST(cdmp_state, test_broadcast_sync_request_is_replayed_after_the_stagger) {
     for(uint8_t device_id = 2; device_id < 22; device_id++)
         fixture.AddPeer(device_id, 0x01000000 + device_id);
     const auto stagger = static_cast<int64_t>(fixture.device->GetStaggeredMessageDelay());
-    zassert_equal(stagger, 20 * CdmpConstants::STAGGERED_MESSAGE_TIME_OFFSET_MS);
+    zassert_equal(stagger, 20LL * CdmpConstants::STAGGERED_MESSAGE_TIME_OFFSET_MS);
 
     const int64_t requested_ms = k_uptime_get();
     zassert_false(

@@ -42,14 +42,16 @@ T Read(std::span<const uint8_t> data, size_t offset) {
 }
 
 inline std::span<const uint8_t> AsBytes(const std::string& data) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): views a byte buffer as text and a string as bytes
     return { reinterpret_cast<const uint8_t*>(data.data()), data.size() };
 }
 
 // A span into a temporary string would dangle before the first assertion runs.
-inline std::span<const uint8_t> AsBytes(std::string&&) = delete;
+std::span<const uint8_t> AsBytes(std::string&&) = delete;
 
 inline std::string AsText(std::span<const uint8_t> data, size_t offset, size_t size) {
     zassert_true(offset + size <= data.size(), "read past the end of the buffer");
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): views a byte buffer as text and a string as bytes
     return { reinterpret_cast<const char*>(data.data() + offset), size };
 }
 
@@ -197,7 +199,7 @@ private:
 
 protected:
     int sync() override {
-        const auto content = str();
+        const auto content = Str();
 
         snapshots_.push_back(
             Snapshot{ content.substr(0, 8), ReadField(content, data_block_address_ + BLOCK_LENGTH_OFFSET),

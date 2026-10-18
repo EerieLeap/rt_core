@@ -188,14 +188,14 @@ public:
      * is kept too, so that a test can wait for it.
      */
     struct LocalChange {
-        CanbusComStateType state_type{};
+        CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS;
         CanbusComStateData data;
         bool is_accepted = true;
     };
 
 private:
     struct HandlerEntry {
-        CanbusComStateType state_type{};
+        CanbusComStateType state_type = CanbusComStateType::LOGGING_STATUS;
         StateHandler handler;
     };
 

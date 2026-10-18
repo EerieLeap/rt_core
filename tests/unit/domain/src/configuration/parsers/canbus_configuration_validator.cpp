@@ -40,7 +40,7 @@ MakeConfiguration(CanbusType type, bool is_extended_id, uint32_t frame_id, uint3
     message->name = "EL_FRAME_0";
     message->message_size = 8;
     message->send_interval_ms = 100;
-    channel.message_configurations.emplace_back(std::move(message));
+    channel.message_configurations.emplace_back(message);
 
     configuration.channel_configurations.emplace(0, std::move(channel));
 
@@ -248,7 +248,7 @@ ZTEST(canbus_configuration_validator, test_a_disabled_message_cannot_share_a_fra
         duplicate->frame_id = 0x123;
         duplicate->name = "EL_FRAME_1";
         duplicate->message_size = 8;
-        messages.emplace_back(std::move(duplicate));
+        messages.emplace_back(duplicate);
 
         // Either copy may be the disabled one; enabling it later must not create a duplicate.
         messages.at(is_first_disabled ? 0 : 1)->is_enabled = false;

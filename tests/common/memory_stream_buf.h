@@ -95,13 +95,16 @@ protected:
     }
 
     pos_type seekpos(pos_type position, std::ios_base::openmode which) override {
-        return seekoff(off_type(position), std::ios_base::beg, which);
+        return seekoff(static_cast<off_type>(position), std::ios_base::beg, which);
     }
 
 public:
     MemoryStreamBuf() = default;
+    MemoryStreamBuf(const MemoryStreamBuf&) = delete;
+    MemoryStreamBuf& operator=(const MemoryStreamBuf&) = delete;
     MemoryStreamBuf(MemoryStreamBuf&&) = default;
     MemoryStreamBuf& operator=(MemoryStreamBuf&&) = default;
+    ~MemoryStreamBuf() override = default;
 
     /** Storage for @p size bytes up front, so writes up to that size do not allocate. */
     void Reserve(size_t size) {
@@ -111,7 +114,7 @@ public:
     [[nodiscard]] size_t Capacity() const {
         return data_.capacity();
     }
-    [[nodiscard]] std::string str() const {
+    [[nodiscard]] std::string Str() const {
         return data_;
     }
 };

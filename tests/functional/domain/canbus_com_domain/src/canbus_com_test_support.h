@@ -36,7 +36,7 @@ private:
     k_mutex lock_{};
     std::deque<std::vector<RemoteStateRecord>> snapshots_;
     INetworkStateTransport* transport_ = nullptr;
-    CanbusComStateType state_type_{};
+    CanbusComStateType state_type_ = CanbusComStateType::LOGGING_STATUS;
     int handler_id_ = -1;
     bool is_off_work_queue_ = false;
     bool is_other_type_ = false;

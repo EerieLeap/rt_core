@@ -2,7 +2,7 @@
 
 #include "logging_control_test_support.h"
 
-#if !defined(CONFIG_LOG_MODE_MINIMAL)
+#ifndef CONFIG_LOG_MODE_MINIMAL
     #include <zephyr/logging/log_backend.h>
     #include <zephyr/logging/log_core.h>
     #include <zephyr/logging/log_msg.h>
@@ -62,7 +62,7 @@ void LogCounter::Add(const char* source_name) {
 
 } // namespace logging_control_test
 
-#if !defined(CONFIG_LOG_MODE_MINIMAL)
+#ifndef CONFIG_LOG_MODE_MINIMAL
 
 namespace {
 
@@ -91,7 +91,7 @@ void PanicLog(const log_backend* const backend) {
     ARG_UNUSED(backend);
 }
 
-const log_backend_api k_log_counter_api = {
+const log_backend_api LOG_COUNTER_API = {
     .process = ProcessLogMessage,
     .dropped = DropLogMessages,
     .panic = PanicLog,
@@ -100,6 +100,6 @@ const log_backend_api k_log_counter_api = {
 } // namespace
 
 // Autostarted at the default level, which passes the warnings it counts.
-LOG_BACKEND_DEFINE(logging_control_log_counter, k_log_counter_api, true);
+LOG_BACKEND_DEFINE(LOGGING_CONTROL_LOG_COUNTER, LOG_COUNTER_API, true);
 
 #endif // !CONFIG_LOG_MODE_MINIMAL

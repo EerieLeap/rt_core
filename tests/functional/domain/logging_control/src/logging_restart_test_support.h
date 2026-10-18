@@ -24,16 +24,16 @@ using namespace canbus_com_loopback_test;
 
 using eerie_leap::domain::canbus_com_domain::commands::CanbusComCommandCode;
 
-inline constexpr uint8_t k_logging_command_code = std::to_underlying(CanbusComCommandCode::LOGGING);
+inline constexpr uint8_t LOGGING_COMMAND_CODE = std::to_underlying(CanbusComCommandCode::LOGGING);
 
 // A LOGGING command on the bus: the broadcast, the code, the transaction, then start or stop.
 inline bool IsLoggingBroadcastFrame(const Bytes& frame) {
-    return frame.size() == 4 && frame[0] == CdmpDevice::DEVICE_ID_BROADCAST && frame[1] == k_logging_command_code;
+    return frame.size() == 4 && frame[0] == CdmpDevice::DEVICE_ID_BROADCAST && frame[1] == LOGGING_COMMAND_CODE;
 }
 
 // A LOGGING command to any unit: the broadcast, or a unicast to one.
 inline bool IsLoggingCommandFrame(const Bytes& frame) {
-    return frame.size() == 4 && frame[1] == k_logging_command_code;
+    return frame.size() == 4 && frame[1] == LOGGING_COMMAND_CODE;
 }
 
 // A LOGGING command addressed to @p device_id alone.
@@ -95,8 +95,8 @@ inline void SendRestart(
 class CdmpQueueHold {
 private:
     struct Context {
-        k_sem entered;
-        k_sem open;
+        k_sem entered{};
+        k_sem open{};
         std::atomic<bool> is_armed = false;
 
         Context() {

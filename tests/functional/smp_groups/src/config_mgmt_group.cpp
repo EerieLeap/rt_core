@@ -53,7 +53,7 @@ struct Reports {
         k_tid_t thread;
     };
 
-    k_mutex lock;
+    k_mutex lock{};
     std::vector<Entry> entries;
 
     Reports() {
@@ -95,6 +95,11 @@ public:
         zassert_true(group->Initialize());
         group->Register();
     }
+
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
 
     ~Harness() {
         group.reset();

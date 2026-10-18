@@ -110,12 +110,12 @@ struct SourceFilter {
     }
 };
 
-constexpr uint32_t k_test_source = 0x7E57;
-constexpr uint32_t k_source_one = 0xA001;
-constexpr uint32_t k_source_two = 0xA002;
+constexpr uint32_t TEST_SOURCE = 0x7E57;
+constexpr uint32_t SOURCE_ONE = 0xA001;
+constexpr uint32_t SOURCE_TWO = 0xA002;
 
 struct DispatchProbe {
-    k_sem delivered;
+    k_sem delivered{};
     std::vector<int> values;
     std::string handler_thread_name;
 
@@ -138,7 +138,7 @@ struct DispatchProbe {
     }
 };
 
-TestEvent MakeEvent(TestEventType type, int value = 0, uint32_t source_id = k_test_source) {
+TestEvent MakeEvent(TestEventType type, int value = 0, uint32_t source_id = TEST_SOURCE) {
     return TestEvent{ .source_id = source_id, .type = type, .payload = { { TestPayloadType::Value, value } } };
 }
 
@@ -231,17 +231,17 @@ ZTEST(event_bus, test_Publish_skips_subscribers_whose_filter_rejects_the_event) 
     DispatchProbe probe;
 
     const auto handle = fixture.channel.Subscribe(
-        TestEventType::Alpha, SourceFilter{ k_source_one }, [&probe](const TestEvent& event) {
+        TestEventType::Alpha, SourceFilter{ SOURCE_ONE }, [&probe](const TestEvent& event) {
             probe.Record(event);
         }
     );
     zassert_true(handle.has_value());
 
-    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1, k_source_two));
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 1, SOURCE_TWO));
 
     zassert_equal(probe.Count(), 0U);
 
-    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 2, k_source_one));
+    fixture.channel.Publish(MakeEvent(TestEventType::Alpha, 2, SOURCE_ONE));
 
     zassert_equal(probe.Count(), 1U);
     zassert_equal(probe.values.front(), 2);
@@ -534,7 +534,7 @@ ZTEST(event_bus, test_channels_sharing_a_bus_stay_isolated) {
     zassert_equal(other_calls, 0, "an event must not leak into a peer channel");
 
     // The one bus drains both channels.
-    other_channel.PublishAsync({ .source_id = k_test_source, .type = OtherEventType::Signal, .payload = {} });
+    other_channel.PublishAsync({ .source_id = TEST_SOURCE, .type = OtherEventType::Signal, .payload = {} });
 
     const int64_t deadline = k_uptime_get() + DISPATCH_TIMEOUT_MS;
     while(other_calls == 0 && k_uptime_get() < deadline)
@@ -544,10 +544,10 @@ ZTEST(event_bus, test_channels_sharing_a_bus_stay_isolated) {
 }
 
 ZTEST(event_bus, test_the_queue_drops_the_oldest_event_when_it_overflows) {
-    constexpr size_t capacity = 4;
-    constexpr int published = 7;
+    constexpr size_t CAPACITY = 4;
+    constexpr int PUBLISHED = 7;
 
-    TestChannel channel("eb_overflow_ch", capacity);
+    TestChannel channel("eb_overflow_ch", CAPACITY);
     ManualBus manual_bus;
     DispatchProbe probe;
 
@@ -559,18 +559,18 @@ ZTEST(event_bus, test_the_queue_drops_the_oldest_event_when_it_overflows) {
     });
     zassert_true(handle.has_value());
 
-    for(int i = 0; i < published; ++i)
+    for(int i = 0; i < PUBLISHED; ++i)
         channel.PublishAsync(MakeEvent(TestEventType::Alpha, i));
 
-    zassert_equal(manual_bus.wake_calls, published, "every publication must wake the bus");
+    zassert_equal(manual_bus.wake_calls, PUBLISHED, "every publication must wake the bus");
 
     while(channel.DrainOne()) {
     }
 
     // Sheds the oldest rather than the newest, so the last `capacity` events survive.
-    zassert_equal(probe.Count(), capacity);
-    for(size_t i = 0; i < capacity; ++i)
-        zassert_equal(probe.values[i], static_cast<int>(published - capacity + i));
+    zassert_equal(probe.Count(), CAPACITY);
+    for(size_t i = 0; i < CAPACITY; ++i)
+        zassert_equal(probe.values[i], static_cast<int>(PUBLISHED - CAPACITY + i));
 
     channel.OnRegistered(nullptr);
 }
@@ -617,15 +617,15 @@ ZTEST(event_bus, test_PublishAsync_preserves_the_publication_order) {
     });
     zassert_true(handle.has_value());
 
-    constexpr int event_count = 5;
-    for(int i = 0; i < event_count; ++i)
+    constexpr int EVENT_COUNT = 5;
+    for(int i = 0; i < EVENT_COUNT; ++i)
         fixture.channel.PublishAsync(MakeEvent(TestEventType::Alpha, i));
 
-    for(int i = 0; i < event_count; ++i)
+    for(int i = 0; i < EVENT_COUNT; ++i)
         zassert_true(probe.WaitForDelivery(), "event %d was never dispatched", i);
 
-    zassert_equal(probe.Count(), static_cast<size_t>(event_count));
-    for(int i = 0; i < event_count; ++i)
+    zassert_equal(probe.Count(), static_cast<size_t>(EVENT_COUNT));
+    for(int i = 0; i < EVENT_COUNT; ++i)
         zassert_equal(probe.values[i], i);
 }
 
@@ -635,7 +635,7 @@ ZTEST(event_bus, test_PublishAsync_applies_the_filters) {
     DispatchProbe accepted;
 
     const auto filtered_handle = fixture.channel.Subscribe(
-        TestEventType::Alpha, SourceFilter{ k_source_one }, [&probe](const TestEvent& event) {
+        TestEventType::Alpha, SourceFilter{ SOURCE_ONE }, [&probe](const TestEvent& event) {
             probe.Record(event);
         }
     );
@@ -645,7 +645,7 @@ ZTEST(event_bus, test_PublishAsync_applies_the_filters) {
     zassert_true(filtered_handle.has_value());
     zassert_true(accepted_handle.has_value());
 
-    fixture.channel.PublishAsync(MakeEvent(TestEventType::Alpha, 1, k_source_two));
+    fixture.channel.PublishAsync(MakeEvent(TestEventType::Alpha, 1, SOURCE_TWO));
 
     zassert_true(accepted.WaitForDelivery(), "the event was never dispatched");
     zassert_equal(probe.Count(), 0U);

@@ -164,8 +164,8 @@ ZTEST(mdf_blocks, test_MetadataBlockWrapsContentInXml) {
 
     const auto text = AsText(data, BLOCK_HEADER_SIZE, block.GetBlockSize() - BLOCK_HEADER_SIZE);
     zassert_true(text.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?><HDcomment>"), "%s", text.c_str());
-    zassert_not_equal(text.find("<TX>hello</TX>"), std::string::npos);
-    zassert_not_equal(text.find("</HDcomment>"), std::string::npos);
+    zassert_true(text.contains("<TX>hello</TX>"));
+    zassert_true(text.contains("</HDcomment>"));
 }
 
 ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
@@ -179,13 +179,13 @@ ZTEST(mdf_blocks, test_MetadataCommentEscapesXml) {
 
     zassert_true(text.starts_with("<CNcomment>"), "readers match the root element at the start: %s", text.c_str());
     zassert_true(text.ends_with("</CNcomment>"), "%s", text.c_str());
-    zassert_not_equal(
-        text.find("<TX>Coolant &quot;inlet&quot; &lt;probe&gt; &amp; &apos;spare&apos;</TX>"), std::string::npos,
+    zassert_true(
+        text.contains("<TX>Coolant &quot;inlet&quot; &lt;probe&gt; &amp; &apos;spare&apos;</TX>"),
         "a description with markup characters must not break the XML: %s", text.c_str()
     );
-    zassert_not_equal(
-        text.find("<common_properties><e name=\"vendor &amp; model\">Acme &lt;X&gt;</e></common_properties>"),
-        std::string::npos, "property names and values must be escaped too: %s", text.c_str()
+    zassert_true(
+        text.contains("<common_properties><e name=\"vendor &amp; model\">Acme &lt;X&gt;</e></common_properties>"),
+        "property names and values must be escaped too: %s", text.c_str()
     );
 
     block.SetComment("CG", "plain");
@@ -274,13 +274,13 @@ ZTEST(mdf_blocks, test_FileHistoryBlockLayout) {
 
     const auto comment_data = Serialize(*comment);
     const auto text = AsText(comment_data, BLOCK_HEADER_SIZE, comment->GetBlockSize() - BLOCK_HEADER_SIZE);
-    zassert_not_equal(text.find("<FHcomment>"), std::string::npos, "%s", text.c_str());
-    zassert_not_equal(
-        text.find("<tool_id>none</tool_id>"), std::string::npos,
+    zassert_true(text.contains("<FHcomment>"), "%s", text.c_str());
+    zassert_true(
+        text.contains("<tool_id>none</tool_id>"),
         "a file history that was never told its tool keeps the placeholder: %s", text.c_str()
     );
-    zassert_not_equal(text.find("<tool_vendor>Eerie Leap</tool_vendor>"), std::string::npos, "%s", text.c_str());
-    zassert_not_equal(text.find("<tool_version>0.0.0</tool_version>"), std::string::npos, "%s", text.c_str());
+    zassert_true(text.contains("<tool_vendor>Eerie Leap</tool_vendor>"), "%s", text.c_str());
+    zassert_true(text.contains("<tool_version>0.0.0</tool_version>"), "%s", text.c_str());
 }
 
 ZTEST(mdf_blocks, test_DataGroupBlockLayout) {

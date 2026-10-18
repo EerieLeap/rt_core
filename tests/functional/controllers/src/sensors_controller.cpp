@@ -167,8 +167,9 @@ ZTEST(sensors_controller, test_a_restart_stops_and_starts_again_the_dependents_t
 
     // rt_gauge's seven arguments.
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([](auto manager) {
+        controller.Initialize([](const auto& manager) {
             zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }));
         }),
         0
@@ -229,8 +230,9 @@ ZTEST(sensors_controller, test_a_disabled_sensor_gets_no_reading_from_processing
     const auto frame = std::make_shared<SensorReadingsFrame>();
 
     SensorsController controller(fs_service, work_queue, nullptr, time_service, frame, nullptr, nullptr);
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([](auto manager) {
+        controller.Initialize([](const auto& manager) {
             auto disabled = MakeVirtualSensor("disabled", "2 + 2");
             disabled->is_enabled = false;
 

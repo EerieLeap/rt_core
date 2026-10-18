@@ -30,7 +30,6 @@ using eerie_leap::domain::configuration_domain::utilities::CborConfigurationMana
 using eerie_leap::subsys::device_tree::DtFs;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::subsys::threading::ScopedMutex;
-using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::utilities::memory::Mrm;
 
 namespace {
@@ -91,7 +90,7 @@ struct Recorder {
         k_tid_t thread;
     };
 
-    k_mutex lock;
+    k_mutex lock{};
     std::vector<Entry> entries;
 
     Recorder() {
@@ -134,6 +133,11 @@ struct Fixture {
         fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
         zassert_true(fs_service->Format());
     }
+
+    Fixture(const Fixture&) = delete;
+    Fixture& operator=(const Fixture&) = delete;
+    Fixture(Fixture&&) = delete;
+    Fixture& operator=(Fixture&&) = delete;
 
     ~Fixture() {
         if(service != nullptr)

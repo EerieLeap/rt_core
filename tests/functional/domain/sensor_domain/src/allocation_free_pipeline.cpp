@@ -123,7 +123,7 @@ Pipeline MakePipeline() {
     pipeline.readers.push_back(
         std::make_unique<SensorReaderPhysicalIndicator>(time_service, pipeline.generation->runtimes[0], pipeline.gpio)
     );
-    pipeline.reader_runtimes.push_back(&pipeline.generation->runtimes[0]);
+    pipeline.reader_runtimes.push_back(pipeline.generation->runtimes.data());
     pipeline.readers.push_back(
         std::make_unique<SensorReaderVirtualAnalog>(time_service, pipeline.generation->runtimes[1])
     );
@@ -284,12 +284,12 @@ ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) 
     // Outside the window: the bus thread starts and the first tick caches a and the sentinel.
     zassert_true(events::Round(*publisher, *frame, { { a.get(), 0.0F } }, *sentinel, *sentinel_recorder));
 
-    constexpr size_t k_rounds = 20;
+    constexpr size_t ROUNDS = 20;
     size_t delivered_rounds = 0;
 
     const size_t allocations_before = GetAllocationCount();
 
-    for(size_t i = 0; i < k_rounds; i++) {
+    for(size_t i = 0; i < ROUNDS; i++) {
         const float value = static_cast<float>(i + 1);
 
         // b goes out for the first time here, so the window also holds one miss: Accepts() and the
@@ -307,11 +307,11 @@ ZTEST(allocation_free_pipeline, test_steady_state_publishing_does_not_allocate) 
 
     publisher->Stop();
 
-    zassert_equal(allocations, 0, "%zu allocations during %zu published rounds", allocations, k_rounds);
-    zassert_equal(delivered_rounds, k_rounds);
-    zassert_equal(sentinel_recorder->Count(), 1 + k_rounds);
-    zassert_equal(a_recorder->Count(), 1 + k_rounds);
-    zassert_equal(a_recorder->At(k_rounds), static_cast<float>(k_rounds));
+    zassert_equal(allocations, 0, "%zu allocations during %zu published rounds", allocations, ROUNDS);
+    zassert_equal(delivered_rounds, ROUNDS);
+    zassert_equal(sentinel_recorder->Count(), 1 + ROUNDS);
+    zassert_equal(a_recorder->Count(), 1 + ROUNDS);
+    zassert_equal(a_recorder->At(ROUNDS), static_cast<float>(ROUNDS));
     zassert_equal(b_recorder->Count(), 1);
     zassert_equal(b_recorder->At(0), 100.0F);
 }
@@ -353,9 +353,9 @@ struct Feed {
 // the dependent evaluated. Only the counts are asserted off native_sim, whose simulated clock
 // makes the values exact.
 ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
-    constexpr int kDebounceMs = 20;
-    constexpr int kSettleMs = 50;
-    constexpr size_t k_rounds = 10;
+    constexpr int DEBOUNCE_MS = 20;
+    constexpr int SETTLE_MS = 50;
+    constexpr size_t ROUNDS = 10;
 
     const auto work_queue_thread = std::make_shared<WorkQueueThread>(
         "conditioning_alloc", CONFIG_EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_STACK_SIZE,
@@ -371,7 +371,7 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     const auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_button");
     button->configuration.type = SensorType::PHYSICAL_INDICATOR;
     button->configuration.channel = 0;
-    button->configuration.debounce_ms = kDebounceMs;
+    button->configuration.debounce_ms = DEBOUNCE_MS;
     button->configuration.input_mode = IndicatorInputMode::Toggle;
 
     const auto probe = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "cond_alloc_probe");
@@ -392,31 +392,31 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     k_work_init(&feed.work, Feed::Handler);
     k_sem_init(&feed.done, 0, 1);
     feed.pipeline = pipeline.get();
-    feed.runtime = &generation->runtimes[0];
+    feed.runtime = generation->runtimes.data();
 
     k_work_q* work_queue = work_queue_thread->GetWorkQueue();
 
     // Outside the window: the first value, then one press settled by the timer.
     feed.Run(work_queue, 0.0F);
     feed.Run(work_queue, 1.0F);
-    k_msleep(kSettleMs);
+    k_msleep(SETTLE_MS);
     feed.Run(work_queue, 0.0F);
-    k_msleep(kSettleMs);
+    k_msleep(SETTLE_MS);
 
-    std::array<float, k_rounds> held{};
-    std::array<float, k_rounds> pressed{};
-    std::array<float, k_rounds> released{};
+    std::array<float, ROUNDS> held{};
+    std::array<float, ROUNDS> pressed{};
+    std::array<float, ROUNDS> released{};
 
     const size_t allocations_before = GetAllocationCount();
 
-    for(size_t i = 0; i < k_rounds; i++) {
+    for(size_t i = 0; i < ROUNDS; i++) {
         feed.Run(work_queue, 1.0F);
         held[i] = frame->TryGetReadingValue("cond_alloc_button").value_or(-1.0F);
-        k_msleep(kSettleMs);
+        k_msleep(SETTLE_MS);
         pressed[i] = frame->TryGetReadingValue("cond_alloc_probe").value_or(-1.0F);
 
         feed.Run(work_queue, 0.0F);
-        k_msleep(kSettleMs);
+        k_msleep(SETTLE_MS);
         released[i] = frame->TryGetReadingValue("cond_alloc_probe").value_or(-1.0F);
     }
 
@@ -425,11 +425,11 @@ ZTEST(allocation_free_pipeline, test_conditioned_indicators_do_not_allocate) {
     // Nothing may settle into the generation once it goes.
     generation->CancelSettles();
 
-    zassert_equal(allocations, 0, "%zu allocations during %zu conditioned presses", allocations, k_rounds);
+    zassert_equal(allocations, 0, "%zu allocations during %zu conditioned presses", allocations, ROUNDS);
 
     if(IS_ENABLED(CONFIG_BOARD_NATIVE_SIM)) {
         // The switch was on after the warm-up press, so the presses turn it off, on, off, ...
-        for(size_t i = 0; i < k_rounds; i++) {
+        for(size_t i = 0; i < ROUNDS; i++) {
             const float before = (i % 2 == 0) ? 1.0F : 0.0F;
             const float after = 1.0F - before;
 

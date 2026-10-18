@@ -27,10 +27,10 @@ using eerie_leap::subsys::event_bus::SubscribeEventBinding;
 using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::utilities::type::ConfigValue;
 
+using event_binding_tests::BINDING_TEST_SOURCE;
 using event_binding_tests::BindingEventType;
 using event_binding_tests::BindingPayloadType;
 using event_binding_tests::FakeView;
-using event_binding_tests::k_binding_test_source;
 using event_binding_tests::PublishSync;
 using event_binding_tests::RegisterBindingTestChannels;
 using event_binding_tests::ResetBindingTestChannels;
@@ -38,7 +38,7 @@ using event_binding_tests::SetUpBindingTestChannels;
 
 namespace {
 
-constexpr int k_dispatch_timeout_ms = 1000;
+constexpr int K_DISPATCH_TIMEOUT_MS = 1000;
 
 std::string CurrentThreadName() {
     const char* name = k_thread_name_get(k_current_get());
@@ -55,7 +55,7 @@ private:
         int calls = 0;
         std::optional<EventData> last_value;
         std::string thread_name;
-        k_sem delivered;
+        k_sem delivered{};
     };
 
     std::shared_ptr<State> state_ = std::make_shared<State>();
@@ -296,12 +296,12 @@ ZTEST(event_binding_subscription, test_an_async_publish_reaches_the_handler_on_t
     zassert_not_null(subscription.get());
 
     channels.primary.PublishAsync(
-        { .source_id = k_binding_test_source,
+        { .source_id = BINDING_TEST_SOURCE,
             .type = BindingEventType::Updated,
             .payload = { { BindingPayloadType::Value, 3.0F } } }
     );
 
-    zassert_true(probe.WaitForDelivery(K_MSEC(k_dispatch_timeout_ms)));
+    zassert_true(probe.WaitForDelivery(K_MSEC(K_DISPATCH_TIMEOUT_MS)));
     zassert_equal(probe.Calls(), 1);
     zassert_equal(std::get<float>(*probe.LastValue()), 3.0F);
     zassert_equal(probe.ThreadName(), std::string("binding_test_bus"));

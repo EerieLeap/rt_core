@@ -12,18 +12,19 @@ using eerie_leap::utilities::memory::Mrm;
 ZTEST_SUITE(cbor_helpers, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(cbor_helpers, test_ToZcborString) {
-    static constexpr char kText[] = "sensor_1";
+    static constexpr char K_TEXT[] = "sensor_1";
 
-    const auto zstr = CborHelpers::ToZcborString(kText);
+    const auto zstr = CborHelpers::ToZcborString(K_TEXT);
 
-    zassert_equal_ptr(zstr.value, reinterpret_cast<const uint8_t*>(kText));
-    zassert_equal(zstr.len, strlen(kText));
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor strings are bytes, the case feeds them text
+    zassert_equal_ptr(zstr.value, reinterpret_cast<const uint8_t*>(K_TEXT));
+    zassert_equal(zstr.len, strlen(K_TEXT));
 }
 
 ZTEST(cbor_helpers, test_ToZcborString_empty) {
-    static constexpr char kText[] = "";
+    static constexpr char K_TEXT[] = "";
 
-    const auto zstr = CborHelpers::ToZcborString(kText);
+    const auto zstr = CborHelpers::ToZcborString(K_TEXT);
 
     zassert_not_null(zstr.value);
     zassert_equal(zstr.len, 0);
@@ -34,23 +35,25 @@ ZTEST(cbor_helpers, test_ToZcborString_does_not_copy) {
 
     const auto zstr = CborHelpers::ToZcborString(text);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor strings are bytes, the case feeds them text
     zassert_equal_ptr(zstr.value, reinterpret_cast<const uint8_t*>(text.data()));
 }
 
 ZTEST(cbor_helpers, test_ToStdString) {
-    static constexpr char kText[] = "temperature";
+    static constexpr char K_TEXT[] = "temperature";
 
-    const auto zstr = CborHelpers::ToZcborString(kText);
+    const auto zstr = CborHelpers::ToZcborString(K_TEXT);
     const auto result = CborHelpers::ToStdString(zstr);
 
-    zassert_equal(result.size(), strlen(kText));
-    zassert_true(result == kText);
+    zassert_equal(result.size(), strlen(K_TEXT));
+    zassert_true(result == K_TEXT);
 }
 
 ZTEST(cbor_helpers, test_ToStdString_is_not_null_terminator_bound) {
     // zcbor strings are length-delimited slices of the payload, not C strings.
-    static constexpr char kPayload[] = "abcdefghij";
-    const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(kPayload), .len = 3 };
+    static constexpr char PAYLOAD[] = "abcdefghij";
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor strings are bytes, the case feeds them text
+    const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(PAYLOAD), .len = 3 };
 
     const auto result = CborHelpers::ToStdString(zstr);
 
@@ -59,8 +62,9 @@ ZTEST(cbor_helpers, test_ToStdString_is_not_null_terminator_bound) {
 }
 
 ZTEST(cbor_helpers, test_ToStdString_keeps_embedded_nul) {
-    static constexpr char kPayload[] = { 'a', '\0', 'b' };
-    const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(kPayload), .len = sizeof(kPayload) };
+    static constexpr char PAYLOAD[] = { 'a', '\0', 'b' };
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor strings are bytes, the case feeds them text
+    const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(PAYLOAD), .len = sizeof(PAYLOAD) };
 
     auto result = CborHelpers::ToStdString(zstr);
 
@@ -71,8 +75,9 @@ ZTEST(cbor_helpers, test_ToStdString_keeps_embedded_nul) {
 }
 
 ZTEST(cbor_helpers, test_ToStdString_empty) {
-    static constexpr char kPayload[] = "unused";
-    const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(kPayload), .len = 0 };
+    static constexpr char PAYLOAD[] = "unused";
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor strings are bytes, the case feeds them text
+    const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(PAYLOAD), .len = 0 };
 
     const auto result = CborHelpers::ToStdString(zstr);
 
@@ -80,19 +85,20 @@ ZTEST(cbor_helpers, test_ToStdString_empty) {
 }
 
 ZTEST(cbor_helpers, test_ToPmrString) {
-    static constexpr char kText[] = "pressure_kpa";
+    static constexpr char K_TEXT[] = "pressure_kpa";
     auto* mr = Mrm::GetDefaultPmr();
 
-    const auto zstr = CborHelpers::ToZcborString(kText);
+    const auto zstr = CborHelpers::ToZcborString(K_TEXT);
     const auto result = CborHelpers::ToPmrString(mr, zstr);
 
-    zassert_equal(result.size(), strlen(kText));
-    zassert_true(result == kText);
+    zassert_equal(result.size(), strlen(K_TEXT));
+    zassert_true(result == K_TEXT);
     zassert_true(result.get_allocator().resource()->is_equal(*mr));
 }
 
 ZTEST(cbor_helpers, test_ToPmrString_copies_payload) {
     char payload[] = "original";
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor strings are bytes, the case feeds them text
     const zcbor_string zstr{ .value = reinterpret_cast<const uint8_t*>(payload), .len = strlen(payload) };
 
     const auto result = CborHelpers::ToPmrString(Mrm::GetDefaultPmr(), zstr);
@@ -102,14 +108,14 @@ ZTEST(cbor_helpers, test_ToPmrString_copies_payload) {
 }
 
 ZTEST(cbor_helpers, test_round_trip) {
-    static constexpr char kText[] = "a rather long identifier that exceeds the short string buffer";
+    static constexpr char K_TEXT[] = "a rather long identifier that exceeds the short string buffer";
 
-    const auto zstr = CborHelpers::ToZcborString(kText);
+    const auto zstr = CborHelpers::ToZcborString(K_TEXT);
     const auto std_string = CborHelpers::ToStdString(zstr);
     const auto zstr_again = CborHelpers::ToZcborString(std_string);
     auto pmr_string = CborHelpers::ToPmrString(Mrm::GetDefaultPmr(), zstr_again);
 
     zassert_equal(zstr.len, zstr_again.len);
-    zassert_equal(pmr_string.size(), strlen(kText));
-    zassert_mem_equal(pmr_string.data(), kText, strlen(kText));
+    zassert_equal(pmr_string.size(), strlen(K_TEXT));
+    zassert_mem_equal(pmr_string.data(), K_TEXT, strlen(K_TEXT));
 }

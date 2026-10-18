@@ -330,8 +330,15 @@ public:
         zassert_true(peer_handler_id_ > 0, "Peer filter rejected: %d", peer_handler_id_);
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     ~Harness() {
-        (*canbus)->RemoveFrameReceivedHandler(peer_handler_id_);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(Canbus* live_bus = canbus->Get(); live_bus != nullptr)
+            live_bus->RemoveFrameReceivedHandler(peer_handler_id_);
         transport.reset();
         work_queue.reset();
         canbus.reset();

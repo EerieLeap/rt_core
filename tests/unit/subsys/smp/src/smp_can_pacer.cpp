@@ -78,10 +78,12 @@ ZTEST(smp_can_pacer, test_wait_for_several_frames) {
     pacer.Reset(0);
     SendAvailable(pacer);
 
-    zassert_equal(pacer.GetWaitUs(4), 4 * 1280);
-    zassert_equal(pacer.GetWaitUs(100), BURST * 1280, "Never waits for more than the bucket holds");
+    zassert_equal(pacer.GetWaitUs(4), 4LL * 1280);
+    zassert_equal(
+        pacer.GetWaitUs(100), static_cast<int64_t>(BURST) * 1280, "Never waits for more than the bucket holds"
+    );
 
-    pacer.Update(4 * 1280);
+    pacer.Update(4LL * 1280);
     zassert_equal(pacer.GetWaitUs(4), 0);
     zassert_equal(SendAvailable(pacer), 4);
 }

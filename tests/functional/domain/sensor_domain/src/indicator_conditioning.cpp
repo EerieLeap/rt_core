@@ -404,11 +404,11 @@ ZTEST(indicator_conditioning, test_a_toggle_driven_by_hand_flips_on_each_press) 
 // Without a queue nothing settles on a timer: a reading of the new value after the window commits
 // it, and one back at the old value cancels it. A long window keeps the board's clock out of it.
 ZTEST(indicator_conditioning, test_without_a_work_queue_a_held_change_settles_on_a_later_reading) {
-    constexpr int kDebounceMs = 500;
+    constexpr int DEBOUNCE_MS = 500;
 
     auto hand = MakeHandPipeline(
         {
-            MakeIndicator("hand_level", 0, kDebounceMs),
+            MakeIndicator("hand_level", 0, DEBOUNCE_MS),
             MakeProbe("hand_level_probe", "hand_level"),
         }
     );
@@ -423,11 +423,11 @@ ZTEST(indicator_conditioning, test_without_a_work_queue_a_held_change_settles_on
     );
 
     hand.Feed("hand_level", 0.0F);
-    k_msleep(kDebounceMs + 100);
+    k_msleep(DEBOUNCE_MS + 100);
     hand.Feed("hand_level", 1.0F);
     zassert_equal(hand.Value("hand_level"), 0.0F, "The return to 0 cancelled the window; this one starts a new one");
 
-    k_msleep(kDebounceMs + 100);
+    k_msleep(DEBOUNCE_MS + 100);
     zassert_equal(hand.Value("hand_level"), 0.0F, "No timer without a queue");
 
     hand.Feed("hand_level", 1.0F);
@@ -493,12 +493,13 @@ ZTEST(indicator_conditioning, test_a_failed_start_keeps_the_switches_of_the_last
 namespace {
 
 // The emulated controller of native_sim; led0 holds its pin 0.
-const device* const kGpioPort = DEVICE_DT_GET(DT_NODELABEL(gpio0));
-constexpr gpio_pin_t kFirstPin = 4;
-constexpr int kChannelCount = 28; // Pins 4 to 31.
+const device* const GPIO_PORT = DEVICE_DT_GET(DT_NODELABEL(gpio0));
+constexpr gpio_pin_t FIRST_PIN = 4;
+constexpr int K_CHANNEL_COUNT = 28; // Pins 4 to 31.
 
 // One channel per sensor and case: a case that fails ends without its destructors, so its readers
 // stay attached to the channels it drove.
+// NOLINTNEXTLINE(cppcoreguidelines-use-enum-class): plain channel numbers, used as indices and arguments throughout
 enum Channel : int {
     kChAtOnce = 0,
     kChToggleAtOnce,
@@ -524,15 +525,16 @@ enum Channel : int {
     kChannelsUsed,
 };
 
-static_assert(kChannelsUsed <= kChannelCount);
+static_assert(kChannelsUsed <= K_CHANNEL_COUNT);
 
 // One Gpio for the suite: it never removes its callbacks from the driver.
 std::shared_ptr<eerie_leap::subsys::gpio::Gpio> TestGpio() {
-    static const auto gpio = [] {
+    static const auto GPIO = [] {
         std::vector<gpio_dt_spec> gpio_specs;
-        for(int i = 0; i < kChannelCount; i++) {
+        gpio_specs.reserve(K_CHANNEL_COUNT);
+        for(int i = 0; i < K_CHANNEL_COUNT; i++) {
             gpio_specs.push_back(
-                { .port = kGpioPort, .pin = static_cast<gpio_pin_t>(kFirstPin + i), .dt_flags = GPIO_ACTIVE_HIGH }
+                { .port = GPIO_PORT, .pin = static_cast<gpio_pin_t>(FIRST_PIN + i), .dt_flags = GPIO_ACTIVE_HIGH }
             );
         }
 
@@ -542,14 +544,14 @@ std::shared_ptr<eerie_leap::subsys::gpio::Gpio> TestGpio() {
         return gpio;
     }();
 
-    return gpio;
+    return GPIO;
 }
 
 // Fires the edge on this thread; it reaches the pipeline once the thread sleeps, at this tick.
 // The emulator takes input levels only on pins configured as inputs, which TestGpio() does.
 void SetInput(int channel, bool level) {
     TestGpio();
-    zassert_ok(gpio_emul_input_set(kGpioPort, static_cast<gpio_pin_t>(kFirstPin + channel), level ? 1 : 0));
+    zassert_ok(gpio_emul_input_set(GPIO_PORT, static_cast<gpio_pin_t>(FIRST_PIN + channel), level ? 1 : 0));
 }
 
 struct Record {
@@ -568,7 +570,7 @@ private:
         Record record;
     };
 
-    mutable k_mutex lock_;
+    mutable k_mutex lock_{};
     std::vector<Entry> entries_;
 
 public:
@@ -1442,8 +1444,8 @@ using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::canbus::CanbusType;
 using eerie_leap::subsys::canbus::CanId;
 
-constexpr uint8_t kCanBus = 0;
-constexpr uint32_t kCanFrameId = 0x300;
+constexpr uint8_t CAN_BUS = 0;
+constexpr uint32_t CAN_FRAME_ID = 0x300;
 
 const device* CanLoopbackDevice() {
     return DEVICE_DT_GET(DT_NODELABEL(can_loopback0));
@@ -1463,7 +1465,7 @@ std::shared_ptr<CanbusConfigurationManager> MakeCanbusConfigurationManager(std::
     signal.SetName("sig");
 
     auto message = std::make_shared<CanMessageConfiguration>(std::allocator_arg, Mrm::GetDefaultPmr());
-    message->frame_id = kCanFrameId;
+    message->frame_id = CAN_FRAME_ID;
     message->is_enabled = true;
     message->name = "EL_SWITCH";
     message->message_size = 8;
@@ -1471,12 +1473,12 @@ std::shared_ptr<CanbusConfigurationManager> MakeCanbusConfigurationManager(std::
 
     CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
     channel.type = CanbusType::CLASSICAL_CAN;
-    channel.bus_channel = kCanBus;
+    channel.bus_channel = CAN_BUS;
     channel.bitrate = 500000;
     channel.message_configurations.push_back(std::move(message));
 
     CanbusConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
-    configuration.channel_configurations.emplace(kCanBus, std::move(channel));
+    configuration.channel_configurations.emplace(CAN_BUS, std::move(channel));
 
     auto manager = std::make_shared<CanbusConfigurationManager>(
         std::make_unique<CborConfigurationService<CborCanbusConfig>>("canbus_config", std::move(fs_service)), nullptr
@@ -1490,7 +1492,7 @@ std::shared_ptr<Sensor> MakeCanIndicator(std::string_view id, uint32_t debounce_
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
     sensor->configuration.type = SensorType::CANBUS_INDICATOR;
     sensor->configuration.canbus_source = make_unique_pmr<CanbusSource>(
-        Mrm::GetDefaultPmr(), kCanBus, kCanFrameId, "sig"
+        Mrm::GetDefaultPmr(), CAN_BUS, CAN_FRAME_ID, "sig"
     );
     sensor->configuration.UpdateConnectionString();
     sensor->configuration.debounce_ms = debounce_ms;
@@ -1507,7 +1509,7 @@ struct CanConditioningRig : ConditioningRig {
     // On this thread; the frame reaches the pipeline once the thread sleeps, at this tick.
     void Send(uint8_t signal) const {
         const std::array<uint8_t, 8> data{ signal };
-        zassert_ok((*canbus)->SendFrame(CanId::Standard(kCanFrameId), data, K_MSEC(100)));
+        zassert_ok((*canbus)->SendFrame(CanId::Standard(CAN_FRAME_ID), data, K_MSEC(100)));
     }
 };
 
@@ -1517,11 +1519,11 @@ CanConditioningRig MakeCanRig(const std::vector<std::shared_ptr<Sensor>>& sensor
 
     rig.canbus_service = std::make_shared<CanbusService>(
         [](uint8_t bus_channel) {
-            return bus_channel == kCanBus ? CanLoopbackDevice() : nullptr;
+            return bus_channel == CAN_BUS ? CanLoopbackDevice() : nullptr;
         },
         MakeCanbusConfigurationManager(rig.fs_service)
     );
-    rig.canbus = rig.canbus_service->GetCanbus(kCanBus);
+    rig.canbus = rig.canbus_service->GetCanbus(CAN_BUS);
     zassert_not_null(rig.canbus.get(), "The channel is open");
 
     // The service opens the channel in normal mode, in which the loopback controller hands no

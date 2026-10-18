@@ -246,18 +246,18 @@ ZTEST_F(canbus_com_state, test_a_span_of_the_capacity_takes_every_unit) {
 
     // Five units share the type, and only the one with the highest ID reports 0x01, as when one of
     // several loggers logs.
-    constexpr std::array<uint8_t, 4> joined_ids = { 3, 4, 5, 6 };
-    constexpr uint8_t ACTIVE_ID = joined_ids.back();
-    static_assert(INetworkStateTransport::MAX_REMOTE_RECORDS > joined_ids.size());
+    constexpr std::array<uint8_t, 4> JOINED_IDS = { 3, 4, 5, 6 };
+    constexpr uint8_t ACTIVE_ID = JOINED_IDS.back();
+    static_assert(INetworkStateTransport::MAX_REMOTE_RECORDS > JOINED_IDS.size());
 
-    for(const uint8_t device_id : joined_ids)
+    for(const uint8_t device_id : JOINED_IDS)
         harness.Join(device_id, 0x30000000 + device_id);
 
     probe.Register(harness.Transport(), LOGGING_STATUS);
     zassert_true(probe.WaitForCall().has_value());
 
     harness.SendAsPeer(STATE_CHANGE, NotificationFrame(PEER_ID, 1, LOGGING_STATUS_CODE, { 0x00 }));
-    for(const uint8_t device_id : joined_ids) {
+    for(const uint8_t device_id : JOINED_IDS) {
         const uint8_t value = device_id == ACTIVE_ID ? 0x01 : 0x00;
         harness.SendAsPeer(STATE_CHANGE, NotificationFrame(device_id, 1, LOGGING_STATUS_CODE, { value }));
     }
@@ -266,13 +266,13 @@ ZTEST_F(canbus_com_state, test_a_span_of_the_capacity_takes_every_unit) {
 
     auto seen = probe.WaitForLastCall();
     zassert_true(seen.has_value(), "The handler hears of the records");
-    zassert_equal(seen->size(), 1 + joined_ids.size(), "and reads every unit's record");
+    zassert_equal(seen->size(), 1 + JOINED_IDS.size(), "and reads every unit's record");
     zassert_equal(seen->back().device_id, ACTIVE_ID);
     zassert_true(seen->back().data == Data({ 0x01 }), "including that of the unit with the highest ID");
 
     RemoteStateRecords records{};
-    zassert_equal(harness.Transport().GetRemoteStates(LOGGING_STATUS, records), 1 + joined_ids.size());
-    zassert_equal(records[joined_ids.size()].device_id, ACTIVE_ID);
+    zassert_equal(harness.Transport().GetRemoteStates(LOGGING_STATUS, records), 1 + JOINED_IDS.size());
+    zassert_equal(records[JOINED_IDS.size()].device_id, ACTIVE_ID);
 
     std::array<RemoteStateRecord, 4> short_span{};
     zassert_equal(

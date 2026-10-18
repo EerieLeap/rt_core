@@ -13,7 +13,8 @@ using namespace eerie_leap::subsys::time;
 
 namespace {
 
-const std::regex kTimestampPattern(R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{1,3})");
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
+const std::regex TIMESTAMP_PATTERN(R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{1,3})");
 
 } // namespace
 
@@ -23,7 +24,7 @@ ZTEST(time_helpers, test_GetFormattedString_matches_expected_pattern) {
     const auto formatted_time = TimeHelpers::GetFormattedString(TimeHelpers::FromMilliseconds(1761106217000ms));
 
     zassert_not_equal(formatted_time.size(), 0);
-    zassert_true(std::regex_match(formatted_time, kTimestampPattern), "unexpected format: %s", formatted_time.c_str());
+    zassert_true(std::regex_match(formatted_time, TIMESTAMP_PATTERN), "unexpected format: %s", formatted_time.c_str());
 }
 
 ZTEST(time_helpers, test_GetFormattedString_appends_millisecond_remainder) {

@@ -19,10 +19,10 @@ ZTEST_SUITE(calibration_restart_race, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-constexpr int kRounds = 40;
+constexpr int ROUNDS = 40;
 // As in the apps: the configuration queue above processing (6), MCUmgr below it.
-constexpr int kConfigPriority = 5;
-constexpr int kMcumgrPriority = 7;
+constexpr int CONFIG_PRIORITY = 5;
+constexpr int MCUMGR_PRIORITY = 7;
 
 K_THREAD_STACK_DEFINE(calibrating_stack, 8192);
 K_THREAD_STACK_DEFINE(restarting_stack, 8192);
@@ -39,7 +39,7 @@ struct Race {
 void Calibrate(void* context, void*, void*) {
     auto* race = static_cast<Race*>(context);
 
-    for(int i = 0; i < kRounds; i++) {
+    for(int i = 0; i < ROUNDS; i++) {
         if(race->calibration_service->Start(1)) {
             race->jobs++;
             k_msleep(1 + i % 4);
@@ -57,7 +57,7 @@ void Calibrate(void* context, void*, void*) {
 void Restart(void* context, void*, void*) {
     auto* race = static_cast<Race*>(context);
 
-    for(int i = 0; i < kRounds; i++) {
+    for(int i = 0; i < ROUNDS; i++) {
         if(race->processing_service->Stop() && race->processing_service->Start())
             race->restarts++;
 
@@ -102,17 +102,17 @@ ZTEST(calibration_restart_race, test_calibration_and_restarts_leave_processing_r
     k_thread restarting;
     k_thread_create(
         &calibrating, calibrating_stack, K_THREAD_STACK_SIZEOF(calibrating_stack), Calibrate, &race, nullptr, nullptr,
-        kMcumgrPriority, 0, K_NO_WAIT
+        MCUMGR_PRIORITY, 0, K_NO_WAIT
     );
     k_thread_create(
         &restarting, restarting_stack, K_THREAD_STACK_SIZEOF(restarting_stack), Restart, &race, nullptr, nullptr,
-        kConfigPriority, 0, K_NO_WAIT
+        CONFIG_PRIORITY, 0, K_NO_WAIT
     );
 
     zassert_ok(k_thread_join(&calibrating, K_SECONDS(30)), "The calibration loop hung");
     zassert_ok(k_thread_join(&restarting, K_SECONDS(30)), "The restart loop hung");
 
-    zassert_equal(race.restarts, kRounds, "Every restart completed");
+    zassert_equal(race.restarts, ROUNDS, "Every restart completed");
     zassert_true(race.jobs > 0, "Calibration ran between the restarts");
     zassert_equal(race.stopped_jobs, race.jobs, "Every job STOP ended");
     zassert_false(calibration_service->IsRunning());

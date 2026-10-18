@@ -65,7 +65,7 @@ using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensor_processor, NULL, NULL, NULL, NULL, NULL);
 
-static std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> SensorProcessorGetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -141,7 +141,7 @@ static std::vector<std::shared_ptr<Sensor>> sensor_processor_GetTestSensors() {
     return sensors_order_resolver.GetProcessingOrder();
 }
 
-static AdcConfiguration sensor_processor_GetTestConfiguration() {
+static AdcConfiguration SensorProcessorGetTestConfiguration() {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -167,7 +167,7 @@ static AdcConfiguration sensor_processor_GetTestConfiguration() {
     return adc_configuration;
 }
 
-struct sensor_processor_HelperInstances {
+struct SensorProcessorHelperInstances {
     std::shared_ptr<ITimeService> time_service;
     std::shared_ptr<IAdcManager> adc_manager; // Owns the ADCs the sample set points at.
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
@@ -177,7 +177,7 @@ struct sensor_processor_HelperInstances {
     std::vector<std::shared_ptr<Sensor>> sensors;
 };
 
-static sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
+static SensorProcessorHelperInstances SensorProcessorGetReadingInstances() {
     const auto time_provider = std::make_shared<BootElapsedTimeProvider>();
     const auto rtc_provider = std::make_shared<RtcProvider>();
     const auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
@@ -190,12 +190,12 @@ static sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
     gpio->Initialize();
 
     const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
-    const auto sensors = sensor_processor_GetTestSensors();
+    const auto sensors = SensorProcessorGetTestSensors();
 
     // The builder lays out the frame's slots and binds the expressions, as the processing service does.
     const auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
                                 .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
-    generation->adc_configuration = std::make_shared<AdcConfiguration>(sensor_processor_GetTestConfiguration());
+    generation->adc_configuration = std::make_shared<AdcConfiguration>(SensorProcessorGetTestConfiguration());
 
     // Analog readers reserve their slots in the sample set, as in a rate group.
     const auto adc_samples = std::make_shared<AdcSampleSet>();
@@ -224,7 +224,7 @@ static sensor_processor_HelperInstances sensor_processor_GetReadingInstances() {
 
     adc_samples->Seal();
 
-    return sensor_processor_HelperInstances{ .time_service = time_service,
+    return SensorProcessorHelperInstances{ .time_service = time_service,
         .adc_manager = adc_manager,
         .sensor_readings_frame = sensor_readings_frame,
         .generation = generation,
@@ -243,7 +243,7 @@ public:
 };
 
 ZTEST(sensor_processor, test_ProcessReading) {
-    const auto helper = sensor_processor_GetReadingInstances();
+    const auto helper = SensorProcessorGetReadingInstances();
 
     const auto sensor_readings_frame = helper.sensor_readings_frame;
     const auto sensor_readers = helper.sensor_readers;

@@ -13,6 +13,12 @@ struct Payload {
     int value = 0;
     int* destructions = nullptr;
 
+    Payload() = default;
+    Payload(const Payload&) = delete;
+    Payload& operator=(const Payload&) = delete;
+    Payload(Payload&&) = delete;
+    Payload& operator=(Payload&&) = delete;
+
     ~Payload() {
         if(destructions != nullptr)
             ++(*destructions);

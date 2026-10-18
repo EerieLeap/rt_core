@@ -29,7 +29,7 @@ using event_binding_tests::SetUpBindingTestChannels;
 
 namespace {
 
-constexpr int k_helper_priority = 5;
+constexpr int HELPER_PRIORITY = 5;
 
 K_THREAD_STACK_DEFINE(dispatch_helper_stack, 4096);
 k_thread dispatch_helper;
@@ -39,7 +39,7 @@ k_thread dispatch_helper;
 struct DetachRace {
     int owner = 0;
     DispatchGuard guard{ &owner };
-    k_sem entered;
+    k_sem entered{};
     std::atomic<bool> finished{ false };
 
     DetachRace() {
@@ -125,7 +125,7 @@ ZTEST(dispatch_guard, test_Detach_waits_for_an_in_flight_dispatch) {
 
     k_thread_create(
         &dispatch_helper, dispatch_helper_stack, K_THREAD_STACK_SIZEOF(dispatch_helper_stack), DispatchSlowly,
-        new std::shared_ptr<DetachRace>(race), nullptr, nullptr, k_helper_priority, 0, K_NO_WAIT
+        new std::shared_ptr<DetachRace>(race), nullptr, nullptr, HELPER_PRIORITY, 0, K_NO_WAIT
     );
 
     zassert_ok(k_sem_take(&race->entered, K_SECONDS(1)));

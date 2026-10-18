@@ -73,21 +73,21 @@ ZTEST(smp_can_framer, test_encode_does_not_advance) {
 }
 
 ZTEST(smp_can_framer, test_can_fd_frames_carry_63_bytes) {
-    constexpr SmpCanFrameFormat can_fd(true);
+    constexpr SmpCanFrameFormat CAN_FD(true);
     auto packet = MakePacket(118); // 126 bytes: 63 + 63
-    auto frames = MakeFrames(packet, can_fd);
+    auto frames = MakeFrames(packet, CAN_FD);
 
     zassert_equal(frames.size(), 2);
     zassert_equal(frames[0].size(), SmpCanFrameFormat::CAN_FD_FRAME_SIZE);
     zassert_equal(frames[1].size(), SmpCanFrameFormat::CAN_FD_FRAME_SIZE);
     zassert_equal(frames[1][0], 1);
-    zassert_equal(SmpCanFramer::GetFrameCount(1008, can_fd), 16);
+    zassert_equal(SmpCanFramer::GetFrameCount(1008, CAN_FD), 16);
 }
 
 ZTEST(smp_can_framer, test_short_can_fd_frame_is_padded_to_a_valid_length) {
-    constexpr SmpCanFrameFormat can_fd(true);
+    constexpr SmpCanFrameFormat CAN_FD(true);
     auto packet = MakePacket(68); // 76 bytes: 63 + 13, sent as a 16-byte frame
-    auto frames = MakeFrames(packet, can_fd);
+    auto frames = MakeFrames(packet, CAN_FD);
 
     zassert_equal(frames.size(), 2);
     zassert_equal(frames[1].size(), 16);
@@ -104,12 +104,12 @@ ZTEST(smp_can_framer, test_short_can_fd_frame_is_padded_to_a_valid_length) {
 }
 
 ZTEST(smp_can_framer, test_can_fd_frames_up_to_8_bytes_are_not_padded) {
-    constexpr SmpCanFrameFormat can_fd(true);
-    auto frames = MakeFrames(MakePacket(60), can_fd); // 68 bytes: 63 + 5
+    constexpr SmpCanFrameFormat CAN_FD(true);
+    auto frames = MakeFrames(MakePacket(60), CAN_FD); // 68 bytes: 63 + 5
 
     zassert_equal(frames.size(), 2);
     zassert_equal(frames[1].size(), 6);
 
-    auto header_only = MakeFrames(MakePacket(0), can_fd);
+    auto header_only = MakeFrames(MakePacket(0), CAN_FD);
     zassert_equal(header_only[0].size(), 12, "9 bytes go out as a 12-byte frame");
 }

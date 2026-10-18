@@ -31,7 +31,7 @@ using eerie_leap::subsys::threading::ServiceState;
 namespace {
 
 // Bounds a call that must not wait for the writer: one that does waits a held tick of kHoldMs.
-constexpr int64_t kNoWaitMs = ProbeLogger::kHoldMs / 2;
+constexpr int64_t NO_WAIT_MS = ProbeLogger::HOLD_MS / 2;
 
 // A rig whose every tick offers a reading, and a probe per start: a session fails at the next tick
 // once the current probe refuses a record.
@@ -164,7 +164,7 @@ ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
     supervisor.RequestStop(ILoggingControl::kAllUnits);
     supervisor.RequestStart(ILoggingControl::kAllUnits);
     int64_t elapsed_ms = k_uptime_get() - start_ms;
-    zassert_true(elapsed_ms < kNoWaitMs, "the requests took %lld ms", static_cast<long long>(elapsed_ms));
+    zassert_true(elapsed_ms < NO_WAIT_MS, "the requests took %lld ms", static_cast<long long>(elapsed_ms));
     Gate().Open();
 
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
@@ -185,7 +185,7 @@ ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
     supervisor.RequestStart(ILoggingControl::kAllUnits);
     supervisor.RequestStop(ILoggingControl::kAllUnits);
     elapsed_ms = k_uptime_get() - start_ms;
-    zassert_true(elapsed_ms < kNoWaitMs, "the requests took %lld ms", static_cast<long long>(elapsed_ms));
+    zassert_true(elapsed_ms < NO_WAIT_MS, "the requests took %lld ms", static_cast<long long>(elapsed_ms));
     Gate().Open();
 
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
@@ -220,7 +220,7 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     supervisor.RequestStop(ILoggingControl::kAllUnits);
     int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms < kNoWaitMs, "RequestStop(ILoggingControl::kAllUnits) took %lld ms",
+        elapsed_ms < NO_WAIT_MS, "RequestStop(ILoggingControl::kAllUnits) took %lld ms",
         static_cast<long long>(elapsed_ms)
     );
 
@@ -239,7 +239,7 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     const bool is_active = supervisor.IsActive();
     elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms < kNoWaitMs,
+        elapsed_ms < NO_WAIT_MS,
         "RequestStart(ILoggingControl::kAllUnits) and IsActive() took %lld ms while the writer stopped",
         static_cast<long long>(elapsed_ms)
     );
@@ -573,7 +573,7 @@ ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAFailedWriterStopped)
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     struct Context {
-        k_sem entered;
+        k_sem entered{};
         std::atomic<bool> saw_failure = false;
         std::atomic<bool> is_stored = false;
     };
@@ -655,7 +655,7 @@ ZTEST(log_writer_supervisor, test_DestroyingWithAPendingRequestStartsNothing) {
     ReleaseSupervisor();
     const int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms < kNoWaitMs, "the destructor waited %lld ms for a run that had not begun",
+        elapsed_ms < NO_WAIT_MS, "the destructor waited %lld ms for a run that had not begun",
         static_cast<long long>(elapsed_ms)
     );
     zassert_not_equal(channel.GetSubscriptionGeneration(), generation, "the destructor must unsubscribe");
@@ -683,7 +683,7 @@ ZTEST(log_writer_supervisor, test_DestroyingWhileTheTaskRunsWaitsForIt) {
     k_sem_init(entered.get(), 0, 1);
     rig.log_writer_service->SetLoggerFactory([entered, inner = rig.logger_factory] {
         k_sem_give(entered.get());
-        k_msleep(ProbeLogger::kHoldMs);
+        k_msleep(ProbeLogger::HOLD_MS);
 
         return inner();
     });
@@ -695,7 +695,7 @@ ZTEST(log_writer_supervisor, test_DestroyingWhileTheTaskRunsWaitsForIt) {
     ReleaseSupervisor();
     const int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms >= kNoWaitMs, "the destructor returned after %lld ms, before the start finished",
+        elapsed_ms >= NO_WAIT_MS, "the destructor returned after %lld ms, before the start finished",
         static_cast<long long>(elapsed_ms)
     );
     zassert_true(rig.log_writer_service->IsRunning(), "the start in progress must have finished");
@@ -776,8 +776,8 @@ ZTEST(log_writer_supervisor, test_AHandlerClearedDuringItsCallFinishesThatCall) 
     auto& manager = *rig.logging_configuration_manager;
 
     struct Signals {
-        k_sem entered;
-        k_sem release;
+        k_sem entered{};
+        k_sem release{};
         std::atomic<int> calls = 0;
         std::atomic<bool> is_stored = false;
     };
@@ -804,7 +804,7 @@ ZTEST(log_writer_supervisor, test_AHandlerClearedDuringItsCallFinishesThatCall) 
     manager.RegisterConfigurationUpdatedHandler(nullptr);
     const int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms < kNoWaitMs, "clearing the handler waited %lld ms for its call", static_cast<long long>(elapsed_ms)
+        elapsed_ms < NO_WAIT_MS, "clearing the handler waited %lld ms for its call", static_cast<long long>(elapsed_ms)
     );
     zassert_false(weak_sentinel.expired(), "the call in progress must keep its handler alive");
 
@@ -831,7 +831,7 @@ ZTEST(log_writer_supervisor, test_ASupervisorThatFailedToInitializeDoesNothing) 
     // Never initialized, so CreateTask() throws.
     const auto idle_queue = std::make_shared<WorkQueueThread>("idle_queue", 2048, 5);
     SupervisorSlot() = std::make_shared<LogWriterSupervisor>(
-        idle_queue, rig.log_writer_service, rig.logging_configuration_manager, MakeSensorsManager(rig), kTestToolId
+        idle_queue, rig.log_writer_service, rig.logging_configuration_manager, MakeSensorsManager(rig), TEST_TOOL_ID
     );
     auto& supervisor = *SupervisorSlot();
     zassert_false(supervisor.Initialize(), "Initialize() must fail without a running queue");
@@ -884,7 +884,7 @@ ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
     const std::string version = std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MAJOR) + "."
         + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MINOR) + "." + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_PATCH);
 
-    zassert_true(ContainsText(content, std::string("<tool_id>") + kTestToolId + "</tool_id>"), "the tool ID");
+    zassert_true(ContainsText(content, std::string("<tool_id>") + TEST_TOOL_ID + "</tool_id>"), "the tool ID");
     zassert_true(ContainsText(content, "<tool_version>" + version + "</tool_version>"), "the tool version");
     zassert_true(ContainsText(content, Property("device_name", CONFIG_BOARD)), "the board");
     zassert_true(
@@ -932,5 +932,5 @@ ZTEST(log_writer_supervisor, test_ARejectedSensorsConfigurationIsLoggedWithoutAH
     zassert_equal(files.size(), 1, "one file (found %zu)", files.size());
     zassert_true(ContainsText(files[0].content, Property("sensors_configuration_hash", "0")), "an unknown hash is 0");
     zassert_true(ContainsText(files[0].content, Property("device_id", "0")), "no provider, device ID 0");
-    zassert_true(ContainsText(files[0].content, std::string("<tool_id>") + kTestToolId + "</tool_id>"), "the tool ID");
+    zassert_true(ContainsText(files[0].content, std::string("<tool_id>") + TEST_TOOL_ID + "</tool_id>"), "the tool ID");
 }

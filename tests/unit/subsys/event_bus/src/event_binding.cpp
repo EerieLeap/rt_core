@@ -43,7 +43,7 @@ ConfigValue NonSelectors(size_t index) {
     }
 }
 
-constexpr size_t k_non_selector_count = 5;
+constexpr size_t NON_SELECTOR_COUNT = 5;
 
 } // namespace
 
@@ -94,7 +94,7 @@ ZTEST(event_bus_event_binding, test_IsSelectorValue_accepts_text_integers_and_bo
     zassert_true(IsSelectorValue(ConfigValue{ 7 }));
     zassert_true(IsSelectorValue(ConfigValue{ true }));
 
-    for(size_t i = 0; i < k_non_selector_count; ++i)
+    for(size_t i = 0; i < NON_SELECTOR_COUNT; ++i)
         zassert_false(IsSelectorValue(NonSelectors(i)), "Alternative %u accepted.", static_cast<unsigned>(i));
 }
 
@@ -119,7 +119,7 @@ ZTEST(event_bus_event_binding, test_ToSelectorValue_keeps_integers_and_bools) {
 }
 
 ZTEST(event_bus_event_binding, test_ToSelectorValue_rejects_what_cannot_select) {
-    for(size_t i = 0; i < k_non_selector_count; ++i)
+    for(size_t i = 0; i < NON_SELECTOR_COUNT; ++i)
         zassert_false(
             ToSelectorValue(NonSelectors(i)).has_value(), "Alternative %u resolved.", static_cast<unsigned>(i)
         );

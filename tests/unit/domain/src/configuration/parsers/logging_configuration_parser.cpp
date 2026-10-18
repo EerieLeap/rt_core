@@ -11,7 +11,7 @@ using namespace eerie_leap::domain::logging_domain::configuration::parsers;
 
 ZTEST_SUITE(logging_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
-static LoggingConfiguration logging_configuration_parser_GetTestConfiguration() {
+static LoggingConfiguration LoggingConfigurationParserGetTestConfiguration() {
     LoggingConfiguration logging_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     logging_configuration.logging_interval_ms = 1000;
     logging_configuration.max_log_size_mb = 1;
@@ -26,7 +26,7 @@ static LoggingConfiguration logging_configuration_parser_GetTestConfiguration() 
     return logging_configuration;
 }
 
-static void logging_configuration_parser_CompareLoggingConfigurations(
+static void LoggingConfigurationParserCompareLoggingConfigurations(
     const LoggingConfiguration& logging_configuration,
     LoggingConfiguration& deserialized_logging_configuration
 ) {
@@ -60,14 +60,12 @@ static void logging_configuration_parser_CompareLoggingConfigurations(
 ZTEST(logging_configuration_parser, test_CborSerializeDeserialize) {
     LoggingConfigurationCborParser logging_configuration_cbor_parser;
 
-    auto logging_configuration = logging_configuration_parser_GetTestConfiguration();
+    auto logging_configuration = LoggingConfigurationParserGetTestConfiguration();
 
     const auto serialized_logging_configuration = logging_configuration_cbor_parser.Serialize(logging_configuration);
     auto deserialized_logging_configuration = logging_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_logging_configuration.get()
     );
 
-    logging_configuration_parser_CompareLoggingConfigurations(
-        logging_configuration, *deserialized_logging_configuration
-    );
+    LoggingConfigurationParserCompareLoggingConfigurations(logging_configuration, *deserialized_logging_configuration);
 }

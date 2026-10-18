@@ -64,7 +64,7 @@ using namespace eerie_leap::domain::sensor_domain::services;
 
 ZTEST_SUITE(sensors_reader, NULL, NULL, NULL, NULL, NULL);
 
-static std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> SensorsReaderGetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 5.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -136,7 +136,7 @@ static std::vector<std::shared_ptr<Sensor>> sensors_reader_GetTestSensors() {
     return sensors;
 }
 
-static AdcConfiguration sensors_reader_GetTestConfiguration() {
+static AdcConfiguration SensorsReaderGetTestConfiguration() {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -162,7 +162,7 @@ static AdcConfiguration sensors_reader_GetTestConfiguration() {
     return adc_configuration;
 }
 
-struct sensors_reader_HelperInstances {
+struct SensorsReaderHelperInstances {
     std::shared_ptr<ITimeService> time_service;
     std::shared_ptr<IAdcManager> adc_manager; // Owns the ADCs the sample set points at.
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame;
@@ -171,7 +171,7 @@ struct sensors_reader_HelperInstances {
     std::shared_ptr<std::vector<std::shared_ptr<ISensorReader>>> sensor_readers;
 };
 
-static sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
+static SensorsReaderHelperInstances SensorsReaderGetReadingInstances() {
     const auto time_provider = std::make_shared<BootElapsedTimeProvider>();
     const auto rtc_provider = std::make_shared<RtcProvider>();
     const auto time_service = std::make_shared<TimeService>(time_provider, rtc_provider);
@@ -184,12 +184,12 @@ static sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
     gpio->Initialize();
 
     const auto sensor_readings_frame = make_shared_pmr<SensorReadingsFrame>(Mrm::GetDefaultPmr());
-    const auto sensors = sensors_reader_GetTestSensors();
+    const auto sensors = SensorsReaderGetTestSensors();
 
     // The builder lays out the frame's slots and binds the expressions, as the processing service does.
     const auto generation = SensorPipelineBuilder(nullptr, sensor_readings_frame)
                                 .Build(std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(sensors));
-    generation->adc_configuration = std::make_shared<AdcConfiguration>(sensors_reader_GetTestConfiguration());
+    generation->adc_configuration = std::make_shared<AdcConfiguration>(SensorsReaderGetTestConfiguration());
 
     // Analog readers reserve their slots in the sample set, as in a rate group.
     const auto adc_samples = std::make_shared<AdcSampleSet>();
@@ -218,7 +218,7 @@ static sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
 
     adc_samples->Seal();
 
-    return sensors_reader_HelperInstances{ .time_service = time_service,
+    return SensorsReaderHelperInstances{ .time_service = time_service,
         .adc_manager = adc_manager,
         .sensor_readings_frame = sensor_readings_frame,
         .generation = generation,
@@ -227,7 +227,7 @@ static sensors_reader_HelperInstances sensors_reader_GetReadingInstances() {
 }
 
 ZTEST(sensors_reader, test_Read) {
-    const auto helper = sensors_reader_GetReadingInstances();
+    const auto helper = SensorsReaderGetReadingInstances();
 
     const auto sensor_readings_frame = helper.sensor_readings_frame;
     const auto sensor_readers = helper.sensor_readers;
@@ -333,7 +333,7 @@ ZTEST(sensors_reader, test_PhysicalAnalog_rebuilt_reader_takes_the_new_adc_sampl
         std::make_unique<CborConfigurationService<CborAdcConfig>>("adc_config", fs_service), adc_manager
     );
 
-    auto adc_configuration = sensors_reader_GetTestConfiguration();
+    auto adc_configuration = SensorsReaderGetTestConfiguration();
     adc_configuration.samples = 40;
     zassert_true(adc_configuration_manager->Update(adc_configuration));
 
@@ -392,7 +392,7 @@ namespace {
 
 // One analog sensor on channel 1 of a scripted four-channel ADC, its reader built the way a rate
 // group builds it, against a configuration made by hand.
-struct sensors_reader_AnalogReader {
+struct SensorsReaderAnalogReader {
     std::shared_ptr<TimeService> time_service;
     std::shared_ptr<processing_test_support::FakeAdc> adc;
     std::shared_ptr<SensorGeneration> generation;
@@ -400,8 +400,8 @@ struct sensors_reader_AnalogReader {
     std::unique_ptr<ISensorReader> reader;
 };
 
-sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(const std::shared_ptr<AdcCalibrator>& calibrator) {
-    sensors_reader_AnalogReader fixture;
+SensorsReaderAnalogReader SensorsReaderMakeAnalogReader(const std::shared_ptr<AdcCalibrator>& calibrator) {
+    SensorsReaderAnalogReader fixture;
 
     fixture.time_service = processing_test_support::MakeTimeService();
     fixture.adc = std::make_shared<processing_test_support::FakeAdc>(4);
@@ -414,7 +414,7 @@ sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(const std::shared_pt
                 std::make_shared<const std::vector<std::shared_ptr<Sensor>>>(std::vector<std::shared_ptr<Sensor>>{
                     processing_test_support::MakeAnalogSensor("analog", 1, 100) })
             );
-    fixture.generation->adc_configuration = processing_test_support::MakeAdcConfiguration(4, 8, std::move(calibrator));
+    fixture.generation->adc_configuration = processing_test_support::MakeAdcConfiguration(4, 8, calibrator);
 
     fixture.adc_samples = std::make_unique<AdcSampleSet>();
     RateGroupBuildContext context{ .adc_samples = *fixture.adc_samples,
@@ -432,7 +432,7 @@ sensors_reader_AnalogReader sensors_reader_MakeAnalogReader(const std::shared_pt
 } // namespace
 
 ZTEST(sensors_reader, test_Read_analog_reports_a_failed_sample) {
-    auto fixture = sensors_reader_MakeAnalogReader(
+    auto fixture = SensorsReaderMakeAnalogReader(
         processing_test_support::MakeCalibrator({ { 0.0F, 0.0F }, { 5.0F, 5.0F } })
     );
     fixture.adc->failing_channel = 1;
@@ -454,7 +454,7 @@ ZTEST(sensors_reader, test_Read_analog_reports_a_failed_sample) {
 
 ZTEST(sensors_reader, test_Read_analog_calibrates_a_valid_sample) {
     // Identity range, and a calibration that recorded 2.5 V for a true 5 V input: 2 V at the pin is 4 V.
-    auto fixture = sensors_reader_MakeAnalogReader(
+    auto fixture = SensorsReaderMakeAnalogReader(
         processing_test_support::MakeCalibrator(
             { { 0.0F, 0.0F }, { 5.0F, 2.5F } }, { .adc_max_v = 5.0F, .sensor_max_v = 5.0F }
         )

@@ -124,14 +124,14 @@ ZTEST(management_controller, test_serves_the_assets_group) {
     volume->DeleteRecursive();
 
     // A provider keeps the span of its extensions, so they are in static storage.
-    static constexpr std::array<std::string_view, 1> extensions = { ".png" };
+    static constexpr std::array<std::string_view, 1> EXTENSIONS = { ".png" };
     const auto registry = std::make_shared<AssetsManager>();
     zassert_true(registry->Register(
         {
             .kind = AssetKind::IMAGES,
             .name = "images",
             .store = std::make_shared<AssetStore>(volume, "images"),
-            .extensions = extensions,
+            .extensions = EXTENSIONS,
             .access = eerie_leap::subsys::assets::ToMask(eerie_leap::subsys::assets::AssetAccess::READ),
             .max_size = 0,
         }

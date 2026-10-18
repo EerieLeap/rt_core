@@ -74,6 +74,11 @@ public:
         UseCard(card);
     }
 
+    Harness(const Harness&) = delete;
+    Harness& operator=(const Harness&) = delete;
+    Harness(Harness&&) = delete;
+    Harness& operator=(Harness&&) = delete;
+
     ~Harness() {
         group.reset();
         work_queue.reset();
@@ -189,6 +194,7 @@ ZTEST_F(smp_files_group, test_empty_request_lists_the_root) {
 ZTEST_F(smp_files_group, test_a_large_directory_is_paged) {
     Harness& harness = *fixture->harness;
     std::vector<DirectoryEntry> files;
+    files.reserve(60);
     for(size_t i = 0; i < 60; i++)
         files.push_back(File(NameOfLength(i, 40), 1000 + i));
     harness.card->directories["scripts"] = files;
@@ -208,6 +214,7 @@ ZTEST_F(smp_files_group, test_a_large_directory_is_paged) {
 ZTEST_F(smp_files_group, test_long_names_fit_the_response) {
     Harness& harness = *fixture->harness;
     std::vector<DirectoryEntry> files;
+    files.reserve(10);
     for(size_t i = 0; i < 10; i++)
         files.push_back(File(NameOfLength(i, 255), i));
     harness.card->directories["scripts"] = files;

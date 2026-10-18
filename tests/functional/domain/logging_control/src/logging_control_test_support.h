@@ -76,14 +76,14 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::utilities::string::StringHelpers;
 
 // Every unit that can log, as a request names it.
-inline constexpr uint32_t kAllUnits = ILoggingControl::kAllUnits;
-inline constexpr uint8_t kBroadcast = ILoggingCommandSender::kBroadcast;
+inline constexpr uint32_t ALL_UNITS = ILoggingControl::kAllUnits;
+inline constexpr uint8_t BROADCAST = ILoggingCommandSender::kBroadcast;
 
 // Well past the time an event takes through the bus or a job through a queue.
-inline constexpr int k_wait_ms = 2000;
-inline constexpr int k_no_wait_ms = 100;
+inline constexpr int WAIT_MS = 2000;
+inline constexpr int NO_WAIT_MS = 100;
 // What a fence event carries as its source, so a blocker recognises it.
-inline constexpr uint32_t k_fence_source_id = 0xFE7CE;
+inline constexpr uint32_t FENCE_SOURCE_ID = 0xFE7CE;
 
 inline k_timeout_t Ms(int milliseconds) {
     return K_MSEC(milliseconds);
@@ -134,14 +134,14 @@ inline void* SetUpChannels() {
 // The configuration work queue of the binary: RemoteLoggingControl sends from it, and the manager
 // stores from it. 16 KiB, because exceptions unwind on it (qemu_riscv64 needs the room).
 inline std::shared_ptr<WorkQueueThread> TestConfigQueue() {
-    static const std::shared_ptr<WorkQueueThread> queue = [] {
+    static const std::shared_ptr<WorkQueueThread> QUEUE = [] {
         auto created = std::make_shared<WorkQueueThread>("logging_control_config_queue", 16384, 5);
         zassert_true(created->Initialize(), "The configuration queue did not start.");
 
         return created;
     }();
 
-    return queue;
+    return QUEUE;
 }
 
 inline k_tid_t QueueThread(WorkQueueThread& queue) {
@@ -171,8 +171,8 @@ inline std::string CurrentThreadName() {
 class QueueGate {
 private:
     struct Context {
-        k_sem entered;
-        k_sem open;
+        k_sem entered{};
+        k_sem open{};
 
         Context() {
             k_sem_init(&entered, 0, 1);
@@ -240,11 +240,11 @@ public:
 
 private:
     struct Context {
-        k_mutex lock;
-        k_sem requested;
-        k_sem held;
-        k_sem release;
-        k_sem job_ran;
+        k_mutex lock{};
+        k_sem requested{};
+        k_sem held{};
+        k_sem release{};
+        k_sem job_ran{};
         std::vector<Request> requests;
         std::atomic<bool> is_holding = false;
         std::shared_ptr<WorkQueueThread> job_queue;
@@ -300,7 +300,7 @@ public:
     void HoldRequests() {
         context_->is_holding = true;
     }
-    [[nodiscard]] bool WaitUntilHeld(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitUntilHeld(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->held, Ms(timeout_ms)) == 0;
     }
     void Release() {
@@ -312,7 +312,7 @@ public:
     void RunJobOn(std::shared_ptr<WorkQueueThread> queue) {
         context_->job_queue = std::move(queue);
     }
-    [[nodiscard]] bool WaitForJob(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitForJob(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->job_ran, Ms(timeout_ms)) == 0;
     }
 
@@ -340,7 +340,7 @@ public:
     }
 
     // Whether @p count requests arrived in time.
-    [[nodiscard]] bool WaitForRequests(size_t count, int timeout_ms = k_wait_ms) const {
+    [[nodiscard]] bool WaitForRequests(size_t count, int timeout_ms = WAIT_MS) const {
         const int64_t deadline = k_uptime_get() + timeout_ms;
         while(Requests().size() < count) {
             if(k_uptime_get() >= deadline)
@@ -368,9 +368,9 @@ public:
 
 private:
     struct Context {
-        k_mutex lock;
-        k_sem held;
-        k_sem release;
+        k_mutex lock{};
+        k_sem held{};
+        k_sem release{};
         std::vector<Send> sends;
         std::atomic<bool> is_holding = false;
 
@@ -402,7 +402,7 @@ public:
     void HoldSends() {
         context_->is_holding = true;
     }
-    [[nodiscard]] bool WaitUntilHeld(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitUntilHeld(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->held, Ms(timeout_ms)) == 0;
     }
     void Release() {
@@ -450,7 +450,7 @@ public:
         return count;
     }
 
-    [[nodiscard]] bool WaitForSends(size_t count, int timeout_ms = k_wait_ms) const {
+    [[nodiscard]] bool WaitForSends(size_t count, int timeout_ms = WAIT_MS) const {
         const int64_t deadline = k_uptime_get() + timeout_ms;
         while(Sends().size() < count) {
             if(k_uptime_get() >= deadline)
@@ -470,13 +470,13 @@ public:
     using CdmpDeviceInfo = eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
     using CdmpDeviceStatus = eerie_leap::subsys::cdmp::models::CdmpDeviceStatus;
 
-    static constexpr uint32_t k_own_uid = 0xA0A0A0A0;
+    static constexpr uint32_t OWN_UID = 0xA0A0A0A0;
 
 private:
     struct Context {
-        mutable k_mutex lock;
+        mutable k_mutex lock{};
         CdmpDeviceInfo own{ .device_id = 1,
-            .uid = k_own_uid,
+            .uid = OWN_UID,
             .features = eerie_leap::tests::DISPLAY_FEATURES,
             .status = CdmpDeviceStatus::ONLINE };
         std::vector<CdmpDeviceInfo> devices;
@@ -541,7 +541,7 @@ public:
 class FakeRestartMonitor final : public ILoggingRestartMonitor {
 private:
     struct Context {
-        k_mutex lock;
+        k_mutex lock{};
         std::shared_ptr<const RestartHandler> handler;
         std::function<void()> on_set;
         std::atomic<bool> is_failing = false;
@@ -607,9 +607,9 @@ template<typename TChannel>
 class DispatchBlocker {
 private:
     struct Context {
-        k_sem entered;
-        k_sem release;
-        k_sem fence;
+        k_sem entered{};
+        k_sem release{};
+        k_sem fence{};
         std::atomic<bool> is_armed = false;
 
         Context() {
@@ -620,19 +620,17 @@ private:
     };
 
     TChannel& channel_;
-    typename TChannel::EventTypeEnum type_;
+    TChannel::EventTypeEnum type_;
     std::shared_ptr<Context> context_ = std::make_shared<Context>();
     AnySubscription subscription_;
 
 public:
-    DispatchBlocker(TChannel& channel, typename TChannel::EventTypeEnum type) :
+    DispatchBlocker(TChannel& channel, TChannel::EventTypeEnum type) :
         channel_(channel),
         type_(type),
-        subscription_(CreateScopedSubscription(
-            channel_,
-            type_,
-            [context = context_](const typename TChannel::EventMessage& event) {
-                if(event.source_id == k_fence_source_id) {
+        subscription_(
+            CreateScopedSubscription(channel_, type_, [context = context_](const TChannel::EventMessage& event) {
+                if(event.source_id == FENCE_SOURCE_ID) {
                     k_sem_give(&context->fence);
                     return;
                 }
@@ -643,8 +641,8 @@ public:
                 k_sem_give(&context->entered);
                 // Gives up after 5 s, so a case that never releases cannot wedge the bus for good.
                 k_sem_take(&context->release, K_SECONDS(5));
-            }
-        )) {
+            })
+        ) {
 
         zassert_not_null(subscription_.get(), "The blocker's subscription was refused.");
     }
@@ -660,7 +658,7 @@ public:
         context_->is_armed = true;
     }
 
-    [[nodiscard]] bool WaitUntilBlocking(int timeout_ms = k_wait_ms) {
+    [[nodiscard]] bool WaitUntilBlocking(int timeout_ms = WAIT_MS) {
         return k_sem_take(&context_->entered, Ms(timeout_ms)) == 0;
     }
 
@@ -672,9 +670,9 @@ public:
     // The channel delivers in order, so everything published before the marker was dispatched when
     // the blocker sees it.
     [[nodiscard]] bool Fence() {
-        channel_.PublishAsync({ .source_id = k_fence_source_id, .type = type_ });
+        channel_.PublishAsync({ .source_id = FENCE_SOURCE_ID, .type = type_ });
 
-        return k_sem_take(&context_->fence, Ms(k_wait_ms)) == 0;
+        return k_sem_take(&context_->fence, Ms(WAIT_MS)) == 0;
     }
 };
 
@@ -731,7 +729,7 @@ inline LoggingTrigger SensorTrigger(std::string_view sensor_id) {
 // Whether the log has backends to count with. The minimal log mode that ztest selects off native_sim
 // prints to printk and has none, so there the counts are not asserted and the cases check only what
 // the code does.
-inline constexpr bool k_can_count_logs = !IS_ENABLED(CONFIG_LOG_MODE_MINIMAL);
+inline constexpr bool CAN_COUNT_LOGS = !IS_ENABLED(CONFIG_LOG_MODE_MINIMAL);
 
 // Counts the warnings and errors of one logger, so a case can assert "logged once". The counting
 // backend is defined once for the binary (in logging_control_test_support.cpp); a case names the
@@ -758,9 +756,9 @@ private:
 };
 
 // Asserts the count of the watched logger where the log can be counted.
-#define zassert_logged(expected, message) \
+#define ZASSERT_LOGGED(expected, message) \
     do { \
-        if(logging_control_test::k_can_count_logs) \
+        if(logging_control_test::CAN_COUNT_LOGS) \
             zassert_equal(logging_control_test::LogCounter::Get().Count(), (expected), message); \
     } while(0)
 

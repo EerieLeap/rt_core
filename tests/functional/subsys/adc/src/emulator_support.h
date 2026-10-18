@@ -14,16 +14,16 @@ using eerie_leap::subsys::device_tree::DtAdc;
 
 // The overlay declares three emulated ADCs: four channels, two channels, then one whose channel
 // states no resolution and therefore never initializes.
-constexpr int kFirstAdcChannels = 4;
-constexpr int kSecondAdcChannels = 2;
-constexpr int kDtAdcCount = 3;
-constexpr int kDtChannelCount = kFirstAdcChannels + kSecondAdcChannels + 1;
-constexpr int kWorkingChannelCount = kFirstAdcChannels + kSecondAdcChannels;
+constexpr int FIRST_ADC_CHANNELS = 4;
+constexpr int SECOND_ADC_CHANNELS = 2;
+constexpr int DT_ADC_COUNT = 3;
+constexpr int DT_CHANNEL_COUNT = FIRST_ADC_CHANNELS + SECOND_ADC_CHANNELS + 1;
+constexpr int WORKING_CHANNEL_COUNT = FIRST_ADC_CHANNELS + SECOND_ADC_CHANNELS;
 
 // vref 3300 mV, gain 1, 12 bits.
-constexpr float kLsbVolts = 3.3F / 4096.0F;
+constexpr float LSB_VOLTS = 3.3F / 4096.0F;
 // adc_emul truncates mV × 4095 / 3300 to a whole count, so a constant input lands up to ~1.3 LSB low.
-constexpr float kEmulTolerance = 2.0F * kLsbVolts;
+constexpr float EMUL_TOLERANCE = 2.0F * LSB_VOLTS;
 
 inline const device* Dev(int index) {
     return DtAdc::Get().value().at(index).adc_device;
@@ -56,10 +56,10 @@ inline void DriveConstant(AdcEmulator& adc, int index, int channel, uint32_t mv)
 }
 
 struct CountedFailure {
-    int failures_left;
+    int failures_left{};
     int calls = 0;
-    int err;
-    uint32_t mv;
+    int err{};
+    uint32_t mv{};
 };
 
 inline int FailThenSucceed(const device*, unsigned int, void* data, uint32_t* result) {
@@ -76,10 +76,10 @@ inline int FailThenSucceed(const device*, unsigned int, void* data, uint32_t* re
 }
 
 struct CountedSuccess {
-    int successes_left;
+    int successes_left{};
     int calls = 0;
-    int err;
-    uint32_t mv;
+    int err{};
+    uint32_t mv{};
 };
 
 // Converts successes_left times, then fails every call.

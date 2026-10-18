@@ -33,8 +33,8 @@ ZTEST(can_frame_payload, test_vector_construction) {
     CanFramePayload payload(bytes);
 
     zassert_equal(payload.size(), 8);
-    for(size_t i = 0; i < payload.size(); i++)
-        zassert_equal(payload[i], 0x5A);
+    for(const auto byte : payload)
+        zassert_equal(byte, 0x5A);
 }
 
 ZTEST(can_frame_payload, test_array_construction) {

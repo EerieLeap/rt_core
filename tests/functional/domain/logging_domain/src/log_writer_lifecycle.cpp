@@ -191,6 +191,7 @@ ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
 
     const auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
     rig.log_writer_service->SetLoggerFactory([probe] {
+        // NOLINTNEXTLINE(performance-no-automatic-move): the factory is called more than once, so the capture must stay
         return probe;
     });
     probe->refuse_next_reading = true;
@@ -247,7 +248,7 @@ ZTEST(log_writer_lifecycle, test_StartFailsWithoutTheMinimumFreeSpace) {
 // tick: every file is finalized, they start one after the other, and every frame is in exactly one
 // of them, in order.
 ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
-    constexpr uint8_t published_frames = 120;
+    constexpr uint8_t PUBLISHED_FRAMES = 120;
 
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
@@ -259,7 +260,7 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
 
     supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
-    for(uint8_t i = 0; i < published_frames; i++) {
+    for(uint8_t i = 0; i < PUBLISHED_FRAMES; i++) {
         PublishReadings(rig, sensors, i);
         k_msleep(10);
     }
@@ -274,7 +275,7 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
     zassert_true(
         stats.rotations >= 2, "1.2 s of frames over a 1 KiB limit must rotate at least twice (got %u)", stats.rotations
     );
-    zassert_equal(stats.frames, published_frames, "every frame is logged across the files (got %u)", stats.frames);
+    zassert_equal(stats.frames, PUBLISHED_FRAMES, "every frame is logged across the files (got %u)", stats.frames);
     zassert_false(rig.log_writer_service->HasFailed(), "a rotation is no failure");
 
     const auto events = recorder.GetEvents();
@@ -308,7 +309,7 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
     }
 
     zassert_equal(
-        sequences.size(), published_frames, "every frame must be in exactly one file (found %zu)", sequences.size()
+        sequences.size(), PUBLISHED_FRAMES, "every frame must be in exactly one file (found %zu)", sequences.size()
     );
     for(size_t i = 0; i < sequences.size(); i++)
         zassert_equal(sequences[i], i, "frame %zu is missing, repeated or out of order across the rotations", i);
@@ -352,8 +353,11 @@ ZTEST(log_writer_lifecycle, test_IsOpenFileFollowsARotation) {
 
     std::string second_path;
     for(const auto& name : files) {
-        if((directory + "/" + name) != first_path)
-            second_path = directory + "/" + name;
+        std::string path = directory;
+        path += '/';
+        path += name;
+        if(path != first_path)
+            second_path = std::move(path);
     }
     zassert_false(second_path.empty(), "the rotation opened another file");
 
@@ -376,11 +380,11 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
     const std::string filler_path = "rotation_fill.bin";
 
-    rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 512, 128 * 1024);
+    rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 512, 128ULL * 1024);
 
     supervisor.RequestStart(ILoggingControl::kAllUnits);
     zassert_true(recorder.WaitForEventCount(1), "the start must succeed on a volume with the minimum free");
-    FillVolume(*rig.fs_service, filler_path, 96 * 1024);
+    FillVolume(*rig.fs_service, filler_path, 96ULL * 1024);
 
     zassert_true(
         PublishFramesUntil(
@@ -462,14 +466,14 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
 
 // The frame queues kRawCanQueueSize raw frames between two ticks; more are dropped, and counted.
 ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
-    constexpr size_t extra_frames = 5;
+    constexpr size_t EXTRA_FRAMES = 5;
 
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
     StoreLoggingConfiguration(rig, 500);
 
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + extra_frames; i++)
+    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + EXTRA_FRAMES; i++)
         PublishFrame(rig, *sensors[1], static_cast<uint8_t>(i), rig.time_service->GetCurrentTime());
 
     k_msleep(800);
@@ -481,7 +485,7 @@ ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
         SensorLimits::kRawCanQueueSize, stats.frames
     );
     zassert_equal(
-        stats.frames_dropped, extra_frames, "the frames past the queue size are dropped (counted %u)",
+        stats.frames_dropped, EXTRA_FRAMES, "the frames past the queue size are dropped (counted %u)",
         stats.frames_dropped
     );
 
@@ -502,6 +506,7 @@ ZTEST(log_writer_lifecycle, test_StopWaitsForARunningTickAndFinalizes) {
 
     const auto probe = std::make_shared<ProbeLogger>(rig.logger_factory());
     rig.log_writer_service->SetLoggerFactory([probe] {
+        // NOLINTNEXTLINE(performance-no-automatic-move): the factory is called more than once, so the capture must stay
         return probe;
     });
     probe->hold_next_reading = true;
@@ -521,7 +526,7 @@ ZTEST(log_writer_lifecycle, test_StopWaitsForARunningTickAndFinalizes) {
         probe->stop_found_held_reading_done.load(), "the file must be finalized after the running tick finished"
     );
     zassert_true(
-        stop_ms >= ProbeLogger::kHoldMs / 2, "Stop returned after %lld ms, before the tick could finish",
+        stop_ms >= ProbeLogger::HOLD_MS / 2, "Stop returned after %lld ms, before the tick could finish",
         static_cast<long long>(stop_ms)
     );
 

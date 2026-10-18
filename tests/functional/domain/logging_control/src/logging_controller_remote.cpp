@@ -316,7 +316,7 @@ ZTEST(logging_controller_remote, test_TriggersAreCheckedAgainstTheSensors) {
     F().Start([&configuration](std::shared_ptr<LoggingControlConfigurationManager> manager) {
         zassert_true(manager->Update(configuration), "The triggers are stored");
     });
-    zassert_logged(2, "A trigger on a missing sensor and one on a disabled sensor are logged, the rest are not");
+    ZASSERT_LOGGED(2, "A trigger on a missing sensor and one on a disabled sensor are logged, the rest are not");
 
     // Without a sensors manager nothing can be checked.
     F().controller.reset();
@@ -328,7 +328,7 @@ ZTEST(logging_controller_remote, test_TriggersAreCheckedAgainstTheSensors) {
         F().controller->GetLoggingControlConfigurationManager()->Get()->triggers.size(), 5U,
         "The first controller's five triggers load again"
     );
-    zassert_logged(0, "Triggers are not checked without the sensors");
+    ZASSERT_LOGGED(0, "Triggers are not checked without the sensors");
 }
 
 ZTEST(logging_controller_remote, test_DestroyingDuringATriggerDispatchRequestsNothing) {
@@ -462,7 +462,7 @@ ZTEST(logging_controller_remote, test_WithoutAWritableFileSystemThereAreNoTrigge
 
     LogCounter::Get().Watch("logging_controller_logger");
     zassert_equal(F().Build(std::move(parts)).Initialize(), 0, "The unit still controls logging");
-    zassert_logged(1, "The missing configuration is logged once");
+    ZASSERT_LOGGED(1, "The missing configuration is logged once");
 
     const auto manager = F().controller->GetLoggingControlConfigurationManager();
     zassert_not_null(manager.get());
@@ -525,7 +525,7 @@ ZTEST(logging_controller_remote, test_ASecondControllerOnTheSameConfigurationSer
     LogCounter::Get().Watch("logging_controller_logger");
     auto& second = F().Build(std::move(again));
     zassert_equal(second.Initialize(), -1, "The service would keep the first controller's manager");
-    zassert_logged(1, "and says why");
+    ZASSERT_LOGGED(1, "and says why");
     zassert_is_null(second.GetControl().get());
     zassert_is_null(second.GetLoggingControlConfigurationManager().get());
 
@@ -581,7 +581,7 @@ ZTEST(logging_controller_remote, test_StartTwiceReturnsTheFirstResult) {
     zassert_equal(F().controller->Start(), 0);
     LogCounter::Get().Watch("logging_controller_logger");
     zassert_equal(F().controller->Start(), 0, "A second call repeats the first one's result");
-    zassert_logged(1, "and logs an error");
+    ZASSERT_LOGGED(1, "and logs an error");
 }
 
 ZTEST(logging_controller_remote, test_WithoutAConfigurationServiceStartSucceedsAndNothingStops) {

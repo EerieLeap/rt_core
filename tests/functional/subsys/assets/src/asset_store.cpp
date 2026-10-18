@@ -93,22 +93,22 @@ using asset_store_test::Recorder;
 
 namespace {
 
-constexpr std::string_view kAssetsDir = "test_assets";
-constexpr std::array<std::string_view, 1> kBinExtensions = { ".bin" };
-constexpr size_t kMaxNameLength = CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH;
+constexpr std::string_view ASSETS_DIR = "test_assets";
+constexpr std::array<std::string_view, 1> BIN_EXTENSIONS = { ".bin" };
+constexpr size_t MAX_NAME_LENGTH = CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH;
 
 // Appends that cross the 4096 byte buffer of a writer in every way: well short of it, one byte
 // short, exactly, one byte over, and across more than one.
-constexpr std::array<size_t, 6> kOddPieces = { 1, 4095, 4096, 4097, 3, 1000 };
+constexpr std::array<size_t, 6> ODD_PIECES = { 1, 4095, 4096, 4097, 3, 1000 };
 
 // Sizes of the requests a reader is read with.
-constexpr std::array<size_t, 9> kReadPieces = { 1, 13, 1000, 4095, 4096, 4097, 9999, 10000, 20000 };
+constexpr std::array<size_t, 9> READ_PIECES = { 1, 13, 1000, 4095, 4096, 4097, 9999, 10000, 20000 };
 
 // Sizes around the buffers of the reader and the writer.
-constexpr std::array<size_t, 7> kEdgeSizes = { 0, 1, 4095, 4096, 4097, 8192, 8193 };
+constexpr std::array<size_t, 7> EDGE_SIZES = { 0, 1, 4095, 4096, 4097, 8192, 8193 };
 
 // Sizes of the files whose reads and writes the block tests follow.
-constexpr std::array<size_t, 8> kBlockSizes = { 0, 1, 4095, 4096, 4097, 8192, 8193, 10000 };
+constexpr std::array<size_t, 8> BLOCK_SIZES = { 0, 1, 4095, 4096, 4097, 8192, 8193, 10000 };
 
 // The file system underneath sees reads and writes of whole sectors at sector boundaries only because
 // the blocks are this size; the block tests below hold the reader and the writer to it.
@@ -120,7 +120,7 @@ void ResetFs(void* = nullptr) {
     GetFsService()->DeleteRecursive();
 }
 
-AssetStore MakeStore(std::string_view directory = kAssetsDir) {
+AssetStore MakeStore(std::string_view directory = ASSETS_DIR) {
     return { GetFsService(), directory };
 }
 
@@ -159,12 +159,12 @@ int AppendInPieces(AssetWriter& writer, const std::vector<uint8_t>& blob, std::s
 // Appends blocks until the volume refuses one. Returns the error, or 0 when the volume never filled.
 int AppendUntilFull(AssetWriter& writer, size_t& appended) {
     // The volumes are 1 MiB; twice that bounds a volume that never fills.
-    constexpr size_t kMaxBlocks = 512;
+    constexpr size_t MAX_BLOCKS = 512;
     const auto block = MakeBlob(AssetWriter::BUFFER_SIZE, 7);
 
     appended = 0;
 
-    for(size_t i = 0; i < kMaxBlocks; ++i) {
+    for(size_t i = 0; i < MAX_BLOCKS; ++i) {
         const int rc = writer.Append(block);
         if(rc != 0)
             return rc;
@@ -240,7 +240,7 @@ struct Listing {
 
 Listing ListPage(const AssetStore& store, size_t first, size_t max_entries) {
     Listing listing;
-    listing.rc = store.List(first, max_entries, kBinExtensions, listing.entries, listing.scanned, listing.count);
+    listing.rc = store.List(first, max_entries, BIN_EXTENSIONS, listing.entries, listing.scanned, listing.count);
 
     return listing;
 }
@@ -407,12 +407,12 @@ ZTEST_SUITE(asset_store, NULL, NULL, ResetFs, ResetFs, NULL);
 // ======== Whole files ========
 
 ZTEST(asset_store, test_construction_creates_assets_dir) {
-    zassert_false(GetFsService()->Exists(kAssetsDir));
+    zassert_false(GetFsService()->Exists(ASSETS_DIR));
 
     auto store = MakeStore();
 
-    zassert_true(GetFsService()->Exists(kAssetsDir));
-    zassert_true(store.GetDirectory() == kAssetsDir);
+    zassert_true(GetFsService()->Exists(ASSETS_DIR));
+    zassert_true(store.GetDirectory() == ASSETS_DIR);
 }
 
 ZTEST(asset_store, test_construction_keeps_existing_assets_dir) {
@@ -446,7 +446,7 @@ ZTEST(asset_store, test_save_writes_below_assets_dir) {
 
     zassert_true(store.Save("image.bin", blob));
 
-    zassert_true(GetFsService()->Exists(std::string(kAssetsDir) + "/image.bin"));
+    zassert_true(GetFsService()->Exists(std::string(ASSETS_DIR) + "/image.bin"));
     zassert_false(GetFsService()->Exists("image.bin"));
 }
 
@@ -476,11 +476,11 @@ ZTEST(asset_store, test_save_creates_the_directory_when_it_is_missing) {
     auto store = MakeStore();
     auto blob = MakeBlob(32, 4);
 
-    zassert_true(GetFsService()->DeleteFile(kAssetsDir));
-    zassert_false(GetFsService()->Exists(kAssetsDir));
+    zassert_true(GetFsService()->DeleteFile(ASSETS_DIR));
+    zassert_false(GetFsService()->Exists(ASSETS_DIR));
 
     zassert_true(store.Save("asset.bin", blob));
-    zassert_true(GetFsService()->Exists(std::string(kAssetsDir) + "/asset.bin"));
+    zassert_true(GetFsService()->Exists(std::string(ASSETS_DIR) + "/asset.bin"));
 }
 
 ZTEST(asset_store, test_load_missing_asset_returns_empty) {
@@ -492,7 +492,7 @@ ZTEST(asset_store, test_load_missing_asset_returns_empty) {
 ZTEST(asset_store, test_load_of_a_directory_returns_empty) {
     auto store = MakeStore();
 
-    zassert_true(GetFsService()->CreateDirectory(std::string(kAssetsDir) + "/folder"));
+    zassert_true(GetFsService()->CreateDirectory(std::string(ASSETS_DIR) + "/folder"));
 
     zassert_true(store.Load("folder").empty());
 }
@@ -501,11 +501,11 @@ ZTEST(asset_store, test_load_of_a_directory_returns_empty) {
 // can hold must give an empty result, not an exception out of the vector.
 ZTEST(asset_store, test_load_of_a_size_no_buffer_can_hold_returns_empty) {
     const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
-    AssetStore store(scripted, kAssetsDir);
+    AssetStore store(scripted, ASSETS_DIR);
     const auto blob = MakeBlob(100, 6);
 
     zassert_true(store.Save("image.bin", blob));
-    zassert_true(GetFsService()->CreateDirectory(std::string(kAssetsDir) + "/folder"));
+    zassert_true(GetFsService()->CreateDirectory(std::string(ASSETS_DIR) + "/folder"));
 
     // More than a vector can hold: std::length_error.
     scripted->forced_file_size = std::numeric_limits<size_t>::max() / 2;
@@ -530,7 +530,7 @@ ZTEST(asset_store, test_load_of_a_size_no_buffer_can_hold_returns_empty) {
 // back as a mixture of the two.
 ZTEST(asset_store, test_load_of_a_file_whose_size_changed_returns_empty) {
     const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
-    AssetStore store(scripted, kAssetsDir);
+    AssetStore store(scripted, ASSETS_DIR);
     auto blob = MakeBlob(1000, 4);
 
     zassert_true(store.Save("image.bin", blob));
@@ -585,7 +585,7 @@ ZTEST(asset_store, test_get_size_reports_the_size_of_a_file) {
 ZTEST(asset_store, test_get_size_of_a_directory_is_nullopt) {
     auto store = MakeStore();
 
-    zassert_true(GetFsService()->CreateDirectory(std::string(kAssetsDir) + "/folder"));
+    zassert_true(GetFsService()->CreateDirectory(std::string(ASSETS_DIR) + "/folder"));
 
     zassert_true(store.Exists("folder"));
     zassert_false(store.GetSize("folder").has_value());
@@ -641,19 +641,19 @@ ZTEST(asset_store, test_get_path_joins_the_directory_and_the_path) {
 
 ZTEST(asset_store, test_get_free_space_falls_by_what_is_written) {
     auto store = MakeStore();
-    constexpr size_t kSize = 20000;
+    constexpr size_t K_SIZE = 20000;
 
     const uint64_t free_before = store.GetFreeSpace();
-    zassert_true(free_before > kSize, "The test volume reports %d bytes free", static_cast<int>(free_before));
+    zassert_true(free_before > K_SIZE, "The test volume reports %d bytes free", static_cast<int>(free_before));
 
-    zassert_true(store.Save("image.bin", MakeBlob(kSize)));
+    zassert_true(store.Save("image.bin", MakeBlob(K_SIZE)));
 
     const uint64_t free_after = store.GetFreeSpace();
 
     // The volume hands out whole allocation units, so it loses a little more than was written.
     zassert_true(
-        free_before >= free_after + kSize, "%d bytes free before, %d after writing %d", static_cast<int>(free_before),
-        static_cast<int>(free_after), static_cast<int>(kSize)
+        free_before >= free_after + K_SIZE, "%d bytes free before, %d after writing %d", static_cast<int>(free_before),
+        static_cast<int>(free_after), static_cast<int>(K_SIZE)
     );
 
     zassert_true(store.Delete("image.bin"));
@@ -662,7 +662,7 @@ ZTEST(asset_store, test_get_free_space_falls_by_what_is_written) {
 
 // Every operation must degrade to a failure instead of touching an unmounted volume.
 ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
-    AssetStore store(std::make_shared<UnavailableFsService>(), kAssetsDir);
+    AssetStore store(std::make_shared<UnavailableFsService>(), ASSETS_DIR);
 
     zassert_false(store.IsAvailable());
     zassert_false(store.Save("asset.bin", MakeBlob(16)));
@@ -678,7 +678,7 @@ ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
     size_t scanned = 7;
     size_t count = 9;
 
-    zassert_equal(store.List(0, 10, kBinExtensions, entries, scanned, count), -ENODEV);
+    zassert_equal(store.List(0, 10, BIN_EXTENSIONS, entries, scanned, count), -ENODEV);
     zassert_true(entries.empty());
     zassert_equal(scanned, 0);
     zassert_equal(count, 0);
@@ -697,7 +697,7 @@ ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
 // monitor is off: each operation has to stop at the question.
 ZTEST(asset_store, test_every_operation_asks_whether_the_volume_is_available) {
     const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
-    AssetStore store(scripted, kAssetsDir);
+    AssetStore store(scripted, ASSETS_DIR);
 
     zassert_true(store.Save("there.bin", MakeBlob(16)));
 
@@ -718,7 +718,7 @@ ZTEST(asset_store, test_every_operation_asks_whether_the_volume_is_available) {
     size_t scanned = 0;
     size_t count = 0;
 
-    zassert_equal(store.List(0, 10, kBinExtensions, entries, scanned, count), -ENODEV);
+    zassert_equal(store.List(0, 10, BIN_EXTENSIONS, entries, scanned, count), -ENODEV);
 
     AssetReader reader;
     zassert_equal(store.OpenRead("there.bin", reader), -ENODEV);
@@ -739,67 +739,67 @@ ZTEST(asset_store, test_every_operation_asks_whether_the_volume_is_available) {
 // ======== Names ========
 
 ZTEST(asset_store, test_is_valid_name_accepts_names_of_the_allowed_characters) {
-    zassert_true(AssetStore::IsValidName("image.bin", kBinExtensions));
-    zassert_true(AssetStore::IsValidName("a.bin", kBinExtensions), "One character before the extension is enough");
-    zassert_true(AssetStore::IsValidName("0.bin", kBinExtensions));
-    zassert_true(AssetStore::IsValidName("IMG_01-final.bin", kBinExtensions));
-    zassert_true(AssetStore::IsValidName("x.y.bin", kBinExtensions));
-    zassert_true(AssetStore::IsValidName("a..b.bin", kBinExtensions), "Dots inside a name are no path");
-    zassert_true(AssetStore::IsValidName("-_-.bin", kBinExtensions));
+    zassert_true(AssetStore::IsValidName("image.bin", BIN_EXTENSIONS));
+    zassert_true(AssetStore::IsValidName("a.bin", BIN_EXTENSIONS), "One character before the extension is enough");
+    zassert_true(AssetStore::IsValidName("0.bin", BIN_EXTENSIONS));
+    zassert_true(AssetStore::IsValidName("IMG_01-final.bin", BIN_EXTENSIONS));
+    zassert_true(AssetStore::IsValidName("x.y.bin", BIN_EXTENSIONS));
+    zassert_true(AssetStore::IsValidName("a..b.bin", BIN_EXTENSIONS), "Dots inside a name are no path");
+    zassert_true(AssetStore::IsValidName("-_-.bin", BIN_EXTENSIONS));
 }
 
 ZTEST(asset_store, test_is_valid_name_limits_the_length) {
-    const std::string longest = std::string(kMaxNameLength - 4, 'a') + ".bin";
-    const std::string too_long = std::string(kMaxNameLength - 3, 'a') + ".bin";
+    const std::string longest = std::string(MAX_NAME_LENGTH - 4, 'a') + ".bin";
+    const std::string too_long = std::string(MAX_NAME_LENGTH - 3, 'a') + ".bin";
 
-    zassert_equal(longest.size(), kMaxNameLength);
-    zassert_equal(too_long.size(), kMaxNameLength + 1);
+    zassert_equal(longest.size(), MAX_NAME_LENGTH);
+    zassert_equal(too_long.size(), MAX_NAME_LENGTH + 1);
 
-    zassert_true(AssetStore::IsValidName(longest, kBinExtensions));
-    zassert_false(AssetStore::IsValidName(too_long, kBinExtensions));
-    zassert_false(AssetStore::IsValidName(std::string(1000, 'a') + ".bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("", kBinExtensions));
+    zassert_true(AssetStore::IsValidName(longest, BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName(too_long, BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName(std::string(1000, 'a') + ".bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("", BIN_EXTENSIONS));
 }
 
 ZTEST(asset_store, test_is_valid_name_refuses_a_leading_dot) {
-    zassert_false(AssetStore::IsValidName(".bin", kBinExtensions), "The extension alone is no name");
-    zassert_false(AssetStore::IsValidName(".hidden.bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("..bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName(".", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("..", kBinExtensions));
+    zassert_false(AssetStore::IsValidName(".bin", BIN_EXTENSIONS), "The extension alone is no name");
+    zassert_false(AssetStore::IsValidName(".hidden.bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("..bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName(".", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("..", BIN_EXTENSIONS));
 }
 
 ZTEST(asset_store, test_is_valid_name_refuses_separators_and_other_characters) {
-    zassert_false(AssetStore::IsValidName("a/b.bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("../a.bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("a\\b.bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("a b.bin", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("a.bin ", kBinExtensions));
-    zassert_false(AssetStore::IsValidName(std::string("a\0b.bin", 7), kBinExtensions));
-    zassert_false(AssetStore::IsValidName(std::string("a.bin\0", 6), kBinExtensions));
-    zassert_false(AssetStore::IsValidName("caf\xC3\xA9.bin", kBinExtensions), "Names are ASCII only");
+    zassert_false(AssetStore::IsValidName("a/b.bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("../a.bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("a\\b.bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("a b.bin", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("a.bin ", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName(std::string("a\0b.bin", 7), BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName(std::string("a.bin\0", 6), BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("caf\xC3\xA9.bin", BIN_EXTENSIONS), "Names are ASCII only");
 
     for(const char c : std::string_view("\t\n:*?\"<>|;,=+[]%~!@#$^&'(){}")) {
         const std::string name = std::string("a") + c + "b.bin";
         zassert_false(
-            AssetStore::IsValidName(name, kBinExtensions), "Accepted a name with 0x%02x", static_cast<int>(c)
+            AssetStore::IsValidName(name, BIN_EXTENSIONS), "Accepted a name with 0x%02x", static_cast<int>(c)
         );
     }
 }
 
 ZTEST(asset_store, test_is_valid_name_requires_one_of_the_extensions) {
-    zassert_false(AssetStore::IsValidName("image", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("image.png", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("image.bin.txt", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("image.binx", kBinExtensions));
-    zassert_false(AssetStore::IsValidName("imagebin", kBinExtensions), "The extension has its dot");
-    zassert_false(AssetStore::IsValidName("bin", kBinExtensions));
+    zassert_false(AssetStore::IsValidName("image", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("image.png", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("image.bin.txt", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("image.binx", BIN_EXTENSIONS));
+    zassert_false(AssetStore::IsValidName("imagebin", BIN_EXTENSIONS), "The extension has its dot");
+    zassert_false(AssetStore::IsValidName("bin", BIN_EXTENSIONS));
 
-    constexpr std::array<std::string_view, 2> several = { ".bin", ".json" };
+    constexpr std::array<std::string_view, 2> SEVERAL = { ".bin", ".json" };
 
-    zassert_true(AssetStore::IsValidName("a.bin", several));
-    zassert_true(AssetStore::IsValidName("a.json", several));
-    zassert_false(AssetStore::IsValidName("a.lua", several));
+    zassert_true(AssetStore::IsValidName("a.bin", SEVERAL));
+    zassert_true(AssetStore::IsValidName("a.json", SEVERAL));
+    zassert_false(AssetStore::IsValidName("a.lua", SEVERAL));
 
     zassert_false(
         AssetStore::IsValidName("a.bin", std::span<const std::string_view>{}), "No extension accepts nothing"
@@ -807,13 +807,13 @@ ZTEST(asset_store, test_is_valid_name_requires_one_of_the_extensions) {
 }
 
 ZTEST(asset_store, test_is_valid_name_compares_the_extension_without_case) {
-    constexpr std::array<std::string_view, 2> several = { ".bin", ".JSON" };
+    constexpr std::array<std::string_view, 2> SEVERAL = { ".bin", ".JSON" };
 
-    zassert_true(AssetStore::IsValidName("image.BIN", kBinExtensions));
-    zassert_true(AssetStore::IsValidName("IMAGE.Bin", kBinExtensions));
-    zassert_true(AssetStore::IsValidName("a.json", several));
-    zassert_true(AssetStore::IsValidName("a.Json", several));
-    zassert_false(AssetStore::IsValidName("a.jsonn", several));
+    zassert_true(AssetStore::IsValidName("image.BIN", BIN_EXTENSIONS));
+    zassert_true(AssetStore::IsValidName("IMAGE.Bin", BIN_EXTENSIONS));
+    zassert_true(AssetStore::IsValidName("a.json", SEVERAL));
+    zassert_true(AssetStore::IsValidName("a.Json", SEVERAL));
+    zassert_false(AssetStore::IsValidName("a.jsonn", SEVERAL));
 }
 
 // ======== Listing ========
@@ -854,7 +854,7 @@ ZTEST(asset_store, test_list_skips_directories_and_invalid_names_but_counts_them
     zassert_equal(listing.entries.size(), 1);
     zassert_str_equal(listing.entries[0].name.c_str(), "ok.bin");
     zassert_equal(listing.entries[0].size, 5);
-    zassert_equal(listing.entries[0].index, PositionOf(kAssetsDir, "ok.bin"));
+    zassert_equal(listing.entries[0].index, PositionOf(ASSETS_DIR, "ok.bin"));
 }
 
 ZTEST(asset_store, test_list_pages_by_first_and_max_entries) {
@@ -940,7 +940,7 @@ ZTEST(asset_store, test_list_clears_what_the_caller_passed_in) {
     size_t scanned = 9;
     size_t count = 9;
 
-    zassert_ok(store.List(0, 10, kBinExtensions, entries, scanned, count));
+    zassert_ok(store.List(0, 10, BIN_EXTENSIONS, entries, scanned, count));
 
     zassert_equal(entries.size(), 1);
     zassert_str_equal(entries[0].name.c_str(), "a.bin");
@@ -952,14 +952,14 @@ ZTEST(asset_store, test_list_of_a_missing_directory_lists_nothing) {
     auto store = MakeStore();
 
     // The constructor created the directory; it goes away again.
-    zassert_true(GetFsService()->DeleteFile(kAssetsDir));
+    zassert_true(GetFsService()->DeleteFile(ASSETS_DIR));
 
     std::vector<AssetEntry> entries;
     entries.push_back({ .name = "stale.bin", .size = 1, .index = 5 });
     size_t scanned = 7;
     size_t count = 9;
 
-    zassert_ok(store.List(0, 10, kBinExtensions, entries, scanned, count));
+    zassert_ok(store.List(0, 10, BIN_EXTENSIONS, entries, scanned, count));
     zassert_true(entries.empty());
     zassert_equal(scanned, 0);
     zassert_equal(count, 0);
@@ -974,7 +974,7 @@ ZTEST(asset_store, test_list_of_a_file_in_place_of_the_directory_fails) {
     size_t scanned = 0;
     size_t count = 0;
 
-    zassert_equal(store.List(0, 10, kBinExtensions, entries, scanned, count), -ENOTDIR);
+    zassert_equal(store.List(0, 10, BIN_EXTENSIONS, entries, scanned, count), -ENOTDIR);
     zassert_true(entries.empty());
     zassert_equal(count, 0);
 }
@@ -1000,7 +1000,7 @@ ZTEST(asset_store, test_list_of_the_volume_root_skips_the_staging_directory) {
 // The volume is reported unavailable while it is still mounted, so ListDirectory() would list it.
 ZTEST(asset_store, test_list_of_an_unavailable_volume_is_ENODEV) {
     const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
-    AssetStore store(scripted, kAssetsDir);
+    AssetStore store(scripted, ASSETS_DIR);
 
     zassert_true(WriteBlob("test_assets/a.bin", 1));
 
@@ -1008,7 +1008,7 @@ ZTEST(asset_store, test_list_of_an_unavailable_volume_is_ENODEV) {
     std::vector<DirectoryEntry> raw;
     size_t raw_count = 0;
 
-    zassert_ok(GetFsService()->ListDirectory(kAssetsDir, 0, 10, raw, raw_count));
+    zassert_ok(GetFsService()->ListDirectory(ASSETS_DIR, 0, 10, raw, raw_count));
     zassert_equal(raw_count, 1);
 
     scripted->unavailable = true;
@@ -1018,7 +1018,7 @@ ZTEST(asset_store, test_list_of_an_unavailable_volume_is_ENODEV) {
     size_t scanned = 7;
     size_t count = 9;
 
-    zassert_equal(store.List(0, 10, kBinExtensions, entries, scanned, count), -ENODEV);
+    zassert_equal(store.List(0, 10, BIN_EXTENSIONS, entries, scanned, count), -ENODEV);
     zassert_true(entries.empty());
     zassert_equal(scanned, 0);
     zassert_equal(count, 0);
@@ -1032,7 +1032,7 @@ ZTEST(asset_store, test_read_in_pieces_of_any_size_returns_the_content) {
 
     zassert_true(store.Save("image.bin", blob));
 
-    for(const size_t piece : kReadPieces) {
+    for(const size_t piece : READ_PIECES) {
         AssetReader reader;
 
         zassert_ok(store.OpenRead("image.bin", reader));
@@ -1049,7 +1049,7 @@ ZTEST(asset_store, test_read_in_pieces_of_any_size_returns_the_content) {
 ZTEST(asset_store, test_read_back_files_around_the_buffer_size) {
     auto store = MakeStore();
 
-    for(const size_t size : kEdgeSizes) {
+    for(const size_t size : EDGE_SIZES) {
         const auto blob = MakeBlob(size, 21);
 
         zassert_true(store.Save("edge.bin", blob), "Saving %d bytes", static_cast<int>(size));
@@ -1083,7 +1083,7 @@ ZTEST(asset_store, test_read_crossing_the_buffer_boundaries_returns_the_content)
     };
 
     // Across one boundary, exactly one block, across two, the whole file, and back to the start.
-    constexpr std::array<Request, 8> requests = { {
+    constexpr std::array<Request, 8> REQUESTS = { {
         { 4090, 20 },
         { 4096, 4096 },
         { 4000, 5000 },
@@ -1094,7 +1094,7 @@ ZTEST(asset_store, test_read_crossing_the_buffer_boundaries_returns_the_content)
         { 100, 3 },
     } };
 
-    for(const auto& request : requests) {
+    for(const auto& request : REQUESTS) {
         std::vector<uint8_t> out(request.length);
         const ssize_t bytes_read = reader.Read(request.offset, out);
 
@@ -1153,9 +1153,9 @@ ZTEST(asset_store, test_read_at_scattered_offsets_returns_the_content) {
     zassert_ok(store.OpenRead("image.bin", reader));
 
     // Forwards, backwards and into the block read last: each is served from the right place.
-    constexpr std::array<size_t, 9> offsets = { 9000, 10, 5000, 5100, 4095, 4096, 8191, 0, 9990 };
+    constexpr std::array<size_t, 9> OFFSETS = { 9000, 10, 5000, 5100, 4095, 4096, 8191, 0, 9990 };
 
-    for(const size_t offset : offsets) {
+    for(const size_t offset : OFFSETS) {
         std::vector<uint8_t> out(10);
 
         zassert_equal(reader.Read(offset, out), 10);
@@ -1166,7 +1166,7 @@ ZTEST(asset_store, test_read_at_scattered_offsets_returns_the_content) {
 ZTEST(asset_store, test_open_read_of_a_directory_is_ENOENT) {
     auto store = MakeStore();
 
-    zassert_true(GetFsService()->CreateDirectory(std::string(kAssetsDir) + "/folder"));
+    zassert_true(GetFsService()->CreateDirectory(std::string(ASSETS_DIR) + "/folder"));
 
     AssetReader reader;
 
@@ -1208,6 +1208,7 @@ ZTEST(asset_store, test_moved_reader_works_and_the_source_is_closed) {
 
     std::vector<uint8_t> out(16);
 
+    // NOLINTNEXTLINE(bugprone-use-after-move): the case checks the state a moved-from object is left in
     zassert_false(first.IsOpen());
     zassert_equal(first.GetSize(), 0);
     zassert_equal(first.Read(0, out), -EBADF);
@@ -1221,6 +1222,7 @@ ZTEST(asset_store, test_moved_reader_works_and_the_source_is_closed) {
     AssetReader third;
     third = std::move(second);
 
+    // NOLINTNEXTLINE(bugprone-use-after-move): the case checks the state a moved-from object is left in
     zassert_false(second.IsOpen());
     zassert_equal(second.Read(0, out), -EBADF);
     zassert_true(third.IsOpen());
@@ -1260,12 +1262,12 @@ ZTEST(asset_store, test_opening_and_closing_never_leak_file_slots) {
     auto store = MakeStore();
 
     zassert_true(store.Save("image.bin", MakeBlob(100)));
-    zassert_true(GetFsService()->CreateDirectory(std::string(kAssetsDir) + "/folder"));
+    zassert_true(GetFsService()->CreateDirectory(std::string(ASSETS_DIR) + "/folder"));
 
     // More rounds than either file system has slots.
-    constexpr int kRounds = 12;
+    constexpr int ROUNDS = 12;
 
-    for(int i = 0; i < kRounds; ++i) {
+    for(int i = 0; i < ROUNDS; ++i) {
         AssetReader reader;
         AssetWriter writer;
 
@@ -1286,13 +1288,13 @@ ZTEST(asset_store, test_opening_and_closing_never_leak_file_slots) {
     AssetReader reader;
     AssetWriter writer;
 
-    for(int i = 0; i < kRounds; ++i) {
+    for(int i = 0; i < ROUNDS; ++i) {
         zassert_ok(store.OpenRead("image.bin", reader), "Reopening round %d", i);
         zassert_ok(store.BeginWrite("again.bin", writer), "Reopening round %d", i);
     }
 
     // And so does one that a move replaces.
-    for(int i = 0; i < kRounds; ++i) {
+    for(int i = 0; i < ROUNDS; ++i) {
         AssetReader replacement;
 
         zassert_ok(store.OpenRead("image.bin", replacement), "Replacing round %d", i);
@@ -1307,12 +1309,12 @@ ZTEST(asset_store, test_open_read_without_a_free_file_slot_is_ENOMEM) {
 
     zassert_true(store.Save("image.bin", MakeBlob(100)));
 
-    constexpr size_t kMaxReaders = 16;
-    std::array<AssetReader, kMaxReaders> readers;
+    constexpr size_t MAX_READERS = 16;
+    std::array<AssetReader, MAX_READERS> readers;
     size_t opened = 0;
     int rc = 0;
 
-    while(opened < kMaxReaders) {
+    while(opened < MAX_READERS) {
         rc = store.OpenRead("image.bin", readers[opened]);
         if(rc != 0)
             break;
@@ -1340,7 +1342,7 @@ ZTEST(asset_store, test_staged_write_publishes_the_asset_on_commit) {
     zassert_true(writer.IsOpen());
     zassert_equal(writer.GetWritten(), 0);
 
-    zassert_ok(AppendInPieces(writer, blob, kOddPieces));
+    zassert_ok(AppendInPieces(writer, blob, ODD_PIECES));
     zassert_equal(writer.GetWritten(), blob.size());
 
     // Until the commit the asset does not exist: the data is in the staged file.
@@ -1362,12 +1364,12 @@ ZTEST(asset_store, test_staged_write_publishes_the_asset_on_commit) {
 ZTEST(asset_store, test_staged_write_of_sizes_around_the_buffer_size) {
     auto store = MakeStore();
 
-    for(const size_t size : kEdgeSizes) {
+    for(const size_t size : EDGE_SIZES) {
         const auto blob = MakeBlob(size, 31);
         AssetWriter writer;
 
         zassert_ok(store.BeginWrite("edge.bin", writer), "Writing %d bytes", static_cast<int>(size));
-        zassert_ok(AppendInPieces(writer, blob, kOddPieces));
+        zassert_ok(AppendInPieces(writer, blob, ODD_PIECES));
         zassert_equal(writer.GetWritten(), size);
         zassert_ok(writer.Commit(), "Writing %d bytes", static_cast<int>(size));
 
@@ -1476,7 +1478,7 @@ ZTEST(asset_store, test_abort_deletes_the_staged_file_and_keeps_the_asset) {
 
     AssetWriter writer;
     zassert_ok(store.BeginWrite("image.bin", writer));
-    zassert_ok(AppendInPieces(writer, MakeBlob(9000, 5), kOddPieces));
+    zassert_ok(AppendInPieces(writer, MakeBlob(9000, 5), ODD_PIECES));
     zassert_true(StagedFileExists());
 
     writer.Abort();
@@ -1591,6 +1593,7 @@ ZTEST(asset_store, test_moved_writer_continues_the_staged_write) {
 
     AssetWriter second(std::move(first));
 
+    // NOLINTNEXTLINE(bugprone-use-after-move): the case checks the state a moved-from object is left in
     zassert_false(first.IsOpen());
     zassert_equal(first.GetWritten(), 0);
     zassert_equal(first.Append(blob), -EBADF);
@@ -1603,6 +1606,7 @@ ZTEST(asset_store, test_moved_writer_continues_the_staged_write) {
     AssetWriter third;
     third = std::move(second);
 
+    // NOLINTNEXTLINE(bugprone-use-after-move): the case checks the state a moved-from object is left in
     zassert_false(second.IsOpen());
     zassert_true(third.IsOpen());
     zassert_equal(third.GetWritten(), blob.size());
@@ -1631,7 +1635,7 @@ ZTEST(asset_store, test_move_assignment_aborts_the_write_it_replaces) {
 
 ZTEST(asset_store, test_commit_that_cannot_rename_deletes_the_staged_file) {
     const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
-    AssetStore store(scripted, kAssetsDir);
+    AssetStore store(scripted, ASSETS_DIR);
     const auto original = MakeBlob(400, 2);
 
     zassert_true(store.Save("image.bin", original));
@@ -1655,10 +1659,10 @@ ZTEST(asset_store, test_commit_that_cannot_rename_deletes_the_staged_file) {
 
 ZTEST(asset_store, test_commit_that_cannot_create_the_directory_deletes_the_staged_file) {
     const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
-    AssetStore store(scripted, kAssetsDir);
+    AssetStore store(scripted, ASSETS_DIR);
 
-    zassert_true(GetFsService()->DeleteFile(kAssetsDir));
-    scripted->failing_directory = kAssetsDir;
+    zassert_true(GetFsService()->DeleteFile(ASSETS_DIR));
+    scripted->failing_directory = ASSETS_DIR;
 
     AssetWriter writer;
     zassert_ok(store.BeginWrite("image.bin", writer));
@@ -1668,7 +1672,7 @@ ZTEST(asset_store, test_commit_that_cannot_create_the_directory_deletes_the_stag
 
     zassert_false(writer.IsOpen());
     zassert_false(StagedFileExists());
-    zassert_false(GetFsService()->Exists(kAssetsDir));
+    zassert_false(GetFsService()->Exists(ASSETS_DIR));
 }
 
 // FAT reports a full volume as a short write with no error, littlefs as -ENOSPC; both come out as
@@ -1751,7 +1755,7 @@ ZTEST(asset_store, test_reader_reads_the_file_in_aligned_blocks) {
     auto store = MakeStore();
     auto& recorder = Recorder();
 
-    for(const size_t size : kBlockSizes) {
+    for(const size_t size : BLOCK_SIZES) {
         const auto blob = MakeBlob(size, 41);
 
         zassert_true(store.Save("blocks.bin", blob), "Saving %d bytes", static_cast<int>(size));
@@ -1765,7 +1769,7 @@ ZTEST(asset_store, test_reader_reads_the_file_in_aligned_blocks) {
 
         // Requests of odd sizes, one after the other.
         for(size_t i = 0; content.size() < size; ++i) {
-            std::vector<uint8_t> out(kOddPieces[i % kOddPieces.size()]);
+            std::vector<uint8_t> out(ODD_PIECES[i % ODD_PIECES.size()]);
             const ssize_t bytes_read = reader.Read(content.size(), out);
 
             if(bytes_read <= 0)
@@ -1835,7 +1839,7 @@ ZTEST(asset_store, test_writer_writes_the_file_in_aligned_blocks) {
     auto store = MakeStore();
     auto& recorder = Recorder();
 
-    for(const size_t size : kBlockSizes) {
+    for(const size_t size : BLOCK_SIZES) {
         const auto blob = MakeBlob(size, 43);
         AssetWriter writer;
 
@@ -1844,7 +1848,7 @@ ZTEST(asset_store, test_writer_writes_the_file_in_aligned_blocks) {
         recorder.Start();
 
         // Appends of odd sizes, one after the other.
-        const int append_rc = AppendInPieces(writer, blob, kOddPieces);
+        const int append_rc = AppendInPieces(writer, blob, ODD_PIECES);
         const size_t written_by_appends = recorder.writes.size();
         const int commit_rc = writer.Commit();
 

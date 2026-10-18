@@ -52,7 +52,7 @@ std::string Rejection(const LoggingControlConfiguration& configuration) {
 } // namespace
 
 ZTEST(logging_control_configuration_validator, test_NoTriggersIsValid) {
-    zassert_equal(Rejection(MakeConfiguration({})), "");
+    zassert_true(Rejection(MakeConfiguration({})).empty());
 }
 
 ZTEST(logging_control_configuration_validator, test_AnyTargetUidIsValid) {
@@ -61,31 +61,27 @@ ZTEST(logging_control_configuration_validator, test_AnyTargetUidIsValid) {
     auto last = MakeTrigger();
     last.target_uid = 0xFFFFFFFF;
 
-    zassert_equal(Rejection(MakeConfiguration({ all, last })), "");
+    zassert_true(Rejection(MakeConfiguration({ all, last })).empty());
 }
 
 ZTEST(logging_control_configuration_validator, test_AChannelMustBeOneThatExists) {
     const auto none = Rejection(MakeConfiguration({ MakeTrigger(), MakeTrigger(EventChannelId::None) }));
     zassert_true(none.find("Invalid logging control configuration.") == 0, "%s", none.c_str());
-    zassert_true(none.find("Trigger 1 names an unknown event channel.") != std::string::npos, "%s", none.c_str());
+    zassert_true(none.contains("Trigger 1 names an unknown event channel."), "%s", none.c_str());
 
     const auto past_last = Rejection(
         MakeConfiguration({ MakeTrigger(static_cast<EventChannelId>(std::to_underlying(k_last_event_channel_id) + 1)) })
     );
-    zassert_true(
-        past_last.find("Trigger 0 names an unknown event channel.") != std::string::npos, "%s", past_last.c_str()
-    );
+    zassert_true(past_last.contains("Trigger 0 names an unknown event channel."), "%s", past_last.c_str());
 }
 
 ZTEST(logging_control_configuration_validator, test_AChannelThatThisUnitDoesNotRegisterIsValid) {
     // Whether a unit registers a channel is the registry's question, not the stored format's.
-    zassert_equal(
-        Rejection(MakeConfiguration(
-            { MakeTrigger(EventChannelId::Navigation), MakeTrigger(EventChannelId::Settings),
-                MakeTrigger(EventChannelId::Logging) }
-        )),
-        ""
-    );
+    zassert_true(Rejection(MakeConfiguration(
+                               { MakeTrigger(EventChannelId::Navigation), MakeTrigger(EventChannelId::Settings),
+                                   MakeTrigger(EventChannelId::Logging) }
+                           ))
+            .empty());
 }
 
 ZTEST(logging_control_configuration_validator, test_ASelectorMustBeTextAnIntegerOrABool) {
@@ -95,21 +91,21 @@ ZTEST(logging_control_configuration_validator, test_ASelectorMustBeTextAnInteger
     number.binding.selector_value = 12;
     auto flag = MakeTrigger();
     flag.binding.selector_value = false;
-    zassert_equal(
-        Rejection(MakeConfiguration({ text, number, flag, MakeTrigger() })), "", "Three kinds of selector and none"
+    zassert_true(
+        Rejection(MakeConfiguration({ text, number, flag, MakeTrigger() })).empty(), "Three kinds of selector and none"
     );
 
     auto real = MakeTrigger();
     real.binding.selector_value = 1.5;
     const auto real_message = Rejection(MakeConfiguration({ MakeTrigger(), real }));
     zassert_true(
-        real_message.find("Trigger 1 selector value must be text, an integer or a bool.") != std::string::npos, "%s",
+        real_message.contains("Trigger 1 selector value must be text, an integer or a bool."), "%s",
         real_message.c_str()
     );
 
     auto numbers = MakeTrigger();
     numbers.binding.selector_value = std::pmr::vector<int>{ 1, 2 };
-    zassert_not_equal(Rejection(MakeConfiguration({ numbers })), "", "A list cannot select");
+    zassert_false(Rejection(MakeConfiguration({ numbers })).empty(), "A list cannot select");
 }
 
 ZTEST(logging_control_configuration_validator, test_TheEventTypeAndTheKeysAreChannelLocal) {
@@ -119,12 +115,12 @@ ZTEST(logging_control_configuration_validator, test_TheEventTypeAndTheKeysAreCha
     trigger.binding.selector_key = 0xFFFFFFFF;
     trigger.binding.selector_value = 1;
 
-    zassert_equal(Rejection(MakeConfiguration({ trigger })), "", "The validator does not know the channel's enums");
+    zassert_true(Rejection(MakeConfiguration({ trigger })).empty(), "The validator does not know the channel's enums");
 }
 
 ZTEST(logging_control_configuration_validator, test_AtMostSixteenTriggers) {
-    zassert_equal(Rejection(MakeConfiguration(std::vector<LoggingTrigger>(16, MakeTrigger()))), "");
+    zassert_true(Rejection(MakeConfiguration(std::vector<LoggingTrigger>(16, MakeTrigger()))).empty());
 
     const auto message = Rejection(MakeConfiguration(std::vector<LoggingTrigger>(17, MakeTrigger())));
-    zassert_true(message.find("At most 16 triggers.") != std::string::npos, "%s", message.c_str());
+    zassert_true(message.contains("At most 16 triggers."), "%s", message.c_str());
 }

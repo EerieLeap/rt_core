@@ -79,9 +79,9 @@ using eerie_leap::utilities::voltage_interpolator::CalibrationData;
 using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
 
 // vref 3300 mV, gain 1, 12 bits on the overlay's first emulated ADC.
-constexpr float kEmulLsbVolts = 3.3F / 4096.0F;
+constexpr float EMUL_LSB_VOLTS = 3.3F / 4096.0F;
 // adc_emul truncates mV × 4095 / 3300 to a whole count, so a constant input lands up to ~1.3 LSB low.
-constexpr float kEmulTolerance = 2.0F * kEmulLsbVolts;
+constexpr float EMUL_TOLERANCE = 2.0F * EMUL_LSB_VOLTS;
 
 // Answers every request from a script: channel c reads volts_base + c × volts_step, a channel listed
 // in failing_channel reports a driver error. Counts requests; Sample() never allocates.
@@ -90,14 +90,14 @@ private:
     int channel_count_;
 
 public:
-    static constexpr size_t kMaxChannels = 8;
+    static constexpr size_t MAX_CHANNELS = 8;
 
     float volts_base = 1.0F;
     float volts_step = 0.0F;
     int failing_channel = -1;
 
     int requests = 0;
-    std::array<uint8_t, kMaxChannels> last_channels{};
+    std::array<uint8_t, MAX_CHANNELS> last_channels{};
     size_t last_channel_count = 0;
     uint16_t last_samples = 0;
 
@@ -115,7 +115,7 @@ public:
 
         for(size_t i = 0; i < request.channels.size(); i++) {
             const uint8_t channel = request.channels[i];
-            if(i < kMaxChannels)
+            if(i < MAX_CHANNELS)
                 last_channels[i] = channel;
 
             request.results[i] = {};
@@ -123,7 +123,7 @@ public:
                 request.results[i].error = AdcError::DRIVER;
                 request.results[i].errno_value = -5;
             } else {
-                request.results[i].volts = volts_base + volts_step * channel;
+                request.results[i].volts = volts_base + volts_step * static_cast<float>(channel);
             }
         }
     }

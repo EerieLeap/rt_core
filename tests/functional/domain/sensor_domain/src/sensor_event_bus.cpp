@@ -19,7 +19,7 @@ namespace {
 constexpr int DISPATCH_TIMEOUT_MS = 1000;
 
 struct SensorProbe {
-    k_sem delivered;
+    k_sem delivered{};
     uint32_t sensor_id = 0;
     float value = 0.0F;
     std::string handler_thread_name;

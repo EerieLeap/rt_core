@@ -14,15 +14,15 @@ namespace {
 // static constexpr forces constant evaluation, so a regression that made GetCallerName
 // runtime-only would fail to compile rather than fail a check.
 CallerName FirstCaller() {
-    static constexpr auto caller = GetCallerName();
+    static constexpr auto CALLER = GetCallerName();
 
-    return caller;
+    return CALLER;
 }
 
 CallerName SecondCaller() {
-    static constexpr auto caller = GetCallerName();
+    static constexpr auto CALLER = GetCallerName();
 
-    return caller;
+    return CALLER;
 }
 
 } // namespace
@@ -42,7 +42,7 @@ ZTEST(reflection_caller_name, test_GetCallerName_identifies_the_enclosing_functi
 
     // An empty name means the location was captured outside a function body.
     zassert_false(name.empty());
-    zassert_true(name.find("FirstCaller") != std::string_view::npos);
+    zassert_true(name.contains("FirstCaller"));
 }
 
 ZTEST(reflection_caller_name, test_GetCallerName_hash_matches_its_name) {

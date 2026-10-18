@@ -46,6 +46,11 @@ struct TransactionFixture {
         k_sem_init(&completed, 0, K_SEM_MAX_LIMIT);
     }
 
+    TransactionFixture(const TransactionFixture&) = delete;
+    TransactionFixture& operator=(const TransactionFixture&) = delete;
+    TransactionFixture(TransactionFixture&&) = delete;
+    TransactionFixture& operator=(TransactionFixture&&) = delete;
+
     ~TransactionFixture() {
         transactions.reset();
         work_queue->Stop();
@@ -61,7 +66,7 @@ struct TransactionFixture {
         );
     }
 
-    void Respond(uint8_t source, uint8_t command_code, uint8_t transaction_id) {
+    void Respond(uint8_t source, uint8_t command_code, uint8_t transaction_id) const {
         transactions->CompleteTransaction(
             { .source_device_id = source,
                 .command_code = command_code,

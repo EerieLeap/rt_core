@@ -133,8 +133,9 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
         rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr
     );
     // Stored before the update handler is registered, so it is no restart of its own.
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([before](auto manager) {
+        controller.Initialize([before](const auto& manager) {
             zassert_true(manager->Update({ before }), "the first sensors were not stored");
         }),
         0, "the sensors controller did not initialize"
@@ -190,7 +191,7 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
         AssertFinalizedFile(files[i].content, files[i].path.c_str());
 
         const auto data_block_address = FindDataBlockAddress(files[i].content);
-        zassert_true(files[i].content.size() > data_block_address + kBlockHeaderSize, "file %zu holds no record", i);
+        zassert_true(files[i].content.size() > data_block_address + BLOCK_HEADER_SIZE, "file %zu holds no record", i);
     }
 
     zassert_true(ContainsText(files[0].content, "before_apply"), "the first file must describe the first sensors");
@@ -230,8 +231,9 @@ ZTEST(sensors_apply_while_logging, test_AStopRequestedDuringASensorsRestartIsNot
     SensorsController controller(
         rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr
     );
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([first](auto manager) {
+        controller.Initialize([first](const auto& manager) {
             zassert_true(manager->Update({ first }), "the first sensors were not stored");
         }),
         0, "the sensors controller did not initialize"
@@ -289,8 +291,9 @@ ZTEST(sensors_apply_while_logging, test_ASessionThatFailsDuringASensorsRestartIs
     SensorsController controller(
         rig.fs_service, rig.config_work_queue, nullptr, rig.time_service, rig.frame, nullptr, nullptr
     );
+    // NOLINTNEXTLINE(bugprone-lambda-function-name): zassert_*() reports __func__; the lambda is part of the test body
     zassert_equal(
-        controller.Initialize([](auto manager) {
+        controller.Initialize([](const auto& manager) {
             zassert_true(manager->Update({ MakeVirtualSensor("first", "1 + 1") }), "the first sensors were not stored");
         }),
         0, "the sensors controller did not initialize"

@@ -56,7 +56,7 @@ ZTEST(expression_evaluator, test_invalid_expression_is_a_compile_error_with_a_po
 
         const auto message = ExpressionEvaluator::Describe(evaluator.error());
         zassert_true(message.starts_with("Invalid expression: "), "%s", message.c_str());
-        zassert_true(message.find(" at ") != std::string::npos, "%s", message.c_str());
+        zassert_true(message.contains(" at "), "%s", message.c_str());
     }
 }
 

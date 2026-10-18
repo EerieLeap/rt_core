@@ -36,9 +36,9 @@ using namespace eerie_leap::domain::adc_domain::configuration;
 namespace {
 
 // The overlay declares two emulated ADCs: four channels, then two.
-constexpr int kFirstAdcChannels = 4;
-constexpr int kDtAdcCount = 2;
-constexpr int kDtChannelCount = 6;
+constexpr int FIRST_ADC_CHANNELS = 4;
+constexpr int DT_ADC_COUNT = 2;
+constexpr int DT_CHANNEL_COUNT = 6;
 
 std::shared_ptr<FsService> MakeFormattedFsService() {
     DtFs::InitInternalFs();
@@ -50,10 +50,11 @@ std::shared_ptr<FsService> MakeFormattedFsService() {
 }
 
 // The first adc_count device-tree ADCs; QEMU targets declare a third one that never initializes.
-std::shared_ptr<IAdcManager> MakeAdcManager(int adc_count = kDtAdcCount) {
+std::shared_ptr<IAdcManager> MakeAdcManager(int adc_count = DT_ADC_COUNT) {
     DtAdc::Initialize();
 
     std::vector<std::shared_ptr<IAdc>> adcs;
+    adcs.reserve(static_cast<size_t>(adc_count));
     for(int i = 0; i < adc_count; i++)
         adcs.push_back(std::make_shared<AdcEmulator>(DtAdc::Get().value().at(i)));
 
@@ -94,7 +95,7 @@ void ExpectSameCalibrator(const AdcCalibrator& expected, const AdcCalibrator& ac
 
 ZTEST_SUITE(adc_configuration_manager, NULL, NULL, NULL, NULL, NULL);
 
-static AdcConfiguration adc_configuration_manager_GetTestConfiguration(int channel_count = kDtChannelCount) {
+static AdcConfiguration AdcConfigurationManagerGetTestConfiguration(int channel_count = DT_CHANNEL_COUNT) {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -120,7 +121,7 @@ static AdcConfiguration adc_configuration_manager_GetTestConfiguration(int chann
     return adc_configuration;
 }
 
-static void adc_configuration_manager_ExpectTestConfiguration(
+static void AdcConfigurationManagerExpectTestConfiguration(
     const std::shared_ptr<AdcConfiguration>& configuration,
     int channel_count
 ) {
@@ -145,16 +146,16 @@ static void adc_configuration_manager_ExpectTestConfiguration(
 ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_successfully_saved) {
     const auto fs_service = MakeFormattedFsService();
     const auto adc_manager = MakeAdcManager();
-    zassert_equal(adc_manager->GetChannelCount(), kDtChannelCount);
+    zassert_equal(adc_manager->GetChannelCount(), DT_CHANNEL_COUNT);
 
     const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
 
-    const bool result = adc_configuration_manager->Update(adc_configuration_manager_GetTestConfiguration());
+    const bool result = adc_configuration_manager->Update(AdcConfigurationManagerGetTestConfiguration());
     zassert_true(result);
 
     const auto saved_configuration = adc_configuration_manager->Get();
     zassert_equal(saved_configuration->samples, 40);
-    adc_configuration_manager_ExpectTestConfiguration(saved_configuration, adc_manager->GetChannelCount());
+    AdcConfigurationManagerExpectTestConfiguration(saved_configuration, adc_manager->GetChannelCount());
     zassert_equal(adc_configuration_manager->GetAdcManager().get(), adc_manager.get());
 }
 
@@ -164,7 +165,7 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_and_Lo
 
     auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
 
-    const bool result = adc_configuration_manager->Update(adc_configuration_manager_GetTestConfiguration());
+    const bool result = adc_configuration_manager->Update(AdcConfigurationManagerGetTestConfiguration());
     zassert_true(result);
 
     adc_configuration_manager = nullptr;
@@ -172,7 +173,7 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_Save_config_and_Lo
 
     const auto saved_configuration = adc_configuration_manager->Get();
     zassert_equal(saved_configuration->samples, 40);
-    adc_configuration_manager_ExpectTestConfiguration(saved_configuration, adc_manager->GetChannelCount());
+    AdcConfigurationManagerExpectTestConfiguration(saved_configuration, adc_manager->GetChannelCount());
 
     // A loaded configuration lives in external RAM, calibration tables included.
     const auto calibration_table =
@@ -185,7 +186,7 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_ApplyCborConfigura
     auto adc_manager = MakeAdcManager();
 
     const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
-    zassert_true(adc_configuration_manager->Update(adc_configuration_manager_GetTestConfiguration()));
+    zassert_true(adc_configuration_manager->Update(AdcConfigurationManagerGetTestConfiguration()));
 
     // The import is stored as received, so the ordering has to come from parsing it.
     eerie_leap::configuration::cbor::CborSerializer<CborAdcConfig> serializer;
@@ -249,7 +250,7 @@ ZTEST(
     const auto adc_manager = MakeAdcManager();
 
     const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
-    zassert_true(adc_configuration_manager->Update(adc_configuration_manager_GetTestConfiguration()));
+    zassert_true(adc_configuration_manager->Update(AdcConfigurationManagerGetTestConfiguration()));
 
     eerie_leap::configuration::cbor::CborSerializer<CborAdcConfig> serializer;
     auto cbor_config = serializer.Deserialize(adc_configuration_manager->GetCborConfiguration());
@@ -258,15 +259,15 @@ ZTEST(
     CborAdcChannelConfig extra_channel_config(std::allocator_arg, Mrm::GetDefaultPmr());
     extra_channel_config = cbor_config->CborAdcChannelConfig_m.back();
     cbor_config->CborAdcChannelConfig_m.push_back(std::move(extra_channel_config));
-    zassert_equal(cbor_config->CborAdcChannelConfig_m.size(), kDtChannelCount + 1);
+    zassert_equal(cbor_config->CborAdcChannelConfig_m.size(), DT_CHANNEL_COUNT + 1);
 
     std::array<char, 96> reason{};
     zassert_false(adc_configuration_manager->ApplyCborConfiguration(serializer.Serialize(*cbor_config), reason));
     zassert_str_equal(reason.data(), "Invalid ADC configuration. 7 channels configured, the device tree has 6.");
 
     // The rejected import neither replaced the configuration nor reached the file.
-    adc_configuration_manager_ExpectTestConfiguration(adc_configuration_manager->Get(), kDtChannelCount);
-    adc_configuration_manager_ExpectTestConfiguration(adc_configuration_manager->Get(true), kDtChannelCount);
+    AdcConfigurationManagerExpectTestConfiguration(adc_configuration_manager->Get(), DT_CHANNEL_COUNT);
+    AdcConfigurationManagerExpectTestConfiguration(adc_configuration_manager->Get(true), DT_CHANNEL_COUNT);
 }
 
 ZTEST(adc_configuration_manager, test_AdcConfigurationManager_notifies_after_an_update_not_on_load) {
@@ -280,7 +281,7 @@ ZTEST(adc_configuration_manager, test_AdcConfigurationManager_notifies_after_an_
         notified++;
     });
 
-    auto adc_configuration = adc_configuration_manager_GetTestConfiguration();
+    auto adc_configuration = AdcConfigurationManagerGetTestConfiguration();
     adc_configuration.samples = 10;
     zassert_true(adc_configuration_manager->Update(adc_configuration));
     zassert_equal(notified, 1, "Update() notifies");
@@ -313,9 +314,9 @@ ZTEST(adc_configuration_manager, test_LoadOrCreateDefault_pads_a_stored_configur
 
     // Stored by firmware that knew only the first ADC.
     const auto first_adc_manager = MakeAdcManager(1);
-    zassert_equal(first_adc_manager->GetChannelCount(), kFirstAdcChannels);
+    zassert_equal(first_adc_manager->GetChannelCount(), FIRST_ADC_CHANNELS);
 
-    auto stored_configuration = adc_configuration_manager_GetTestConfiguration(kFirstAdcChannels);
+    auto stored_configuration = AdcConfigurationManagerGetTestConfiguration(FIRST_ADC_CHANNELS);
     stored_configuration.samples = 25;
     {
         const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, first_adc_manager);
@@ -324,16 +325,16 @@ ZTEST(adc_configuration_manager, test_LoadOrCreateDefault_pads_a_stored_configur
 
     // Loaded by firmware whose device tree adds the second one.
     const auto adc_manager = MakeAdcManager();
-    zassert_equal(adc_manager->GetChannelCount(), kDtChannelCount);
+    zassert_equal(adc_manager->GetChannelCount(), DT_CHANNEL_COUNT);
 
     const auto adc_configuration_manager = MakeAdcConfigurationManager(fs_service, adc_manager);
     const auto loaded_configuration = adc_configuration_manager->Get();
 
     zassert_not_null(loaded_configuration.get());
     zassert_equal(loaded_configuration->samples, 25);
-    zassert_equal(loaded_configuration->channel_configurations->size(), kDtChannelCount);
+    zassert_equal(loaded_configuration->channel_configurations->size(), DT_CHANNEL_COUNT);
 
-    for(size_t i = 0; i < kFirstAdcChannels; i++) {
+    for(size_t i = 0; i < FIRST_ADC_CHANNELS; i++) {
         ExpectSameCalibrator(
             *stored_configuration.channel_configurations->at(i)->calibrator,
             *loaded_configuration->channel_configurations->at(i)->calibrator, i
@@ -341,7 +342,7 @@ ZTEST(adc_configuration_manager, test_LoadOrCreateDefault_pads_a_stored_configur
     }
 
     const auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());
-    for(size_t i = kFirstAdcChannels; i < kDtChannelCount; i++)
+    for(size_t i = FIRST_ADC_CHANNELS; i < DT_CHANNEL_COUNT; i++)
         ExpectSameCalibrator(*default_calibrator, *loaded_configuration->channel_configurations->at(i)->calibrator, i);
 
     // The user's calibration was loaded, not replaced by a default.
@@ -361,10 +362,10 @@ ZTEST(adc_configuration_manager, test_Default_configuration_matches_the_device_t
     zassert_equal(
         default_configuration->channel_configurations->size(), static_cast<size_t>(adc_manager->GetChannelCount())
     );
-    zassert_equal(default_configuration->channel_configurations->size(), kDtChannelCount);
+    zassert_equal(default_configuration->channel_configurations->size(), DT_CHANNEL_COUNT);
 
     const auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());
-    for(size_t i = 0; i < kDtChannelCount; i++) {
+    for(size_t i = 0; i < DT_CHANNEL_COUNT; i++) {
         const auto channel_configuration = default_configuration->channel_configurations->at(i);
 
         zassert_not_null(channel_configuration.get());
@@ -375,5 +376,5 @@ ZTEST(adc_configuration_manager, test_Default_configuration_matches_the_device_t
     // The default was stored, so a reload finds the same configuration rather than creating it again.
     const auto reloaded_configuration = MakeAdcConfigurationManager(fs_service, adc_manager)->Get();
     zassert_equal(reloaded_configuration->samples, AdcDefaultConfiguration::SAMPLES);
-    zassert_equal(reloaded_configuration->channel_configurations->size(), kDtChannelCount);
+    zassert_equal(reloaded_configuration->channel_configurations->size(), DT_CHANNEL_COUNT);
 }

@@ -25,7 +25,7 @@ ZTEST_SUITE(adc_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-constexpr size_t kChannelCount = 8;
+constexpr size_t K_CHANNEL_COUNT = 8;
 
 std::string ExpectedSamplesReason(uint32_t samples) {
     return "Invalid ADC configuration. Samples must be between 1 and "
@@ -36,7 +36,7 @@ std::string ExpectedSamplesReason(uint32_t samples) {
 template<typename Action>
 std::string ExpectInvalidArgument(Action&& action) {
     try {
-        action();
+        std::forward<Action>(action)();
     } catch(const std::invalid_argument& e) {
         return e.what();
     }
@@ -47,14 +47,14 @@ std::string ExpectInvalidArgument(Action&& action) {
 
 void ExpectReasonContains(const std::string& reason, std::string_view expected) {
     zassert_true(
-        reason.find(expected) != std::string::npos, "'%s' does not contain '%.*s'", reason.c_str(),
-        static_cast<int>(expected.size()), expected.data()
+        reason.contains(expected), "'%s' does not contain '%.*s'", reason.c_str(), static_cast<int>(expected.size()),
+        expected.data()
     );
 }
 
 } // namespace
 
-static AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t channel_count = kChannelCount) {
+static AdcConfiguration AdcConfigurationParserGetTestConfiguration(size_t channel_count = K_CHANNEL_COUNT) {
     const std::pmr::vector<CalibrationData> adc_calibration_data_samples_1{ { 0.0, 0.0 }, { 5.0, 5.0 } };
 
     const auto adc_calibration_data_samples_ptr_1 = std::make_shared<std::pmr::vector<CalibrationData>>(
@@ -95,7 +95,7 @@ static AdcConfiguration adc_configuration_parser_GetTestConfiguration(size_t cha
     return adc_configuration;
 }
 
-static void adc_configuration_parser_CompareCalibrators(
+static void AdcConfigurationParserCompareCalibrators(
     const AdcCalibrator& calibrator,
     const AdcCalibrator& deserialized_calibrator
 ) {
@@ -111,7 +111,7 @@ static void adc_configuration_parser_CompareCalibrators(
     }
 }
 
-static void adc_configuration_parser_CompareAdcConfigurations(
+static void AdcConfigurationParserCompareAdcConfigurations(
     const AdcConfiguration& adc_configuration,
     const AdcConfiguration& deserialized_adc_configuration
 ) {
@@ -121,7 +121,7 @@ static void adc_configuration_parser_CompareAdcConfigurations(
     );
 
     for(size_t i = 0; i < adc_configuration.channel_configurations->size(); i++) {
-        adc_configuration_parser_CompareCalibrators(
+        AdcConfigurationParserCompareCalibrators(
             *adc_configuration.channel_configurations->at(i)->calibrator,
             *deserialized_adc_configuration.channel_configurations->at(i)->calibrator
         );
@@ -129,22 +129,22 @@ static void adc_configuration_parser_CompareAdcConfigurations(
 }
 
 ZTEST(adc_configuration_parser, test_CborSerializeDeserialize) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
 
     const auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
     auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_adc_configuration.get()
     );
 
-    adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
+    AdcConfigurationParserCompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_orders_an_unordered_calibration_table) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
 
     for(auto& adc_channel_config : serialized_adc_configuration->CborAdcChannelConfig_m)
@@ -154,13 +154,13 @@ ZTEST(adc_configuration_parser, test_Deserialize_orders_an_unordered_calibration
         Mrm::GetDefaultPmr(), *serialized_adc_configuration
     );
 
-    adc_configuration_parser_CompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
+    AdcConfigurationParserCompareAdcConfigurations(adc_configuration, *deserialized_adc_configuration);
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_monotonic_values) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    const auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    const auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
 
     // A tie on a spline channel: two readings for different voltages.
     {
@@ -198,7 +198,7 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_monotonic_values) {
                 { 0.0F, 5.0F }, { 5.0F, 0.0F } })
         );
 
-        auto falling_configuration = adc_configuration_parser_GetTestConfiguration();
+        auto falling_configuration = AdcConfigurationParserGetTestConfiguration();
         falling_configuration.channel_configurations->at(3) = std::make_shared<AdcChannelConfiguration>(
             falling_calibrator
         );
@@ -211,9 +211,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_monotonic_values) {
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_duplicate_voltages) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    const auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    const auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
     auto& table = serialized_adc_configuration->CborAdcChannelConfig_m.at(1).calibration_table.float32float;
     table.at(3).float32float_key = table.at(2).float32float_key;
@@ -227,9 +227,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_duplicate_voltages) {
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_values_that_saturate_together) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    const auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    const auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
 
     // Both readings lie beyond the sensor maximum, so both map to the top of the ADC range.
@@ -248,9 +248,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_values_that_saturate_to
 ZTEST(adc_configuration_parser, test_Deserialize_loads_a_value_beyond_the_sensor_range) {
     // A table recorded before calibration readings were clamped: its top reading lies above the
     // sensor range. It loads unchanged (with a warning) and its point saturates at the ADC maximum.
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    const auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    const auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
 
     auto& table = serialized_adc_configuration->CborAdcChannelConfig_m.at(0).calibration_table.float32float;
@@ -278,9 +278,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_loads_a_value_beyond_the_sensor
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_finite_points) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    const auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    const auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
     serialized_adc_configuration->CborAdcChannelConfig_m.at(6).calibration_table.float32float.at(2).float32float =
         std::numeric_limits<float>::quiet_NaN();
@@ -294,9 +294,9 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_non_finite_points) {
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_samples_out_of_range) {
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(K_CHANNEL_COUNT);
 
-    auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
 
     // 65537 is checked as stored: narrowed to uint16_t it would load as 1.
@@ -331,50 +331,50 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_samples_out_of_range) {
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_pads_missing_channels) {
-    constexpr size_t kConfiguredChannelCount = 4;
-    constexpr size_t kDtChannelCount = 6;
+    constexpr size_t CONFIGURED_CHANNEL_COUNT = 4;
+    constexpr size_t DT_CHANNEL_COUNT = 6;
 
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kDtChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(DT_CHANNEL_COUNT);
 
-    const auto adc_configuration = adc_configuration_parser_GetTestConfiguration(kConfiguredChannelCount);
+    const auto adc_configuration = AdcConfigurationParserGetTestConfiguration(CONFIGURED_CHANNEL_COUNT);
     auto serialized_adc_configuration = adc_configuration_cbor_parser.Serialize(adc_configuration);
-    zassert_equal(serialized_adc_configuration->CborAdcChannelConfig_m.size(), kConfiguredChannelCount);
+    zassert_equal(serialized_adc_configuration->CborAdcChannelConfig_m.size(), CONFIGURED_CHANNEL_COUNT);
 
     auto deserialized_adc_configuration = adc_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_adc_configuration
     );
 
     zassert_equal(deserialized_adc_configuration->samples, adc_configuration.samples);
-    zassert_equal(deserialized_adc_configuration->channel_configurations->size(), kDtChannelCount);
+    zassert_equal(deserialized_adc_configuration->channel_configurations->size(), DT_CHANNEL_COUNT);
 
-    for(size_t i = 0; i < kConfiguredChannelCount; i++) {
-        adc_configuration_parser_CompareCalibrators(
+    for(size_t i = 0; i < CONFIGURED_CHANNEL_COUNT; i++) {
+        AdcConfigurationParserCompareCalibrators(
             *adc_configuration.channel_configurations->at(i)->calibrator,
             *deserialized_adc_configuration->channel_configurations->at(i)->calibrator
         );
     }
 
     const auto default_calibrator = AdcDefaultConfiguration::CreateCalibrator(Mrm::GetDefaultPmr());
-    for(size_t i = kConfiguredChannelCount; i < kDtChannelCount; i++) {
+    for(size_t i = CONFIGURED_CHANNEL_COUNT; i < DT_CHANNEL_COUNT; i++) {
         const auto channel_configuration = deserialized_adc_configuration->channel_configurations->at(i);
 
         zassert_not_null(channel_configuration.get());
         zassert_not_null(channel_configuration->calibrator.get());
-        adc_configuration_parser_CompareCalibrators(*default_calibrator, *channel_configuration->calibrator);
+        AdcConfigurationParserCompareCalibrators(*default_calibrator, *channel_configuration->calibrator);
     }
 
     // The padded configuration is a valid one, so storing it again keeps all six channels.
     auto reserialized_adc_configuration = adc_configuration_cbor_parser.Serialize(*deserialized_adc_configuration);
-    zassert_equal(reserialized_adc_configuration->CborAdcChannelConfig_m.size(), kDtChannelCount);
+    zassert_equal(reserialized_adc_configuration->CborAdcChannelConfig_m.size(), DT_CHANNEL_COUNT);
 }
 
 ZTEST(adc_configuration_parser, test_Deserialize_rejects_too_many_channels) {
-    constexpr size_t kConfiguredChannelCount = 7;
-    constexpr size_t kDtChannelCount = 6;
+    constexpr size_t CONFIGURED_CHANNEL_COUNT = 7;
+    constexpr size_t DT_CHANNEL_COUNT = 6;
     const std::string expected_reason = "Invalid ADC configuration. 7 channels configured, the device tree has 6.";
 
-    AdcConfigurationCborParser adc_configuration_cbor_parser(kDtChannelCount);
-    auto adc_configuration = adc_configuration_parser_GetTestConfiguration(kConfiguredChannelCount);
+    AdcConfigurationCborParser adc_configuration_cbor_parser(DT_CHANNEL_COUNT);
+    auto adc_configuration = AdcConfigurationParserGetTestConfiguration(CONFIGURED_CHANNEL_COUNT);
 
     const auto serialize_reason = ExpectInvalidArgument([&] {
         adc_configuration_cbor_parser.Serialize(adc_configuration);
@@ -383,7 +383,7 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_too_many_channels) {
 
     // Stored by a unit whose device tree has more channels.
     auto serialized_adc_configuration =
-        AdcConfigurationCborParser(kConfiguredChannelCount).Serialize(adc_configuration);
+        AdcConfigurationCborParser(CONFIGURED_CHANNEL_COUNT).Serialize(adc_configuration);
 
     const auto deserialize_reason = ExpectInvalidArgument([&] {
         adc_configuration_cbor_parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_adc_configuration);
@@ -392,18 +392,18 @@ ZTEST(adc_configuration_parser, test_Deserialize_rejects_too_many_channels) {
 }
 
 ZTEST(adc_configuration_parser, test_Validate_requires_a_calibrator_per_channel) {
-    auto adc_configuration = adc_configuration_parser_GetTestConfiguration();
+    auto adc_configuration = AdcConfigurationParserGetTestConfiguration();
     adc_configuration.channel_configurations->at(7) = std::make_shared<AdcChannelConfiguration>();
 
     auto reason = ExpectInvalidArgument([&] {
-        AdcConfigurationValidator::Validate(adc_configuration, kChannelCount);
+        AdcConfigurationValidator::Validate(adc_configuration, K_CHANNEL_COUNT);
     });
     ExpectReasonContains(reason, "Channel: 7. ");
 
     adc_configuration.channel_configurations = nullptr;
 
     reason = ExpectInvalidArgument([&] {
-        AdcConfigurationValidator::Validate(adc_configuration, kChannelCount);
+        AdcConfigurationValidator::Validate(adc_configuration, K_CHANNEL_COUNT);
     });
     zassert_str_equal(reason.c_str(), "Invalid ADC configuration. Channel configurations are missing.");
 }

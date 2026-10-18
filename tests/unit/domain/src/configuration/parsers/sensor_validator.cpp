@@ -33,7 +33,7 @@ ZTEST_SUITE(sensor_validator, NULL, NULL, NULL, NULL, NULL);
 
 namespace {
 
-constexpr uint32_t kChannelCount = 8;
+constexpr uint32_t K_CHANNEL_COUNT = 8;
 
 std::shared_ptr<Sensor> MakeSensor(std::string_view id, SensorType type, std::optional<int> sampling_rate_ms) {
     auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
@@ -72,7 +72,7 @@ std::shared_ptr<Sensor> MakeSensor(std::string_view id, SensorType type, std::op
 // Returns the validation error, or nothing when the sensors validate.
 std::optional<std::string> Validate(const std::vector<std::shared_ptr<Sensor>>& sensors) {
     try {
-        SensorValidator::Validate(sensors, nullptr, kChannelCount, kChannelCount);
+        SensorValidator::Validate(sensors, nullptr, K_CHANNEL_COUNT, K_CHANNEL_COUNT);
     } catch(const std::invalid_argument& e) {
         return e.what();
     }
@@ -147,7 +147,7 @@ CanbusConfiguration MakeCanbusConfiguration() {
     signal.SetName("rpm");
     message->signal_configurations.emplace_back(std::move(signal));
 
-    channel.message_configurations.emplace_back(std::move(message));
+    channel.message_configurations.emplace_back(message);
     configuration.channel_configurations.emplace(0, std::move(channel));
 
     return configuration;
@@ -245,17 +245,17 @@ ZTEST(sensor_validator, test_duplicate_sensor_ids_are_rejected) {
 
 ZTEST(sensor_validator, test_sensor_id_hash_collisions_are_rejected) {
     // Readings are keyed by the 32-bit hash; these two IDs collide on it.
-    constexpr std::string_view first = "sensor_28093";
-    constexpr std::string_view second = "sensor_39328";
-    zassert_equal(StringHelpers::GetHash(first), StringHelpers::GetHash(second), "Test IDs must collide");
+    constexpr std::string_view FIRST = "sensor_28093";
+    constexpr std::string_view SECOND = "sensor_39328";
+    zassert_equal(StringHelpers::GetHash(FIRST), StringHelpers::GetHash(SECOND), "Test IDs must collide");
 
     const auto error = Validate(
-        { MakeSensor(first, SensorType::USER_ANALOG, 100), MakeSensor(second, SensorType::USER_ANALOG, 100) }
+        { MakeSensor(FIRST, SensorType::USER_ANALOG, 100), MakeSensor(SECOND, SensorType::USER_ANALOG, 100) }
     );
 
     zassert_true(Contains(error, "hash collides"));
-    zassert_true(Contains(error, first));
-    zassert_true(Contains(error, second));
+    zassert_true(Contains(error, FIRST));
+    zassert_true(Contains(error, SECOND));
 }
 
 ZTEST(sensor_validator, test_invalid_sensor_id_message_names_the_sensor) {
@@ -380,13 +380,13 @@ ZTEST(sensor_validator, test_calibration_table_holds_at_most_50_finite_points_wi
     calibration_table.push_back({ .voltage = 10.0F, .value = 50.0F });
     AssertRejection(Validate({ analog }), Rejected("analog", "Calibration table must have at most 50 points."));
 
-    constexpr float nan = std::numeric_limits<float>::quiet_NaN();
-    constexpr float infinity = std::numeric_limits<float>::infinity();
+    constexpr float NAN = std::numeric_limits<float>::quiet_NaN();
+    constexpr float INFINITY = std::numeric_limits<float>::infinity();
 
-    calibration_table = { { 0.0F, 0.0F }, { nan, 1.0F } };
+    calibration_table = { { 0.0F, 0.0F }, { NAN, 1.0F } };
     AssertRejection(Validate({ analog }), Rejected("analog", "Calibration table must hold finite numbers."));
 
-    calibration_table = { { 0.0F, 0.0F }, { 1.0F, -infinity } };
+    calibration_table = { { 0.0F, 0.0F }, { 1.0F, -INFINITY } };
     AssertRejection(Validate({ analog }), Rejected("analog", "Calibration table must hold finite numbers."));
 
     // A repeated voltage need not be next to the first one: the table is ordered only after validation.
@@ -475,6 +475,7 @@ ZTEST(sensor_validator, test_metadata_error_names_the_sensor) {
 
 ZTEST(sensor_validator, test_sensor_count_limit) {
     std::vector<std::shared_ptr<Sensor>> sensors;
+    sensors.reserve(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT);
     for(int i = 0; i < CONFIG_EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT; i++)
         sensors.push_back(MakeSensor("sensor_" + std::to_string(i), SensorType::USER_ANALOG, 100));
 
@@ -617,6 +618,7 @@ ZTEST(sensor_validator, test_a_disabled_sensor_is_validated_like_an_enabled_one)
 // A disabled sensor keeps its slot in the readings frame.
 ZTEST(sensor_validator, test_disabled_sensors_count_toward_the_sensor_limit) {
     std::vector<std::shared_ptr<Sensor>> sensors;
+    sensors.reserve(CONFIG_EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT);
     for(int i = 0; i < CONFIG_EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT; i++)
         sensors.push_back(MakeSensor("sensor_" + std::to_string(i), SensorType::USER_ANALOG, 100));
 
@@ -774,7 +776,7 @@ std::optional<std::string> ValidateScriptOn(ScriptCard& card, std::string_view s
     sensor->configuration.script_path = script_path;
 
     try {
-        SensorValidator::Validate({ sensor }, &card, kChannelCount, kChannelCount);
+        SensorValidator::Validate({ sensor }, &card, K_CHANNEL_COUNT, K_CHANNEL_COUNT);
     } catch(const std::invalid_argument& e) {
         return e.what();
     }

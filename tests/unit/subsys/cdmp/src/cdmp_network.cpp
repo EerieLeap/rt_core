@@ -164,9 +164,17 @@ struct NetworkFixture {
         });
     }
 
+    NetworkFixture(const NetworkFixture&) = delete;
+    NetworkFixture& operator=(const NetworkFixture&) = delete;
+    NetworkFixture(NetworkFixture&&) = delete;
+    NetworkFixture& operator=(NetworkFixture&&) = delete;
+
     ~NetworkFixture() {
-        if(canbus != nullptr)
-            (*canbus)->RemoveFrameReceivedHandler(bus_handler_id);
+        // Get() instead of operator->, which throws when the proxy holds no instance.
+        if(canbus != nullptr) {
+            if(Canbus* live_bus = canbus->Get(); live_bus != nullptr)
+                live_bus->RemoveFrameReceivedHandler(bus_handler_id);
+        }
 
         // Queued work must run while the service exists; after the stop it does nothing.
         service.Stop();
@@ -231,7 +239,7 @@ struct NetworkFixture {
 
     /** @brief Returns once the work queued so far has run. */
     void DrainQueue() {
-        k_sem done;
+        k_sem done{};
         k_sem_init(&done, 0, 1);
         work_queue->Run([&done] {
             k_sem_give(&done);
@@ -807,7 +815,7 @@ ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {
     zassert_equal(fixture.events.size(), 1);
 
     // Hold the queue, so the next frame waits behind it until after the stop.
-    k_sem release;
+    k_sem release{};
     k_sem_init(&release, 0, 1);
     fixture.work_queue->Run([&release] {
         k_sem_take(&release, K_FOREVER);

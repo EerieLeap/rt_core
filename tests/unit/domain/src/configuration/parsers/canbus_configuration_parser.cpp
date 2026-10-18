@@ -18,7 +18,7 @@ using namespace eerie_leap::domain::canbus_domain::configuration::parsers;
 
 ZTEST_SUITE(canbus_configuration_parser, NULL, NULL, NULL, NULL, NULL);
 
-static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
+static CanbusConfiguration CanbusConfigurationParserGetTestConfiguration() {
     CanbusConfiguration canbus_configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     CanChannelConfiguration channel_configuration_0(std::allocator_arg, Mrm::GetDefaultPmr());
     channel_configuration_0.type = CanbusType::CLASSICAL_CAN;
@@ -55,7 +55,7 @@ static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     signal_configuration_0_0_1.unit = "kmh";
     message_configuration_0_0->signal_configurations.emplace_back(std::move(signal_configuration_0_0_1));
 
-    channel_configuration_0.message_configurations.emplace_back(std::move(message_configuration_0_0));
+    channel_configuration_0.message_configurations.emplace_back(message_configuration_0_0);
 
     const auto message_configuration_0_1 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
@@ -65,7 +65,7 @@ static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_0_1->name = "EL_FRAME_1";
     message_configuration_0_1->message_size = 8;
     message_configuration_0_1->send_interval_ms = 200;
-    channel_configuration_0.message_configurations.emplace_back(std::move(message_configuration_0_1));
+    channel_configuration_0.message_configurations.emplace_back(message_configuration_0_1);
 
     CanChannelConfiguration channel_configuration_1(std::allocator_arg, Mrm::GetDefaultPmr());
     channel_configuration_1.type = CanbusType::CLASSICAL_CAN;
@@ -79,7 +79,7 @@ static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_1_0->name = "EL_FRAME_0";
     message_configuration_1_0->message_size = 8;
     message_configuration_1_0->send_interval_ms = 100;
-    channel_configuration_1.message_configurations.emplace_back(std::move(message_configuration_1_0));
+    channel_configuration_1.message_configurations.emplace_back(message_configuration_1_0);
 
     const auto message_configuration_1_1 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
@@ -88,7 +88,7 @@ static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_1_1->name = "EL_FRAME_1";
     message_configuration_1_1->message_size = 8;
     message_configuration_1_1->send_interval_ms = 200;
-    channel_configuration_1.message_configurations.emplace_back(std::move(message_configuration_1_1));
+    channel_configuration_1.message_configurations.emplace_back(message_configuration_1_1);
 
     const auto message_configuration_1_2 = std::make_shared<CanMessageConfiguration>(
         std::allocator_arg, Mrm::GetDefaultPmr()
@@ -98,7 +98,7 @@ static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     message_configuration_1_2->name = "EL_FRAME_2";
     message_configuration_1_2->message_size = 8;
     message_configuration_1_2->send_interval_ms = 300;
-    channel_configuration_1.message_configurations.emplace_back(std::move(message_configuration_1_2));
+    channel_configuration_1.message_configurations.emplace_back(message_configuration_1_2);
 
     CanChannelConfiguration channel_configuration_2(std::allocator_arg, Mrm::GetDefaultPmr());
     channel_configuration_2.type = CanbusType::CANFD;
@@ -123,7 +123,7 @@ static CanbusConfiguration canbus_configuration_parser_GetTestConfiguration() {
     return canbus_configuration;
 }
 
-static void canbus_configuration_parser_CompareCanbusConfigurations(
+static void CanbusConfigurationParserCompareCanbusConfigurations(
     CanbusConfiguration& canbus_configuration,
     CanbusConfiguration& deserialized_configuration
 ) {
@@ -192,20 +192,20 @@ static void canbus_configuration_parser_CompareCanbusConfigurations(
 ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    auto canbus_configuration = CanbusConfigurationParserGetTestConfiguration();
 
     const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
     auto deserialized_canbus_configuration = canbus_configuration_cbor_parser.Deserialize(
         Mrm::GetDefaultPmr(), *serialized_canbus_configuration
     );
 
-    canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
+    CanbusConfigurationParserCompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
 }
 
 ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_without_com_channel) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    auto canbus_configuration = CanbusConfigurationParserGetTestConfiguration();
     canbus_configuration.com_configuration = {};
 
     const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
@@ -214,13 +214,13 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_without_com_cha
     );
 
     zassert_false(deserialized_canbus_configuration->com_configuration.bus_channel.has_value());
-    canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
+    CanbusConfigurationParserCompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
 }
 
 ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_com_channel_out_of_range) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    const auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    const auto canbus_configuration = CanbusConfigurationParserGetTestConfiguration();
     auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     // Channel 0 is configured, which 256 must not wrap to.
@@ -237,7 +237,7 @@ ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_com_channel_ou
 ZTEST(canbus_configuration_parser, test_CborDeserialize_rejects_a_channel_out_of_range) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    const auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    const auto canbus_configuration = CanbusConfigurationParserGetTestConfiguration();
     auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     // 258 would wrap to channel 2, the one it replaces.
@@ -314,7 +314,7 @@ std::vector<uint8_t> EncodeSingleMessageConfiguration(bool has_is_enabled, bool 
 ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_keeps_enabled_and_disabled_messages) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    const auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    const auto canbus_configuration = CanbusConfigurationParserGetTestConfiguration();
 
     const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
@@ -343,7 +343,7 @@ ZTEST(canbus_configuration_parser, test_CborSerializeDeserialize_keeps_enabled_a
 ZTEST(canbus_configuration_parser, test_CborEncodeDecode_keeps_enabled_and_disabled_messages) {
     CanbusConfigurationCborParser canbus_configuration_cbor_parser(nullptr);
 
-    auto canbus_configuration = canbus_configuration_parser_GetTestConfiguration();
+    auto canbus_configuration = CanbusConfigurationParserGetTestConfiguration();
     const auto serialized_canbus_configuration = canbus_configuration_cbor_parser.Serialize(canbus_configuration);
 
     std::vector<uint8_t> payload(2048);
@@ -361,7 +361,7 @@ ZTEST(canbus_configuration_parser, test_CborEncodeDecode_keeps_enabled_and_disab
         Mrm::GetDefaultPmr(), decoded_config
     );
 
-    canbus_configuration_parser_CompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
+    CanbusConfigurationParserCompareCanbusConfigurations(canbus_configuration, *deserialized_canbus_configuration);
 }
 
 ZTEST(canbus_configuration_parser, test_CborDecode_reads_is_enabled_after_the_frame_id) {

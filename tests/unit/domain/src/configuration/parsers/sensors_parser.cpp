@@ -34,7 +34,7 @@ using namespace eerie_leap::utilities::voltage_interpolator;
 
 ZTEST_SUITE(sensors_parser, NULL, NULL, NULL, NULL, NULL);
 
-static std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
+static std::vector<std::shared_ptr<Sensor>> SensorsParserGetTestSensors() {
     const std::pmr::vector<CalibrationData> calibration_data_1{ { 0.0, 0.0 }, { 3.3, 100.0 } };
     const auto calibration_data_1_ptr = std::make_shared<std::pmr::vector<CalibrationData>>(calibration_data_1);
 
@@ -97,7 +97,7 @@ static std::vector<std::shared_ptr<Sensor>> sensors_parser_GetTestSensors() {
     return sensors;
 }
 
-static void sensors_parser_CompareSensors(
+static void SensorsParserCompareSensors(
     std::vector<std::shared_ptr<Sensor>>& sensors,
     std::vector<std::shared_ptr<Sensor>>& deserialized_sensors
 ) {
@@ -149,18 +149,18 @@ static void sensors_parser_CompareSensors(
 ZTEST(sensors_parser, test_CborSerializeDeserialize) {
     const auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
 
-    auto sensors = sensors_parser_GetTestSensors();
+    auto sensors = SensorsParserGetTestSensors();
 
     const auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
     auto deserialized_sensors = sensors_cbor_parser->Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
 
-    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
 }
 
 ZTEST(sensors_parser, test_Deserialize_orders_an_unordered_calibration_table) {
     const auto sensors_cbor_parser = std::make_shared<SensorsCborParser>(nullptr);
 
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
     auto serialized_sensors = sensors_cbor_parser->Serialize(sensors, 16, 16);
 
     for(auto& sensor_config : serialized_sensors->CborSensorConfig_m)
@@ -203,7 +203,7 @@ bool HasFivePointTable(const CborSensorConfig& sensor_config) {
 
 ZTEST(sensors_parser, test_Deserialize_refuses_a_non_finite_voltage_before_ordering_the_table) {
     SensorsCborParser parser(nullptr);
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
     auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
@@ -221,7 +221,7 @@ ZTEST(sensors_parser, test_Deserialize_refuses_a_non_finite_voltage_before_order
 
 ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_voltage) {
     SensorsCborParser parser(nullptr);
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
     auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
@@ -269,7 +269,7 @@ ZTEST(sensors_parser, test_Deserialize_reads_the_connection_string_strictly) {
 
 ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_sensor_id) {
     SensorsCborParser parser(nullptr);
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
     // sensor_4 stored as a second sensor_1, which ordering the sensors would drop.
@@ -284,7 +284,7 @@ ZTEST(sensors_parser, test_Deserialize_refuses_a_repeated_sensor_id) {
 
 ZTEST(sensors_parser, test_Deserialize_names_the_sensor_whose_expression_is_wrong) {
     SensorsCborParser parser(nullptr);
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
     auto& sensor_configs = serialized_sensors->CborSensorConfig_m;
 
@@ -318,17 +318,17 @@ size_t OffsetAfterTstr(std::span<const uint8_t> bytes, std::string_view text) {
     encoded.push_back(static_cast<uint8_t>(0x60 + text.size()));
     encoded.insert(encoded.end(), text.begin(), text.end());
 
-    const auto found = std::search(bytes.begin(), bytes.end(), encoded.begin(), encoded.end());
-    zassert_true(found != bytes.end(), "%s is not encoded", std::string(text).c_str());
+    const auto found = std::ranges::search(bytes, encoded);
+    zassert_true(!found.empty(), "%s is not encoded", std::string(text).c_str());
 
-    return static_cast<size_t>(found - bytes.begin()) + encoded.size();
+    return static_cast<size_t>(found.begin() - bytes.begin()) + encoded.size();
 }
 
 } // namespace
 
 ZTEST(sensors_parser, test_is_enabled_survives_Serialize_and_Deserialize) {
     SensorsCborParser parser(nullptr);
-    auto sensors = sensors_parser_GetTestSensors();
+    auto sensors = SensorsParserGetTestSensors();
 
     // sensor_3 reads the enabled sensor_1; nothing reads sensor_4.
     sensors[2]->is_enabled = false;
@@ -342,13 +342,13 @@ ZTEST(sensors_parser, test_is_enabled_survives_Serialize_and_Deserialize) {
     zassert_false(sensor_configs[3].is_enabled);
 
     auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
-    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
 }
 
 ZTEST(sensors_parser, test_is_enabled_survives_a_round_trip_through_cbor_bytes) {
     SensorsCborParser parser(nullptr);
     CborSerializer<CborSensorsConfig> serializer;
-    auto sensors = sensors_parser_GetTestSensors();
+    auto sensors = SensorsParserGetTestSensors();
     sensors[3]->is_enabled = false;
 
     const auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
@@ -358,13 +358,13 @@ ZTEST(sensors_parser, test_is_enabled_survives_a_round_trip_through_cbor_bytes) 
     zassert_not_null(decoded.get());
 
     auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded, 16, 16);
-    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
 }
 
 ZTEST(sensors_parser, test_is_enabled_follows_the_id_and_cannot_be_left_out) {
     SensorsCborParser parser(nullptr);
     CborSerializer<CborSensorsConfig> serializer;
-    auto sensors = sensors_parser_GetTestSensors();
+    auto sensors = SensorsParserGetTestSensors();
     sensors[3]->is_enabled = false;
 
     auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
@@ -381,7 +381,7 @@ ZTEST(sensors_parser, test_is_enabled_follows_the_id_and_cannot_be_left_out) {
 
 ZTEST(sensors_parser, test_Deserialize_refuses_an_expression_that_reads_a_disabled_sensor) {
     SensorsCborParser parser(nullptr);
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
     // sensor_1 reads sensor_2; the stored flag is read before the configuration is validated.
@@ -398,8 +398,8 @@ namespace {
 
 // A debounced switch with neither of the optional fields before the conditioning, so the decoder
 // goes from script_path straight to debounce_ms, and a debounced derived indicator.
-std::vector<std::shared_ptr<Sensor>> sensors_parser_GetConditionedSensors() {
-    auto sensors = sensors_parser_GetTestSensors();
+std::vector<std::shared_ptr<Sensor>> SensorsParserGetConditionedSensors() {
+    auto sensors = SensorsParserGetTestSensors();
 
     auto button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "button");
     button->configuration.type = SensorType::PHYSICAL_INDICATOR;
@@ -421,6 +421,7 @@ std::vector<std::shared_ptr<Sensor>> sensors_parser_GetConditionedSensors() {
 const CborSensorConfig& FindSensorConfig(const CborSensorsConfig& sensors_config, std::string_view sensor_id) {
     const auto& sensor_configs = sensors_config.CborSensorConfig_m;
     const auto sensor_config = std::ranges::find_if(sensor_configs, [sensor_id](const CborSensorConfig& candidate) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
         return std::string_view(reinterpret_cast<const char*>(candidate.id.value), candidate.id.len) == sensor_id;
     });
     zassert_true(sensor_config != sensor_configs.end(), "%s is not serialized", std::string(sensor_id).c_str());
@@ -432,7 +433,7 @@ const CborSensorConfig& FindSensorConfig(const CborSensorsConfig& sensors_config
 
 ZTEST(sensors_parser, test_conditioning_survives_Serialize_and_Deserialize) {
     SensorsCborParser parser(nullptr);
-    auto sensors = sensors_parser_GetConditionedSensors();
+    auto sensors = SensorsParserGetConditionedSensors();
 
     const auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
@@ -449,13 +450,13 @@ ZTEST(sensors_parser, test_conditioning_survives_Serialize_and_Deserialize) {
     zassert_equal(analog.input_mode, 0);
 
     auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
-    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
 }
 
 ZTEST(sensors_parser, test_conditioning_survives_a_round_trip_through_cbor_bytes) {
     SensorsCborParser parser(nullptr);
     CborSerializer<CborSensorsConfig> serializer;
-    auto sensors = sensors_parser_GetConditionedSensors();
+    auto sensors = SensorsParserGetConditionedSensors();
 
     const auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
     zassert_false(bytes.empty(), "The size calculation must count the conditioning");
@@ -464,13 +465,13 @@ ZTEST(sensors_parser, test_conditioning_survives_a_round_trip_through_cbor_bytes
     zassert_not_null(decoded.get());
 
     auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded, 16, 16);
-    sensors_parser_CompareSensors(sensors, deserialized_sensors);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
 }
 
 ZTEST(sensors_parser, test_a_sensor_built_in_code_encodes_the_default_conditioning) {
     SensorsCborParser parser(nullptr);
     CborSerializer<CborSensorsConfig> serializer;
-    const auto sensors = sensors_parser_GetTestSensors();
+    const auto sensors = SensorsParserGetTestSensors();
 
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
     for(const auto& sensor_config : serialized_sensors->CborSensorConfig_m) {
@@ -490,7 +491,7 @@ ZTEST(sensors_parser, test_a_sensor_built_in_code_encodes_the_default_conditioni
 ZTEST(sensors_parser, test_conditioning_cannot_be_left_out) {
     SensorsCborParser parser(nullptr);
     CborSerializer<CborSensorsConfig> serializer;
-    auto sensors = sensors_parser_GetConditionedSensors();
+    auto sensors = SensorsParserGetConditionedSensors();
 
     // A debounce that encodes to bytes found nowhere else.
     const auto button = std::ranges::find_if(sensors, [](const auto& sensor) {
@@ -514,10 +515,11 @@ ZTEST(sensors_parser, test_conditioning_cannot_be_left_out) {
 ZTEST(sensors_parser, test_Deserialize_refuses_an_unknown_input_mode) {
     SensorsCborParser parser(nullptr);
     // The CBOR strings point into the sensors.
-    const auto sensors = sensors_parser_GetConditionedSensors();
+    const auto sensors = SensorsParserGetConditionedSensors();
     auto serialized_sensors = parser.Serialize(sensors, 16, 16);
 
     for(auto& sensor_config : serialized_sensors->CborSensorConfig_m) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
         if(std::string_view(reinterpret_cast<const char*>(sensor_config.id.value), sensor_config.id.len) == "button")
             sensor_config.configuration.input_mode = 7;
     }

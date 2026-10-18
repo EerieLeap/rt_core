@@ -13,11 +13,12 @@ namespace rt_core_test {
 
 namespace allocation_counter_detail {
 
-std::atomic<size_t> allocation_count{ 0 };
+inline std::atomic<size_t> allocation_count{ 0 };
 
-void* CountedAllocate(size_t size) {
+inline void* CountedAllocate(size_t size) {
     allocation_count.fetch_add(1, std::memory_order_relaxed);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc): the replacement operator new has to allocate raw memory
     void* pointer = std::malloc(size == 0 ? 1 : size);
     if(pointer == nullptr)
         throw std::bad_alloc();
@@ -25,21 +26,24 @@ void* CountedAllocate(size_t size) {
     return pointer;
 }
 
-void* CountedAllocate(size_t size, const std::nothrow_t&) noexcept {
+inline void* CountedAllocate(size_t size, const std::nothrow_t&) noexcept {
     allocation_count.fetch_add(1, std::memory_order_relaxed);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc): the replacement operator new has to allocate raw memory
     return std::malloc(size == 0 ? 1 : size);
 }
 
 } // namespace allocation_counter_detail
 
 /** Allocations through operator new since the program started. */
-size_t GetAllocationCount() {
+inline size_t GetAllocationCount() {
     return allocation_counter_detail::allocation_count.load(std::memory_order_relaxed);
 }
 
 } // namespace rt_core_test
 
+// NOLINTBEGIN(misc-definitions-in-headers, cppcoreguidelines-no-malloc): replacement allocation functions cannot be
+// inline and must wrap malloc/free; exactly one translation unit per test binary includes this header (see above)
 void* operator new(size_t size) {
     return rt_core_test::allocation_counter_detail::CountedAllocate(size);
 }
@@ -64,3 +68,4 @@ void operator delete(void* pointer, size_t) noexcept {
 void operator delete[](void* pointer, size_t) noexcept {
     std::free(pointer);
 }
+// NOLINTEND(misc-definitions-in-headers, cppcoreguidelines-no-malloc)

@@ -44,10 +44,10 @@ using eerie_leap::utilities::memory::Mrm;
 
 namespace {
 
-constexpr uint8_t kBus = 0;
-constexpr uint32_t kEnabledFrameId = 0x100;
-constexpr uint32_t kDisabledFrameId = 0x200;
-constexpr int kSendIntervalMs = 10;
+constexpr uint8_t K_BUS = 0;
+constexpr uint32_t ENABLED_FRAME_ID = 0x100;
+constexpr uint32_t DISABLED_FRAME_ID = 0x200;
+constexpr int SEND_INTERVAL_MS = 10;
 
 const device* LoopbackDevice() {
     return DEVICE_DT_GET(DT_NODELABEL(can_loopback0));
@@ -80,7 +80,7 @@ std::shared_ptr<CanMessageConfiguration> MakeMessage(uint32_t frame_id, std::str
     message->is_enabled = is_enabled;
     message->name = name;
     message->message_size = 8;
-    message->send_interval_ms = kSendIntervalMs;
+    message->send_interval_ms = SEND_INTERVAL_MS;
 
     return message;
 }
@@ -91,11 +91,11 @@ CanbusConfiguration MakeConfiguration() {
 
     CanChannelConfiguration channel(std::allocator_arg, Mrm::GetDefaultPmr());
     channel.type = CanbusType::CLASSICAL_CAN;
-    channel.bus_channel = kBus;
+    channel.bus_channel = K_BUS;
     channel.bitrate = 500000;
-    channel.message_configurations.push_back(MakeMessage(kEnabledFrameId, "EL_FRAME_0", true));
-    channel.message_configurations.push_back(MakeMessage(kDisabledFrameId, "EL_FRAME_1", false));
-    configuration.channel_configurations.emplace(kBus, std::move(channel));
+    channel.message_configurations.push_back(MakeMessage(ENABLED_FRAME_ID, "EL_FRAME_0", true));
+    channel.message_configurations.push_back(MakeMessage(DISABLED_FRAME_ID, "EL_FRAME_1", false));
+    configuration.channel_configurations.emplace(K_BUS, std::move(channel));
 
     return configuration;
 }
@@ -145,11 +145,11 @@ ZTEST(disabled_can_message, test_a_disabled_message_is_stored_and_reloaded_as_di
     const auto reloaded = manager->Get(true);
     zassert_not_null(reloaded.get());
 
-    const auto& messages = reloaded->channel_configurations.at(kBus).message_configurations;
+    const auto& messages = reloaded->channel_configurations.at(K_BUS).message_configurations;
     zassert_equal(messages.size(), 2);
     zassert_true(messages.at(0)->is_enabled);
     zassert_false(messages.at(1)->is_enabled);
-    zassert_equal(messages.at(1)->send_interval_ms, kSendIntervalMs, "A disabled message keeps its send interval");
+    zassert_equal(messages.at(1)->send_interval_ms, SEND_INTERVAL_MS, "A disabled message keeps its send interval");
 
     // What a client exports carries the flag too.
     CborSerializer<CborCanbusConfig> serializer;
@@ -165,18 +165,18 @@ ZTEST(disabled_can_message, test_a_disabled_message_is_stored_and_reloaded_as_di
 ZTEST(disabled_can_message, test_the_script_of_a_disabled_message_is_not_loaded) {
     const auto fs_service = MakeFormattedFsService();
 
-    static constexpr std::string_view script = "function process_can_frame(frame_id, data) return data end";
-    zassert_true(fs_service->WriteFile("frame.lua", script.data(), script.size()));
+    static constexpr std::string_view SCRIPT = "function process_can_frame(frame_id, data) return data end";
+    zassert_true(fs_service->WriteFile("frame.lua", SCRIPT.data(), SCRIPT.size()));
 
     auto configuration = MakeConfiguration();
-    for(const auto& message : configuration.channel_configurations.at(kBus).message_configurations)
+    for(const auto& message : configuration.channel_configurations.at(K_BUS).message_configurations)
         message->script_path = "frame.lua";
 
     CanbusConfigurationCborParser parser(fs_service);
     const auto cbor_config = parser.Serialize(configuration);
     auto parsed = parser.Deserialize(Mrm::GetDefaultPmr(), *cbor_config);
 
-    const auto& messages = parsed->channel_configurations.at(kBus).message_configurations;
+    const auto& messages = parsed->channel_configurations.at(K_BUS).message_configurations;
     zassert_not_null(messages.at(0)->lua_script.get(), "The enabled message loads its script");
     zassert_is_null(messages.at(1)->lua_script.get(), "A disabled message never sends, so its script is not loaded");
     zassert_true(messages.at(1)->script_path == "frame.lua", "A disabled message keeps its script path");
@@ -189,22 +189,22 @@ ZTEST(disabled_can_message, test_the_scheduler_does_not_send_a_disabled_message)
     const auto configuration_manager = MakeConfigurationManager(MakeFormattedFsService());
     const auto canbus_service = std::make_shared<CanbusService>(
         [](uint8_t bus_channel) {
-            return bus_channel == kBus ? LoopbackDevice() : nullptr;
+            return bus_channel == K_BUS ? LoopbackDevice() : nullptr;
         },
         configuration_manager
     );
 
-    const auto canbus = canbus_service->GetCanbus(kBus);
+    const auto canbus = canbus_service->GetCanbus(K_BUS);
     zassert_not_null(canbus.get(), "The channel is open");
     SwitchToLoopbackMode();
 
     const int enabled_handler_id = (*canbus)->RegisterFrameReceivedHandler(
-        CanId::Standard(kEnabledFrameId), [&enabled_frames](const CanFrame&) {
+        CanId::Standard(ENABLED_FRAME_ID), [&enabled_frames](const CanFrame&) {
             enabled_frames.Count();
         }
     );
     const int disabled_handler_id = (*canbus)->RegisterFrameReceivedHandler(
-        CanId::Standard(kDisabledFrameId), [&disabled_frames](const CanFrame&) {
+        CanId::Standard(DISABLED_FRAME_ID), [&disabled_frames](const CanFrame&) {
             disabled_frames.Count();
         }
     );
@@ -220,7 +220,7 @@ ZTEST(disabled_can_message, test_the_scheduler_does_not_send_a_disabled_message)
     // Both tasks would start together with the same interval, and frames come back in the order they
     // were sent, so a disabled message that was sent shows up before the third enabled frame.
     for(int i = 0; i < 3; i++)
-        zassert_true(enabled_frames.Wait(1000), "The enabled message is sent every %d ms", kSendIntervalMs);
+        zassert_true(enabled_frames.Wait(1000), "The enabled message is sent every %d ms", SEND_INTERVAL_MS);
 
     zassert_equal(disabled_frames.GetCount(), 0, "The disabled message was sent");
 

@@ -68,9 +68,9 @@ ZTEST(string_helpers, test_GetHash_distinguishes_inputs) {
 
 ZTEST(string_helpers, test_GetHash_is_length_delimited) {
     // The view length, not a terminator, determines what is hashed.
-    static constexpr char kPayload[] = "sensor_1_extra";
+    static constexpr char PAYLOAD[] = "sensor_1_extra";
 
-    zassert_equal(StringHelpers::GetHash(std::string_view(kPayload, 8)), StringHelpers::GetHash("sensor_1"));
+    zassert_equal(StringHelpers::GetHash(std::string_view(PAYLOAD, 8)), StringHelpers::GetHash("sensor_1"));
 }
 
 ZTEST(string_helpers, test_UInt16ToStaticString) {

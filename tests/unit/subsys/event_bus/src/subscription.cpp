@@ -21,9 +21,9 @@ namespace {
 using TestEvent = Event<TestEventType, TestPayloadType>;
 using TestSubscription = Subscription<TestEventType, TestPayloadType>;
 
-constexpr uint32_t k_source_one = 0xA001;
-constexpr uint32_t k_source_two = 0xA002;
-constexpr uint32_t k_source_three = 0xA003;
+constexpr uint32_t SOURCE_ONE = 0xA001;
+constexpr uint32_t SOURCE_TWO = 0xA002;
+constexpr uint32_t SOURCE_THREE = 0xA003;
 
 struct SourceFilter {
     uint32_t source_id;
@@ -51,10 +51,10 @@ ZTEST(event_bus_subscription, test_a_subscription_keeps_its_id_and_event_type) {
 }
 
 ZTEST(event_bus_subscription, test_a_subscription_erases_the_filter_type_but_keeps_its_behaviour) {
-    const TestSubscription subscription(1, TestEventType::Alpha, SourceFilter{ k_source_one }, [](const TestEvent&) {});
+    const TestSubscription subscription(1, TestEventType::Alpha, SourceFilter{ SOURCE_ONE }, [](const TestEvent&) {});
 
-    zassert_true(subscription.filter(MakeEvent(TestEventType::Alpha, k_source_one)));
-    zassert_false(subscription.filter(MakeEvent(TestEventType::Alpha, k_source_two)));
+    zassert_true(subscription.filter(MakeEvent(TestEventType::Alpha, SOURCE_ONE)));
+    zassert_false(subscription.filter(MakeEvent(TestEventType::Alpha, SOURCE_TWO)));
 }
 
 ZTEST(event_bus_subscription, test_a_subscription_invokes_the_handler_with_the_event) {
@@ -69,8 +69,8 @@ ZTEST(event_bus_subscription, test_a_subscription_invokes_the_handler_with_the_e
         }
     );
 
-    subscription.handler(MakeEvent(TestEventType::Alpha, k_source_three));
+    subscription.handler(MakeEvent(TestEventType::Alpha, SOURCE_THREE));
 
     zassert_equal(calls, 1);
-    zassert_equal(observed_source, k_source_three);
+    zassert_equal(observed_source, SOURCE_THREE);
 }

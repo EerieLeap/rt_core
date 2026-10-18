@@ -102,27 +102,27 @@ ZTEST(cbor_size_calculator, test_SizeOfLength_boundaries) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfTstr) {
-    static constexpr char kShort[] = "abc";
-    static constexpr char kBoundary[] = "12345678901234567890123"; // 23 chars
-    static constexpr char kLong[] = "123456789012345678901234";    // 24 chars
+    static constexpr char K_SHORT[] = "abc";
+    static constexpr char BOUNDARY[] = "12345678901234567890123"; // 23 chars
+    static constexpr char K_LONG[] = "123456789012345678901234";  // 24 chars
 
-    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kShort)), 4);
-    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kBoundary)), 24);
-    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kLong)), 26);
+    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_SHORT)), 4);
+    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(BOUNDARY)), 24);
+    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_LONG)), 26);
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfTstr_empty) {
-    static constexpr char kEmpty[] = "";
+    static constexpr char K_EMPTY[] = "";
 
-    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kEmpty)), 1);
+    zassert_equal(CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_EMPTY)), 1);
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfTstr_matches_zcbor) {
-    static constexpr char kShort[] = "abc";
-    static constexpr char kBoundary[] = "12345678901234567890123";
-    static constexpr char kLong[] = "123456789012345678901234";
+    static constexpr char K_SHORT[] = "abc";
+    static constexpr char BOUNDARY[] = "12345678901234567890123";
+    static constexpr char K_LONG[] = "123456789012345678901234";
 
-    const char* values[] = { "", kShort, kBoundary, kLong };
+    const char* values[] = { "", K_SHORT, BOUNDARY, K_LONG };
 
     for(const char* value : values) {
         auto zstr = CborHelpers::ToZcborString(value);
@@ -208,13 +208,13 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfIndefiniteArray_matches_zcbor) {
-    static constexpr char kName[] = "sensor_1";
+    static constexpr char K_NAME[] = "sensor_1";
 
     const size_t expected = CborSizeCalc::SizeOfIndefiniteArrayStart() + CborSizeCalc::SizeOfUint(42)
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kName)) + CborSizeCalc::SizeOfBool(true);
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_NAME)) + CborSizeCalc::SizeOfBool(true);
 
     const size_t encoded = EncodedSize([](zcbor_state_t* state) {
-        const auto name = CborHelpers::ToZcborString(kName);
+        const auto name = CborHelpers::ToZcborString(K_NAME);
         return zcbor_list_start_encode(state, 3)
             && zcbor_uint64_put(state, 42)
             && zcbor_tstr_encode(state, &name)
@@ -238,16 +238,16 @@ ZTEST(cbor_size_calculator, test_SizeOfIndefiniteMapMarkers) {
 }
 
 ZTEST(cbor_size_calculator, test_SizeOfIndefiniteMap_matches_zcbor) {
-    static constexpr char kKey[] = "unit";
-    static constexpr char kValue[] = "celsius";
+    static constexpr char K_KEY[] = "unit";
+    static constexpr char K_VALUE[] = "celsius";
 
     const size_t expected = CborSizeCalc::SizeOfIndefiniteMapStart()
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kKey))
-        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(kValue));
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_KEY))
+        + CborSizeCalc::SizeOfTstr(CborHelpers::ToZcborString(K_VALUE));
 
     const size_t encoded = EncodedSize([](zcbor_state_t* state) {
-        const auto key = CborHelpers::ToZcborString(kKey);
-        const auto value = CborHelpers::ToZcborString(kValue);
+        const auto key = CborHelpers::ToZcborString(K_KEY);
+        const auto value = CborHelpers::ToZcborString(K_VALUE);
         return zcbor_map_start_encode(state, 1)
             && zcbor_tstr_encode(state, &key)
             && zcbor_tstr_encode(state, &value)

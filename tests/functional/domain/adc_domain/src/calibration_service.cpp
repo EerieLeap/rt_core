@@ -28,9 +28,9 @@ ZTEST_SUITE(calibration_service, NULL, NULL, NULL, NULL, NULL);
 namespace {
 
 // vref 3300 mV, gain 1, 12 bits on the overlay's first emulated ADC.
-constexpr float kEmulLsbVolts = 3.3F / 4096.0F;
+constexpr float EMUL_LSB_VOLTS = 3.3F / 4096.0F;
 // adc_emul truncates mV × 4095 / 3300 to a whole count, so a constant input lands up to ~1.3 LSB low.
-constexpr float kEmulTolerance = 2.0F * kEmulLsbVolts;
+constexpr float EMUL_TOLERANCE = 2.0F * EMUL_LSB_VOLTS;
 
 // The overlay's first emulated ADC, every channel back on a constant so a value function a
 // previous test installed is never called.
@@ -62,7 +62,7 @@ void DriveConstant(AdcEmulator& adc, int channel, uint32_t mv) {
 // Polls until a result newer than @p after_sequence exists.
 std::optional<CalibrationService::Result>
 WaitForResultAfter(const CalibrationService& service, uint32_t after_sequence) {
-    const int64_t end = k_uptime_get() + 10 * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS;
+    const int64_t end = k_uptime_get() + 10LL * CONFIG_EERIE_LEAP_ADC_CALIBRATION_SAMPLING_RATE_MS;
     while(k_uptime_get() < end) {
         const auto latest = service.GetLatest();
         if(latest.has_value() && latest->sequence > after_sequence)
@@ -106,7 +106,7 @@ ZTEST(calibration_service, test_Start_pauses_and_samples) {
     zassert_true(second->sequence > first->sequence);
     zassert_true(second->timestamp > first->timestamp);
     zassert_equal(second->error, AdcError::NONE);
-    zassert_within(second->adc_volts, 1.5F, kEmulTolerance);
+    zassert_within(second->adc_volts, 1.5F, EMUL_TOLERANCE);
     zassert_within(second->sensor_volts, AdcRange::Default().ToSensorVolts(second->adc_volts), 1e-6F);
 
     zassert_true(calibration_service.Stop());
