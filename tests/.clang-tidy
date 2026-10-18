@@ -4,11 +4,14 @@ InheritParentConfig: true
 Checks: >
   -misc-use-internal-linkage,
   -misc-use-anonymous-namespace,
+  -misc-const-correctness,
   -bugprone-unchecked-optional-access
 
 # 1. ZTEST() and ZTEST_SUITE() define functions and statistics with external linkage; that is how the
 #    test runner finds them.
-# 2. zassert_*() ends the test on failure, which the optional-access analysis cannot see, so every
+# 2. ZTEST() hands each test a void* fixture and zassert_*() declares a local per assertion: those
+#    are the const-correctness findings in tests, all inside Zephyr's macros.
+# 3. zassert_*() ends the test on failure, which the optional-access analysis cannot see, so every
 #    access after an assertion would be reported.
 
 CheckOptions:
