@@ -52,7 +52,7 @@ public:
         std::shared_ptr<CdmpNetworkService> network_service
     );
 
-    ~CdmpHeartbeatService();
+    ~CdmpHeartbeatService() override;
 
     // Heartbeat management
     void SetHeartbeatEnabled(bool enabled);

@@ -37,7 +37,7 @@ private:
 
 public:
     IdBlock();
-    virtual ~IdBlock() = default;
+    ~IdBlock() override = default;
 
     bool IsFinalized() const;
     /** Switches the file identifier between "MDF" and "UnFinMF"; clears the standard flags when finalizing. */

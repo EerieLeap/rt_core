@@ -216,7 +216,7 @@ public:
         std::shared_ptr<CdmpCommandService> command_service
     );
 
-    ~CdmpStateService();
+    ~CdmpStateService() override;
 
     /**
      * @brief Shares @p data as this unit's record of @p state_type, from any thread.

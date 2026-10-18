@@ -29,7 +29,7 @@ private:
 
 public:
     FileHistoryBlock();
-    virtual ~FileHistoryBlock();
+    ~FileHistoryBlock() override;
 
     void SetTimeNs(uint64_t time_ns);
     /** Rebuilds the FHcomment with the tool fields XML escaped. */

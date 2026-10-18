@@ -51,7 +51,7 @@ public:
     };
 
     FsServiceStreamBuf(IFsService* fs_service, const std::string_view relative_path, OpenMode mode);
-    ~FsServiceStreamBuf();
+    ~FsServiceStreamBuf() override;
 
     /** Flushes the put area and closes the file; true only when both succeeded. */
     bool close();

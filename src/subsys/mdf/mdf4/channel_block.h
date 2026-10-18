@@ -107,7 +107,7 @@ private:
 
 public:
     ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count);
-    virtual ~ChannelBlock();
+    ~ChannelBlock() override;
 
     Type GetType() const;
     DataType GetDataType() const;

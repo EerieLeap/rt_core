@@ -71,7 +71,7 @@ public:
      * @param uid Unique identifier of this unit, usually CdmpUid::Generate().
      */
     CdmpService(uint16_t features, uint32_t uid);
-    ~CdmpService();
+    ~CdmpService() override;
 
     /**
      * @brief Binds the services to a bus; only while stopped.

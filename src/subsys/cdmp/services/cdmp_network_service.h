@@ -179,7 +179,7 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread
     );
 
-    ~CdmpNetworkService();
+    ~CdmpNetworkService() override;
 
     void ProcessFrame(std::span<const uint8_t> frame_data);
 

@@ -102,7 +102,7 @@ public:
         std::span<const std::shared_ptr<Sensor>> sensors,
         const LoggerMetadata& metadata
     );
-    virtual ~Mdf4LoggerSensorReading() = default;
+    ~Mdf4LoggerSensorReading() override = default;
 
     const char* GetFileExtension() const override;
     bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) override;

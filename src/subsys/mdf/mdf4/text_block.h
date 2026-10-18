@@ -8,7 +8,7 @@ class TextBlock : public TextBlockBase {
 public:
     TextBlock() :
         TextBlockBase("TX") {}
-    virtual ~TextBlock() = default;
+    ~TextBlock() override = default;
 
     void SetText(const std::string& text) {
         text_ = text;

@@ -38,7 +38,7 @@ private:
 
 public:
     HeaderBlock();
-    virtual ~HeaderBlock() = default;
+    ~HeaderBlock() override = default;
 
     void SetCurrentTimeNs(uint64_t time_ns);
     void SetComment(std::shared_ptr<MetadataBlock> comment);

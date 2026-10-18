@@ -48,7 +48,7 @@ protected:
 public:
     CdmpCanbusServiceBase(std::shared_ptr<CdmpCanIdManager> can_id_manager, std::shared_ptr<CdmpDevice> device);
 
-    virtual ~CdmpCanbusServiceBase();
+    ~CdmpCanbusServiceBase() override;
 
     void Configure(std::shared_ptr<CanbusProxy> canbus) override;
 };

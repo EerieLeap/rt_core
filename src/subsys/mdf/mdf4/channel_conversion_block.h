@@ -113,7 +113,7 @@ private:
 
 public:
     explicit ChannelConversionBlock(ConversionType conversion_type);
-    virtual ~ChannelConversionBlock() = default;
+    ~ChannelConversionBlock() override = default;
 
     static std::shared_ptr<ChannelConversionBlock> CreateAlgebraicConversion(std::shared_ptr<TextBlock> formula);
 

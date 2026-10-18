@@ -31,7 +31,7 @@ private:
 
 public:
     DataGroupBlock(uint8_t record_id_size_bytes);
-    virtual ~DataGroupBlock();
+    ~DataGroupBlock() override;
 
     uint8_t GetRecordIdSizeBytes() const;
     std::shared_ptr<DataBlock> GetDataBlock() const;

@@ -39,7 +39,7 @@ private:
 
 public:
     SdmmcService(fs_mount_t* mountpoint, const char* disk_name);
-    ~SdmmcService();
+    ~SdmmcService() override;
 
     bool Initialize() override;
     void RegisterIsSdCardPresentHandler(std::function<bool()> handler);

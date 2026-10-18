@@ -17,7 +17,7 @@ public:
         is_start_ = data[0] == 0x01;
     }
 
-    virtual ~CanbusComLoggingCommand() = default;
+    ~CanbusComLoggingCommand() override = default;
 
     [[nodiscard]] bool IsStart() const {
         return is_start_;

@@ -16,7 +16,7 @@ class MetadataBlock : public TextBlockBase {
 public:
     MetadataBlock() :
         TextBlockBase("MD") {}
-    virtual ~MetadataBlock() = default;
+    ~MetadataBlock() override = default;
 
     /** Escapes & < > " ' and replaces the control characters XML 1.0 forbids (all of C0 but tab, LF, CR) with U+FFFD. */
     static std::string EscapeXml(std::string_view text);

@@ -54,7 +54,7 @@ private:
 
 public:
     SourceInformationBlock(SourceType source_type, BusType bus_type);
-    virtual ~SourceInformationBlock() = default;
+    ~SourceInformationBlock() override = default;
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;

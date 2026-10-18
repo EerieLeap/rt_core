@@ -17,7 +17,7 @@ protected:
 
 public:
     explicit TextBlockBase(const std::string& id);
-    virtual ~TextBlockBase() = default;
+    ~TextBlockBase() override = default;
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;

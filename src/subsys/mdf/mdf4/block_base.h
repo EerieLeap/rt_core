@@ -25,7 +25,7 @@ protected:
 
 public:
     explicit BlockBase(const std::string& id);
-    virtual ~BlockBase() = default;
+    ~BlockBase() override = default;
 
     std::string GetId() const override;
     uint64_t GetBaseSize() const;

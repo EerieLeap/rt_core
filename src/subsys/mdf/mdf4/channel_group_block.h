@@ -51,7 +51,7 @@ private:
 
 public:
     ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id);
-    virtual ~ChannelGroupBlock();
+    ~ChannelGroupBlock() override;
 
     uint16_t GetFlags() const;
     uint64_t GetRecordId() const;

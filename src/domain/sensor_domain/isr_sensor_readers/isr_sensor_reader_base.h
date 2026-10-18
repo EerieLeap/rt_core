@@ -42,7 +42,7 @@ public:
         runtime_(&runtime),
         process_sensor_callback_(std::move(process_sensor_callback)) {}
 
-    virtual ~IsrSensorReaderBase() = default;
+    ~IsrSensorReaderBase() override = default;
 };
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers

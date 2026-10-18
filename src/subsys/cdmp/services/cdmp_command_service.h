@@ -81,7 +81,7 @@ public:
         std::shared_ptr<WorkQueueThread> work_queue_thread
     );
 
-    ~CdmpCommandService();
+    ~CdmpCommandService() override;
 
     void RegisterCommandHandler(uint8_t command_code, CommandHandler handler);
     void RegisterUserCommandHandler(uint8_t command_code, CommandHandler handler);
