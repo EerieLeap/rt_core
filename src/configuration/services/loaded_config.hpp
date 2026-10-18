@@ -10,7 +10,7 @@ struct LoadedConfig {
 public:
     std::pmr::vector<uint8_t> config_raw;
     eerie_memory::pmr_unique_ptr<T> config;
-    uint32_t checksum;
+    uint32_t checksum{ 0 };
 };
 
 } // namespace eerie_leap::configuration::services

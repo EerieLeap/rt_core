@@ -15,7 +15,7 @@ std::unique_ptr<char[]> StringHelpers::ToPaddedCharArray(const std::string& str,
 
 template<size_t N, typename T>
 static StaticString<N> UIntToStaticString(T value) {
-    std::array<char, N> buffer;
+    std::array<char, N> buffer{};
     auto [ptr, _] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
 
     return StaticString<N>(std::string_view(buffer.data(), ptr));

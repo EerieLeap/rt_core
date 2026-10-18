@@ -10,27 +10,15 @@ ChannelBlock::ChannelBlock(Type type, SyncType sync_type, DataType data_type, ui
     type_(type),
     sync_type_(sync_type),
     data_type_(data_type),
-    bit_offset_(0) {
-
-    byte_offset_ = 0;
-    bit_count_ = bit_count;
-    flags_ = 0;
-    invalidation_bit_pos_ = 0;
-    precision_ = 0;
-    attachment_count_ = 0;
-    val_range_min_ = 0;
-    val_range_max_ = 0;
-    limit_min_ = 0;
-    limit_max_ = 0;
-    limit_ext_min_ = 0;
-    limit_ext_max_ = 0;
-}
+    bit_count_(bit_count) {}
 
 // See ~ChannelGroupBlock(): no destructor recursion along the chain.
 ChannelBlock::~ChannelBlock() {
-    auto next = links_.TakeLink(LinkType::ChannelNext);
-    while(next && next.use_count() == 1)
-        next = static_cast<ChannelBlock&>(*next).links_.TakeLink(LinkType::ChannelNext);
+    auto next = links_.TakeLink<LinkType::ChannelNext>();
+    while(next && next.use_count() == 1) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only ChannelBlocks (LinkBlock is its only writer); no throwing dynamic_cast in a destructor
+        next = static_cast<ChannelBlock&>(*next).links_.TakeLink<LinkType::ChannelNext>();
+    }
 }
 
 ChannelBlock::Type ChannelBlock::GetType() const {
@@ -72,6 +60,7 @@ void ChannelBlock::SetConversion(std::shared_ptr<ChannelConversionBlock> convers
 void ChannelBlock::LinkBlock(std::shared_ptr<ChannelBlock> next_block) {
     auto* last = this;
     while(const auto next = last->links_.GetLink(LinkType::ChannelNext))
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only ChannelBlocks (LinkBlock is its only writer); no RTTI per step of the walk
         last = static_cast<ChannelBlock*>(next.get());
 
     last->links_.SetLink(LinkType::ChannelNext, std::move(next_block));
@@ -178,7 +167,6 @@ std::unique_ptr<uint8_t[]> ChannelBlock::Serialize() const {
     offset += sizeof(limit_ext_min_);
 
     std::memcpy(buffer.get() + offset, &limit_ext_max_, sizeof(limit_ext_max_));
-    offset += sizeof(limit_ext_max_);
 
     return buffer;
 }

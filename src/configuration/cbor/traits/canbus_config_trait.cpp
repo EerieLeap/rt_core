@@ -6,12 +6,19 @@
 
 namespace eerie_leap::configuration::cbor::traits {
 
-static struct CborCanbusConfigTraitRegistrar {
+namespace {
+
+struct CborCanbusConfigTraitRegistrar {
     CborCanbusConfigTraitRegistrar() {
         CborTraitRegistry::Register<CborCanbusConfig>(
             cbor_encode_CborCanbusConfig, cbor_decode_CborCanbusConfig, cbor_get_size_CborCanbusConfig
         );
     }
-} CborCanbusConfigTraitRegistrar;
+};
+
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): the registry insert can only throw std::bad_alloc, fatal before main
+const CborCanbusConfigTraitRegistrar CBOR_CANBUS_CONFIG_TRAIT_REGISTRAR;
+
+} // namespace
 
 } // namespace eerie_leap::configuration::cbor::traits

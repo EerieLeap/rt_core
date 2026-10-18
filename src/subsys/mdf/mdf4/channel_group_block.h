@@ -52,6 +52,10 @@ private:
 public:
     ChannelGroupBlock(uint8_t record_id_size_bytes, uint64_t record_id);
     ~ChannelGroupBlock() override;
+    ChannelGroupBlock(const ChannelGroupBlock&) = delete;
+    ChannelGroupBlock& operator=(const ChannelGroupBlock&) = delete;
+    ChannelGroupBlock(ChannelGroupBlock&&) = delete;
+    ChannelGroupBlock& operator=(ChannelGroupBlock&&) = delete;
 
     uint16_t GetFlags() const;
     uint64_t GetRecordId() const;

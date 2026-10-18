@@ -8,6 +8,8 @@
 
 namespace eerie_leap::utilities::cbor {
 
+// zcbor holds text as uint8_t data, std::string and string_view as char: the same bytes viewed through the other type.
+// NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
 class CborHelpers {
 public:
     static std::string ToStdString(const zcbor_string& zstr) {
@@ -29,5 +31,6 @@ public:
         return { .value = reinterpret_cast<const uint8_t*>(str.data()), .len = static_cast<uint_fast32_t>(str.size()) };
     }
 };
+// NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
 
 } // namespace eerie_leap::utilities::cbor

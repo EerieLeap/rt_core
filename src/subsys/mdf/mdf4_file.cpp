@@ -181,7 +181,7 @@ std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateCanDataFrameChannelGrou
     if(!vlsd_channel_group)
         throw std::invalid_argument("VLSD channel group cannot be null");
 
-    if(!(vlsd_channel_group->GetFlags() & std::to_underlying(mdf4::ChannelGroupBlock::Flag::VlsdChannel)))
+    if((vlsd_channel_group->GetFlags() & std::to_underlying(mdf4::ChannelGroupBlock::Flag::VlsdChannel)) == 0)
         throw std::runtime_error("Invalid channel group flags");
 
     auto channel_group = CreateTimeChannelGroup(record_id, name);

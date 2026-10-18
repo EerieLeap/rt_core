@@ -11,7 +11,7 @@ struct Guid {
     uint32_t timestamp;
 
     uint64_t AsUint64() const {
-        uint64_t value;
+        uint64_t value = 0;
         memcpy(&value, this, sizeof(*this));
 
         return value;

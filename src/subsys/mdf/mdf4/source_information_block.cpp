@@ -30,9 +30,8 @@ std::unique_ptr<uint8_t[]> SourceInformationBlock::Serialize() const {
     offset += sizeof(uint8_t);
 
     std::memcpy(buffer.get() + offset, &flags_, sizeof(flags_));
-    offset += sizeof(flags_);
 
-    offset += 5; // reserved_1_
+    // reserved_1_: 5 bytes, left zero by the memset in SerializeBase().
 
     return buffer;
 }

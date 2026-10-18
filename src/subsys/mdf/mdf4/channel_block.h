@@ -87,27 +87,31 @@ private:
 
     utilities::BlockLinks<LinkType, 8> links_;
 
-    Type type_;                     // 1 byte, Channel type
-    SyncType sync_type_;            // 1 byte, Sync type
-    DataType data_type_;            // 1 byte, Data type
-    uint8_t bit_offset_;            // 1 byte, Bit offset
-    uint32_t byte_offset_;          // 4 bytes, Byte offset
-    uint32_t bit_count_;            // 4 bytes, Bit count
-    uint32_t flags_;                // 4 bytes, Flags
-    uint32_t invalidation_bit_pos_; // 4 bytes, Position of invalidation bit
-    uint8_t precision_;             // 1 byte, Precision
+    Type type_;                          // 1 byte, Channel type
+    SyncType sync_type_;                 // 1 byte, Sync type
+    DataType data_type_;                 // 1 byte, Data type
+    uint8_t bit_offset_{ 0 };            // 1 byte, Bit offset
+    uint32_t byte_offset_{ 0 };          // 4 bytes, Byte offset
+    uint32_t bit_count_;                 // 4 bytes, Bit count
+    uint32_t flags_{ 0 };                // 4 bytes, Flags
+    uint32_t invalidation_bit_pos_{ 0 }; // 4 bytes, Position of invalidation bit
+    uint8_t precision_{ 0 };             // 1 byte, Precision
     // uint8_t reserved_1_[1];          // 1 bytes, Reserved
-    uint16_t attachment_count_; // 2 bytes, Number of attachments
-    double val_range_min_;      // 8 bytes, Minimum value of raw range
-    double val_range_max_;      // 8 bytes, Maximum value of raw range
-    double limit_min_;          // 8 bytes, Lower limit
-    double limit_max_;          // 8 bytes, Upper limit
-    double limit_ext_min_;      // 8 bytes, Lower extended limit
-    double limit_ext_max_;      // 8 bytes, Upper extended limit
+    uint16_t attachment_count_{ 0 }; // 2 bytes, Number of attachments
+    double val_range_min_{ 0 };      // 8 bytes, Minimum value of raw range
+    double val_range_max_{ 0 };      // 8 bytes, Maximum value of raw range
+    double limit_min_{ 0 };          // 8 bytes, Lower limit
+    double limit_max_{ 0 };          // 8 bytes, Upper limit
+    double limit_ext_min_{ 0 };      // 8 bytes, Lower extended limit
+    double limit_ext_max_{ 0 };      // 8 bytes, Upper extended limit
 
 public:
     ChannelBlock(Type type, SyncType sync_type, DataType data_type, uint32_t bit_count);
     ~ChannelBlock() override;
+    ChannelBlock(const ChannelBlock&) = delete;
+    ChannelBlock& operator=(const ChannelBlock&) = delete;
+    ChannelBlock(ChannelBlock&&) = delete;
+    ChannelBlock& operator=(ChannelBlock&&) = delete;
 
     Type GetType() const;
     DataType GetDataType() const;

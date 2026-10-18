@@ -42,7 +42,7 @@ private:
     const std::string configuration_file_path_ = configuration_dir_ + "/" + configuration_name_ + ".cbor";
 
     struct SaveTask {
-        k_work work;
+        k_work work{};
         CborConfigurationService<T>* instance{ nullptr };
         T* configuration{ nullptr }; // null to write config_bytes as they are
         std::span<const uint8_t> config_bytes;
@@ -50,7 +50,7 @@ private:
     };
 
     struct LoadTask {
-        k_work work;
+        k_work work{};
         CborConfigurationService<T>* instance{ nullptr };
         bool decode{ true };
         std::optional<LoadedConfig<T>> result{ std::nullopt };
@@ -60,8 +60,8 @@ private:
     // to eliminate cases when configuration is updated from some thread
     // which will require that thread to have enough stack size for the operation.
     // mutex_ serialises callers off the queue; the queue thread never takes it.
-    k_mutex mutex_;
-    k_work_sync work_sync_;
+    k_mutex mutex_{};
+    k_work_sync work_sync_{};
     SaveTask task_save_;
     LoadTask task_load_;
 
@@ -76,6 +76,7 @@ private:
     }
 
     bool SaveProcessor(T* configuration) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         auto config_bytes = serializer_->Serialize(*configuration);
@@ -107,6 +108,7 @@ private:
     }
 
     std::optional<LoadedConfig<T>> LoadProcessor(bool decode) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         if(!fs_service_->Exists(configuration_file_path_)) {
@@ -154,6 +156,7 @@ private:
     }
 
     bool SaveOnQueue(T* configuration, std::span<const uint8_t> config_bytes) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         // Waiting here, in k_work_flush() or for mutex_, could wait for this very thread.
@@ -179,6 +182,7 @@ private:
     }
 
     std::optional<LoadedConfig<T>> LoadOnQueue(bool decode) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         if(IsOnWorkQueue())
@@ -202,6 +206,7 @@ private:
     }
 
     static void WorkTaskSave(k_work* work) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         SaveTask* task = CONTAINER_OF(work, SaveTask, work);
@@ -219,6 +224,7 @@ private:
     }
 
     static void WorkTaskLoad(k_work* work) {
+        // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(configuration_service_logger);
 
         // LoadTask is not standard-layout, so offsetof() is only conditionally supported;

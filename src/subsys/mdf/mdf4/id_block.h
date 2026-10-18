@@ -30,10 +30,10 @@ private:
     // uint8_t reserved_0_[4];              // 4 bytes, Reserved (byte order / float format in MDF 3.x)
     uint16_t version_num_{ VERSION_NUMBER }; // 2 bytes, Version number
     // uint8_t reserved_1_[30];             // 30 bytes, Reserved
-    uint16_t standard_flags_; // 2 bytes, Flags
-    uint16_t custom_flags_;   // 2 bytes, Flags
+    uint16_t standard_flags_{ 0 }; // 2 bytes, Flags
+    uint16_t custom_flags_{ 0 };   // 2 bytes, Flags
 
-    bool is_finalized_;
+    bool is_finalized_{ false };
 
 public:
     IdBlock();

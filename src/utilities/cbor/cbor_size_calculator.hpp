@@ -41,12 +41,11 @@ public:
      * Calculate CBOR encoding size for signed integer
      */
     static size_t SizeOfInt(int64_t value) {
-        if(value >= 0) {
+        if(value >= 0)
             return SizeOfUint(static_cast<uint64_t>(value));
-        } else {
-            // Negative integers encoded as -1 - value
-            return SizeOfUint(static_cast<uint64_t>(-1 - value));
-        }
+
+        // Negative integers encoded as -1 - value
+        return SizeOfUint(static_cast<uint64_t>(-1 - value));
     }
 
     /**
@@ -108,18 +107,18 @@ public:
     /**
      * Calculate size for an array of uniform elements
      */
-    static size_t SizeOfArrayUniform(size_t count, size_t elementSize) {
-        return SizeOfArrayOverhead(count) + (count * elementSize);
+    static size_t SizeOfArrayUniform(size_t count, size_t element_size) {
+        return SizeOfArrayOverhead(count) + (count * element_size);
     }
 
     /**
      * Calculate size for a vector of items with custom size calculator
      */
     template<typename T, typename SizeFunc>
-    static size_t SizeOfArray(const std::vector<T>& items, SizeFunc sizeFunc) {
+    static size_t SizeOfArray(const std::vector<T>& items, SizeFunc size_func) {
         size_t size = SizeOfArrayStart(items.size());
         for(const auto& item : items) {
-            size += sizeFunc(item);
+            size += size_func(item);
         }
         return size;
     }
@@ -148,10 +147,10 @@ public:
      * Calculate size for indefinite array with known elements
      */
     template<typename SizeFunc>
-    static size_t SizeOfIndefiniteArray(size_t count, SizeFunc elementSizeFunc) {
+    static size_t SizeOfIndefiniteArray(size_t count, SizeFunc element_size_func) {
         size_t size = SizeOfIndefiniteArrayMarkers();
         for(size_t i = 0; i < count; i++) {
-            size += elementSizeFunc(i);
+            size += element_size_func(i);
         }
         return size;
     }
@@ -164,8 +163,8 @@ public:
      * Calculate CBOR map overhead for definite-length map
      * Note: count is number of key-value PAIRS, not total items
      */
-    static size_t SizeOfMapOverhead(size_t pairCount) {
-        return SizeOfLength(pairCount);
+    static size_t SizeOfMapOverhead(size_t pair_count) {
+        return SizeOfLength(pair_count);
     }
 
     /**
@@ -174,8 +173,8 @@ public:
      *   size_t size = CborSizeCalc::SizeOfMapStart(2);
      *   size += CborSizeCalc::SizeOfTstr("key1") + CborSizeCalc::SizeOfUint(value1);
      */
-    static size_t SizeOfMapStart(size_t pairCount) {
-        return SizeOfMapOverhead(pairCount);
+    static size_t SizeOfMapStart(size_t pair_count) {
+        return SizeOfMapOverhead(pair_count);
     }
 
     /**
@@ -232,16 +231,16 @@ public:
      * Calculate size for optional field (returns 0 if not present)
      */
     template<typename T, typename SizeFunc>
-    static size_t SizeOfOptional(const T* value, SizeFunc sizeFunc) {
-        return value ? sizeFunc(*value) : 0;
+    static size_t SizeOfOptional(const T* value, SizeFunc size_func) {
+        return value ? size_func(*value) : 0;
     }
 
     /**
      * Calculate size for optional value based on boolean flag
      */
     template<typename T, typename SizeFunc>
-    static size_t SizeOfOptional(bool hasValue, const T& value, SizeFunc sizeFunc) {
-        return hasValue ? sizeFunc(value) : 0;
+    static size_t SizeOfOptional(bool has_value, const T& value, SizeFunc size_func) {
+        return has_value ? size_func(value) : 0;
     }
 };
 

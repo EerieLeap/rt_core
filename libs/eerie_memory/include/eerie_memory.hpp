@@ -34,6 +34,7 @@ public:
     pmr_deleter& operator=(pmr_deleter const&) noexcept = default;
     pmr_deleter(pmr_deleter&&) noexcept = default;
     pmr_deleter& operator=(pmr_deleter&&) noexcept = default;
+    ~pmr_deleter() = default;
 
     template<class U>
         requires std::convertible_to<U*, T*>
@@ -42,6 +43,7 @@ public:
 
     template<class U>
         requires std::convertible_to<U*, T*>
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved): the deleter only holds a raw pointer, moving it is copying it
     pmr_deleter(pmr_deleter<U>&& other) noexcept :
         mr_(other.get_memory_resource()) {}
 

@@ -14,9 +14,6 @@ IdBlock::IdBlock() :
     version_str_("4.10"),
     program_id_("EL") {
 
-    standard_flags_ = 0;
-    custom_flags_ = 0;
-
     SetFinalized(false);
 }
 
@@ -66,7 +63,6 @@ std::unique_ptr<uint8_t[]> IdBlock::Serialize() const {
     offset += sizeof(standard_flags_);
 
     std::memcpy(buffer.get() + offset, &custom_flags_, sizeof(custom_flags_));
-    offset += sizeof(custom_flags_);
 
     return buffer;
 }

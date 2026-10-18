@@ -17,9 +17,9 @@ uint8_t ToCanDlc(size_t data_length) {
     if(data_length <= 8)
         return static_cast<uint8_t>(data_length);
 
-    constexpr std::array<size_t, 7> fd_lengths{ 12, 16, 20, 24, 32, 48, 64 };
-    for(size_t i = 0; i < fd_lengths.size(); i++) {
-        if(data_length <= fd_lengths[i])
+    constexpr std::array<size_t, 7> FD_LENGTHS{ 12, 16, 20, 24, 32, 48, 64 };
+    for(size_t i = 0; i < FD_LENGTHS.size(); i++) {
+        if(data_length <= FD_LENGTHS[i])
             return static_cast<uint8_t>(9 + i);
     }
 
@@ -37,7 +37,7 @@ CanRecordWriter::CanRecordWriter(
     channel_group_(&channel_group),
     vlsd_channel_group_(&vlsd_channel_group) {
 
-    if(!(vlsd_channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel)))
+    if((vlsd_channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel)) == 0)
         throw std::runtime_error("Invalid channel group flags");
 
     if(time_type == MdfDataType::Float32)
@@ -143,6 +143,7 @@ uint64_t CanRecordWriter::Write(std::streambuf& stream, const CanFrame& frame, d
     std::memcpy(can_frame + DATA_BYTES_OFFSET, &vlsd_offset_, vlsd_offset_size_);
 
     const auto size = static_cast<std::streamsize>(vlsd_record_size + record_size_);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): streambuf::sputn takes char*, the buffer holds raw record bytes
     if(stream.sputn(reinterpret_cast<const char*>(buffer_.data()), size) != size)
         throw std::ios_base::failure("Failed to write CAN data frame records to stream.");
 

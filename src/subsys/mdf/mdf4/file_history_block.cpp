@@ -7,20 +7,18 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 FileHistoryBlock::FileHistoryBlock() :
-    BlockBase("FH"),
-    dst_offset_min_(0) {
-
-    time_flags_ = 0;
-
+    BlockBase("FH") {
     links_.SetLink(LinkType::MetadataComment, std::make_shared<MetadataBlock>());
     SetTool("none", "Eerie Leap", "0.0.0");
 }
 
 // See ~ChannelGroupBlock(): no destructor recursion along the chain.
 FileHistoryBlock::~FileHistoryBlock() {
-    auto next = links_.TakeLink(LinkType::FileHistoryNext);
-    while(next && next.use_count() == 1)
-        next = static_cast<FileHistoryBlock&>(*next).links_.TakeLink(LinkType::FileHistoryNext);
+    auto next = links_.TakeLink<LinkType::FileHistoryNext>();
+    while(next && next.use_count() == 1) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only FileHistoryBlocks (LinkBlock is its only writer); no throwing dynamic_cast in a destructor
+        next = static_cast<FileHistoryBlock&>(*next).links_.TakeLink<LinkType::FileHistoryNext>();
+    }
 }
 
 void FileHistoryBlock::SetTool(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version) {
@@ -48,6 +46,7 @@ void FileHistoryBlock::SetTimeNs(uint64_t time_ns) {
 void FileHistoryBlock::LinkBlock(std::shared_ptr<FileHistoryBlock> next_block) {
     auto* last = this;
     while(const auto next = last->links_.GetLink(LinkType::FileHistoryNext))
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only FileHistoryBlocks (LinkBlock is its only writer); no RTTI per step of the walk
         last = static_cast<FileHistoryBlock*>(next.get());
 
     last->links_.SetLink(LinkType::FileHistoryNext, std::move(next_block));
@@ -71,9 +70,8 @@ std::unique_ptr<uint8_t[]> FileHistoryBlock::Serialize() const {
     offset += sizeof(dst_offset_min_);
 
     std::memcpy(buffer.get() + offset, &time_flags_, sizeof(time_flags_));
-    offset += sizeof(time_flags_);
 
-    offset += 3; // reserved_1_
+    // reserved_1_: 3 bytes, left zero by the memset in SerializeBase().
 
     return buffer;
 }

@@ -53,6 +53,7 @@ public:
     RecordWriter& operator=(const RecordWriter&) = delete;
     RecordWriter(RecordWriter&&) = default;
     RecordWriter& operator=(RecordWriter&&) = default;
+    ~RecordWriter() = default;
 
     /**
      * Writes one record from one value per channel, in channel order, each holding the type of its

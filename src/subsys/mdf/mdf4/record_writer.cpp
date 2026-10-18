@@ -57,7 +57,7 @@ uint8_t GetVariantIndex(const ChannelBlock& channel) {
 
 RecordWriter::RecordWriter(ChannelGroupBlock& channel_group) :
     channel_group_(&channel_group) {
-    if(channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel))
+    if((channel_group.GetFlags() & std::to_underlying(ChannelGroupBlock::Flag::VlsdChannel)) != 0)
         throw std::runtime_error("A VLSD channel group has no fixed length records");
 
     const auto invalidation_bytes = channel_group.GetInvalidationBytes();
@@ -143,6 +143,7 @@ uint64_t RecordWriter::Write(std::streambuf& stream, std::span<const MdfValue> v
     if(invalidation_bytes_ > 0)
         std::memcpy(record_.data() + invalidation_offset_, &invalid_mask, invalidation_bytes_);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): streambuf::sputn takes char*, the buffer holds raw record bytes
     const auto written = stream.sputn(reinterpret_cast<const char*>(record_.data()), record_size_);
     if(std::cmp_not_equal(written, record_size_))
         throw std::ios_base::failure("Failed to write data record to stream.");

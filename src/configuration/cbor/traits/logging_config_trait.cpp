@@ -6,12 +6,19 @@
 
 namespace eerie_leap::configuration::cbor::traits {
 
-static struct CborLoggingConfigTraitRegistrar {
+namespace {
+
+struct CborLoggingConfigTraitRegistrar {
     CborLoggingConfigTraitRegistrar() {
         CborTraitRegistry::Register<CborLoggingConfig>(
             cbor_encode_CborLoggingConfig, cbor_decode_CborLoggingConfig, cbor_get_size_CborLoggingConfig
         );
     }
-} CborLoggingConfigTraitRegistrar;
+};
+
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): the registry insert can only throw std::bad_alloc, fatal before main
+const CborLoggingConfigTraitRegistrar CBOR_LOGGING_CONFIG_TRAIT_REGISTRAR;
+
+} // namespace
 
 } // namespace eerie_leap::configuration::cbor::traits

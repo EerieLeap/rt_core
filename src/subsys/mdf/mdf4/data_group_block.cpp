@@ -19,9 +19,11 @@ DataGroupBlock::DataGroupBlock(uint8_t record_id_size_bytes) :
 
 // See ~ChannelGroupBlock(): no destructor recursion along the chain.
 DataGroupBlock::~DataGroupBlock() {
-    auto next = links_.TakeLink(LinkType::DataGroupNext);
-    while(next && next.use_count() == 1)
-        next = static_cast<DataGroupBlock&>(*next).links_.TakeLink(LinkType::DataGroupNext);
+    auto next = links_.TakeLink<LinkType::DataGroupNext>();
+    while(next && next.use_count() == 1) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only DataGroupBlocks (LinkBlock is its only writer); no throwing dynamic_cast in a destructor
+        next = static_cast<DataGroupBlock&>(*next).links_.TakeLink<LinkType::DataGroupNext>();
+    }
 }
 
 uint8_t DataGroupBlock::GetRecordIdSizeBytes() const {
@@ -55,6 +57,7 @@ void DataGroupBlock::ClearChannelGroups() {
 void DataGroupBlock::LinkBlock(std::shared_ptr<DataGroupBlock> next_block) {
     auto* last = this;
     while(const auto next = last->links_.GetLink(LinkType::DataGroupNext))
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the chain holds only DataGroupBlocks (LinkBlock is its only writer); no RTTI per step of the walk
         last = static_cast<DataGroupBlock*>(next.get());
 
     last->links_.SetLink(LinkType::DataGroupNext, std::move(next_block));
@@ -66,12 +69,11 @@ uint64_t DataGroupBlock::GetBlockSize() const {
 
 std::unique_ptr<uint8_t[]> DataGroupBlock::Serialize() const {
     auto buffer = SerializeBase();
-    uint64_t offset = GetBaseSize();
+    const uint64_t offset = GetBaseSize();
 
     std::memcpy(buffer.get() + offset, &record_id_size_bytes_, sizeof(record_id_size_bytes_));
-    offset += sizeof(record_id_size_bytes_);
 
-    offset += 7; // reserved_1_
+    // reserved_1_: 7 bytes, left zero by the memset in SerializeBase().
 
     return buffer;
 }

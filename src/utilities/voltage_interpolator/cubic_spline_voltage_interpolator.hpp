@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <memory_resource>
 #include <vector>
@@ -68,7 +69,7 @@ public:
         z[n - 1] = 0.0F;
         coefficients_[n - 1].c = 0.0F;
 
-        for(int j = n - 2; j >= 0; --j) {
+        for(auto j = static_cast<int>(n) - 2; j >= 0; --j) {
             coefficients_[j].c = z[j] - mu[j] * coefficients_[j + 1].c;
             coefficients_[j].b = (coefficients_[j + 1].a - coefficients_[j].a) / h[j]
                 - h[j] * (coefficients_[j + 1].c + 2.0F * coefficients_[j].c) / 3.0F;
@@ -86,9 +87,7 @@ public:
                 return table.back().value;
         }
 
-        const auto it = std::upper_bound(table.begin(), table.end(), voltage, [](float val, const CalibrationData& d) {
-            return val < d.voltage;
-        });
+        const auto it = std::ranges::upper_bound(table, voltage, std::less<>{}, &CalibrationData::voltage);
 
         // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
         const size_t last_segment = table.size() - 2;

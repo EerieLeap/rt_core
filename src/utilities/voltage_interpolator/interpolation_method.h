@@ -5,8 +5,6 @@
 #include <stdexcept>
 #include <string_view>
 
-#include "interpolation_method.h"
-
 namespace eerie_leap::utilities::voltage_interpolator {
 
 using namespace std::string_view_literals;

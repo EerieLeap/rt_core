@@ -21,7 +21,7 @@ void ExtHeapFree(void* pointer) noexcept;
 template<typename T>
 class HeapAllocator {
 private:
-    static constexpr size_t kAlignment = alignof(T) > 32 ? alignof(T) : 32;
+    static constexpr size_t ALIGNMENT = alignof(T) > 32 ? alignof(T) : 32;
 
 public:
     using value_type = T;
@@ -31,10 +31,11 @@ public:
     template<typename U>
     constexpr HeapAllocator(const HeapAllocator<U>& obj) noexcept {}
 
-    T* allocate(size_t n, size_t align = kAlignment) {
+    T* allocate(size_t n, size_t align = ALIGNMENT) {
         void* pointer = ExtHeapAllocate(align, n * sizeof(T));
 
         if(pointer == nullptr) {
+            // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
             LOG_MODULE_DECLARE(heap_allocator_logger);
             LOG_ERR("Failed to allocate %zu bytes for %zu elements of type %s\n", n * sizeof(T), n, typeid(T).name());
             throw std::bad_alloc();
@@ -43,7 +44,7 @@ public:
         return static_cast<T*>(pointer);
     }
 
-    void deallocate(void* p, size_t n, size_t align = 0) noexcept {
+    void deallocate(void* p, size_t /*n*/, size_t /*align*/ = 0) noexcept {
         ExtHeapFree(p);
     }
 
@@ -77,12 +78,12 @@ public:
 // to new memory allocator utilities is complete.
 
 template<class T, class U>
-bool operator==(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) {
+bool operator==(const HeapAllocator<T>& /*lhs*/, const HeapAllocator<U>& /*rhs*/) {
     return true;
 }
 
 template<class T, class U>
-bool operator!=(const HeapAllocator<T>& lhs, const HeapAllocator<U>& rhs) {
+bool operator!=(const HeapAllocator<T>& /*lhs*/, const HeapAllocator<U>& /*rhs*/) {
     return false;
 }
 

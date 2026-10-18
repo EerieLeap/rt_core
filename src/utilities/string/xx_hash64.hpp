@@ -67,7 +67,7 @@ private:
     static constexpr uint64_t XXH64(std::string_view str, uint64_t seed = 0) noexcept {
         const size_t len = str.size();
         size_t i = 0;
-        uint64_t h64;
+        uint64_t h64 = 0;
 
         if(len >= 32) {
             const size_t limit = len - 32;

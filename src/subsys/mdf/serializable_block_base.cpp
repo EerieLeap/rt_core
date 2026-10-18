@@ -107,6 +107,7 @@ uint64_t SerializableBlockBase::ResolveBlockAddress(uint64_t address) {
 }
 
 void SerializableBlockBase::WriteBlockData(std::streambuf& stream, const uint8_t* data, uint64_t size) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): streambuf::sputn takes char*, the block holds raw bytes
     const auto written = stream.sputn(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 
     if(written < 0 || std::cmp_not_equal(written, size))

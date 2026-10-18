@@ -6,14 +6,7 @@
 namespace eerie_leap::subsys::mdf::mdf4 {
 
 HeaderBlock::HeaderBlock() :
-    BlockBase("HD"),
-    dst_offset_min_(0) {
-
-    time_flags_ = 0;
-    time_class_ = 0;
-    flags_ = 0;
-    hd_start_angle_rad_ = 0.0;
-    hd_distance_m_ = 0.0;
+    BlockBase("HD") {
 
     links_.SetLink(LinkType::FileHistoryFirst, std::make_shared<FileHistoryBlock>());
 }
@@ -88,7 +81,6 @@ std::unique_ptr<uint8_t[]> HeaderBlock::Serialize() const {
     offset += sizeof(hd_start_angle_rad_);
 
     std::memcpy(buffer.get() + offset, &hd_distance_m_, sizeof(hd_distance_m_));
-    offset += sizeof(hd_distance_m_);
 
     return buffer;
 }

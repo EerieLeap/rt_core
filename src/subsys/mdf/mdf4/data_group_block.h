@@ -32,6 +32,10 @@ private:
 public:
     DataGroupBlock(uint8_t record_id_size_bytes);
     ~DataGroupBlock() override;
+    DataGroupBlock(const DataGroupBlock&) = delete;
+    DataGroupBlock& operator=(const DataGroupBlock&) = delete;
+    DataGroupBlock(DataGroupBlock&&) = delete;
+    DataGroupBlock& operator=(DataGroupBlock&&) = delete;
 
     uint8_t GetRecordIdSizeBytes() const;
     std::shared_ptr<DataBlock> GetDataBlock() const;

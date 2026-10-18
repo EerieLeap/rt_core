@@ -50,15 +50,14 @@ std::unique_ptr<uint8_t[]> BlockBase::SerializeBase() const {
     if(link_count > 0) {
         const auto links = block_links->Serialize();
         std::copy(links.get(), links.get() + block_links->GetLinksSizeBytes(), buffer.get() + offset);
-        offset += block_links->GetLinksSizeBytes();
     }
 
     return buffer;
 }
 
 const IBlockLinks* BlockBase::GetBlockLinks() const {
-    static const BlockLinksEmpty links_empty;
-    return &links_empty;
+    static const BlockLinksEmpty LINKS_EMPTY;
+    return &LINKS_EMPTY;
 }
 
 } // namespace eerie_leap::subsys::mdf::mdf4

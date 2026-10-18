@@ -2,14 +2,14 @@
 
 namespace eerie_leap::utilities::memory {
 
-ExtMemoryResource Mrm::ext_memory_resource_;
+ExtMemoryResource Mrm::ext_memory_resource;
 
 std::pmr::memory_resource* Mrm::GetDefaultPmr() {
     return std::pmr::get_default_resource();
 }
 
 std::pmr::memory_resource* Mrm::GetExtPmr() {
-    return &ext_memory_resource_;
+    return &ext_memory_resource;
 }
 
 } // namespace eerie_leap::utilities::memory

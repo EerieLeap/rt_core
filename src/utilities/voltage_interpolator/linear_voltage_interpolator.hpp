@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -34,9 +35,7 @@ public:
         }
 
         // Binary search for the correct interval
-        auto upper = std::lower_bound(table.begin(), table.end(), voltage, [](const CalibrationData& data, float v) {
-            return data.voltage < v;
-        });
+        auto upper = std::ranges::lower_bound(table, voltage, std::less<>{}, &CalibrationData::voltage);
 
         // Keep the segment inside the table; out-of-range voltages extrapolate along the nearest one.
         if(upper == table.begin())

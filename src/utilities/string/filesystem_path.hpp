@@ -9,8 +9,8 @@ namespace eerie_leap::utilities::string {
 template<size_t N>
 class FilesystemPath {
 private:
-    static constexpr char kPathSeparator_ = '/';
-    static constexpr std::string_view kRootPath_{ &kPathSeparator_, 1 };
+    static constexpr char PATH_SEPARATOR = '/';
+    static constexpr std::string_view ROOT_PATH{ &PATH_SEPARATOR, 1 };
     StaticString<N> data_;
 
 public:
@@ -44,17 +44,17 @@ public:
         if(rhs.empty())
             return *this;
 
-        if(rhs.front() == kPathSeparator_)
+        if(rhs.front() == PATH_SEPARATOR)
             data_.Clear();
 
         if(!data_.Empty()) {
             // Compute trimmed size without clearing — string_view stays valid
             size_t trimmed = data_.Size();
-            while(trimmed > 0 && data_[trimmed - 1] == kPathSeparator_)
+            while(trimmed > 0 && data_[trimmed - 1] == PATH_SEPARATOR)
                 --trimmed;
 
             data_.Truncate(trimmed);
-            data_.Append(kPathSeparator_);
+            data_.Append(PATH_SEPARATOR);
         }
 
         data_.Append(rhs);
@@ -84,27 +84,27 @@ public:
         if(view.empty())
             return FilesystemPath{};
 
-        constexpr auto trim_separators = [](std::string_view value) {
-            while(!value.empty() && value.back() == kPathSeparator_)
+        const auto trim_separators = [](std::string_view value) {
+            while(!value.empty() && value.back() == PATH_SEPARATOR)
                 value.remove_suffix(1);
 
             return value;
         };
 
-        if(view.back() == kPathSeparator_) {
+        if(view.back() == PATH_SEPARATOR) {
             const std::string_view trimmed = trim_separators(view);
 
-            return trimmed.empty() ? FilesystemPath{ kRootPath_ } : FilesystemPath{ trimmed };
+            return trimmed.empty() ? FilesystemPath{ ROOT_PATH } : FilesystemPath{ trimmed };
         }
 
-        const auto pos = view.rfind(kPathSeparator_);
+        const auto pos = view.rfind(PATH_SEPARATOR);
 
         if(pos == std::string_view::npos)
             return FilesystemPath{};
 
         const std::string_view parent = trim_separators(view.substr(0, pos));
 
-        return parent.empty() ? FilesystemPath{ kRootPath_ } : FilesystemPath{ parent };
+        return parent.empty() ? FilesystemPath{ ROOT_PATH } : FilesystemPath{ parent };
     }
 };
 
