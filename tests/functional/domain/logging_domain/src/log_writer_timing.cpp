@@ -97,14 +97,16 @@ ZTEST(log_writer_timing, test_AFullDrainBringsTheNextTickForward) {
 
     const int64_t start_ticks = k_uptime_ticks();
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize; i++)
+    for(size_t i = 0; i < SensorLimits::RAW_CAN_QUEUE_SIZE; i++)
         PublishFrame(rig, *sensors[1], static_cast<uint8_t>(i), rig.time_service->GetCurrentTime());
 
     k_sleep(K_TIMEOUT_ABS_TICKS(start_ticks + MsToTicks(500)));
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 
     const auto stats = rig.log_writer_service->GetStats();
-    zassert_equal(stats.frames, SensorLimits::kRawCanQueueSize, "every queued frame is logged (got %u)", stats.frames);
+    zassert_equal(
+        stats.frames, SensorLimits::RAW_CAN_QUEUE_SIZE, "every queued frame is logged (got %u)", stats.frames
+    );
     zassert_equal(stats.frames_dropped, 0, "a queue filled to its size drops nothing (got %u)", stats.frames_dropped);
 
     const auto& times = probe->tick_times;

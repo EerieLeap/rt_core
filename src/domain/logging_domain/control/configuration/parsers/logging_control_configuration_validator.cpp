@@ -21,9 +21,9 @@ void InvalidLoggingControlConfiguration(std::string_view message) {
 } // namespace
 
 void LoggingControlConfigurationValidator::Validate(const LoggingControlConfiguration& configuration) {
-    if(configuration.triggers.size() > LoggingControlConfiguration::kMaxTriggers) {
+    if(configuration.triggers.size() > LoggingControlConfiguration::MAX_TRIGGERS) {
         InvalidLoggingControlConfiguration(
-            "At most " + std::to_string(LoggingControlConfiguration::kMaxTriggers) + " triggers."
+            "At most " + std::to_string(LoggingControlConfiguration::MAX_TRIGGERS) + " triggers."
         );
     }
 

@@ -516,7 +516,7 @@ int AssetStore::OpenRead(std::string_view name, AssetReader& reader) const {
         return -ENOENT;
 
     // Everything that can throw comes before the file is opened.
-    eerie_memory::pmr_unique_ptr<AssetReader::Block> buffer;
+    eerie_memory::PmrUniquePtr<AssetReader::Block> buffer;
     std::string path;
 
     try {
@@ -576,7 +576,7 @@ int AssetStore::BeginWrite(std::string_view name, AssetWriter& writer) {
         return -EINVAL;
 
     // Everything that can throw comes before the file is opened.
-    eerie_memory::pmr_unique_ptr<AssetWriter::Block> buffer;
+    eerie_memory::PmrUniquePtr<AssetWriter::Block> buffer;
     std::string directory;
     std::string target_path;
 

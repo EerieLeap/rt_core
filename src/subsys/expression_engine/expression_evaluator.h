@@ -32,7 +32,7 @@ private:
     std::pmr::string expression_;
     ee::Program program_;
     std::optional<size_t> input_index_;
-    std::array<const float*, ee::limits::kMaxVariables> bindings_{};
+    std::array<const float*, ee::limits::MAX_VARIABLES> bindings_{};
 
     ExpressionEvaluator(std::pmr::memory_resource* resource, std::string_view expression, ee::Program program);
 

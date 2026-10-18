@@ -67,9 +67,9 @@ struct LogWriterTask {
     int64_t last_sync_ms = 0;
 
     // Snapshot buffers, so a logging tick does not allocate.
-    std::array<SensorReading, SensorLimits::kMaxCount> readings;
-    std::array<SensorReading, SensorLimits::kRawCanQueueSize> raw_readings;
-    std::array<CanFrame, SensorLimits::kRawCanQueueSize> raw_frames;
+    std::array<SensorReading, SensorLimits::MAX_COUNT> readings;
+    std::array<SensorReading, SensorLimits::RAW_CAN_QUEUE_SIZE> raw_readings;
+    std::array<CanFrame, SensorLimits::RAW_CAN_QUEUE_SIZE> raw_frames;
 };
 
 } // namespace eerie_leap::domain::logging_domain::services

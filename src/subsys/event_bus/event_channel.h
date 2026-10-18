@@ -34,7 +34,7 @@ public:
     using PayloadMap = EventPayload<TPayloadType>;
     using HandleType = SubscriptionHandle<TEventType>;
 
-    static constexpr size_t k_default_max_queued_events = 64;
+    static constexpr size_t DEFAULT_MAX_QUEUED_EVENTS = 64;
 
 private:
     std::string name_;
@@ -80,12 +80,12 @@ private:
     };
 
     // Dispatch snapshots the matching subscribers; this many fit without touching the heap.
-    static constexpr size_t k_max_inline_subscribers = 16;
+    static constexpr size_t MAX_INLINE_SUBSCRIBERS = 16;
 
     void Dispatch(const EventMessage& event);
 
 protected:
-    EventChannel(std::string name, size_t max_queued_events = k_default_max_queued_events);
+    EventChannel(std::string name, size_t max_queued_events = DEFAULT_MAX_QUEUED_EVENTS);
 
 public:
     ~EventChannel() override = default;

@@ -19,8 +19,8 @@ class SystemConfigurationManager : public CborConfigurationManagerBase<SystemCon
 private:
     SystemConfigurationCborParser cbor_parser_;
 
-    eerie_memory::pmr_unique_ptr<CborSystemConfig> Serialize(const SystemConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<SystemConfiguration> Deserialize(const CborSystemConfig& cbor_config) override;
+    eerie_memory::PmrUniquePtr<CborSystemConfig> Serialize(const SystemConfiguration& configuration) override;
+    eerie_memory::PmrUniquePtr<SystemConfiguration> Deserialize(const CborSystemConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:

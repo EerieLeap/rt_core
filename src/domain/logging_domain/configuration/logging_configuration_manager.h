@@ -37,8 +37,8 @@ private:
 
     void NotifyUpdated();
 
-    eerie_memory::pmr_unique_ptr<CborLoggingConfig> Serialize(const LoggingConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<LoggingConfiguration> Deserialize(const CborLoggingConfig& cbor_config) override;
+    eerie_memory::PmrUniquePtr<CborLoggingConfig> Serialize(const LoggingConfiguration& configuration) override;
+    eerie_memory::PmrUniquePtr<LoggingConfiguration> Deserialize(const CborLoggingConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:

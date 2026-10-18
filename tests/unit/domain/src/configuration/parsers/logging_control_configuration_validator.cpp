@@ -15,7 +15,7 @@ using eerie_leap::domain::logging_domain::control::configuration::parsers::Loggi
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
 using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::subsys::event_bus::EventChannelId;
-using eerie_leap::subsys::event_bus::k_last_event_channel_id;
+using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 
 ZTEST_SUITE(logging_control_configuration_validator, NULL, NULL, NULL, NULL, NULL);
 
@@ -70,7 +70,7 @@ ZTEST(logging_control_configuration_validator, test_AChannelMustBeOneThatExists)
     zassert_true(none.contains("Trigger 1 names an unknown event channel."), "%s", none.c_str());
 
     const auto past_last = Rejection(
-        MakeConfiguration({ MakeTrigger(static_cast<EventChannelId>(std::to_underlying(k_last_event_channel_id) + 1)) })
+        MakeConfiguration({ MakeTrigger(static_cast<EventChannelId>(std::to_underlying(LAST_EVENT_CHANNEL_ID) + 1)) })
     );
     zassert_true(past_last.contains("Trigger 0 names an unknown event channel."), "%s", past_last.c_str());
 }

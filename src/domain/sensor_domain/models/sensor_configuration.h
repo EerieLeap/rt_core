@@ -42,7 +42,7 @@ struct SensorConfiguration {
     IndicatorInputMode input_mode = IndicatorInputMode::Level;
 
     // connection_string data source decomposition objects
-    eerie_memory::pmr_unique_ptr<CanbusSource> canbus_source = nullptr;
+    eerie_memory::PmrUniquePtr<CanbusSource> canbus_source = nullptr;
 
     SensorConfiguration(std::allocator_arg_t, allocator_type alloc) :
         connection_string(alloc),

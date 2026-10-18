@@ -13,9 +13,9 @@ public:
     virtual ~ILoggingCommandSender() = default;
 
     // The CDMP device ID that addresses every unit.
-    static constexpr uint8_t kBroadcast = eerie_leap::subsys::cdmp::utilities::CdmpConstants::COMMAND_BROADCAST_ID;
+    static constexpr uint8_t BROADCAST = eerie_leap::subsys::cdmp::utilities::CdmpConstants::COMMAND_BROADCAST_ID;
 
-    // Sends start or stop to @p device_id (kBroadcast or one CDMP device ID) and returns without waiting
+    // Sends start or stop to @p device_id (BROADCAST or one CDMP device ID) and returns without waiting
     // for an answer; a change of state arrives as the logging status the units share.
     virtual void SendLoggingCommand(bool is_start, uint8_t device_id) = 0;
 };

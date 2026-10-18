@@ -46,11 +46,11 @@ bool SystemConfigurationManager::UpdateBuildNumber(uint32_t build_number) {
     return true;
 }
 
-pmr_unique_ptr<CborSystemConfig> SystemConfigurationManager::Serialize(const SystemConfiguration& configuration) {
+PmrUniquePtr<CborSystemConfig> SystemConfigurationManager::Serialize(const SystemConfiguration& configuration) {
     return cbor_parser_.Serialize(configuration);
 }
 
-pmr_unique_ptr<SystemConfiguration> SystemConfigurationManager::Deserialize(const CborSystemConfig& cbor_config) {
+PmrUniquePtr<SystemConfiguration> SystemConfigurationManager::Deserialize(const CborSystemConfig& cbor_config) {
     return cbor_parser_.Deserialize(Mrm::GetDefaultPmr(), cbor_config);
 }
 

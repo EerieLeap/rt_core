@@ -345,7 +345,7 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
 
     // 7. A configuration stored on this unit stops logging on every unit once Start() is called (L9).
     //    It registers nothing before that, so it may come before the configuration types. In both roles
-    //    the control's RequestStop(kAllUnits) sends the broadcast (the writer's network half, the remote
+    //    the control's RequestStop(ALL_UNITS) sends the broadcast (the writer's network half, the remote
     //    control itself), so there is no sender of its own.
     if(configuration_service_ != nullptr) {
         configuration_update_logging_stop_ = std::make_unique<ConfigurationUpdateLoggingStop>(
@@ -616,7 +616,7 @@ void LoggingController::StopLogWriter() {
         return;
 
     // The supervisor itself: this stops this unit's writer, not the other units.
-    log_writer_supervisor_->RequestStop(ILoggingControl::kAllUnits);
+    log_writer_supervisor_->RequestStop(ILoggingControl::ALL_UNITS);
 
     if(config_work_queue_thread_->IsCurrentThread()) {
         // The stop is queued behind this very job, so waiting for it would wait for itself.

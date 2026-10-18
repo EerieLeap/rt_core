@@ -15,15 +15,15 @@ enum class InterpolationMethod : std::uint8_t {
     CUBIC_SPLINE
 };
 
-constexpr const std::array InterpolationMethodNames = { "NONE"sv, "LINEAR"sv, "CUBIC_SPLINE"sv };
+constexpr const std::array INTERPOLATION_METHOD_NAMES = { "NONE"sv, "LINEAR"sv, "CUBIC_SPLINE"sv };
 
 inline const char* GetInterpolationMethodName(InterpolationMethod method) {
-    return InterpolationMethodNames[static_cast<std::uint8_t>(method)].data();
+    return INTERPOLATION_METHOD_NAMES[static_cast<std::uint8_t>(method)].data();
 }
 
 inline InterpolationMethod GetInterpolationMethod(std::string_view name) {
-    for(size_t i = 0; i < size(InterpolationMethodNames); ++i)
-        if(InterpolationMethodNames[i] == name)
+    for(size_t i = 0; i < size(INTERPOLATION_METHOD_NAMES); ++i)
+        if(INTERPOLATION_METHOD_NAMES[i] == name)
             return static_cast<InterpolationMethod>(i);
 
     throw std::runtime_error("Invalid interpolation method type.");

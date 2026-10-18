@@ -51,7 +51,7 @@ struct LoggingTriggerSet::Trigger {
     size_t index;
     // What it selects, for the log lines and for OnConfigurationUpdated(). Read-only after construction.
     EventBinding binding;
-    // The unit it starts and stops; ILoggingControl::kAllUnits is every unit that can log.
+    // The unit it starts and stops; ILoggingControl::ALL_UNITS is every unit that can log.
     uint32_t target_uid;
 
     // Inside the guard only: the guard serializes every delivery to the set, so a trigger reached

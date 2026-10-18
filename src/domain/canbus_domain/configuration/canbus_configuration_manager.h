@@ -32,8 +32,8 @@ private:
     CanbusConfigurationCborParser cbor_parser_;
     ConfigurationUpdatedHandler configuration_updated_handler_;
 
-    eerie_memory::pmr_unique_ptr<CborCanbusConfig> Serialize(const CanbusConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<CanbusConfiguration> Deserialize(const CborCanbusConfig& cbor_config) override;
+    eerie_memory::PmrUniquePtr<CborCanbusConfig> Serialize(const CanbusConfiguration& configuration) override;
+    eerie_memory::PmrUniquePtr<CanbusConfiguration> Deserialize(const CborCanbusConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:

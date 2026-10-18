@@ -51,11 +51,11 @@ bool AdcConfigurationManager::ApplyCborConfiguration(std::span<const uint8_t> cb
     return true;
 }
 
-pmr_unique_ptr<CborAdcConfig> AdcConfigurationManager::Serialize(const AdcConfiguration& configuration) {
+PmrUniquePtr<CborAdcConfig> AdcConfigurationManager::Serialize(const AdcConfiguration& configuration) {
     return cbor_parser_.Serialize(configuration);
 }
 
-pmr_unique_ptr<AdcConfiguration> AdcConfigurationManager::Deserialize(const CborAdcConfig& cbor_config) {
+PmrUniquePtr<AdcConfiguration> AdcConfigurationManager::Deserialize(const CborAdcConfig& cbor_config) {
     return cbor_parser_.Deserialize(Mrm::GetExtPmr(), cbor_config);
 }
 

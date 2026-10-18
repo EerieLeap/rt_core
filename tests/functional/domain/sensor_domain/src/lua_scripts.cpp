@@ -56,8 +56,8 @@ MakeScriptedRuntime(const std::shared_ptr<LuaScript>& host, std::string_view id,
 
     auto guard = host->Lock();
     runtime.script.environment = host->LoadChunk(Bytes(script), runtime.sensor->id.c_str());
-    runtime.script.create_value = host->FindFunction(runtime.script.environment, SensorScript::kCreateValueFunction);
-    runtime.script.post_process = host->FindFunction(runtime.script.environment, SensorScript::kPostProcessFunction);
+    runtime.script.create_value = host->FindFunction(runtime.script.environment, SensorScript::CREATE_VALUE_FUNCTION);
+    runtime.script.post_process = host->FindFunction(runtime.script.environment, SensorScript::POST_PROCESS_FUNCTION);
 
     return runtime;
 }
@@ -143,7 +143,7 @@ ZTEST(lua_scripts, test_post_process_receives_the_sample_and_returns_the_new_val
         host, "failing", "function post_process_sensor_value(id, value) error('no') end\n"
     );
 
-    ScriptProcessor processor(SensorScript::kPostProcessFunction);
+    ScriptProcessor processor(SensorScript::POST_PROCESS_FUNCTION);
 
     auto reading = MakeReading(doubling, 21.0F);
     processor.Process(doubling, reading);
@@ -188,7 +188,7 @@ ZTEST(lua_scripts, test_scripts_read_and_write_other_sensors_through_the_frame) 
         "end\n"
     );
 
-    ScriptProcessor processor(SensorScript::kPostProcessFunction);
+    ScriptProcessor processor(SensorScript::POST_PROCESS_FUNCTION);
 
     // Nothing processed yet: get_sensor_value returns nil.
     auto reading = MakeReading(runtime, 1.0F);

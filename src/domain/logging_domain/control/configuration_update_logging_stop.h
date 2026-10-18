@@ -46,7 +46,7 @@ public:
     /**
      * @param logging_control The unit's control, null without one; RequestStop() on the storing thread.
      * @param stop_sender Broadcasts the LOGGING stop from the configuration work queue; null where the
-     *        control sends it (RequestStop(kAllUnits) of both roles' controls) or the unit has no COM
+     *        control sends it (RequestStop(ALL_UNITS) of both roles' controls) or the unit has no COM
      *        service. It serves a unit without a logging controller.
      * Throws std::invalid_argument for a null service or queue.
      */

@@ -46,7 +46,7 @@ constexpr uint64_t REJECTED_DEVICE_ID = 0xBAD;
 // A manager over the system configuration's codec: the base's store paths and nothing else.
 class TestManager : public CborConfigurationManagerBase<TestConfiguration, CborSystemConfig> {
 private:
-    pmr_unique_ptr<CborSystemConfig> Serialize(const TestConfiguration& configuration) override {
+    PmrUniquePtr<CborSystemConfig> Serialize(const TestConfiguration& configuration) override {
         auto cbor_config = make_unique_pmr<CborSystemConfig>(Mrm::GetDefaultPmr());
         cbor_config->device_id = configuration.device_id;
         cbor_config->build_number = configuration.build_number;
@@ -54,7 +54,7 @@ private:
         return cbor_config;
     }
 
-    pmr_unique_ptr<TestConfiguration> Deserialize(const CborSystemConfig& cbor_config) override {
+    PmrUniquePtr<TestConfiguration> Deserialize(const CborSystemConfig& cbor_config) override {
         auto configuration = make_unique_pmr<TestConfiguration>(Mrm::GetDefaultPmr());
         configuration->device_id = cbor_config.device_id;
         configuration->build_number = cbor_config.build_number;

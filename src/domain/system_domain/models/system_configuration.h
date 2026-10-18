@@ -11,10 +11,10 @@ struct SystemConfiguration {
 
     uint64_t device_id = 0;
 
-    static constexpr uint32_t hw_version = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR << 24
+    static constexpr uint32_t HW_VERSION = CONFIG_EERIE_LEAP_HW_VERSION_MAJOR << 24
         | CONFIG_EERIE_LEAP_HW_VERSION_MINOR << 16 | CONFIG_EERIE_LEAP_HW_VERSION_PATCH;
 
-    static constexpr uint32_t sw_version = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR << 24
+    static constexpr uint32_t SW_VERSION = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR << 24
         | CONFIG_EERIE_LEAP_SW_VERSION_MINOR << 16 | CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
 
     uint32_t build_number = 0;

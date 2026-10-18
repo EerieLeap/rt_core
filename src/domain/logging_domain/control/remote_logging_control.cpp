@@ -221,7 +221,7 @@ void RemoteLoggingControl::Submit(uint32_t target_uid, Request request) {
     }
 
     // This unit has no writer, so it cannot be a target.
-    if(target_uid != kAllUnits
+    if(target_uid != ALL_UNITS
         && mode_ == Mode::Remote
         && network_info_ != nullptr
         && network_info_->GetDeviceInfo().uid == target_uid) {
@@ -237,7 +237,7 @@ void RemoteLoggingControl::Submit(uint32_t target_uid, Request request) {
     {
         const ScopedSpinlock lock(targets_lock_);
 
-        if(target_uid == kAllUnits) {
+        if(target_uid == ALL_UNITS) {
             // The broadcast reaches every unit, so it replaces what any target wanted.
             for(auto& target : targets_)
                 target = Target{};
@@ -354,7 +354,7 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
         const bool is_start = target.wanted == Request::Start;
 
         if(i == 0) {
-            command_sender_->SendLoggingCommand(is_start, ILoggingCommandSender::kBroadcast);
+            command_sender_->SendLoggingCommand(is_start, ILoggingCommandSender::BROADCAST);
             is_broadcast_start_sent = is_start;
             continue;
         }
@@ -383,7 +383,7 @@ WorkQueueTaskResult RemoteLoggingControl::Process() {
                 // Already covered.
             } else if(stopped_devices.none()) {
                 LOG_INF("A logging unit is back; sending the wanted logging start again.");
-                command_sender_->SendLoggingCommand(true, ILoggingCommandSender::kBroadcast);
+                command_sender_->SendLoggingCommand(true, ILoggingCommandSender::BROADCAST);
                 is_broadcast_start_sent = true;
             } else {
                 for(size_t i = 0; i < device_count; i++) {

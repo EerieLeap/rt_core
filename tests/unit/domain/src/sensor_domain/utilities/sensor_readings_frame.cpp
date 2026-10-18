@@ -742,7 +742,7 @@ ZTEST(sensor_readings_frame, test_raw_can_queue_drops_and_counts_when_full) {
     SensorReading reading = MakeReading(raw, ReadingSource::ISR, ReadingStatus::PROCESSED);
     reading.can_frame = &can_frame;
 
-    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + 5; i++)
+    for(size_t i = 0; i < SensorLimits::RAW_CAN_QUEUE_SIZE + 5; i++)
         sensor_readings_frame->AddOrUpdateReading(reading);
 
     zassert_equal(sensor_readings_frame->GetDroppedRawCanFrameCount(), 5);
@@ -757,7 +757,7 @@ ZTEST(sensor_readings_frame, test_raw_can_queue_drops_and_counts_when_full) {
         total += count;
     } while(count == readings.size());
 
-    zassert_equal(total, SensorLimits::kRawCanQueueSize);
+    zassert_equal(total, SensorLimits::RAW_CAN_QUEUE_SIZE);
 
     // The latest frame is still available for diagnostics, and ClearReadings() empties the queue.
     CanFrame latest;

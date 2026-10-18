@@ -19,7 +19,7 @@ using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
 using eerie_leap::subsys::event_bus::IsSelectorValue;
 using eerie_leap::subsys::event_bus::IsValidEventChannelId;
-using eerie_leap::subsys::event_bus::k_last_event_channel_id;
+using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::utilities::string::StringHelpers;
@@ -71,9 +71,9 @@ ZTEST(event_bus_event_binding, test_IsValidEventChannelId_accepts_only_named_cha
 
 // The registry sizes its table from the last id, so the bound must stop exactly there.
 ZTEST(event_bus_event_binding, test_IsValidEventChannelId_stops_at_the_last_id) {
-    const auto last = std::to_underlying(k_last_event_channel_id);
+    const auto last = std::to_underlying(LAST_EVENT_CHANNEL_ID);
 
-    zassert_true(IsValidEventChannelId(k_last_event_channel_id));
+    zassert_true(IsValidEventChannelId(LAST_EVENT_CHANNEL_ID));
     zassert_false(IsValidEventChannelId(static_cast<EventChannelId>(last + 1)));
 }
 

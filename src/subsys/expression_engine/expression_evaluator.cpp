@@ -43,7 +43,7 @@ bool ExpressionEvaluator::BindVariable(std::string_view name, const float* value
 }
 
 std::optional<float> ExpressionEvaluator::Evaluate(std::optional<float> input) const noexcept {
-    std::array<float, ee::limits::kMaxVariables> values{};
+    std::array<float, ee::limits::MAX_VARIABLES> values{};
     const size_t count = program_.VariableCount();
 
     for(size_t i = 0; i < count; i++) {

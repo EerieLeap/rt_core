@@ -92,7 +92,7 @@ std::shared_ptr<T> make_shared_ext(Args&&... args) {
     return std::allocate_shared<T>(HeapAllocator<T>(), std::forward<Args>(args)...);
 }
 
-struct ext_deleter {
+struct ExtDeleter {
     template<typename T>
     void operator()(T* p) const {
         if(p) {
@@ -105,16 +105,16 @@ struct ext_deleter {
 };
 
 template<typename T>
-using ext_unique_ptr = std::unique_ptr<T, ext_deleter>;
+using ExtUniquePtr = std::unique_ptr<T, ExtDeleter>;
 
 template<typename T, typename... Args>
-ext_unique_ptr<T> make_unique_ext(Args&&... args) {
+ExtUniquePtr<T> make_unique_ext(Args&&... args) {
     HeapAllocator<T> allocator;
     auto p = allocator.allocate(1);
 
     try {
         new(p) T(std::forward<Args>(args)...);
-        return ext_unique_ptr<T>(p, ext_deleter{});
+        return ExtUniquePtr<T>(p, ExtDeleter{});
     } catch(...) {
         allocator.deallocate(p, 1);
         throw;

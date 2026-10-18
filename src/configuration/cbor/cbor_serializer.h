@@ -49,7 +49,7 @@ public:
         return buffer;
     }
 
-    eerie_memory::pmr_unique_ptr<T> Deserialize(std::span<const uint8_t> input) {
+    eerie_memory::PmrUniquePtr<T> Deserialize(std::span<const uint8_t> input) {
         // NOLINTNEXTLINE(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
         LOG_MODULE_DECLARE(cbor_serializer_logger);
 

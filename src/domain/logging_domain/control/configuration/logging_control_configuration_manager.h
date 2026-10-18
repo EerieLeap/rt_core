@@ -40,9 +40,9 @@ private:
     // Logs what the handler throws: the configuration is stored by then.
     void NotifyUpdated();
 
-    eerie_memory::pmr_unique_ptr<CborLoggingControlConfig>
+    eerie_memory::PmrUniquePtr<CborLoggingControlConfig>
     Serialize(const LoggingControlConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<LoggingControlConfiguration>
+    eerie_memory::PmrUniquePtr<LoggingControlConfiguration>
     Deserialize(const CborLoggingControlConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 

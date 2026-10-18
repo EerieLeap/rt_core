@@ -100,7 +100,7 @@ void Cfb::InitializeThread() {
 }
 
 WorkQueueTaskResult Cfb::ProcessWorkTask(CfbTask* task) {
-    const bool is_animation_running = atomic_get(&task->is_animation_running_) != 0
+    const bool is_animation_running = atomic_get(&task->is_animation_running) != 0
         && task->frame_rate > 0
         && task->animation_handler;
 
@@ -246,13 +246,13 @@ void Cfb::SetAnimationHandler(std::function<void()> handler, uint32_t frame_rate
 }
 
 void Cfb::StartAnimation() {
-    atomic_set(&GetTask().GetUserdata()->is_animation_running_, 1);
+    atomic_set(&GetTask().GetUserdata()->is_animation_running, 1);
     GetTask().Schedule();
 }
 
 void Cfb::StopAnimation() {
     GetTask().Cancel();
-    atomic_set(&GetTask().GetUserdata()->is_animation_running_, 0);
+    atomic_set(&GetTask().GetUserdata()->is_animation_running, 0);
 }
 
 void Cfb::PrintScreenInfo() {

@@ -228,9 +228,9 @@ under one mutex and never allocate; value slots have stable addresses, which exp
 | Call | Use |
 | --- | --- |
 | `TryGetReading(id / hash / slot)`, `TryGetReadingValue(...)`, `GetReadingValues(hashes, values)` | Latest reading or value of a sensor. |
-| `SnapshotProcessedReadings(span)`, `TakeProcessedReadings(span)` | All processed readings; `Take` also clears the "updated" mark. Buffers are sized with `SensorLimits::kMaxCount`. |
+| `SnapshotProcessedReadings(span)`, `TakeProcessedReadings(span)` | All processed readings; `Take` also clears the "updated" mark. Buffers are sized with `SensorLimits::MAX_COUNT`. |
 | `TryGetCanFrame(hash, frame)` | Latest frame of a `CANBUS_RAW` sensor. |
-| `TakeRawCanFrames(readings, frames)` | Every raw frame since the last take, oldest first, from a queue of `kRawCanQueueSize` entries; overflow is counted. For the log writer. |
+| `TakeRawCanFrames(readings, frames)` | Every raw frame since the last take, oldest first, from a queue of `RAW_CAN_QUEUE_SIZE` entries; overflow is counted. For the log writer. |
 | `UpdateReadingValue(hash, value)` | What `update_sensor_value()` in Lua calls; it bypasses indicator conditioning. |
 | `MarkProcessedReadingsUpdated()` | Marks every processed reading as not yet taken, so the next `Take` returns each once more. Behind `SensorEventsPublisher::Replay()`. |
 
@@ -303,7 +303,7 @@ one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`fl
   moved the generation by then, so a sensor cached as rejected is asked again.
 - **Lifecycle.** A `ServiceBase`: `Initialize()` creates the thread, `Start()` the ticks; it is
   pausable, and `Stop()` (also run by the destructor) waits for a tick in progress.
-- **Memory.** The readings buffer (`kMaxCount` readings) and the acceptance cache (`kMaxCount`
+- **Memory.** The readings buffer (`MAX_COUNT` readings) and the acceptance cache (`MAX_COUNT`
   answers, 8 bytes each) are part of the object, so they come with its owner's allocation.
   `Initialize()` allocates the thread's stack. A tick never allocates.
 

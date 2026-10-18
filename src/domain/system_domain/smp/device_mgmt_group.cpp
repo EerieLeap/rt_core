@@ -38,18 +38,18 @@ int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
     if(network_info_ != nullptr)
         device = network_info_->GetDeviceInfo();
 
-    const uint16_t features = device.has_value() ? device->features : ProductInfo::features;
+    const uint16_t features = device.has_value() ? device->features : ProductInfo::FEATURES;
 
     bool ok = zcbor_tstr_put_lit(zse, "product")
-        && zcbor_uint32_put(zse, ProductInfo::product_id)
+        && zcbor_uint32_put(zse, ProductInfo::PRODUCT_ID)
         && zcbor_tstr_put_lit(zse, "revision")
-        && zcbor_uint32_put(zse, ProductInfo::revision)
+        && zcbor_uint32_put(zse, ProductInfo::REVISION)
         && zcbor_tstr_put_lit(zse, "features")
         && zcbor_uint32_put(zse, features)
         && zcbor_tstr_put_lit(zse, "hw")
-        && zcbor_uint32_put(zse, SystemConfiguration::hw_version)
+        && zcbor_uint32_put(zse, SystemConfiguration::HW_VERSION)
         && zcbor_tstr_put_lit(zse, "sw")
-        && zcbor_uint32_put(zse, SystemConfiguration::sw_version)
+        && zcbor_uint32_put(zse, SystemConfiguration::SW_VERSION)
         && zcbor_tstr_put_lit(zse, "build")
         && zcbor_uint32_put(zse, build_number_);
 

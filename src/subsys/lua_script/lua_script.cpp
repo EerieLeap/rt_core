@@ -81,14 +81,14 @@ void LuaScript::Load(const std::span<const uint8_t>& script) {
 int LuaScript::LoadChunk(std::span<const uint8_t> script, const char* name) {
     if(state_ == nullptr) {
         LOG_ERR("Cannot load script %s: Lua state is null", name);
-        return kNoRef;
+        return NO_REF;
     }
 
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): luaL_loadbuffer takes the script bytes as char*
     if(luaL_loadbuffer(state_, reinterpret_cast<const char*>(script.data()), script.size(), name) != LUA_OK) {
         LOG_ERR("Error loading script %s: %s", name, lua_tostring(state_, -1));
         lua_pop(state_, 1);
-        return kNoRef;
+        return NO_REF;
     }
 
     // A fresh environment that falls back to the globals for reads: the libraries and the
@@ -106,22 +106,22 @@ int LuaScript::LoadChunk(std::span<const uint8_t> script, const char* name) {
         LOG_ERR("Error executing script %s: %s", name, lua_tostring(state_, -1));
         lua_pop(state_, 1);
         luaL_unref(state_, LUA_REGISTRYINDEX, environment_ref);
-        return kNoRef;
+        return NO_REF;
     }
 
     return environment_ref;
 }
 
 int LuaScript::FindFunction(int environment_ref, const char* name) {
-    if(state_ == nullptr || environment_ref == kNoRef)
-        return kNoRef;
+    if(state_ == nullptr || environment_ref == NO_REF)
+        return NO_REF;
 
     lua_rawgeti(state_, LUA_REGISTRYINDEX, environment_ref); // env
     lua_getfield(state_, -1, name);                          // env, value
 
     if(!lua_isfunction(state_, -1)) {
         lua_pop(state_, 2);
-        return kNoRef;
+        return NO_REF;
     }
 
     const int function_ref = luaL_ref(state_, LUA_REGISTRYINDEX); // env
@@ -131,10 +131,10 @@ int LuaScript::FindFunction(int environment_ref, const char* name) {
 }
 
 void LuaScript::Release(int& ref) {
-    if(state_ != nullptr && ref != kNoRef)
+    if(state_ != nullptr && ref != NO_REF)
         luaL_unref(state_, LUA_REGISTRYINDEX, ref);
 
-    ref = kNoRef;
+    ref = NO_REF;
 }
 
 void LuaScript::RegisterGlobalFunction(const std::string& name, lua_CFunction func, void* object) {

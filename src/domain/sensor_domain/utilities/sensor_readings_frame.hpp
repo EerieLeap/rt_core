@@ -117,7 +117,7 @@ private:
         bool has_reading = false;
         bool has_processed = false;
         bool is_updated = false; // Processed and not yet taken.
-        uint16_t can_frame_index = SensorSlot::kInvalid;
+        uint16_t can_frame_index = SensorSlot::INVALID;
     };
 
     struct IndexEntry {
@@ -253,7 +253,7 @@ public:
         });
 
         can_frames_.assign(can_frame_count, CanFrame{});
-        raw_can_queue_.assign(can_frame_count > 0 ? SensorLimits::kRawCanQueueSize : 0, RawCanRecord{});
+        raw_can_queue_.assign(can_frame_count > 0 ? SensorLimits::RAW_CAN_QUEUE_SIZE : 0, RawCanRecord{});
         raw_can_head_ = 0;
         raw_can_count_ = 0;
         raw_can_dropped_ = 0;
@@ -336,7 +336,7 @@ public:
         slot.latest = Record::Pack(reading);
         slot.has_reading = true;
 
-        if(reading.can_frame != nullptr && slot.can_frame_index != SensorSlot::kInvalid) {
+        if(reading.can_frame != nullptr && slot.can_frame_index != SensorSlot::INVALID) {
             can_frames_[slot.can_frame_index] = *reading.can_frame;
             PushRawCanFrameLocked(slot_index->index, reading);
         }
@@ -448,7 +448,7 @@ public:
             return false;
 
         const auto can_frame_index = slots_[slot->index].can_frame_index;
-        if(can_frame_index == SensorSlot::kInvalid || !slots_[slot->index].has_reading)
+        if(can_frame_index == SensorSlot::INVALID || !slots_[slot->index].has_reading)
             return false;
 
         can_frame = can_frames_[can_frame_index];

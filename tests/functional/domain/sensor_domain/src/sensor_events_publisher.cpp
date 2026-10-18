@@ -91,7 +91,7 @@ void* Setup() {
 ZTEST_SUITE(sensor_events_publisher, NULL, Setup, NULL, NULL, NULL);
 
 ZTEST(sensor_events_publisher, test_a_publisher_without_a_frame_does_not_start) {
-    // On the heap, as in Rig: the object holds kMaxCount readings.
+    // On the heap, as in Rig: the object holds MAX_COUNT readings.
     auto publisher = std::make_unique<SensorEventsPublisher>(nullptr);
 
     zassert_false(publisher->Initialize());
@@ -441,7 +441,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_in_one
     // takes a second batch. Every sensor is accepted, so each round also fills the acceptance
     // cache and clears it when the next key finds it full. The k_count events of a tick fit
     // sensor_events' 128-event queue.
-    static constexpr size_t K_COUNT = SensorLimits::kMaxCount + 1;
+    static constexpr size_t K_COUNT = SensorLimits::MAX_COUNT + 1;
     static constexpr size_t SENTINEL = K_COUNT - 1;
 
     struct Deliveries {

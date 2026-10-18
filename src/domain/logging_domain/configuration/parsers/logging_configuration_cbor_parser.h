@@ -13,8 +13,8 @@ class LoggingConfigurationCborParser {
 public:
     LoggingConfigurationCborParser() = default;
 
-    eerie_memory::pmr_unique_ptr<CborLoggingConfig> Serialize(const LoggingConfiguration& logging_configuration);
-    eerie_memory::pmr_unique_ptr<LoggingConfiguration>
+    eerie_memory::PmrUniquePtr<CborLoggingConfig> Serialize(const LoggingConfiguration& logging_configuration);
+    eerie_memory::PmrUniquePtr<LoggingConfiguration>
     Deserialize(std::pmr::memory_resource* mr, const CborLoggingConfig& logging_config);
 };
 

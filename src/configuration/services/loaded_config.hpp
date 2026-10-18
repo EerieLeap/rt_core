@@ -9,7 +9,7 @@ template<typename T>
 struct LoadedConfig {
 public:
     std::pmr::vector<uint8_t> config_raw;
-    eerie_memory::pmr_unique_ptr<T> config;
+    eerie_memory::PmrUniquePtr<T> config;
     uint32_t checksum{ 0 };
 };
 

@@ -31,7 +31,7 @@ using eerie_leap::subsys::threading::ScopedMutex;
 // that needed it, so one script cannot exhaust the heap for the others.
 class LuaScript {
 public:
-    static constexpr int kNoRef = LUA_NOREF;
+    static constexpr int NO_REF = LUA_NOREF;
 
     struct MemoryBudget {
         size_t used = 0;
@@ -91,10 +91,10 @@ public:
     void Load(const std::span<const uint8_t>& script);
 
     // Compiles and runs @p script in a fresh environment and returns a reference to that
-    // environment, or kNoRef when it fails to compile or run (logged with @p name).
+    // environment, or NO_REF when it fails to compile or run (logged with @p name).
     int LoadChunk(std::span<const uint8_t> script, const char* name);
 
-    // A reference to the function @p name of the environment @p environment_ref, or kNoRef.
+    // A reference to the function @p name of the environment @p environment_ref, or NO_REF.
     int FindFunction(int environment_ref, const char* name);
 
     // Pushes the referenced value for a call; the caller handles the stack from there.

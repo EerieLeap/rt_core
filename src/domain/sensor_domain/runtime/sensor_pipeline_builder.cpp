@@ -143,13 +143,13 @@ void SensorPipelineBuilder::BuildScript(SensorGeneration& generation, SensorRunt
     script.environment = script.host->LoadChunk(
         std::span<const uint8_t>(buffer.data(), out_len), runtime.sensor->id.c_str()
     );
-    if(script.environment == LuaScript::kNoRef) {
+    if(script.environment == LuaScript::NO_REF) {
         LOG_ERR("Sensor %s: script %s failed to load.", runtime.sensor->id.c_str(), configuration.script_path.c_str());
         return;
     }
 
-    script.create_value = script.host->FindFunction(script.environment, SensorScript::kCreateValueFunction);
-    script.post_process = script.host->FindFunction(script.environment, SensorScript::kPostProcessFunction);
+    script.create_value = script.host->FindFunction(script.environment, SensorScript::CREATE_VALUE_FUNCTION);
+    script.post_process = script.host->FindFunction(script.environment, SensorScript::POST_PROCESS_FUNCTION);
 }
 
 // Only an indicator with a debounce or Toggle gets one, so the defaults cost nothing.

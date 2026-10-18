@@ -17,7 +17,7 @@ using eerie_leap::subsys::cdmp::utilities::CdmpManagementMessageType;
 
 // Base message structures (Base + 0)
 struct CdmpDiscoveryResponseMessage {
-    static constexpr CdmpManagementMessageType message_type = CdmpManagementMessageType::DISCOVERY_RESPONSE;
+    static constexpr CdmpManagementMessageType MESSAGE_TYPE = CdmpManagementMessageType::DISCOVERY_RESPONSE;
     uint8_t device_id;
     uint32_t uid;
     uint16_t features; ///< Application feature mask, bytes 6-7.
@@ -44,7 +44,7 @@ struct CdmpDiscoveryResponseMessage {
     }
 
     std::vector<uint8_t> ToCanFrame() const {
-        std::vector<uint8_t> frame_data = { std::to_underlying(message_type), device_id, static_cast<uint8_t>(uid),
+        std::vector<uint8_t> frame_data = { std::to_underlying(MESSAGE_TYPE), device_id, static_cast<uint8_t>(uid),
             static_cast<uint8_t>(uid >> 8), static_cast<uint8_t>(uid >> 16), static_cast<uint8_t>(uid >> 24),
             static_cast<uint8_t>(features), static_cast<uint8_t>(features >> 8) };
 

@@ -11,7 +11,7 @@ using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::domain::logging_domain::models;
 
-pmr_unique_ptr<CborLoggingConfig> LoggingConfigurationCborParser::Serialize(const LoggingConfiguration& configuration) {
+PmrUniquePtr<CborLoggingConfig> LoggingConfigurationCborParser::Serialize(const LoggingConfiguration& configuration) {
     LoggingConfigurationValidator::Validate(configuration);
 
     auto logging_config = make_unique_pmr<CborLoggingConfig>(Mrm::GetExtPmr());
@@ -31,7 +31,7 @@ pmr_unique_ptr<CborLoggingConfig> LoggingConfigurationCborParser::Serialize(cons
     return logging_config;
 }
 
-pmr_unique_ptr<LoggingConfiguration>
+PmrUniquePtr<LoggingConfiguration>
 LoggingConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborLoggingConfig& config) {
     auto configuration = make_unique_pmr<LoggingConfiguration>(mr);
     configuration->logging_interval_ms = config.logging_interval_ms;

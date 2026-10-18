@@ -139,8 +139,8 @@ LoggerMetadata CreateLoggerMetadata(
     metadata.tool_version = std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MAJOR) + "."
         + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_MINOR) + "." + std::to_string(CONFIG_EERIE_LEAP_SW_VERSION_PATCH);
     metadata.product_id = CONFIG_EERIE_LEAP_PRODUCT_ID;
-    metadata.hw_version = SystemConfiguration::hw_version;
-    metadata.sw_version = SystemConfiguration::sw_version;
+    metadata.hw_version = SystemConfiguration::HW_VERSION;
+    metadata.sw_version = SystemConfiguration::SW_VERSION;
 
     // Unassigned (0) until the unit has claimed an ID on the CDMP network, or without one.
     if(device_id_provider)
@@ -298,9 +298,9 @@ void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
 
 bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
     if(is_start)
-        RequestStart(kAllUnits);
+        RequestStart(ALL_UNITS);
     else
-        RequestStop(kAllUnits);
+        RequestStop(ALL_UNITS);
 
     return true;
 }

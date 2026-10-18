@@ -10,7 +10,7 @@ namespace eerie_leap::domain::logging_domain::control {
 // The logging control of a unit with a log writer that can also start and stop the other units. It
 // routes a request by its target and holds no state or thread of its own, so it is callable from any
 // thread:
-// - kAllUnits: this unit's writer, and every other unit that logs (one broadcast, through the network
+// - ALL_UNITS: this unit's writer, and every other unit that logs (one broadcast, through the network
 //   half), so a trigger on a DAQ starts all of them;
 // - this unit's own UID: the writer only;
 // - another UID: that unit only, through the network half.

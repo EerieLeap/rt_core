@@ -136,7 +136,7 @@ private:
         const uint32_t crc = crc32_ieee(buffer.data(), buffer.size());
         SetStoredInfo(buffer.size(), crc);
 
-        eerie_memory::pmr_unique_ptr<T> configuration;
+        eerie_memory::PmrUniquePtr<T> configuration;
         if(decode) {
             configuration = serializer_->Deserialize(buffer);
 
@@ -303,7 +303,7 @@ public:
         return info;
     }
 
-    eerie_memory::pmr_unique_ptr<T> Deserialize(std::span<const uint8_t> config_bytes) {
+    eerie_memory::PmrUniquePtr<T> Deserialize(std::span<const uint8_t> config_bytes) {
         return serializer_->Deserialize(config_bytes);
     }
 

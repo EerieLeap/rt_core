@@ -130,7 +130,7 @@ ZTEST(log_writer_service, test_FramesQueuedBeforeStartAreNotLogged) {
     const auto sensors = MakeLoggedSensors();
     auto rig = MakeLogWriterRig(sensors);
 
-    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + 4; i++)
+    for(size_t i = 0; i < SensorLimits::RAW_CAN_QUEUE_SIZE + 4; i++)
         PublishFrame(rig, *sensors[1], 0xF0, rig.time_service->GetCurrentTime());
     k_sleep(K_MSEC(20));
 

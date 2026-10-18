@@ -31,7 +31,7 @@ void CanbusComLoggingCommandSender::SendLoggingCommand(bool is_start, uint8_t de
             if(success)
                 return;
 
-            if(device_id == kBroadcast)
+            if(device_id == BROADCAST)
                 LOG_WRN("Logging %s command failed.", is_start ? "start" : "stop");
             else
                 LOG_WRN(

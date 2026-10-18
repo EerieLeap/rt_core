@@ -16,7 +16,7 @@ std::shared_ptr<T> make_shared_pmr(const std::pmr::polymorphic_allocator<>& allo
 }
 
 template<class T>
-class pmr_deleter {
+class PmrDeleter {
 private:
     std::pmr::memory_resource* mr_;
 
@@ -27,25 +27,25 @@ private:
     // size_t alignment_;
 
 public:
-    pmr_deleter(std::pmr::memory_resource* mr = std::pmr::get_default_resource()) :
+    PmrDeleter(std::pmr::memory_resource* mr = std::pmr::get_default_resource()) :
         mr_(mr) {}
 
-    pmr_deleter(pmr_deleter const&) noexcept = default;
-    pmr_deleter& operator=(pmr_deleter const&) noexcept = default;
-    pmr_deleter(pmr_deleter&&) noexcept = default;
-    pmr_deleter& operator=(pmr_deleter&&) noexcept = default;
-    ~pmr_deleter() = default;
+    PmrDeleter(PmrDeleter const&) noexcept = default;
+    PmrDeleter& operator=(PmrDeleter const&) noexcept = default;
+    PmrDeleter(PmrDeleter&&) noexcept = default;
+    PmrDeleter& operator=(PmrDeleter&&) noexcept = default;
+    ~PmrDeleter() = default;
 
     template<class U>
         requires std::convertible_to<U*, T*>
-    pmr_deleter(const pmr_deleter<U>& other) noexcept :
-        mr_(other.get_memory_resource()) {}
+    PmrDeleter(const PmrDeleter<U>& other) noexcept :
+        mr_(other.GetMemoryResource()) {}
 
     template<class U>
         requires std::convertible_to<U*, T*>
     // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved): the deleter only holds a raw pointer, moving it is copying it
-    pmr_deleter(pmr_deleter<U>&& other) noexcept :
-        mr_(other.get_memory_resource()) {}
+    PmrDeleter(PmrDeleter<U>&& other) noexcept :
+        mr_(other.GetMemoryResource()) {}
 
     void operator()(T* p) const noexcept {
         if(!p)
@@ -56,15 +56,15 @@ public:
     }
 
     // Add accessor so other instantiations can access mr_
-    std::pmr::memory_resource* get_memory_resource() const noexcept {
+    std::pmr::memory_resource* GetMemoryResource() const noexcept {
         return mr_;
     }
 
     // Make all instantiations friends of each other
     template<class U>
-    friend class pmr_deleter;
+    friend class PmrDeleter;
 
-    // pmr_deleter(
+    // PmrDeleter(
     //     std::pmr::memory_resource* mr = std::pmr::get_default_resource(),
     //     size_t size = sizeof(T),
     //     size_t alignment = alignof(T))
@@ -72,12 +72,12 @@ public:
 
     // template<class U>
     //     requires std::convertible_to<U*, T*>
-    // pmr_deleter(const pmr_deleter<U>& other) noexcept
+    // PmrDeleter(const PmrDeleter<U>& other) noexcept
     //     : mr_(other.mr_), size_(other.size_), alignment_(other.alignment_) {}
 
     // template<class U>
     //     requires std::convertible_to<U*, T*>
-    // pmr_deleter(pmr_deleter<U>&& other) noexcept
+    // PmrDeleter(PmrDeleter<U>&& other) noexcept
     //     : mr_(other.mr_), size_(other.size_), alignment_(other.alignment_) {}
 
     // void operator()(T* p) const noexcept {
@@ -90,16 +90,16 @@ public:
 };
 
 template<typename T>
-using pmr_unique_ptr = std::unique_ptr<T, pmr_deleter<T>>;
+using PmrUniquePtr = std::unique_ptr<T, PmrDeleter<T>>;
 
 template<typename T, typename... Args>
-pmr_unique_ptr<T> make_unique_pmr(std::pmr::memory_resource* mr, Args&&... args) {
+PmrUniquePtr<T> make_unique_pmr(std::pmr::memory_resource* mr, Args&&... args) {
     std::pmr::polymorphic_allocator<T> prm_allocator(mr);
     T* ptr = prm_allocator.allocate(1);
 
     try {
         prm_allocator.construct(ptr, std::forward<Args>(args)...);
-        return pmr_unique_ptr<T>(ptr, pmr_deleter<T>(mr));
+        return PmrUniquePtr<T>(ptr, PmrDeleter<T>(mr));
     } catch(...) {
         prm_allocator.deallocate(ptr, 1);
         throw;
@@ -107,7 +107,7 @@ pmr_unique_ptr<T> make_unique_pmr(std::pmr::memory_resource* mr, Args&&... args)
 }
 
 template<typename T, typename... Args>
-pmr_unique_ptr<T> make_unique_pmr(std::pmr::polymorphic_allocator<> alloc, Args&&... args) {
+PmrUniquePtr<T> make_unique_pmr(std::pmr::polymorphic_allocator<> alloc, Args&&... args) {
     return make_unique_pmr<T>(alloc.resource(), std::forward<Args>(args)...);
 }
 

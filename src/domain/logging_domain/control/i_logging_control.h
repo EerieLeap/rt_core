@@ -14,10 +14,10 @@ public:
     // nothing: a stop while stopped, or a start that fails (logged on the unit that logs). So a
     // requester cannot tell a refusal from a request not yet served.
     //
-    // @p target_uid is the CDMP UID of the unit to start or stop; kAllUnits is every unit that can log.
-    // A unit with a log writer acts on its own state for kAllUnits or its own UID (WriterLoggingControl
+    // @p target_uid is the CDMP UID of the unit to start or stop; ALL_UNITS is every unit that can log.
+    // A unit with a log writer acts on its own state for ALL_UNITS or its own UID (WriterLoggingControl
     // routes the rest to the network); the control of a unit without a writer sends everything out.
-    static constexpr uint32_t kAllUnits = 0;
+    static constexpr uint32_t ALL_UNITS = 0;
     virtual void RequestStart(uint32_t target_uid) = 0;
     virtual void RequestStop(uint32_t target_uid) = 0;
 

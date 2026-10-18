@@ -81,7 +81,7 @@ ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
     const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "Start must publish StatusUpdated");
     zassert_true(
         WaitFor(
@@ -93,7 +93,7 @@ ZTEST(log_writer_lifecycle, test_StartAndStopPublishTheirStatus) {
         "IsActive() must follow the event"
     );
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "Stop must publish StatusUpdated");
     zassert_true(
         WaitFor(
@@ -130,7 +130,7 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
     const std::string filler_path = "session_fill.bin";
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     const auto first_probe = probes->Current();
     const auto file_path = std::string(LogFileNaming::LOGS_DIR) + "/"
@@ -167,11 +167,11 @@ ZTEST(log_writer_lifecycle, test_AFullVolumeStopsTheSessionThroughTheEvent) {
 
     RemoveFiller(*rig.fs_service, filler_path);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(4), "a start must succeed once the volume has room again");
     zassert_false(rig.log_writer_service->HasFailed(), "Start must clear the failure");
     k_msleep(250);
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(5), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
@@ -197,7 +197,7 @@ ZTEST(log_writer_lifecycle, test_AWriteThatThrowsEndsTheSessionAtThatTick) {
     probe->refuse_next_reading = true;
 
     PublishValue(rig, *sensors[0], 3, rig.time_service->GetCurrentTime());
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
 
     zassert_true(recorder.WaitForEventCount(3), "Start, the failure and the stop each publish a status");
     zassert_true(
@@ -258,14 +258,14 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
     // About three ticks of the frames below per file.
     rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 1024, 0);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     for(uint8_t i = 0; i < PUBLISHED_FRAMES; i++) {
         PublishReadings(rig, sensors, i);
         k_msleep(10);
     }
     k_msleep(250);
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     zassert_true(rig.log_writer_service->IsStopped(), "the requested stop must leave the service stopped");
@@ -382,7 +382,7 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
 
     rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 512, 128ULL * 1024);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must succeed on a volume with the minimum free");
     FillVolume(*rig.fs_service, filler_path, 96ULL * 1024);
 
@@ -424,7 +424,7 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     const StatusRecorder recorder;
     auto& supervisor = AttachSupervisor(rig);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     k_msleep(250);
 
@@ -438,7 +438,7 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     k_msleep(250);
 
     zassert_true(rig.log_writer_service->IsRunning(), "the restarted writer must run");
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(6), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
@@ -464,7 +464,7 @@ ZTEST(log_writer_lifecycle, test_ALoggingConfigurationApplyRestartsTheWriter) {
     }
 }
 
-// The frame queues kRawCanQueueSize raw frames between two ticks; more are dropped, and counted.
+// The frame queues RAW_CAN_QUEUE_SIZE raw frames between two ticks; more are dropped, and counted.
 ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
     constexpr size_t EXTRA_FRAMES = 5;
 
@@ -473,7 +473,7 @@ ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
     StoreLoggingConfiguration(rig, 500);
 
     zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
-    for(size_t i = 0; i < SensorLimits::kRawCanQueueSize + EXTRA_FRAMES; i++)
+    for(size_t i = 0; i < SensorLimits::RAW_CAN_QUEUE_SIZE + EXTRA_FRAMES; i++)
         PublishFrame(rig, *sensors[1], static_cast<uint8_t>(i), rig.time_service->GetCurrentTime());
 
     k_msleep(800);
@@ -481,8 +481,8 @@ ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
 
     const auto stats = rig.log_writer_service->GetStats();
     zassert_equal(
-        stats.frames, SensorLimits::kRawCanQueueSize, "the queue holds %zu frames (logged %u)",
-        SensorLimits::kRawCanQueueSize, stats.frames
+        stats.frames, SensorLimits::RAW_CAN_QUEUE_SIZE, "the queue holds %zu frames (logged %u)",
+        SensorLimits::RAW_CAN_QUEUE_SIZE, stats.frames
     );
     zassert_equal(
         stats.frames_dropped, EXTRA_FRAMES, "the frames past the queue size are dropped (counted %u)",
@@ -493,7 +493,7 @@ ZTEST(log_writer_lifecycle, test_RawFramesPastTheQueueSizeAreCountedAsDropped) {
     zassert_equal(files.size(), 1, "one Start must leave exactly one file (found %zu)", files.size());
 
     const auto records = ReadDataRecords(files[0].content);
-    zassert_equal(records.frame_sequences.size(), SensorLimits::kRawCanQueueSize, "one CAN record per queued frame");
+    zassert_equal(records.frame_sequences.size(), SensorLimits::RAW_CAN_QUEUE_SIZE, "one CAN record per queued frame");
     for(size_t i = 0; i < records.frame_sequences.size(); i++)
         zassert_equal(records.frame_sequences[i], i, "the oldest frames are kept, frame %zu is not", i);
 }

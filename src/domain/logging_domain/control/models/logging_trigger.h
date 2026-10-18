@@ -13,7 +13,7 @@ using eerie_leap::subsys::event_bus::EventBinding;
 // mode.
 struct LoggingTrigger {
     EventBinding binding;
-    // CDMP UID (CdmpDeviceInfo::uid) of the unit it starts and stops; 0 (ILoggingControl::kAllUnits) is
+    // CDMP UID (CdmpDeviceInfo::uid) of the unit it starts and stops; 0 (ILoggingControl::ALL_UNITS) is
     // every unit that can log.
     uint32_t target_uid = 0;
 };

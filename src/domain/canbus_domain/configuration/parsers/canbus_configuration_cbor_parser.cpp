@@ -21,7 +21,7 @@ using namespace eerie_leap::domain::canbus_domain::models;
 CanbusConfigurationCborParser::CanbusConfigurationCborParser(std::shared_ptr<IFsService> sd_fs_service) :
     sd_fs_service_(std::move(sd_fs_service)) {}
 
-pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const CanbusConfiguration& configuration) {
+PmrUniquePtr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const CanbusConfiguration& configuration) {
     CanbusConfigurationValidator::Validate(configuration, sd_fs_service_.get());
 
     auto config = make_unique_pmr<CborCanbusConfig>(Mrm::GetExtPmr());
@@ -78,7 +78,7 @@ pmr_unique_ptr<CborCanbusConfig> CanbusConfigurationCborParser::Serialize(const 
     return config;
 }
 
-pmr_unique_ptr<CanbusConfiguration>
+PmrUniquePtr<CanbusConfiguration>
 CanbusConfigurationCborParser::Deserialize(std::pmr::memory_resource* mr, const CborCanbusConfig& config) {
     auto configuration = make_unique_pmr<CanbusConfiguration>(mr);
 

@@ -193,13 +193,13 @@ std::vector<uint8_t> BleService::GetManufacturerData() {
     append_le16(COMPANY_ID);
 
     // Product ID (2 bytes)
-    append_le16(ProductInfo::product_id);
+    append_le16(ProductInfo::PRODUCT_ID);
 
     // Product features (2 bytes)
-    append_le16(ProductInfo::features);
+    append_le16(ProductInfo::FEATURES);
 
     // Product revision (1 byte)
-    manufacturer_data.push_back(ProductInfo::revision);
+    manufacturer_data.push_back(ProductInfo::REVISION);
 
     return manufacturer_data;
 }

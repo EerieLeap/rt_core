@@ -16,7 +16,7 @@ namespace eerie_leap::subsys::event_bus {
 class EventChannelRegistry {
 private:
     // Sized from the last id, so every id IsValidEventChannelId() accepts has a slot.
-    static constexpr size_t K_CHANNEL_COUNT = std::to_underlying(k_last_event_channel_id) + 1;
+    static constexpr size_t K_CHANNEL_COUNT = std::to_underlying(LAST_EVENT_CHANNEL_ID) + 1;
 
     std::array<IEventChannel*, K_CHANNEL_COUNT> channels_{};
 

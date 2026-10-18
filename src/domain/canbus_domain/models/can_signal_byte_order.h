@@ -16,22 +16,22 @@ enum class CanSignalByteOrder : uint8_t {
     BIG_ENDIAN_MOTOROLA
 };
 
-constexpr const std::array CanSignalByteOrderNames = { "LITTLE_ENDIAN_INTEL"sv, "BIG_ENDIAN_MOTOROLA"sv };
+constexpr const std::array CAN_SIGNAL_BYTE_ORDER_NAMES = { "LITTLE_ENDIAN_INTEL"sv, "BIG_ENDIAN_MOTOROLA"sv };
 
 constexpr bool IsCanSignalByteOrderValid(CanSignalByteOrder byte_order) {
-    return std::to_underlying(byte_order) < CanSignalByteOrderNames.size();
+    return std::to_underlying(byte_order) < CAN_SIGNAL_BYTE_ORDER_NAMES.size();
 }
 
 inline const char* GetCanSignalByteOrderName(CanSignalByteOrder byte_order) {
     if(!IsCanSignalByteOrderValid(byte_order))
         return "UNKNOWN";
 
-    return CanSignalByteOrderNames[std::to_underlying(byte_order)].data();
+    return CAN_SIGNAL_BYTE_ORDER_NAMES[std::to_underlying(byte_order)].data();
 }
 
 inline CanSignalByteOrder GetCanSignalByteOrder(std::string_view name) {
-    for(size_t i = 0; i < size(CanSignalByteOrderNames); ++i) {
-        if(CanSignalByteOrderNames[i] == name)
+    for(size_t i = 0; i < size(CAN_SIGNAL_BYTE_ORDER_NAMES); ++i) {
+        if(CAN_SIGNAL_BYTE_ORDER_NAMES[i] == name)
             return static_cast<CanSignalByteOrder>(i);
     }
 

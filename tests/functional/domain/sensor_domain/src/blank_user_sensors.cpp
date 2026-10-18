@@ -114,7 +114,7 @@ Fixture MakeFixture() {
 
     const auto processors = std::make_shared<std::vector<std::shared_ptr<IReadingProcessor>>>();
     processors->push_back(std::make_shared<ExpressionProcessor>(fixture.frame));
-    processors->push_back(std::make_shared<ScriptProcessor>(SensorScript::kPostProcessFunction));
+    processors->push_back(std::make_shared<ScriptProcessor>(SensorScript::POST_PROCESS_FUNCTION));
     fixture.pipeline = std::make_shared<ReadingPipeline>(fixture.frame, processors, fixture.time_service);
 
     return fixture;

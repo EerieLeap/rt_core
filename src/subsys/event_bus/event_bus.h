@@ -115,10 +115,10 @@ inline int EventBus::RegisterChannel(IEventChannel& channel) {
     }
 
     const size_t count = channel_count_.load(std::memory_order_relaxed);
-    if(count == k_max_bus_channels) {
+    if(count == MAX_BUS_CHANNELS) {
         LOG_ERR(
             "'%s' cannot register channel '%s', all %u slots are taken", bus_name_.c_str(), channel.GetName(),
-            static_cast<unsigned>(k_max_bus_channels)
+            static_cast<unsigned>(MAX_BUS_CHANNELS)
         );
 
         return -ENOSPC;

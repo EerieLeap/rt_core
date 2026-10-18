@@ -69,7 +69,7 @@ Bytes Encode(const LoggingControlConfiguration& configuration) {
 }
 
 // Decodes stored bytes to the CBOR structure; null for bytes that are not the schema's.
-pmr_unique_ptr<CborLoggingControlConfig> Decode(const Bytes& bytes) {
+PmrUniquePtr<CborLoggingControlConfig> Decode(const Bytes& bytes) {
     CborSerializer<CborLoggingControlConfig> serializer;
 
     return serializer.Deserialize(bytes);
@@ -204,7 +204,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     // The worst case the validator lets through: the most triggers, each with the longest id and
     // numbers that need every byte. The buffer is as long as the size calculator says.
     std::vector<LoggingTrigger> triggers;
-    for(size_t i = 0; i < LoggingControlConfiguration::kMaxTriggers; i++) {
+    for(size_t i = 0; i < LoggingControlConfiguration::MAX_TRIGGERS; i++) {
         auto trigger = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
         trigger.binding.selector_value = std::pmr::string(64, static_cast<char>('a' + i));
         trigger.target_uid = 0xFFFFFFFF;

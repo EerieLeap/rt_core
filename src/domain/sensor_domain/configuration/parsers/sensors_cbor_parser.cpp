@@ -23,7 +23,7 @@ SensorsCborParser::SensorsCborParser(std::shared_ptr<IFsService> sd_fs_service) 
     sd_fs_service_(std::move(sd_fs_service)) {}
 
 // Serializes plain configuration data; nothing executable is built or touched here.
-pmr_unique_ptr<CborSensorsConfig> SensorsCborParser::Serialize(
+PmrUniquePtr<CborSensorsConfig> SensorsCborParser::Serialize(
     const std::vector<std::shared_ptr<Sensor>>& sensors,
     uint32_t gpio_channel_count,
     uint32_t adc_channel_count

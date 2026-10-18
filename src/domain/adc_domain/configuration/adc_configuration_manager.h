@@ -34,8 +34,8 @@ private:
     AdcConfigurationCborParser cbor_parser_;
     ConfigurationUpdatedHandler configuration_updated_handler_;
 
-    eerie_memory::pmr_unique_ptr<CborAdcConfig> Serialize(const AdcConfiguration& configuration) override;
-    eerie_memory::pmr_unique_ptr<AdcConfiguration> Deserialize(const CborAdcConfig& cbor_config) override;
+    eerie_memory::PmrUniquePtr<CborAdcConfig> Serialize(const AdcConfiguration& configuration) override;
+    eerie_memory::PmrUniquePtr<AdcConfiguration> Deserialize(const CborAdcConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
 public:

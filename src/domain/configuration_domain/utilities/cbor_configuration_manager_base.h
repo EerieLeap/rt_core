@@ -42,8 +42,8 @@ private:
     std::shared_ptr<const StoredHandler> stored_handler_;
 
     // Both validate; Deserialize must accept everything Serialize produces.
-    virtual eerie_memory::pmr_unique_ptr<TCborConfig> Serialize(const TConfiguration& configuration) = 0;
-    virtual eerie_memory::pmr_unique_ptr<TConfiguration> Deserialize(const TCborConfig& cbor_config) = 0;
+    virtual eerie_memory::PmrUniquePtr<TCborConfig> Serialize(const TConfiguration& configuration) = 0;
+    virtual eerie_memory::PmrUniquePtr<TConfiguration> Deserialize(const TCborConfig& cbor_config) = 0;
     virtual bool CreateDefaultConfiguration() = 0;
     virtual void OnConfigurationChanged(const std::shared_ptr<TConfiguration>&) {}
 
@@ -53,9 +53,9 @@ private:
     virtual void ValidateApply(const TConfiguration&) {}
 
     // Takes over the parsed allocation instead of moving it into a new one.
-    static std::shared_ptr<TConfiguration> Share(eerie_memory::pmr_unique_ptr<TConfiguration> configuration) {
+    static std::shared_ptr<TConfiguration> Share(eerie_memory::PmrUniquePtr<TConfiguration> configuration) {
         const auto deleter = configuration.get_deleter();
-        const std::pmr::polymorphic_allocator<> control_block_allocator(deleter.get_memory_resource());
+        const std::pmr::polymorphic_allocator<> control_block_allocator(deleter.GetMemoryResource());
 
         return std::shared_ptr<TConfiguration>(configuration.release(), deleter, control_block_allocator);
     }

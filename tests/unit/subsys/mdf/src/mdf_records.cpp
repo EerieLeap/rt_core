@@ -236,31 +236,31 @@ ZTEST(mdf_records, test_RecordWriterThrowsOnAShortWrite) {
 
 ZTEST(mdf_records, test_RecordWriterRejectsLayoutsBeyondItsLimits) {
     auto too_many_fields = MakeGroup(1, 1);
-    for(size_t i = 0; i < RecordWriter::kMaxFields + 1; i++)
+    for(size_t i = 0; i < RecordWriter::MAX_FIELDS + 1; i++)
         too_many_fields->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
     zassert_true(
         Throws<std::runtime_error>([&] {
             RecordWriter writer(*too_many_fields);
         }),
-        "%zu channels exceed the field table", RecordWriter::kMaxFields + 1
+        "%zu channels exceed the field table", RecordWriter::MAX_FIELDS + 1
     );
 
     // 1 + 8 * 8 = 65 bytes, one more than the record buffer.
     auto too_large = MakeGroup(1, 1);
-    for(size_t i = 0; i < RecordWriter::kMaxFields; i++)
+    for(size_t i = 0; i < RecordWriter::MAX_FIELDS; i++)
         too_large->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 64));
     zassert_true(
         Throws<std::runtime_error>([&] {
             RecordWriter writer(*too_large);
         }),
-        "a 65 byte record exceeds the %zu byte buffer", RecordWriter::kMaxRecordBytes
+        "a 65 byte record exceeds the %zu byte buffer", RecordWriter::MAX_RECORD_BYTES
     );
 
     const auto largest = MakeGroup(8, 1);
     for(size_t i = 0; i < 7; i++)
         largest->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 64));
     zassert_equal(
-        RecordWriter(*largest).GetRecordSizeBytes(), RecordWriter::kMaxRecordBytes,
+        RecordWriter(*largest).GetRecordSizeBytes(), RecordWriter::MAX_RECORD_BYTES,
         "a record of exactly the limit is accepted"
     );
 
@@ -392,25 +392,25 @@ ZTEST(mdf_records, test_RecordWriterInvalidationLimits) {
 
     auto wide_mask = MakeGroup(1, 3);
     wide_mask->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 32));
-    wide_mask->SetInvalidationBytes(RecordWriter::kMaxInvalidationBytes + 1);
+    wide_mask->SetInvalidationBytes(RecordWriter::MAX_INVALIDATION_BYTES + 1);
     zassert_true(
         Throws<std::runtime_error>([&] {
             RecordWriter wide_writer(*wide_mask);
         }),
-        "%zu invalidation bytes do not fit the 32 bit mask", RecordWriter::kMaxInvalidationBytes + 1
+        "%zu invalidation bytes do not fit the 32 bit mask", RecordWriter::MAX_INVALIDATION_BYTES + 1
     );
 
     // 8 + 7 * 8 = 64 bytes fit exactly; the invalidation byte would make 65.
     auto full = MakeGroup(8, 4);
     for(size_t i = 0; i < 7; i++)
         full->AddChannel(MakeChannel(ChannelBlock::DataType::FloatLe, 64));
-    zassert_equal(RecordWriter(*full).GetRecordSizeBytes(), RecordWriter::kMaxRecordBytes);
+    zassert_equal(RecordWriter(*full).GetRecordSizeBytes(), RecordWriter::MAX_RECORD_BYTES);
     full->SetInvalidationBytes(1);
     zassert_true(
         Throws<std::runtime_error>([&] {
             RecordWriter full_writer(*full);
         }),
-        "the invalidation byte counts towards the %zu byte record buffer", RecordWriter::kMaxRecordBytes
+        "the invalidation byte counts towards the %zu byte record buffer", RecordWriter::MAX_RECORD_BYTES
     );
 }
 

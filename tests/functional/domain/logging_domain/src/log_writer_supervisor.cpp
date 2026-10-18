@@ -77,7 +77,7 @@ ZTEST(log_writer_supervisor, test_ARequestStartsAndStopsTheWriter) {
 
     zassert_false(supervisor.IsActive(), "nothing has been reported yet");
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     zassert_true(
         WaitFor(
@@ -90,13 +90,13 @@ ZTEST(log_writer_supervisor, test_ARequestStartsAndStopsTheWriter) {
     );
     zassert_equal(CountLogFiles(*rig.fs_service), 1, "a start opens a file");
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     k_msleep(50);
     zassert_equal(CountLogFiles(*rig.fs_service), 1, "a start while running must not open another file");
     zassert_equal(recorder.GetEvents().size(), 1, "a start while running must publish nothing");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(
         WaitFor(
@@ -110,7 +110,7 @@ ZTEST(log_writer_supervisor, test_ARequestStartsAndStopsTheWriter) {
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     zassert_true(rig.log_writer_service->IsStopped(), "the stop must leave the writer stopped");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     k_msleep(50);
     zassert_equal(recorder.GetEvents().size(), 2, "a stop while stopped must publish nothing");
@@ -160,9 +160,9 @@ ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
 
     zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
     int64_t start_ms = k_uptime_get();
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(elapsed_ms < NO_WAIT_MS, "the requests took %lld ms", static_cast<long long>(elapsed_ms));
     Gate().Open();
@@ -176,14 +176,14 @@ ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
     );
     zassert_equal(CountLogFiles(*rig.fs_service), 1, "one start, one file");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
     zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
     start_ms = k_uptime_get();
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(elapsed_ms < NO_WAIT_MS, "the requests took %lld ms", static_cast<long long>(elapsed_ms));
     Gate().Open();
@@ -208,7 +208,7 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     const auto probes = ProbeLoggerFactory::Make(rig.logger_factory);
     rig.log_writer_service->SetLoggerFactory(probes->AsFactory());
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     const auto probe = probes->Current();
@@ -217,10 +217,10 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     zassert_equal(k_sem_take(&probe->held_reading_started, K_SECONDS(2)), 0, "a tick must log the published value");
 
     int64_t start_ms = k_uptime_get();
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     int64_t elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
-        elapsed_ms < NO_WAIT_MS, "RequestStop(ILoggingControl::kAllUnits) took %lld ms",
+        elapsed_ms < NO_WAIT_MS, "RequestStop(ILoggingControl::ALL_UNITS) took %lld ms",
         static_cast<long long>(elapsed_ms)
     );
 
@@ -235,12 +235,12 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     );
 
     start_ms = k_uptime_get();
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     const bool is_active = supervisor.IsActive();
     elapsed_ms = k_uptime_get() - start_ms;
     zassert_true(
         elapsed_ms < NO_WAIT_MS,
-        "RequestStart(ILoggingControl::kAllUnits) and IsActive() took %lld ms while the writer stopped",
+        "RequestStart(ILoggingControl::ALL_UNITS) and IsActive() took %lld ms while the writer stopped",
         static_cast<long long>(elapsed_ms)
     );
     zassert_true(is_active, "the stop has not been published yet");
@@ -254,7 +254,7 @@ ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {
     zassert_true(events[0].is_active && !events[1].is_active && events[2].is_active, "start, stop, start");
     zassert_equal(CountLogFiles(*rig.fs_service), 2, "the second start opens a second file");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(4), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
@@ -268,7 +268,7 @@ ZTEST(log_writer_supervisor, test_AFailedSessionIsStoppedOnTheConfigurationWorkQ
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     const auto probe = failing.probes->Current();
 
@@ -326,13 +326,13 @@ ZTEST(log_writer_supervisor, test_AStartOfAFailedSessionStopsItAndStartsANewFile
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
     failing.probes->Current()->refuse_next_reading = true;
     zassert_true(recorder.WaitForEventCount(2), "the failure must be published");
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     Gate().Open();
 
     zassert_true(recorder.WaitForEventCount(4), "the stop of the failed session and the new start must be published");
@@ -347,7 +347,7 @@ ZTEST(log_writer_supervisor, test_AStartOfAFailedSessionStopsItAndStartsANewFile
     zassert_true(events[2].reason == LoggingStatusReason::Stopped, "the failed session is stopped first");
     zassert_true(events[3].is_active, "then the new session starts");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(5), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
@@ -366,7 +366,7 @@ ZTEST(log_writer_supervisor, test_AFailureEventAfterANewStartStopsNothing) {
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     blocker.Arm();
@@ -374,7 +374,7 @@ ZTEST(log_writer_supervisor, test_AFailureEventAfterANewStartStopsNothing) {
     zassert_true(blocker.WaitUntilBlocking(), "the failure event must reach the blocker");
 
     // The bus holds WriteFailed; the start closes the failed session and opens a new one first.
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(
         WaitFor(
             [&] {
@@ -421,7 +421,7 @@ ZTEST(log_writer_supervisor, test_AFailureEventAfterANewStartStopsNothing) {
     zassert_true(events[2].reason == LoggingStatusReason::Stopped, "the stop of the failed session");
     zassert_true(events[3].is_active, "the new session is the last word");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(5), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
@@ -435,7 +435,7 @@ ZTEST(log_writer_supervisor, test_AStartStopsAFailedSessionTheFailureCheckCouldN
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     const auto probe = failing.probes->Current();
 
@@ -443,7 +443,7 @@ ZTEST(log_writer_supervisor, test_AStartStopsAFailedSessionTheFailureCheckCouldN
     probe->stop_throws = 1;
     probe->refuse_next_reading = true;
     zassert_true(recorder.WaitForEventCount(2), "the failure must be published");
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     Gate().Open();
 
     zassert_true(recorder.WaitForEventCount(4), "the stop of the failed session and the new start must be published");
@@ -458,7 +458,7 @@ ZTEST(log_writer_supervisor, test_AStartStopsAFailedSessionTheFailureCheckCouldN
     zassert_true(events[2].reason == LoggingStatusReason::Stopped, "the failed session is stopped first");
     zassert_true(events[3].is_active, "then the new session starts");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(5), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
@@ -472,7 +472,7 @@ ZTEST(log_writer_supervisor, test_AStartThatCannotStopTheFailedSessionStartsNoth
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
     const auto probe = failing.probes->Current();
 
@@ -480,7 +480,7 @@ ZTEST(log_writer_supervisor, test_AStartThatCannotStopTheFailedSessionStartsNoth
     probe->stop_throws = 2;
     probe->refuse_next_reading = true;
     zassert_true(recorder.WaitForEventCount(2), "the failure must be published");
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     Gate().Open();
 
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
@@ -492,7 +492,7 @@ ZTEST(log_writer_supervisor, test_AStartThatCannotStopTheFailedSessionStartsNoth
     zassert_equal(recorder.GetEvents().size(), 2, "nothing may be published (%zu events)", recorder.GetEvents().size());
 
     // Once the stop can finalize again, a request closes the session.
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(3), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     zassert_true(rig.log_writer_service->IsStopped(), "the stop must close the failed session");
@@ -508,7 +508,7 @@ ZTEST(log_writer_supervisor, test_AFailedStartLeavesLoggingStopped) {
     const auto dependent = supervisor.GetDependentService();
 
     rig.log_writer_service->SetSizeLimitsForTesting(0, rig.fs_service->GetTotalSpace() + 1);
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     k_msleep(50);
     zassert_true(rig.log_writer_service->IsStopped(), "a start without the minimum free must fail");
@@ -546,9 +546,9 @@ ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAStoppedWriterStopped
     zassert_true(rig.log_writer_service->IsStopped(), "a stored configuration must not start a writer that never ran");
     zassert_equal(CountLogFiles(*rig.fs_service), 0, "no file may be opened");
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
@@ -569,7 +569,7 @@ ZTEST(log_writer_supervisor, test_AConfigurationApplyLeavesAFailedWriterStopped)
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     struct Context {
@@ -620,7 +620,7 @@ ZTEST(log_writer_supervisor, test_AStartInTheRunOfAStoredConfigurationOpensOneFi
     const auto is_stored = std::make_shared<std::atomic<bool>>(false);
     rig.config_work_queue->Run([&supervisor, is_stored, manager = rig.logging_configuration_manager] {
         *is_stored = TryStoreLoggingConfiguration(*manager, 50);
-        supervisor.RequestStart(ILoggingControl::kAllUnits);
+        supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     });
 
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
@@ -634,7 +634,7 @@ ZTEST(log_writer_supervisor, test_AStartInTheRunOfAStoredConfigurationOpensOneFi
     );
     zassert_equal(CountLogFiles(*rig.fs_service), 1, "one file");
 
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
@@ -649,7 +649,7 @@ ZTEST(log_writer_supervisor, test_DestroyingWithAPendingRequestStartsNothing) {
     const auto generation = channel.GetSubscriptionGeneration();
 
     zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
 
     const int64_t start_ms = k_uptime_get();
     ReleaseSupervisor();
@@ -688,7 +688,7 @@ ZTEST(log_writer_supervisor, test_DestroyingWhileTheTaskRunsWaitsForIt) {
         return inner();
     });
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_equal(k_sem_take(entered.get(), K_SECONDS(2)), 0, "the start did not run");
 
     const int64_t start_ms = k_uptime_get();
@@ -740,7 +740,7 @@ ZTEST(log_writer_supervisor, test_AStatusEventInFlightDuringDestructionDoesNothi
     auto& supervisor = AttachSupervisor(rig);
     UseProbes(failing);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(
         WaitFor(
             [&] {
@@ -836,8 +836,8 @@ ZTEST(log_writer_supervisor, test_ASupervisorThatFailedToInitializeDoesNothing) 
     auto& supervisor = *SupervisorSlot();
     zassert_false(supervisor.Initialize(), "Initialize() must fail without a running queue");
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
     k_msleep(50);
     zassert_true(rig.log_writer_service->IsStopped(), "a request must do nothing without a successful Initialize()");
@@ -867,9 +867,9 @@ ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
     });
     EnableSensorLogging(rig, sensors);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 
@@ -892,11 +892,11 @@ ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
     );
     zassert_true(ContainsText(content, Property("device_id", "7")), "the device ID");
     zassert_true(
-        ContainsText(content, Property("hw_version", std::to_string(SystemConfiguration::hw_version))),
+        ContainsText(content, Property("hw_version", std::to_string(SystemConfiguration::HW_VERSION))),
         "the hardware version"
     );
     zassert_true(
-        ContainsText(content, Property("sw_version", std::to_string(SystemConfiguration::sw_version))),
+        ContainsText(content, Property("sw_version", std::to_string(SystemConfiguration::SW_VERSION))),
         "the software version"
     );
     zassert_true(
@@ -922,9 +922,9 @@ ZTEST(log_writer_supervisor, test_ARejectedSensorsConfigurationIsLoggedWithoutAH
 
     auto& supervisor = AttachSupervisor(rig, sensors_manager, true);
 
-    supervisor.RequestStart(ILoggingControl::kAllUnits);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
-    supervisor.RequestStop(ILoggingControl::kAllUnits);
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
     zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 

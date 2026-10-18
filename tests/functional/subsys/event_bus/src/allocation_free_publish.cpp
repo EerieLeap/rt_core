@@ -19,7 +19,7 @@ using eerie_leap::subsys::event_bus::Event;
 using eerie_leap::subsys::event_bus::EventChannel;
 using eerie_leap::subsys::event_bus::EventPayload;
 using eerie_leap::subsys::event_bus::IEventBus;
-using eerie_leap::subsys::event_bus::k_max_payload_entries;
+using eerie_leap::subsys::event_bus::MAX_PAYLOAD_ENTRIES;
 
 // Replaces the global allocation functions for this test binary so every allocation is counted.
 namespace {
@@ -193,5 +193,5 @@ ZTEST(allocation_free_publish, test_inline_payload_keeps_map_semantics) {
     zassert_false(payload.contains(ProbePayloadType::Value));
     zassert_equal(std::get<uint32_t>(payload.begin()->second), 3U, "The remaining entry moved up");
 
-    zassert_equal(k_max_payload_entries, 6U);
+    zassert_equal(MAX_PAYLOAD_ENTRIES, 6U);
 }

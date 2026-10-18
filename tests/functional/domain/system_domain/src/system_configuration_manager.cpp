@@ -43,8 +43,8 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
 
     const auto saved_system_configuration = system_configuration_manager->Get();
 
-    zassert_equal(saved_system_configuration->hw_version, system_configuration.hw_version);
-    zassert_equal(saved_system_configuration->sw_version, system_configuration.sw_version);
+    zassert_equal(saved_system_configuration->HW_VERSION, system_configuration.HW_VERSION);
+    zassert_equal(saved_system_configuration->SW_VERSION, system_configuration.SW_VERSION);
 }
 
 ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_and_Load) {
@@ -77,8 +77,8 @@ ZTEST(system_configuration_manager, test_SystemConfigurationManager_Save_config_
     const auto saved_system_configuration = system_configuration_manager->Get();
 
     zassert_equal(saved_system_configuration->device_id, system_configuration.device_id);
-    zassert_equal(saved_system_configuration->hw_version, SystemConfiguration::hw_version);
-    zassert_equal(saved_system_configuration->sw_version, SystemConfiguration::sw_version);
+    zassert_equal(saved_system_configuration->HW_VERSION, SystemConfiguration::HW_VERSION);
+    zassert_equal(saved_system_configuration->SW_VERSION, SystemConfiguration::SW_VERSION);
 }
 
 namespace {

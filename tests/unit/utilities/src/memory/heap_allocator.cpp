@@ -6,8 +6,8 @@
 
 #include "utilities/memory/heap_allocator.h"
 
-using eerie_leap::utilities::memory::ext_unique_ptr;
 using eerie_leap::utilities::memory::ExtString;
+using eerie_leap::utilities::memory::ExtUniquePtr;
 using eerie_leap::utilities::memory::ExtVector;
 using eerie_leap::utilities::memory::HeapAllocator;
 using eerie_leap::utilities::memory::make_shared_ext;
@@ -228,7 +228,7 @@ ZTEST(heap_allocator, test_make_unique_ext) {
     ResetTracked();
 
     {
-        ext_unique_ptr<Tracked> tracked = make_unique_ext<Tracked>(11);
+        ExtUniquePtr<Tracked> tracked = make_unique_ext<Tracked>(11);
 
         zassert_not_null(tracked.get());
         zassert_equal(tracked->value, 11);
@@ -266,7 +266,7 @@ ZTEST(heap_allocator, test_make_unique_ext_rethrows_constructor_failure) {
 }
 
 ZTEST(heap_allocator, test_ext_deleter_ignores_null) {
-    const ext_unique_ptr<Tracked> empty;
+    const ExtUniquePtr<Tracked> empty;
 
     zassert_is_null(empty.get());
 }

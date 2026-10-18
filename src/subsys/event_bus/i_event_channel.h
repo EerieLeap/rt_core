@@ -52,7 +52,7 @@ public:
 // Channels are singletons that outlive every bus, so the slots observe rather than
 // own. A fixed array keeps the drain loop lock-free and allocation-free; registration
 // only ever appends.
-inline constexpr size_t k_max_bus_channels = 8;
-using EventChannelSlots = std::array<IEventChannel*, k_max_bus_channels>;
+inline constexpr size_t MAX_BUS_CHANNELS = 8;
+using EventChannelSlots = std::array<IEventChannel*, MAX_BUS_CHANNELS>;
 
 } // namespace eerie_leap::subsys::event_bus

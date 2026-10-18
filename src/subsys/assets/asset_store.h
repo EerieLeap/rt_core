@@ -79,7 +79,7 @@ private:
     fs_file_t file_{};
     bool open_ = false;
     size_t size_ = 0;
-    eerie_memory::pmr_unique_ptr<Block> buffer_;
+    eerie_memory::PmrUniquePtr<Block> buffer_;
     // The file range the buffer holds: starts at a multiple of BUFFER_SIZE, shorter at the end.
     size_t buffer_offset_ = 0;
     size_t buffer_length_ = 0;
@@ -153,7 +153,7 @@ private:
     bool open_ = false;
     // The first failure of a write; Append() and Commit() return it from then on.
     int error_ = 0;
-    eerie_memory::pmr_unique_ptr<Block> buffer_;
+    eerie_memory::PmrUniquePtr<Block> buffer_;
     size_t buffered_ = 0;
     size_t written_ = 0;
 

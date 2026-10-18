@@ -310,9 +310,9 @@ std::shared_ptr<mdf4::ChannelBlock> Mdf4File::CreateDataChannel(
         throw std::runtime_error("Channels can only be added to a plain channel group");
 
     const auto channels = channel_group->GetChannels();
-    if(channels.size() + 1 > RecordWriter::kMaxFields) {
+    if(channels.size() + 1 > RecordWriter::MAX_FIELDS) {
         throw std::runtime_error(
-            "A record of more than " + std::to_string(RecordWriter::kMaxFields)
+            "A record of more than " + std::to_string(RecordWriter::MAX_FIELDS)
             + " channels does not fit the record writer"
         );
     }
@@ -335,10 +335,10 @@ std::shared_ptr<mdf4::ChannelBlock> Mdf4File::CreateDataChannel(
         + static_cast<uint64_t>(channel_group->GetDataSizeBytes())
         + MdfHelpers::ToMdf4ChannelDataType(data_type).bit_count / 8 + invalidation_bytes;
 
-    if(record_size > RecordWriter::kMaxRecordBytes) {
+    if(record_size > RecordWriter::MAX_RECORD_BYTES) {
         throw std::runtime_error(
             "A record of " + std::to_string(record_size) + " bytes exceeds the "
-            + std::to_string(RecordWriter::kMaxRecordBytes) + " byte limit of the record writer"
+            + std::to_string(RecordWriter::MAX_RECORD_BYTES) + " byte limit of the record writer"
         );
     }
 

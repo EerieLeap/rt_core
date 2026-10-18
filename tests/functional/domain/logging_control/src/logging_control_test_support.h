@@ -76,8 +76,8 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::utilities::string::StringHelpers;
 
 // Every unit that can log, as a request names it.
-inline constexpr uint32_t ALL_UNITS = ILoggingControl::kAllUnits;
-inline constexpr uint8_t BROADCAST = ILoggingCommandSender::kBroadcast;
+inline constexpr uint32_t ALL_UNITS = ILoggingControl::ALL_UNITS;
+inline constexpr uint8_t BROADCAST = ILoggingCommandSender::BROADCAST;
 
 // Well past the time an event takes through the bus or a job through a queue.
 inline constexpr int WAIT_MS = 2000;
@@ -424,7 +424,7 @@ public:
         return starts;
     }
 
-    // The IDs the sends went to, in order (kBroadcast for a broadcast).
+    // The IDs the sends went to, in order (BROADCAST for a broadcast).
     std::vector<uint8_t> Devices() const {
         std::vector<uint8_t> devices;
         for(const auto& send : Sends())
@@ -437,7 +437,7 @@ public:
     size_t Broadcasts() const {
         size_t count = 0;
         for(const auto& send : Sends())
-            count += send.device_id == kBroadcast ? 1 : 0;
+            count += send.device_id == BROADCAST ? 1 : 0;
 
         return count;
     }
