@@ -964,7 +964,7 @@ int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
     const std::string_view to_name = ToView(target);
 
     // A rename takes a name away and makes one: both bits.
-    std::shared_ptr<const AssetProvider> provider = FindProvider(kind);
+    const auto provider = FindProvider(kind);
     if(provider == nullptr)
         return Fail(ctxt, Error::UNKNOWN_KIND);
 
