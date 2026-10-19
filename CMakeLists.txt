@@ -288,6 +288,7 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
             "${SRC_DIR}/controllers/logging_controller.cpp"
             "${SRC_DIR}/domain/logging_domain/control/*.c"
             "${SRC_DIR}/domain/logging_domain/control/*.cpp"
+            "${SRC_DIR}/domain/logging_domain/smp/*.cpp"
             "${SRC_DIR}/configuration/cbor/traits/logging_control_config_trait.cpp"
             "${SRC_DIR}/configuration/cbor/cbor_logging_control_config/*.cpp"
         )
@@ -319,8 +320,9 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
 
     # The logging domain's glob also finds control/, which needs the CDMP domain; it is built only
     # by the logging controller's branch above.
+    # Its smp/ group takes the controller's control the same way.
     if(NOT CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
-        list(FILTER SRC EXCLUDE REGEX "/domain/logging_domain/control/")
+        list(FILTER SRC EXCLUDE REGEX "/domain/logging_domain/(control|smp)/")
     endif()
 
     # A unit with both the logging domain and its controller globs control/ twice.

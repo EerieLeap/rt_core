@@ -157,6 +157,7 @@ public:
     // sent is dropped by a stop; a stop not yet sent (this unit's own update) is kept.
     bool HandleLoggingCommand(bool is_start) override;
     [[nodiscard]] bool IsActive() const override;
+    [[nodiscard]] LoggingStatusReason GetReason() const override;
 
 private:
     enum class Request : uint8_t {
@@ -208,6 +209,8 @@ private:
     std::array<CdmpDeviceInfo, K_MAX_NETWORK_DEVICES> devices_{};
     // From the last StatusUpdated.
     std::atomic<bool> is_active_ = false;
+    // The reason of the last StatusUpdated; Stopped while active.
+    std::atomic<LoggingStatusReason> reason_ = LoggingStatusReason::Stopped;
     // Whether the last StatusUpdated was inactive Unavailable. The status handler only, inside guard_.
     bool is_unavailable_ = false;
 

@@ -14,9 +14,11 @@ if(NOT CONFIG_EERIE_LEAP_SMP_ASSETS)
   list(FILTER TEST_SOURCES EXCLUDE REGEX "/assets_mgmt_group\\.cpp$")
 endif()
 
-# The COM domain needs CAN and CDMP, so its group is built on its own here.
+# The COM domain needs CAN and CDMP, and the logging group is built with the logging controller, so
+# both groups are built on their own here.
 target_sources(app PRIVATE
   ${RT_CORE_DIR}/src/domain/canbus_com_domain/smp/network_mgmt_group.cpp
+  ${RT_CORE_DIR}/src/domain/logging_domain/smp/logging_mgmt_group.cpp
   ${TEST_SOURCES}
 )
 

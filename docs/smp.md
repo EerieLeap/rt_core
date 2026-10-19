@@ -22,6 +22,7 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 | `calibration` | 68 | `AdcController` | `START` 0, `STOP` 1, `READ` 2 |
 | `files` | 69 | `ManagementController` | `LIST` 0 |
 | `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4, `STAT` 5, `RENAME` 6 |
+| `logging` | 71 | `LoggingController` | `STATUS` 0, `START` 1, `STOP` 2 |
 
 ### `config`: read and write stored configurations
 
@@ -282,6 +283,40 @@ SMP v1 clients get `rc` instead: `ENOENT` for `UNKNOWN_KIND` and `NOT_FOUND`, `E
 `UNAVAILABLE`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
 for `DENIED`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`, `ECORRUPT`
 for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
+
+### `logging`: status, start and stop
+
+The CDMP `LOGGING` command and the shared status reach only units on the CAN bus. This group gives a
+client that talks SMP, over Bluetooth or routed through an access point, the same view and the same
+controls. Both roles serve it (see [logging.md](logging.md#control)); `LoggingController` registers it
+when `EERIE_LEAP_SMP` is on.
+
+| Command | Request | Response |
+| --- | --- | --- |
+| `STATUS` (read) | | `{active, reason, since_ms?, file?, bytes?}` |
+| `START` (write) | `{uid?}` | `{}` |
+| `STOP` (write) | `{uid?}` | `{}` |
+
+- `active` is a boolean, `reason` the `LoggingStatusReason` (0 `Stopped`, 1 `WriteFailed`, 2 `NoSpace`,
+  3 `RotationFailed`, 4 `Unavailable`) of the last status on `logging_events`; 0 while `active`, as in the CDMP
+  record. On a unit with a log writer it is that unit's own status. On a unit without one (the gauge)
+  it is the combined status the units share, and `Unavailable` while none reports.
+- `since_ms` is the start of the session in Unix milliseconds, UTC, and only present while this unit's
+  own writer runs a session. `file` (the asset name in the [`logs`](#assets-asset-kinds) kind) and
+  `bytes` (that file's size so far, headers included) are present only while a file is open; the file
+  being written cannot be read as an asset. A unit without a writer never sends the three.
+- `uid` is the CDMP UID of the unit to start or stop; absent or 0 is every unit that can log, as in the
+  `LOGGING` command. The request is the control's `RequestStart()` or `RequestStop()`, the same as a
+  trigger makes: the answer `{}` means the request was taken, not that logging changed, and a start
+  that fails or a stop while stopped publishes nothing. A client reads `STATUS` again to see the effect.
+  A unit with a writer acts on 0 and its own UID itself and sends the rest to the network; the gauge
+  sends the `LOGGING` command.
+
+Errors: the group has no error codes of its own. A `uid` that is not an unsigned integer that fits 32
+bits is a bad request (`rc` `EINVAL`).
+
+Threading: the handlers run on the MCUmgr work queue and only read atomics, call the writer's session
+getter and store a request; they allocate, block and throw nothing.
 
 ## Transports
 

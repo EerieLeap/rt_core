@@ -15,6 +15,7 @@ enum class SmpGroupId : uint16_t {
     CALIBRATION = MGMT_GROUP_ID_PERUSER + 4,
     FILES = MGMT_GROUP_ID_PERUSER + 5,
     ASSETS = MGMT_GROUP_ID_PERUSER + 6,
+    LOGGING = MGMT_GROUP_ID_PERUSER + 7,
 };
 
 } // namespace eerie_leap::subsys::smp

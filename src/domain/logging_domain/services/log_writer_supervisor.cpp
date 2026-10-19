@@ -309,6 +309,10 @@ bool LogWriterSupervisor::IsActive() const {
     return is_active_;
 }
 
+LoggingStatusReason LogWriterSupervisor::GetReason() const {
+    return reason_;
+}
+
 std::shared_ptr<IService> LogWriterSupervisor::GetDependentService() const {
     return dependent_;
 }
@@ -420,13 +424,16 @@ void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessa
 
     const bool is_active = std::get<bool>(active->second);
     is_active_ = is_active;
-    if(is_active)
+    if(is_active) {
+        reason_ = LoggingStatusReason::Stopped;
         return;
+    }
 
     auto reason = LoggingStatusReason::Stopped;
     const auto* const reason_entry = event.payload.find(LoggingPayloadType::Reason);
     if(reason_entry != event.payload.end() && std::holds_alternative<uint32_t>(reason_entry->second))
         reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason_entry->second));
+    reason_ = reason;
 
     // A stop publishes Stopped; anything else ended a session that the task now closes.
     if(reason == LoggingStatusReason::Stopped)

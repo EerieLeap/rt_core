@@ -90,6 +90,7 @@ public:
     // act on it now (a request before Initialize() is refused and logged, as for any caller).
     bool HandleLoggingCommand(bool is_start) override;
     [[nodiscard]] bool IsActive() const override;
+    [[nodiscard]] LoggingStatusReason GetReason() const override;
 
     /**
      * What to register with SensorsController::RegisterDependentService(), after a successful
@@ -131,6 +132,7 @@ private:
     std::atomic<bool> is_restart_due_ = false;
     // From the last StatusUpdated.
     std::atomic<bool> is_active_ = false;
+    std::atomic<LoggingStatusReason> reason_ = LoggingStatusReason::Stopped;
     // The reason of the last failure event, for the log line of the stop; taken by every failure
     // check. Stopped: none.
     std::atomic<LoggingStatusReason> failure_reason_ = LoggingStatusReason::Stopped;

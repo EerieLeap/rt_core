@@ -2,7 +2,11 @@
 
 #include <cstdint>
 
+#include "domain/logging_domain/event_bus/logging_status_reason.h"
+
 namespace eerie_leap::domain::logging_domain::control {
+
+using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 
 // Starts and stops logging, on this unit or on the units that log, and tells whether it runs.
 class ILoggingControl {
@@ -30,6 +34,11 @@ public:
     // Whether logging runs, as logging_events last reported it: for the shell's status and for
     // tests. A trigger never reads it, its bound value already says what it wants.
     [[nodiscard]] virtual bool IsActive() const = 0;
+
+    // Why logging is not active, as logging_events last reported it, like IsActive(): Stopped while
+    // active or before the first status. In the remote role it is the combined imported status
+    // (Unavailable when no unit reports one). Lock-free, callable from the MCUmgr work queue.
+    [[nodiscard]] virtual LoggingStatusReason GetReason() const = 0;
 };
 
 } // namespace eerie_leap::domain::logging_domain::control

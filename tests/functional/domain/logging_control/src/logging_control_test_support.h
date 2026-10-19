@@ -295,6 +295,9 @@ public:
     [[nodiscard]] bool IsActive() const override {
         return false;
     }
+    [[nodiscard]] LoggingStatusReason GetReason() const override {
+        return LoggingStatusReason::Stopped;
+    }
 
     // Each request blocks its caller until Release().
     void HoldRequests() {

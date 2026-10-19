@@ -94,6 +94,7 @@ ZTEST(writer_logging_control, test_IsActiveIsTheWriters) {
     Fixture f;
 
     zassert_equal(f.control->IsActive(), f.local->IsActive());
+    zassert_equal(f.control->GetReason(), f.local->GetReason());
 }
 
 ZTEST(writer_logging_control, test_ANullWriterIsRefused) {

@@ -154,6 +154,7 @@ bool RemoteLoggingControl::Initialize() {
             task_.reset();
             guard_ = std::make_shared<DispatchGuard>(this);
             is_active_ = false;
+            reason_ = LoggingStatusReason::Stopped;
             is_unavailable_ = false;
             {
                 const ScopedSpinlock lock(targets_lock_);
@@ -207,6 +208,10 @@ bool RemoteLoggingControl::HandleLoggingCommand(bool is_start) {
 
 bool RemoteLoggingControl::IsActive() const {
     return is_active_;
+}
+
+LoggingStatusReason RemoteLoggingControl::GetReason() const {
+    return reason_;
 }
 
 // Under the lock the task takes its snapshot with, so a run that takes the due flag sees at least this
@@ -483,6 +488,8 @@ void RemoteLoggingControl::OnStatusUpdated(const LoggingEventsChannel::EventMess
         if(reason_entry != event.payload.end() && std::holds_alternative<uint32_t>(reason_entry->second))
             reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason_entry->second));
     }
+
+    reason_ = reason;
 
     // Exactly this transition: no logging unit was reporting, and now one does and is idle. The first
     // status has no predecessor. Active -> Stopped or a failure -> Stopped is the unit's own doing,

@@ -74,4 +74,8 @@ bool WriterLoggingControl::IsActive() const {
     return local_->IsActive();
 }
 
+LoggingStatusReason WriterLoggingControl::GetReason() const {
+    return local_->GetReason();
+}
+
 } // namespace eerie_leap::domain::logging_domain::control

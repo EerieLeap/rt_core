@@ -28,6 +28,10 @@
 #include "domain/sensor_domain/services/sensor_events_publisher.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 
+#ifdef CONFIG_EERIE_LEAP_SMP
+    #include "domain/logging_domain/smp/logging_mgmt_group.h"
+#endif
+
 // The role headers are conditional: the log writer's header reads logging domain options.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     #include "domain/canbus_com_domain/state_bridge/network_state_exporter.h"
@@ -224,6 +228,11 @@ private:
     // Serves the LOGGING command in both roles; the control decides.
     std::unique_ptr<LoggingCommandHandler> logging_command_handler_;
     std::unique_ptr<ConfigurationUpdateLoggingStop> configuration_update_logging_stop_;
+#ifdef CONFIG_EERIE_LEAP_SMP
+    // The SMP `logging` group, in both roles; it dispatches to logging_control_ and the writer, so
+    // Teardown() drops it first.
+    std::unique_ptr<eerie_leap::domain::logging_domain::smp::LoggingMgmtGroup> logging_mgmt_group_;
+#endif
 
     // Replaced only by RebuildTriggers() on the configuration work queue, and by Initialize() and
     // Teardown() while neither the task nor the handler can run; trigger_set_lock_ orders those
@@ -264,6 +273,8 @@ private:
     // Writer role with CONFIG_EERIE_LEAP_ASSETS, a manager and the log volume: serves the log files as
     // the LOGS kind, reading and deleting them, but not the one being written. Does nothing otherwise.
     void RegisterAssets();
+    // With CONFIG_EERIE_LEAP_SMP: serves the SMP `logging` group over logging_control_. Not fatal.
+    void RegisterSmpGroup();
     void UnregisterAssets();
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     // From Teardown(): stops logging through the supervisor and waits for it.

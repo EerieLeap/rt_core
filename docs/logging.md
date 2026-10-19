@@ -123,6 +123,13 @@ a log's duration without reading it.
 
 ### Status events and failures
 
+`LogWriterService::GetSessionInfo()` tells the running session for the SMP `logging` group's STATUS
+(`models/log_session_info.h`): null before `Start()` succeeded and after `Stop()`; else `since_ms` (the
+time service's time at `Start()`, Unix ms UTC), the open file's name without directory (empty between
+the two files of a rotation and after a failure closed the file) and its bytes so far, headers
+included, as of the last tick. A failed session still runs until the supervisor's `Stop()`, so it is
+returned. Any thread: it copies under the lock of `IsOpenFile()`, with no allocation or I/O.
+
 The writer publishes `StatusUpdated` on the `logging_events` channel (see
 [infrastructure.md](infrastructure.md)) with `IsActive` and, when inactive, `Reason`
 (`LoggingStatusReason`):
@@ -254,7 +261,7 @@ the destructor: whoever requests keeps the supervisor alive or goes first.
 | --- | --- |
 | `RequestStart(target_uid)`, `RequestStop(target_uid)` | Record the wanted state and return, from any thread. The latest request wins. `target_uid` is the CDMP UID of the unit to start or stop; `ILoggingControl::ALL_UNITS` (0) is every unit that can log, this one included in the writer role. The supervisor ignores it: routing is `WriterLoggingControl`'s. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
 | `HandleLoggingCommand(is_start)` | The CDMP `LOGGING` command another unit sent (see [The `LOGGING` command](#the-logging-command)). Whether this unit accepts it: the answer is `SUCCESS` if so, else `FAILURE`. A unit that logs takes it as a request; a unit without a writer serves only a stop. |
-| `IsActive()` | `IsActive` of the last `StatusUpdated` on `logging_events`; false until the first. For a shell's status and for tests: a trigger never reads it. |
+| `IsActive()`, `GetReason()` | `IsActive` and the `Reason` (`Stopped` while active) of the last `StatusUpdated` on `logging_events`; false and `Stopped` until the first. For a shell's status, the SMP `logging` group's `STATUS` and tests: a trigger never reads them. |
 
 A request never waits for the writer or for the CAN bus. Both implementations store the wanted
 state in an atomic and reschedule one task on the configuration work queue, so a trigger can call
@@ -266,6 +273,7 @@ the status is `StatusUpdated` on `logging_events`, which a display or a widget b
 | [Triggers](#triggers) | Stored configuration: an event binding, typically an indicator sensor. |
 | [The `LOGGING` command](#the-logging-command) | CDMP, from another unit; on every unit with a COM service. |
 | [A configuration update](#configuration-updates) | A configuration stored on this unit: a stop. |
+| [The SMP `logging` group](smp.md#logging-status-start-and-stop) | `START` and `STOP` over BLE, or routed by an access point, on every unit with `EERIE_LEAP_SMP`; `STATUS` reads the status. |
 | The application's shell or autostart | `LoggingController::GetControl()`. |
 
 The build picks the implementation (`EERIE_LEAP_DOMAIN_LOGGING`):
@@ -286,6 +294,11 @@ stop also tells the network half to drop its wanted starts.
 
 `RemoteLoggingControl` (`control/remote_logging_control.h`) is the control of a unit without a log
 writer.
+
+- **Status over SMP.** `logging_events` carries the imported combined status here (`Unavailable` while no
+  unit reports one), so `IsActive()` and `GetReason()` are that status, and the SMP `logging` group's
+  `STATUS` answers it with `active` and `reason` alone: the session, file and size are the writing
+  unit's. Its `START` and `STOP` go through this control like a trigger's request.
 
 - **Targets.** A request names its target. `ALL_UNITS` is one broadcast, whatever the device table
   holds. A UID is one unicast to the device ID of the unit with that UID, looked up through

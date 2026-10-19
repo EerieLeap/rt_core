@@ -38,6 +38,7 @@ public:
     // Returns the writer's answer.
     bool HandleLoggingCommand(bool is_start) override;
     [[nodiscard]] bool IsActive() const override;
+    [[nodiscard]] LoggingStatusReason GetReason() const override;
 
 private:
     std::shared_ptr<ILoggingControl> local_;

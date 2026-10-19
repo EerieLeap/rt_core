@@ -261,8 +261,13 @@ ZTEST(remote_logging_control, test_IsActiveFollowsTheStatus) {
     PublishStatus(true);
     zassert_true(F().control->IsActive());
 
+    zassert_equal(F().control->GetReason(), LoggingStatusReason::Stopped, "Active has no reason");
+
     PublishStatus(false, LoggingStatusReason::Stopped);
     zassert_false(F().control->IsActive());
+
+    PublishStatus(false, LoggingStatusReason::Unavailable);
+    zassert_equal(F().control->GetReason(), LoggingStatusReason::Unavailable, "The reason follows the last status");
 }
 
 // The restart monitor's report, from the CDMP work queue in the real wiring: the logging unit

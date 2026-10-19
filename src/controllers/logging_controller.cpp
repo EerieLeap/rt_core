@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -379,6 +381,7 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
 
     // 9. Nothing after this can fail, so a controller that failed to initialize serves nothing.
     RegisterAssets();
+    RegisterSmpGroup();
 
     return true;
 }
@@ -620,6 +623,35 @@ void LoggingController::RegisterAssets() {
 #endif
 }
 
+void LoggingController::RegisterSmpGroup() {
+#ifdef CONFIG_EERIE_LEAP_SMP
+    using eerie_leap::domain::logging_domain::models::LogSessionProvider;
+    using eerie_leap::domain::logging_domain::smp::LoggingMgmtGroup;
+
+    try {
+        LogSessionProvider session_provider;
+    #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+        // The writer can outlive the controller, as the dependent service SensorsController keeps
+        // holds it, so it is held weakly.
+        session_provider = [weak_writer = std::weak_ptr<LogWriterService>(
+                                log_writer_service_
+                            )]() -> std::optional<eerie_leap::domain::logging_domain::models::LogSessionInfo> {
+            const auto writer = weak_writer.lock();
+            if(writer == nullptr)
+                return std::nullopt;
+
+            return writer->GetSessionInfo();
+        };
+    #endif
+        auto group = std::make_unique<LoggingMgmtGroup>(logging_control_, std::move(session_provider));
+        group->Register();
+        logging_mgmt_group_ = std::move(group);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to serve the logging SMP group: %s", e.what());
+    }
+#endif
+}
+
 void LoggingController::UnregisterAssets() {
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
     if(assets_manager_ != nullptr && is_assets_registered_)
@@ -685,6 +717,11 @@ void LoggingController::StopLogWriter() {
 // Also the failed-Initialize() path and the destructor, so each step tolerates a member that was
 // never built, and the whole can run again.
 void LoggingController::Teardown() {
+#ifdef CONFIG_EERIE_LEAP_SMP
+    // The group dispatches to the control and the writer.
+    logging_mgmt_group_.reset();
+#endif
+
     // The log files are not served any more, so no request asks the writer about a file past this.
     UnregisterAssets();
 
