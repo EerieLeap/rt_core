@@ -59,6 +59,11 @@ using eerie_leap::subsys::threading::WorkQueueThread;
  * chunk, while nothing came after it, gets the session's token instead of BUSY; the last one, after
  * the commit, gets the same answer again; and a file sent in one chunk, which the unit stored, gets
  * its token again for the same request without one.
+ *
+ * A checkpoint is good for the file system's mount and the store's writes as they were when it was
+ * taken (AssetStore::GetGeneration()): a remount or a write through the store, a same-size overwrite
+ * say, ends it. A stored upload leaves a checkpoint of the whole file, so that STAT and a download
+ * resumed after it need not read the file.
  */
 class AssetsMgmtGroup : public SmpGroup<AssetsMgmtGroup> {
 public:
@@ -98,6 +103,14 @@ public:
         WRITE = 3,
         /// Write `{kind, name}`: `{}`.
         DELETE = 4,
+        /// Read `{kind, name}`: `{len, crc?}`. The size of the file and, unless it is above
+        /// CONFIG_EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE and no current checkpoint covers it, the
+        /// CRC32/IEEE of the whole file, the one READ sends. Checked as READ is (the kind, its READ
+        /// bit, the name, the volume, NOT_FOUND, IN_USE). The CRC comes from the checkpoint when it is
+        /// current (the file system was not remounted and no write went through the store since it was
+        /// taken) and covers the whole file, otherwise the unit reads the file, and keeps the result as
+        /// the checkpoint. An open download is left as it is.
+        STAT = 5,
     };
 
     /** @brief Group error codes, returned in the SMP v2 `err` map. */
@@ -137,6 +150,8 @@ private:
         std::string name;
         // Open while the session is.
         AssetReader reader;
+        // AssetStore::GetGeneration() from before the file was opened.
+        uint64_t generation = 0;
         // CRC32 of the file's bytes [0, crc_end).
         uint32_t crc = 0;
         size_t crc_end = 0;
@@ -183,6 +198,8 @@ private:
         AssetKind kind{};
         std::string name;
         size_t size = 0;
+        // AssetStore::GetGeneration() the checkpoint is good for.
+        uint64_t generation = 0;
         uint32_t crc = 0;
         size_t crc_end = 0;
     };
@@ -212,6 +229,7 @@ private:
     int HandleRead(smp_streamer* ctxt);
     int HandleWrite(smp_streamer* ctxt);
     int HandleDelete(smp_streamer* ctxt);
+    int HandleStat(smp_streamer* ctxt);
 
     int RunJob(Command command, smp_streamer* ctxt);
     WorkQueueTaskResult ProcessJob();
@@ -223,6 +241,7 @@ private:
     int ExecuteRead(smp_streamer* ctxt);
     int ExecuteWrite(smp_streamer* ctxt);
     int ExecuteDelete(smp_streamer* ctxt);
+    int ExecuteStat(smp_streamer* ctxt);
 
     int WriteFirstChunk(
         smp_streamer* ctxt,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -145,6 +146,8 @@ private:
     };
 
     std::shared_ptr<IFsService> fs_service_;
+    // The store's write counter (AssetStore::GetGeneration()), which a commit increases.
+    std::shared_ptr<std::atomic<uint32_t>> write_counter_;
     // The store's directory, created by Commit() when it is missing.
     std::string directory_;
     // Where Commit() renames the staged file to, relative to the volume.
@@ -203,6 +206,14 @@ public:
     std::optional<size_t> GetSize(std::string_view relative_path) const;
 
     [[nodiscard]] bool IsAvailable() const;
+    /**
+     * @brief Changes whenever the files of the store may have: the volume's mount generation in the
+     *        upper 32 bits, and in the lower 32 a counter that Save(), Delete() and
+     *        AssetWriter::Commit() increase, whether or not they succeed. Something that
+     *        was computed from a file stays good while this is the same. It assumes that assets are
+     *        written only through their store.
+     */
+    [[nodiscard]] uint64_t GetGeneration() const;
     [[nodiscard]] const std::string& GetDirectory() const {
         return directory_;
     }
@@ -273,6 +284,8 @@ public:
 private:
     std::shared_ptr<IFsService> fs_service_;
     std::string directory_;
+    // Shared with the writers, which may outlive a call but not the store's files.
+    std::shared_ptr<std::atomic<uint32_t>> write_counter_;
 };
 
 } // namespace eerie_leap::subsys::assets

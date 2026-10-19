@@ -660,6 +660,31 @@ ZTEST(asset_store, test_get_free_space_falls_by_what_is_written) {
     zassert_true(store.GetFreeSpace() > free_after);
 }
 
+ZTEST(asset_store, test_generation_changes_with_every_save_delete_and_commit) {
+    auto store = MakeStore();
+
+    uint64_t generation = store.GetGeneration();
+
+    zassert_true(store.Save("a.bin", MakeBlob(100)));
+    zassert_not_equal(store.GetGeneration(), generation);
+    generation = store.GetGeneration();
+
+    // Reads change nothing.
+    zassert_true(store.Exists("a.bin"));
+    zassert_equal(store.Load("a.bin").size(), 100);
+    zassert_equal(store.GetGeneration(), generation);
+
+    AssetWriter writer;
+    zassert_equal(store.BeginWrite("a.bin", writer), 0);
+    zassert_equal(writer.Append(MakeBlob(100)), 0);
+    zassert_equal(writer.Commit(), 0);
+    zassert_not_equal(store.GetGeneration(), generation);
+    generation = store.GetGeneration();
+
+    zassert_true(store.Delete("a.bin"));
+    zassert_not_equal(store.GetGeneration(), generation);
+}
+
 ZTEST(asset_store, test_get_space_is_free_and_used_of_one_volume) {
     auto store = MakeStore();
 

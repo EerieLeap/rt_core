@@ -48,6 +48,8 @@ inline std::shared_ptr<FsService> GetSimFsService() {
 class SwitchableFsService : public IFsService {
 public:
     std::atomic<bool> available;
+    // Added to the wrapped volume's mount generation: a test counts a remount of the card here.
+    std::atomic<uint32_t> remounts{ 0 };
 
     using IFsService::DeleteRecursive;
     using IFsService::ListFiles;
@@ -131,6 +133,9 @@ public:
     }
     bool Format() override {
         return available && inner_->Format();
+    }
+    uint32_t GetMountGeneration() const override {
+        return inner_->GetMountGeneration() + remounts;
     }
 
 private:

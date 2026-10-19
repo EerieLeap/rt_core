@@ -304,6 +304,13 @@ public:
         );
     }
 
+    Response Stat(uint32_t kind, std::string_view name) {
+        return client.Read(
+            SmpGroupId::ASSETS, std::to_underlying(Command::STAT),
+            CborMap().Put("kind", kind).PutText("name", name).Build()
+        );
+    }
+
     Response WriteFirst(
         uint32_t kind,
         std::string_view name,
@@ -2747,6 +2754,199 @@ ZTEST_F(smp_assets_group, test_a_destroyed_group_with_a_download_and_an_upload_g
 
     k_msleep(PAST_TIMEOUT_MS);
     zassert_equal(atomic_get(&files_closed), closed_before + 2);
+}
+
+// ======== STAT ========
+
+namespace {
+
+size_t BytesReadSince(atomic_val_t mark) {
+    return static_cast<size_t>(atomic_get(&bytes_read_from_files) - mark);
+}
+
+} // namespace
+
+ZTEST_F(smp_assets_group, test_stat_answers_the_size_and_the_crc_of_the_file) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(2500, 31);
+    harness.Put("images/a.bin", data);
+
+    const auto response = harness.Stat(IMAGES, "a.bin");
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), data.size());
+    zassert_equal(response.Value("crc"), Crc(data));
+
+    // The CRC is the one a download ends with.
+    zassert_equal(harness.DownloadFrom(IMAGES, "a.bin", 0, data.size()).crc, Crc(data));
+}
+
+ZTEST_F(smp_assets_group, test_stat_of_an_empty_file_has_the_crc_of_nothing) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/empty.bin", {});
+
+    const auto response = harness.Stat(IMAGES, "empty.bin");
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), 0);
+    zassert_equal(response.Value("crc"), Crc({}));
+}
+
+ZTEST_F(smp_assets_group, test_stat_checks_the_request_as_read_does) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/a.bin", Pattern(100, 1));
+    harness.Put("scripts/used.lua", Pattern(100, 2));
+    harness.in_use.names.insert("used.lua");
+
+    AssertError(harness.Stat(77, "a.bin"), Error::UNKNOWN_KIND);
+    AssertError(harness.Stat(CAN_SCRIPTS, "a.lua"), Error::DENIED);
+    AssertError(harness.Stat(IMAGES, "a.txt"), Error::BAD_NAME);
+    AssertError(harness.Stat(ANIMATIONS, "a.json"), Error::UNAVAILABLE);
+    AssertError(harness.Stat(IMAGES, "missing.bin"), Error::NOT_FOUND);
+    AssertError(harness.Stat(SENSOR_SCRIPTS, "used.lua"), Error::IN_USE);
+
+    zassert_equal(harness.in_use.calls.back().first, AssetAccess::READ);
+}
+
+ZTEST_F(smp_assets_group, test_stat_of_a_file_in_use_by_a_throwing_check_is_no_memory) {
+    Harness& harness = *fixture->harness;
+    harness.Put("scripts/a.lua", Pattern(100, 2));
+    harness.in_use.throws_bad_alloc = true;
+
+    AssertError(harness.Stat(SENSOR_SCRIPTS, "a.lua"), Error::NO_MEMORY);
+
+    // Nothing is left open: the file can be deleted at once.
+    harness.in_use.throws_bad_alloc = false;
+    zassert_true(harness.Delete(SENSOR_SCRIPTS, "a.lua").IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_stat_after_an_upload_is_served_from_the_checkpoint) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 32);
+
+    zassert_true(harness.UploadAll(IMAGES, "a.bin", data).IsOk());
+
+    const atomic_val_t mark = atomic_get(&bytes_read_from_files);
+    const auto response = harness.Stat(IMAGES, "a.bin");
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), data.size());
+    zassert_equal(response.Value("crc"), Crc(data));
+    zassert_equal(BytesReadSince(mark), 0, "The upload left the CRC");
+}
+
+ZTEST_F(smp_assets_group, test_stat_keeps_its_result_until_the_file_changes) {
+    Harness& harness = *fixture->harness;
+    const Bytes old_data = Pattern(2000, 33);
+    const Bytes new_data = Pattern(2000, 34);
+    harness.Put("images/a.bin", old_data);
+
+    atomic_val_t mark = atomic_get(&bytes_read_from_files);
+    zassert_equal(harness.Stat(IMAGES, "a.bin").Value("crc"), Crc(old_data));
+    zassert_true(BytesReadSince(mark) > 0, "The first STAT reads the file");
+
+    mark = atomic_get(&bytes_read_from_files);
+    zassert_equal(harness.Stat(IMAGES, "a.bin").Value("crc"), Crc(old_data));
+    zassert_equal(BytesReadSince(mark), 0, "The second one does not");
+
+    // The same size, written through the store.
+    zassert_true(harness.images_store->Save("a.bin", new_data));
+
+    mark = atomic_get(&bytes_read_from_files);
+    zassert_equal(harness.Stat(IMAGES, "a.bin").Value("crc"), Crc(new_data));
+    zassert_true(BytesReadSince(mark) > 0, "A write through the store ends the checkpoint");
+}
+
+ZTEST_F(smp_assets_group, test_stat_after_a_remount_reads_the_file_again) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(2000, 35);
+
+    zassert_true(harness.UploadAll(IMAGES, "a.bin", data).IsOk());
+
+    // The card is taken out and put back; a PC may have edited the file.
+    harness.images_volume->remounts++;
+
+    const atomic_val_t mark = atomic_get(&bytes_read_from_files);
+    const auto response = harness.Stat(IMAGES, "a.bin");
+
+    zassert_equal(response.Value("crc"), Crc(data));
+    zassert_true(BytesReadSince(mark) > 0, "The checkpoint of the old mount is not trusted");
+}
+
+ZTEST_F(smp_assets_group, test_stat_of_a_file_above_the_cap_has_no_crc_unless_a_checkpoint_covers_it) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(LARGE_FILE_SIZE, 36);
+    harness.Put("images/big.bin", data);
+    zassert_true(LARGE_FILE_SIZE > CONFIG_EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE);
+
+    const atomic_val_t mark = atomic_get(&bytes_read_from_files);
+    const auto response = harness.Stat(IMAGES, "big.bin");
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), data.size());
+    zassert_false(response.Has("crc"));
+    zassert_equal(BytesReadSince(mark), 0, "A file above the cap is not read");
+
+    // A whole download leaves its checkpoint.
+    zassert_equal(harness.DownloadFrom(IMAGES, "big.bin", 0, data.size()).crc, Crc(data));
+
+    const auto after = harness.Stat(IMAGES, "big.bin");
+
+    zassert_true(after.IsOk());
+    zassert_equal(after.Value("crc"), Crc(data));
+}
+
+ZTEST_F(smp_assets_group, test_stat_leaves_the_read_session_as_it_was) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(LARGE_FILE_SIZE, 37);
+    const Bytes other = Pattern(1500, 38);
+    harness.Put("images/big.bin", data);
+    harness.Put("images/other.bin", other);
+
+    const size_t chunk = Harness::DataOf(harness.Read(IMAGES, "big.bin", 0)).size();
+
+    // Of the file that is open, and of another one.
+    zassert_true(harness.Stat(IMAGES, "big.bin").IsOk());
+    zassert_equal(harness.Stat(IMAGES, "other.bin").Value("crc"), Crc(other));
+
+    // The download goes on in the same session: nothing was opened for it.
+    const atomic_val_t closed = atomic_get(&files_closed);
+    const auto download = harness.DownloadFrom(IMAGES, "big.bin", chunk, data.size());
+
+    zassert_equal(download.crc, Crc(data));
+    zassert_equal(atomic_get(&files_closed) - closed, 1, "Only the end of the download closes its file");
+}
+
+ZTEST_F(smp_assets_group, test_stat_after_a_whole_download_is_served_from_the_checkpoint) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(2500, 39);
+    harness.Put("images/a.bin", data);
+
+    zassert_equal(harness.DownloadFrom(IMAGES, "a.bin", 0, data.size()).crc, Crc(data));
+
+    const atomic_val_t mark = atomic_get(&bytes_read_from_files);
+    zassert_equal(harness.Stat(IMAGES, "a.bin").Value("crc"), Crc(data));
+    zassert_equal(BytesReadSince(mark), 0);
+}
+
+ZTEST_F(smp_assets_group, test_read_resume_after_a_same_size_overwrite_computes_the_crc_again) {
+    Harness& harness = *fixture->harness;
+    const Bytes old_data = Pattern(LARGE_FILE_SIZE, 40);
+    const Bytes new_data = Pattern(LARGE_FILE_SIZE, 41);
+    harness.Put("images/a.bin", old_data);
+    harness.Put("images/b.bin", Pattern(100, 42));
+
+    const size_t chunk = Harness::DataOf(harness.Read(IMAGES, "a.bin", 0)).size();
+
+    // Another file closes the session of the first and leaves its checkpoint.
+    zassert_true(harness.Read(IMAGES, "b.bin", 0).IsOk());
+
+    zassert_true(harness.images_store->Save("a.bin", new_data));
+
+    const auto download = harness.DownloadFrom(IMAGES, "a.bin", chunk, new_data.size());
+
+    zassert_true(download.data == Bytes(new_data.begin() + chunk, new_data.end()));
+    zassert_equal(download.crc, Crc(new_data), "The CRC of the old content is not kept");
 }
 
 // ======== Dispatch ========

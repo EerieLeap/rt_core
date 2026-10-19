@@ -2,6 +2,7 @@
 #include <cerrno>
 #include <cstring>
 #include <exception>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <utility>
@@ -218,6 +219,7 @@ AssetWriter& AssetWriter::operator=(AssetWriter&& other) noexcept {
 
 void AssetWriter::MoveFrom(AssetWriter& other) noexcept {
     fs_service_ = std::move(other.fs_service_);
+    write_counter_ = std::move(other.write_counter_);
     directory_ = std::move(other.directory_);
     target_path_ = std::move(other.target_path_);
     file_ = other.file_;
@@ -325,6 +327,10 @@ int AssetWriter::Commit() {
     if(rc != 0)
         DiscardStaged();
 
+    // Counted even when it failed: the target may have been replaced before the failure.
+    if(write_counter_ != nullptr)
+        (*write_counter_)++;
+
     buffer_.reset();
     buffered_ = 0;
 
@@ -347,7 +353,8 @@ void AssetWriter::Abort() {
 
 AssetStore::AssetStore(std::shared_ptr<IFsService> fs_service, std::string_view directory) :
     fs_service_(std::move(fs_service)),
-    directory_(directory) {
+    directory_(directory),
+    write_counter_(std::make_shared<std::atomic<uint32_t>>(0)) {
 
     if(fs_service_ == nullptr)
         throw std::invalid_argument("fs_service cannot be null");
@@ -373,6 +380,10 @@ bool AssetStore::IsAvailable() const {
     return fs_service_->IsAvailable();
 }
 
+uint64_t AssetStore::GetGeneration() const {
+    return (static_cast<uint64_t>(fs_service_->GetMountGeneration()) << 32) | *write_counter_;
+}
+
 bool AssetStore::Save(std::string_view relative_path, std::span<const uint8_t> data) {
     if(!fs_service_->IsAvailable())
         return false;
@@ -381,7 +392,11 @@ bool AssetStore::Save(std::string_view relative_path, std::span<const uint8_t> d
     if(!EnsureDirectory(*fs_service_, directory_))
         return false;
 
-    return fs_service_->WriteFile(GetPath(relative_path), data.data(), data.size(), false);
+    const bool is_saved = fs_service_->WriteFile(GetPath(relative_path), data.data(), data.size(), false);
+    // Counted even when it failed: a write that fails half way leaves the file changed.
+    (*write_counter_)++;
+
+    return is_saved;
 }
 
 std::pmr::vector<uint8_t> AssetStore::Load(std::string_view relative_path) const {
@@ -423,7 +438,10 @@ bool AssetStore::Delete(std::string_view relative_path) {
     if(!fs_service_->IsAvailable())
         return false;
 
-    return fs_service_->DeleteFile(GetPath(relative_path));
+    const bool is_deleted = fs_service_->DeleteFile(GetPath(relative_path));
+    (*write_counter_)++;
+
+    return is_deleted;
 }
 
 bool AssetStore::Exists(std::string_view relative_path) const {
@@ -607,6 +625,7 @@ int AssetStore::BeginWrite(std::string_view name, AssetWriter& writer) {
         return rc;
 
     writer.fs_service_ = fs_service_;
+    writer.write_counter_ = write_counter_;
     writer.directory_ = std::move(directory);
     writer.target_path_ = std::move(target_path);
     writer.file_ = file;

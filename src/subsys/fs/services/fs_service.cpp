@@ -657,6 +657,10 @@ bool FsService::Format() {
     return Mount();
 }
 
+uint32_t FsService::GetMountGeneration() const {
+    return mount_generation_;
+}
+
 bool FsService::Mount() {
     ScopedMutex lock(mutex_);
 
@@ -671,6 +675,8 @@ bool FsService::Mount() {
         LOG_ERR("Failed to mount FS: %d.", rc);
         return false;
     }
+
+    mount_generation_++;
 
     LOG_INF("Mounted FS at %s.", mountpoint_->mnt_point);
 

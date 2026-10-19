@@ -48,6 +48,15 @@ menu "EerieLeap SMP groups config"
         help
           Closes the file of a download, or deletes the staged file of an upload, that the
           client stopped sending requests for.
+
+    config EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE
+        int "Largest asset the STAT command computes a CRC for"
+        default 4194304
+        depends on EERIE_LEAP_SMP_ASSETS
+        help
+          STAT reads a file that no checkpoint covers on the configuration work queue, and
+          the client waits for the answer. A larger file gets its size and no CRC, unless
+          a download or an upload left a current checkpoint of it.
 endmenu
 
 config EERIE_LEAP_SMP_CAN

@@ -95,6 +95,15 @@ public:
     virtual uint64_t GetUsedSpace() const = 0;
     virtual bool Format() = 0;
 
+    /**
+     * @brief Counts the times the volume was mounted: it changes when the volume went away and
+     *        came back, which may have changed its files behind the unit's back (an SD card edited
+     *        on a PC). A service that cannot tell returns 0 always.
+     */
+    virtual uint32_t GetMountGeneration() const {
+        return 0;
+    }
+
     // Non-virtual shorthands: default arguments on virtuals bind to the static type.
     bool WriteFile(std::string_view relative_path, const void* data_p, size_t data_size) {
         return WriteFile(relative_path, data_p, data_size, false);

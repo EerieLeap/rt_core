@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -29,6 +30,7 @@ protected:
     // the devicetree fstab entry and not a copy of it.
     fs_mount_t* mountpoint_;
     mutable k_mutex mutex_{};
+    std::atomic<uint32_t> mount_generation_{ 0 };
 
     bool TryBuildPath(std::string_view relative_path, FilesystemPath<PATH_BUFFER_SIZE>& full_path) const;
 
@@ -71,6 +73,7 @@ public:
     uint64_t GetTotalSpace() const override;
     uint64_t GetUsedSpace() const override;
     bool Format() override;
+    uint32_t GetMountGeneration() const override;
 };
 
 } // namespace eerie_leap::subsys::fs::services

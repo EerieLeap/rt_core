@@ -28,6 +28,7 @@ using eerie_leap::utilities::memory::Mrm;
 namespace {
 
 constexpr int64_t SESSION_TIMEOUT_MS = CONFIG_EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS;
+constexpr size_t STAT_CRC_MAX_SIZE = CONFIG_EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE;
 
 // Worst-case encodings, in bytes, of what the responses are made of.
 // A text key shorter than 24 bytes: its head byte and its characters.
@@ -90,6 +91,7 @@ const mgmt_handler AssetsMgmtGroup::HANDLERS[] = {
     { .mh_read = Dispatch<&AssetsMgmtGroup::HandleRead>, .mh_write = nullptr },
     { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleWrite> },
     { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleDelete> },
+    { .mh_read = Dispatch<&AssetsMgmtGroup::HandleStat>, .mh_write = nullptr },
 };
 
 AssetsMgmtGroup::AssetsMgmtGroup(
@@ -195,6 +197,10 @@ int AssetsMgmtGroup::HandleDelete(smp_streamer* ctxt) {
     return RunJob(Command::DELETE, ctxt);
 }
 
+int AssetsMgmtGroup::HandleStat(smp_streamer* ctxt) {
+    return RunJob(Command::STAT, ctxt);
+}
+
 int AssetsMgmtGroup::RunJob(Command command, smp_streamer* ctxt) {
     // Initialize() creates the task; without it no job could ever run and the wait below would not end.
     if(!job_task_.has_value())
@@ -248,6 +254,8 @@ int AssetsMgmtGroup::ExecuteJob(const Job& job) {
             return ExecuteWrite(job.ctxt);
         case Command::DELETE:
             return ExecuteDelete(job.ctxt);
+        case Command::STAT:
+            return ExecuteStat(job.ctxt);
     }
 
     return MGMT_ERR_ENOTSUP;
@@ -486,6 +494,114 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
         read_session_.last_activity_ms = k_uptime_get();
         OnActivity();
     }
+
+    return MGMT_RETURN_CHECK(ok);
+}
+
+int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
+    uint32_t kind = 0;
+    zcbor_string name{};
+    std::array keys = {
+        SmpMapKey("kind", zcbor_uint32_decode, &kind),
+        SmpMapKey("name", zcbor_tstr_decode, &name),
+    };
+
+    if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found || !keys[1].found)
+        return MGMT_ERR_EINVAL;
+
+    const std::string_view asset_name = ToView(name);
+    std::shared_ptr<const AssetProvider> provider;
+
+    const Error error = CheckTarget(kind, asset_name, AssetAccess::READ, provider);
+    if(error != Error::OK)
+        return Fail(ctxt, error);
+
+    const AssetStore& store = *provider->store;
+
+    // Read before the size: a write in between makes the result stale at worst.
+    const uint64_t generation = store.GetGeneration();
+
+    const std::optional<size_t> stored_size = store.GetSize(asset_name);
+    if(!stored_size.has_value())
+        return Fail(ctxt, Error::NOT_FOUND);
+
+    // May throw; no reader is open yet.
+    if(provider->is_in_use && provider->is_in_use(AssetAccess::READ, asset_name))
+        return Fail(ctxt, Error::IN_USE);
+
+    size_t size = *stored_size;
+    std::optional<uint32_t> crc;
+
+    if(IsReadSessionOf(provider, asset_name)
+        && read_session_.generation == generation
+        && read_session_.crc_end == size
+        && read_session_.reader.GetSize() == size) {
+
+        // The open download has read all of it.
+        crc = read_session_.crc;
+    } else if(checkpoint_.is_valid
+        && checkpoint_.kind == provider->kind
+        && checkpoint_.size == size
+        && checkpoint_.crc_end == size
+        && checkpoint_.generation == generation
+        && checkpoint_.name == asset_name) {
+
+        crc = checkpoint_.crc;
+    } else if(size <= STAT_CRC_MAX_SIZE) {
+        // The read session is left as it is: this reader is its own, closed when it goes out of scope.
+        AssetReader reader;
+
+        const int rc = store.OpenRead(asset_name, reader);
+        if(rc < 0)
+            return Fail(ctxt, ToError(rc));
+
+        // What was opened is what is summed, whatever the file was a moment ago.
+        size = reader.GetSize();
+
+        if(size > UINT32_MAX)
+            return Fail(ctxt, Error::IO_ERROR);
+
+        if(size <= STAT_CRC_MAX_SIZE) {
+            uint32_t sum = 0;
+            size_t done = 0;
+
+            while(done < size) {
+                const size_t length = std::min(size - done, transfer_buffer_.size());
+                const ssize_t read = reader.Read(done, std::span(transfer_buffer_).first(length));
+                if(std::cmp_not_equal(read, length))
+                    return Fail(ctxt, Error::IO_ERROR);
+
+                sum = crc32_ieee_update(sum, transfer_buffer_.data(), length);
+                done += length;
+            }
+
+            crc = sum;
+
+            // The next STAT of this file costs nothing, as long as it does not change.
+            checkpoint_.is_valid = false;
+
+            try {
+                checkpoint_.name.assign(asset_name);
+                checkpoint_.kind = provider->kind;
+                checkpoint_.size = size;
+                checkpoint_.generation = generation;
+                checkpoint_.crc = sum;
+                checkpoint_.crc_end = size;
+                checkpoint_.is_valid = true;
+            } catch(const std::bad_alloc&) {
+                LOG_WRN("Out of memory recording the STAT checkpoint.");
+            }
+        }
+    }
+
+    if(size > UINT32_MAX)
+        return Fail(ctxt, Error::IO_ERROR);
+
+    zcbor_state_t* zse = ctxt->writer->zs;
+    bool ok = zcbor_tstr_put_lit(zse, "len") && zcbor_uint32_put(zse, static_cast<uint32_t>(size));
+
+    if(ok && crc.has_value())
+        ok = zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, *crc);
 
     return MGMT_RETURN_CHECK(ok);
 }
@@ -733,6 +849,22 @@ int AssetsMgmtGroup::FinishUpload(
     const size_t length = upload_.length;
 
     // The file is stored: failing to remember it must not fail the answer.
+    // Its CRC was checked against the declared one, so the checkpoint covers the whole file. The
+    // generation is read after the commit, which has increased it.
+    checkpoint_.is_valid = false;
+
+    try {
+        checkpoint_.name = upload_.name;
+        checkpoint_.kind = upload_.kind;
+        checkpoint_.size = length;
+        checkpoint_.generation = provider.store->GetGeneration();
+        checkpoint_.crc = upload_.declared_crc;
+        checkpoint_.crc_end = length;
+        checkpoint_.is_valid = true;
+    } catch(const std::bad_alloc&) {
+        LOG_WRN("Out of memory recording the upload's checkpoint, a STAT will read the file.");
+    }
+
     last_commit_.token = 0;
 
     try {
@@ -891,9 +1023,11 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
     if(!use_checkpoint)
         InvalidateCheckpoint(provider->kind, name);
 
-    // The session is open once its reader is, so the reader opens last.
+    // The session is open once its reader is, so the reader opens last. The generation is read
+    // first: a write in between only makes a checkpoint of this session stale.
     read_session_.kind = provider->kind;
     read_session_.name.assign(name);
+    read_session_.generation = provider->store->GetGeneration();
 
     const int rc = provider->store->OpenRead(name, read_session_.reader);
     if(rc < 0) {
@@ -940,6 +1074,7 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
         && checkpoint_.is_valid
         && checkpoint_.kind == provider->kind
         && checkpoint_.size == size
+        && checkpoint_.generation == read_session_.generation
         && checkpoint_.name == name) {
 
         read_session_.crc = checkpoint_.crc;
@@ -985,6 +1120,7 @@ void AssetsMgmtGroup::CloseReadSession() {
             checkpoint_.name = read_session_.name;
             checkpoint_.kind = read_session_.kind;
             checkpoint_.size = size;
+            checkpoint_.generation = read_session_.generation;
             checkpoint_.crc = read_session_.crc;
             checkpoint_.crc_end = read_session_.crc_end;
             checkpoint_.is_valid = true;
@@ -1002,6 +1138,7 @@ void AssetsMgmtGroup::ResetReadSession() {
     read_session_.provider.reset();
     read_session_.kind = {};
     read_session_.name.clear();
+    read_session_.generation = 0;
     read_session_.crc = 0;
     read_session_.crc_end = 0;
     read_session_.last_activity_ms = 0;
