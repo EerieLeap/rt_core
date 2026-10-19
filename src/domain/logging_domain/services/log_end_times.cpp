@@ -118,8 +118,11 @@ void LogEndTimes::Load() {
             int64_t end_ms = 0;
             const auto [after_number, error] = std::from_chars(line.data(), line.data() + line.size(), end_ms);
             const size_t name_start = static_cast<size_t>(after_number - line.data()) + 1;
-            if(error != std::errc{} || after_number == line.data() + line.size() || *after_number != ' '
-                || name_start >= line.size() || line.size() - name_start > MAX_NAME_LENGTH) {
+            if(error != std::errc{}
+                || after_number == line.data() + line.size()
+                || *after_number != ' '
+                || name_start >= line.size()
+                || line.size() - name_start > MAX_NAME_LENGTH) {
                 is_dirty = true;
                 continue;
             }

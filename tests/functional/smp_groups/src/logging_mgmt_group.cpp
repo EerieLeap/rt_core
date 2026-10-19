@@ -183,8 +183,12 @@ ZTEST(smp_logging_group, test_start_and_stop_take_the_uid_and_default_to_all_uni
     zassert_true(harness.Stop(CborMap().Put("uid", 77).Build()).IsOk());
 
     const std::vector<Request> expected = {
-        { true, ILoggingControl::ALL_UNITS }, { true, ILoggingControl::ALL_UNITS }, { true, 0xFFFFFFFFU },
-        { false, ILoggingControl::ALL_UNITS }, { false, ILoggingControl::ALL_UNITS }, { false, 77 },
+        { true, ILoggingControl::ALL_UNITS },
+        { true, ILoggingControl::ALL_UNITS },
+        { true, 0xFFFFFFFFU },
+        { false, ILoggingControl::ALL_UNITS },
+        { false, ILoggingControl::ALL_UNITS },
+        { false, 77 },
     };
     zassert_true(harness.control->requests == expected, "The requests reach the control as sent");
 }
