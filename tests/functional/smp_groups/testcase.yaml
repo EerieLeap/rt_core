@@ -1,4 +1,7 @@
 common:
+  # Some 170 cases, one of which fills the whole volume: the default 60 s is too short on a loaded
+  # CI runner under QEMU.
+  timeout: 300
   tags:
     - functional
     - subsys.smp
