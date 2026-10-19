@@ -605,6 +605,43 @@ ZTEST_F(smp_assets_group, test_kinds_reports_whether_the_volume_is_mounted_now) 
     zassert_true(response.entry_flags[1].at("avail"), "The animations came");
 }
 
+ZTEST_F(smp_assets_group, test_kinds_reports_free_and_used_space_only_while_mounted) {
+    Harness& harness = *fixture->harness;
+
+    harness.images_volume->available = false;
+
+    const auto response = harness.Kinds();
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 5);
+
+    zassert_false(response.entry_flags[0].at("avail"));
+    zassert_false(response.entries[0].contains("free"), "No space for a kind that is not mounted");
+    zassert_false(response.entries[0].contains("used"));
+
+    for(size_t i = 1; i < response.entries.size(); i++) {
+        if(!response.entry_flags[i].at("avail"))
+            continue;
+
+        zassert_true(response.entries[i].contains("free"), "Kind %u", static_cast<unsigned>(i));
+        zassert_true(response.entries[i].contains("used"), "Kind %u", static_cast<unsigned>(i));
+        zassert_true(response.entries[i].at("free") > 0);
+    }
+
+    harness.images_volume->available = true;
+
+    const auto mounted = harness.Kinds();
+
+    zassert_true(mounted.IsOk());
+    zassert_true(mounted.entry_flags[0].at("avail"));
+    zassert_true(mounted.entries[0].contains("free"));
+    zassert_true(mounted.entries[0].contains("used"));
+    zassert_equal(
+        mounted.entries[0].at("free"), static_cast<uint32_t>(harness.images_store->GetFreeSpace()),
+        "free is the number WRITE checks"
+    );
+}
+
 ZTEST_F(smp_assets_group, test_kinds_follows_the_registry) {
     Harness& harness = *fixture->harness;
 

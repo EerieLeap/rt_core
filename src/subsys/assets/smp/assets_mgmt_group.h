@@ -64,10 +64,12 @@ class AssetsMgmtGroup : public SmpGroup<AssetsMgmtGroup> {
 public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
-        /// Read, empty body: `{kinds: [{kind, name, dir, access, max, ext: [tstr...], avail}]}`,
-        /// ordered by `kind`. `name` is the kind's name, `dir` its directory on the volume, `access`
-        /// the AssetAccess bits, `max` the largest upload (0 for none), `ext` the extensions with their
-        /// dot and `avail` whether the volume is mounted now.
+        /// Read, empty body: `{kinds: [{kind, name, dir, access, max, ext: [tstr...], avail, free?,
+        /// used?}]}`, ordered by `kind`. `name` is the kind's name, `dir` its directory on the volume,
+        /// `access` the AssetAccess bits, `max` the largest upload (0 for none), `ext` the extensions
+        /// with their dot and `avail` whether the volume is mounted now. `free` and `used` (bytes on the
+        /// kind's volume) are sent only while `avail` is true; `free` is the number WRITE checks `len`
+        /// against, and only a hint: files take whole blocks, so a `len` below it can still be NO_SPACE.
         KINDS = 0,
         /// Read `{kind, off?}`: `{entries: [{name, size}], next?}`. The files of the kind with a valid
         /// name from directory position `off` (0 when absent), as many as fit into the response.

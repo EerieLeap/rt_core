@@ -285,9 +285,13 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
     for(const auto& provider : providers) {
         const AssetStore& store = *provider->store;
         const std::string& directory = store.GetDirectory();
+        const bool is_available = store.IsAvailable();
+        const AssetStore::Space space = is_available ? store.GetSpace() : AssetStore::Space{};
+        // free and used join the entry while the volume is mounted.
+        const size_t entry_size = is_available ? 9 : 7;
 
         ok = ok
-            && zcbor_map_start_encode(zse, 7)
+            && zcbor_map_start_encode(zse, entry_size)
             && zcbor_tstr_put_lit(zse, "kind")
             && zcbor_uint32_put(zse, std::to_underlying(provider->kind))
             && zcbor_tstr_put_lit(zse, "name")
@@ -307,8 +311,17 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
         ok = ok
             && zcbor_list_end_encode(zse, provider->extensions.size())
             && zcbor_tstr_put_lit(zse, "avail")
-            && zcbor_bool_put(zse, store.IsAvailable())
-            && zcbor_map_end_encode(zse, 7);
+            && zcbor_bool_put(zse, is_available);
+
+        if(is_available) {
+            ok = ok
+                && zcbor_tstr_put_lit(zse, "free")
+                && zcbor_uint64_put(zse, space.free)
+                && zcbor_tstr_put_lit(zse, "used")
+                && zcbor_uint64_put(zse, space.used);
+        }
+
+        ok = ok && zcbor_map_end_encode(zse, entry_size);
     }
 
     ok = ok && zcbor_list_end_encode(zse, providers.size());

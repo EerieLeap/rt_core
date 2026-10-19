@@ -168,6 +168,12 @@ private:
  */
 class AssetStore {
 public:
+    /// The room on a store's volume, in bytes.
+    struct Space {
+        uint64_t free = 0;
+        uint64_t used = 0;
+    };
+
     /// Directory of staged writes, at the root of the store's volume.
     static constexpr std::string_view STAGING_DIRECTORY = ".assets_tmp";
     /// The staged file: one write is staged per volume at a time.
@@ -203,7 +209,12 @@ public:
     /** @brief @p relative_path relative to the volume: directory + "/" + path, or the path alone
      *         for an empty directory. */
     [[nodiscard]] std::string GetPath(std::string_view relative_path) const;
-    /** @brief Free bytes on the store's volume: total minus used, 0 when unavailable. */
+    /**
+     * @brief Free and used bytes on the store's volume, from one reading of its total and used
+     *        space: free is total minus used. Both 0 when unavailable.
+     */
+    [[nodiscard]] Space GetSpace() const;
+    /** @brief Free bytes on the store's volume: GetSpace().free. */
     [[nodiscard]] uint64_t GetFreeSpace() const;
 
     /**

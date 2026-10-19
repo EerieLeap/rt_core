@@ -660,6 +660,20 @@ ZTEST(asset_store, test_get_free_space_falls_by_what_is_written) {
     zassert_true(store.GetFreeSpace() > free_after);
 }
 
+ZTEST(asset_store, test_get_space_is_free_and_used_of_one_volume) {
+    auto store = MakeStore();
+
+    const auto before = store.GetSpace();
+    zassert_true(before.free > 0);
+    zassert_equal(before.free, store.GetFreeSpace());
+
+    zassert_true(store.Save("image.bin", MakeBlob(20000)));
+
+    const auto after = store.GetSpace();
+    zassert_true(after.used >= before.used + 20000);
+    zassert_true(after.free < before.free);
+}
+
 // Every operation must degrade to a failure instead of touching an unmounted volume.
 ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
     AssetStore store(std::make_shared<UnavailableFsService>(), ASSETS_DIR);
@@ -671,6 +685,8 @@ ZTEST(asset_store, test_unavailable_fs_service_fails_gracefully) {
     zassert_false(store.Exists("asset.bin"));
     zassert_false(store.GetSize("asset.bin").has_value());
     zassert_equal(store.GetFreeSpace(), 0);
+    zassert_equal(store.GetSpace().free, 0);
+    zassert_equal(store.GetSpace().used, 0);
     zassert_false(store.RemoveStaged());
 
     std::vector<AssetEntry> entries;

@@ -440,14 +440,18 @@ std::optional<size_t> AssetStore::GetSize(std::string_view relative_path) const 
     return fs_service_->GetFileSize(GetPath(relative_path));
 }
 
-uint64_t AssetStore::GetFreeSpace() const {
+AssetStore::Space AssetStore::GetSpace() const {
     if(!fs_service_->IsAvailable())
-        return 0;
+        return {};
 
     const uint64_t total = fs_service_->GetTotalSpace();
     const uint64_t used = fs_service_->GetUsedSpace();
 
-    return total > used ? total - used : 0;
+    return { .free = total > used ? total - used : 0, .used = used };
+}
+
+uint64_t AssetStore::GetFreeSpace() const {
+    return GetSpace().free;
 }
 
 int AssetStore::List(
