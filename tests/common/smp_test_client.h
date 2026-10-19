@@ -166,6 +166,47 @@ inline uint8_t AdditionalInfo(const zcbor_state_t* state) {
     return static_cast<uint8_t>(*state->payload & 0x1F);
 }
 
+// A list of text values, appended to @p items.
+inline bool DecodeTextList(zcbor_state_t* zsd, std::vector<std::string>& items) {
+    if(!zcbor_list_start_decode(zsd))
+        return false;
+
+    while(!zcbor_array_at_end(zsd)) {
+        zcbor_string item{};
+        if(!zcbor_tstr_decode(zsd, &item))
+            return false;
+
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
+        items.emplace_back(reinterpret_cast<const char*>(item.value), item.len);
+    }
+
+    return zcbor_list_end_decode(zsd);
+}
+
+// An unsigned value under @p name: into @p wide when it needs more than 32 bits and wide is given,
+// otherwise into @p entry (where a value above 32 bits fails the decode).
+inline bool DecodeUnsigned(zcbor_state_t* zsd, const std::string& name, Entry& entry, WideEntry* wide) {
+    if(wide == nullptr) {
+        uint32_t value = 0;
+        if(!zcbor_uint32_decode(zsd, &value))
+            return false;
+
+        entry[name] = value;
+        return true;
+    }
+
+    uint64_t value = 0;
+    if(!zcbor_uint64_decode(zsd, &value))
+        return false;
+
+    if(value > UINT32_MAX)
+        (*wide)[name] = value;
+    else
+        entry[name] = static_cast<uint32_t>(value);
+
+    return true;
+}
+
 // Decodes a map of unsigned values into entry; its text values into texts, its booleans into flags
 // its lists of text values into lists and its unsigned values above 32 bits into wide, when given.
 inline bool DecodeEntry(
@@ -198,20 +239,7 @@ inline bool DecodeEntry(
         }
 
         if(lists != nullptr && MajorType(zsd) == 4) {
-            std::vector<std::string>& items = (*lists)[name];
-            if(!zcbor_list_start_decode(zsd))
-                return false;
-
-            while(!zcbor_array_at_end(zsd)) {
-                zcbor_string item{};
-                if(!zcbor_tstr_decode(zsd, &item))
-                    return false;
-
-                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
-                items.emplace_back(reinterpret_cast<const char*>(item.value), item.len);
-            }
-
-            if(!zcbor_list_end_decode(zsd))
+            if(!DecodeTextList(zsd, (*lists)[name]))
                 return false;
 
             continue;
@@ -227,24 +255,8 @@ inline bool DecodeEntry(
             continue;
         }
 
-        if(wide != nullptr) {
-            uint64_t wide_value = 0;
-            if(!zcbor_uint64_decode(zsd, &wide_value))
-                return false;
-
-            if(wide_value > UINT32_MAX)
-                (*wide)[name] = wide_value;
-            else
-                entry[name] = static_cast<uint32_t>(wide_value);
-
-            continue;
-        }
-
-        uint32_t value = 0;
-        if(!zcbor_uint32_decode(zsd, &value))
+        if(!DecodeUnsigned(zsd, name, entry, wide))
             return false;
-
-        entry[name] = value;
     }
 
     return zcbor_map_end_decode(zsd);
