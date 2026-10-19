@@ -584,12 +584,13 @@ CborLoggingControlConfig = [ triggers: [0*16 CborLoggingControlBindingConfig] ]
 | `channel` | An `EventChannelId` (1 sensors, 2 logging, ...). A channel the unit does not register makes the trigger do nothing. |
 | `event_type`, `payload_key` | The channel's enum values: for `Sensors`, `DataUpdated` (0) and `Value` (1). |
 | `has_selector` | Whether the selector applies. Without it `selector_key` and `selector_value` are ignored; `selector_value` is written as 0. |
-| `selector_key`, `selector_value` | The payload key the selector matches and its value: for a sensor, `SensorId` (0) and the sensor's text id (matched by its hash), an integer or a bool. |
+| `selector_key`, `selector_value` | The payload key the selector matches and its value: for a sensor, `SensorId` (0) and the sensor's text id (matched by its hash), an integer or a bool. A trigger on `Sensors` must have a `SensorId` selector. |
 | `target_uid` | The CDMP UID (`CdmpDeviceInfo::uid`) of the unit the trigger starts and stops; 0 is every unit that can log. |
 
 Every field is required, so a file stored before `target_uid` existed does not decode (the file is kept and an unsaved default, no triggers, is used until a valid one is stored), and a stored list of more than 16 triggers does not decode. Any `target_uid` is valid: the validator has no rule for it. The validator
-checks the count, that each channel is an `EventChannelId` and that a selector is text, an integer
-or a bool. It is structural: it does not resolve channels or sensors. The default is no triggers.
+checks the count, that each channel is an `EventChannelId`, that a selector is text, an integer
+or a bool, and that a `Sensors` trigger selects by `SensorId`. It is structural: it does not
+resolve channels or sensors. The default is no triggers.
 
 ## Status on other units
 

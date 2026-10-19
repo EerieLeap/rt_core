@@ -5,10 +5,14 @@
 #include "subsys/event_bus/event_binding.h"
 #include "subsys/event_bus/event_channel_id.h"
 
+#include "domain/sensor_domain/event_bus/sensor_event_binding.h"
+
 #include "logging_control_configuration_validator.h"
 
 namespace eerie_leap::domain::logging_domain::control::configuration::parsers {
 
+using eerie_leap::domain::sensor_domain::event_bus::SelectsSensor;
+using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::IsSelectorValue;
 using eerie_leap::subsys::event_bus::IsValidEventChannelId;
 
@@ -32,6 +36,14 @@ void LoggingControlConfigurationValidator::Validate(const LoggingControlConfigur
 
         if(!IsValidEventChannelId(binding.channel))
             InvalidLoggingControlConfiguration("Trigger " + std::to_string(i) + " names an unknown event channel.");
+
+        // A trigger on a sensor must select one: without a selector it would receive every sensor's
+        // value and make the publisher publish every reading.
+        if(binding.channel == EventChannelId::Sensors && !SelectsSensor(binding)) {
+            InvalidLoggingControlConfiguration(
+                "Trigger " + std::to_string(i) + " on the Sensors channel must select a sensor by its SensorId."
+            );
+        }
 
         // The event type, the payload key and the selector key are enums of the channel, which is
         // not known here.

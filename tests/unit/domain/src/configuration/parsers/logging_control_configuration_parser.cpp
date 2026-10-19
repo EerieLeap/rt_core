@@ -33,9 +33,10 @@ using Bytes = std::vector<uint8_t>;
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes TEXT_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF5, 0x00, 0x62, 0x61, 0x62, 0x1A, 0x01, 0x02, 0x03,
     0x04, 0xFF, 0xFF, 0xFF };
-// The same without a selector: false, key 0, the value written as int 0, and target 0 (every unit).
+// The same on the Logging channel (2), which needs no selector: false, key 0, the value written as int 0,
+// and target 0 (every unit).
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
-const Bytes NO_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
+const Bytes NO_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x02, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes K_EMPTY = { 0x9F, 0x9F, 0xFF, 0xFF };
 
@@ -146,19 +147,21 @@ ZTEST(logging_control_configuration_parser, test_TheEncodingIsStable) {
     with_selector.target_uid = 0x01020304;
     zassert_true(Encode(MakeConfiguration({ with_selector })) == TEXT_SELECTOR, "A text selector");
 
-    zassert_true(Encode(MakeConfiguration({ MakeTrigger() })) == NO_SELECTOR, "No selector is int 0");
+    auto without_selector = MakeTrigger();
+    without_selector.event.channel = EventChannelId::Logging;
+    zassert_true(Encode(MakeConfiguration({ without_selector })) == NO_SELECTOR, "No selector is int 0");
 
     // And the same bytes read back.
     const auto text = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(TEXT_SELECTOR));
     AssertSame(MakeConfiguration({ with_selector }), *text);
 
     const auto none = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(NO_SELECTOR));
-    AssertSame(MakeConfiguration({ MakeTrigger() }), *none);
+    AssertSame(MakeConfiguration({ without_selector }), *none);
 }
 
 ZTEST(logging_control_configuration_parser, test_AnAbsentSelectorIsIgnoredWhateverIsStored) {
     // has_selector false with a text value: the value is dropped.
-    const Bytes bytes = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
+    const Bytes bytes = { 0x9F, 0x9F, 0x9F, 0x02, 0x00, 0x01, 0xF4, 0x00, 0x62, 0x61, 0x62, 0x00, 0xFF, 0xFF, 0xFF };
 
     const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
 
@@ -200,6 +203,7 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     std::vector<LoggingControlBinding> triggers;
     for(size_t i = 0; i < LoggingControlConfiguration::MAX_TRIGGERS; i++) {
         auto trigger = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
+        trigger.event.channel = EventChannelId::Logging; // Sensors triggers select by SensorId (key 0)
         trigger.event.selector_value = std::pmr::string(64, static_cast<char>('a' + i));
         trigger.target_uid = 0xFFFFFFFF;
         triggers.push_back(std::move(trigger));

@@ -18,7 +18,7 @@
 
 #include "domain/logging_domain/control/models/logging_control_binding.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
-#include "domain/sensor_domain/event_bus/sensor_payload_type.h"
+#include "domain/sensor_domain/event_bus/sensor_event_binding.h"
 
 #include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
 #include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
@@ -44,7 +44,7 @@ namespace eerie_leap::controllers {
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
-using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
+using eerie_leap::domain::sensor_domain::event_bus::SelectsSensor;
 using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
@@ -74,9 +74,7 @@ LoggingTriggerSet::SelectorResolver MakeSelectorResolver(std::shared_ptr<Sensors
         return nullptr;
 
     return [manager = std::move(sensors_manager)](const EventBinding& binding) {
-        if(binding.channel != EventChannelId::Sensors
-            || !binding.HasSelector()
-            || binding.selector_key != std::to_underlying(SensorPayloadType::SensorId))
+        if(binding.channel != EventChannelId::Sensors || !SelectsSensor(binding))
             return true;
 
         const auto selector = ToSelectorValue(binding.selector_value);

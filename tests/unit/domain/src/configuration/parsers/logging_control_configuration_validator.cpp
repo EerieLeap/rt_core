@@ -7,6 +7,7 @@
 
 #include "domain/logging_domain/control/configuration/parsers/logging_control_configuration_validator.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
+#include "domain/sensor_domain/event_bus/sensor_payload_type.h"
 #include "subsys/event_bus/event_channel_id.h"
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -14,6 +15,7 @@ using namespace eerie_leap::utilities::memory;
 using eerie_leap::domain::logging_domain::control::configuration::parsers::LoggingControlConfigurationValidator;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
+using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 
@@ -26,6 +28,12 @@ LoggingControlBinding MakeTrigger(EventChannelId channel = EventChannelId::Senso
     trigger.event.channel = channel;
     trigger.event.event_type = 0;
     trigger.event.payload_key = 1;
+
+    // A trigger on a sensor must select it; the other channels have no such rule.
+    if(channel == EventChannelId::Sensors) {
+        trigger.event.selector_key = std::to_underlying(SensorPayloadType::SensorId);
+        trigger.event.selector_value = std::pmr::string("speed");
+    }
 
     return trigger;
 }
@@ -109,7 +117,7 @@ ZTEST(logging_control_configuration_validator, test_ASelectorMustBeTextAnInteger
 }
 
 ZTEST(logging_control_configuration_validator, test_TheEventTypeAndTheKeysAreChannelLocal) {
-    auto trigger = MakeTrigger();
+    auto trigger = MakeTrigger(EventChannelId::Logging);
     trigger.event.event_type = 0xFFFFFFFF;
     trigger.event.payload_key = 0xFFFFFFFF;
     trigger.event.selector_key = 0xFFFFFFFF;
@@ -123,4 +131,29 @@ ZTEST(logging_control_configuration_validator, test_AtMostSixteenTriggers) {
 
     const auto message = Rejection(MakeConfiguration(std::vector<LoggingControlBinding>(17, MakeTrigger())));
     zassert_true(message.contains("At most 16 triggers."), "%s", message.c_str());
+}
+
+ZTEST(logging_control_configuration_validator, test_ATriggerOnSensorsMustSelectBySensorId) {
+    auto without = MakeTrigger();
+    without.event.selector_value = std::monostate{};
+    const auto no_selector = Rejection(MakeConfiguration({ MakeTrigger(), without }));
+    zassert_true(
+        no_selector.contains("Trigger 1 on the Sensors channel must select a sensor by its SensorId."), "%s",
+        no_selector.c_str()
+    );
+
+    auto other_key = MakeTrigger();
+    other_key.event.selector_key = std::to_underlying(SensorPayloadType::Value);
+    const auto wrong_key = Rejection(MakeConfiguration({ other_key }));
+    zassert_true(
+        wrong_key.contains("Trigger 0 on the Sensors channel must select a sensor by its SensorId."), "%s",
+        wrong_key.c_str()
+    );
+
+    auto by_number = MakeTrigger();
+    by_number.event.selector_value = 12;
+    zassert_true(Rejection(MakeConfiguration({ MakeTrigger(), by_number })).empty(), "Any SensorId selector counts");
+
+    auto logging = MakeTrigger(EventChannelId::Logging);
+    zassert_true(Rejection(MakeConfiguration({ logging })).empty(), "Other channels need no selector");
 }

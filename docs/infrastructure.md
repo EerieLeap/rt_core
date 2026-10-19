@@ -91,6 +91,11 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
 - A selector is text, an integer or a bool (`IsSelectorValue()`). Text is compared by its hash,
   because payloads carry ids hashed (`ToSelectorValue()`, `SelectorMatches()`). An integer matches
   an `int` or `uint32_t` entry, a bool a `bool` entry.
+- A binding to the `Sensors` channel must select a sensor by its `SensorId`
+  (`SelectsSensor()`, `sensor_event_binding.h`, header only). Without a selector it receives every
+  sensor and makes `SensorEventsPublisher` publish every reading, which its acceptance cache exists
+  to avoid; a selector on another key would have that cache, keyed by sensor, answer from a
+  sensor's first reading. The logging control validator (and rt_gauge's UI validator) refuses it.
 - `SubscribeEventBinding(binding, handler)` (`event_binding_subscription.h`) resolves and
   subscribes in one step. The selector becomes the channel filter, run under the subscriber lock.
   The handler receives the value under the payload key, on the dispatching thread. It returns null
