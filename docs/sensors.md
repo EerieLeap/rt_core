@@ -227,7 +227,8 @@ under one mutex and never allocate; value slots have stable addresses, which exp
 
 | Call | Use |
 | --- | --- |
-| `TryGetReading(id / hash / slot)`, `TryGetReadingValue(...)`, `GetReadingValues(hashes, values)` | Latest reading or value of a sensor. |
+| `TryGetReading(id / hash / slot)`, `TryGetReadingValue(...)`, `GetReadingValues(hashes, values)` | Latest reading or value of a sensor. A `PHYSICAL_ANALOG` reading carries `calibrated_voltage` (the ADC voltage after the ADC calibration) and `adc_voltage` (before it). |
+| `GetReadingFields(hashes, fields, values)` | One number per entry (a sensor and a `ReadingField`: value, calibrated voltage, ADC voltage) under one lock, so the entries of one sensor come from the same moment. The voltages come from the sensor's latest reading, so they show while processing fails. Behind the `live` group's `fields`. |
 | `SnapshotProcessedReadings(span)`, `TakeProcessedReadings(span)` | All processed readings; `Take` also clears the "updated" mark. Buffers are sized with `SensorLimits::MAX_COUNT`. |
 | `TryGetCanFrame(hash, frame)` | Latest frame of a `CANBUS_RAW` sensor. |
 | `TakeRawCanFrames(readings, frames)` | Every raw frame since the last take, oldest first, from a queue of `RAW_CAN_QUEUE_SIZE` entries; overflow is counted. For the log writer. |

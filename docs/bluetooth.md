@@ -47,17 +47,20 @@ over CAN through the `ISmpForwarder` (the COM service), anything else is answere
 
 ## Live data
 
-A central subscribes with the `live` SMP group (`SUBSCRIBE {ids, period}`, see
+A central subscribes with the `live` SMP group (`SUBSCRIBE {ids, period, fields?}`, see
 [smp.md](smp.md)) after enabling notifications on `live`. `LiveDataService` then samples the
-latest values of the subscribed sensors every `period` ms (at least 50) on the system work queue
+latest numbers of the subscribed entries every `period` ms (at least 50) on the system work queue
 and notifies:
 
 ```
 [version=1][seq][t_ms: u32 LE][n] then n × [index][value: f32 LE]
 ```
 
-`index` is the sensor's position in the subscription; sensors without a value are left out. Up
-to 47 sensors fit one notification at an MTU of 247. At most one notification is in flight: a
+`index` is the entry's position in the subscription; entries without a number are left out. An
+entry is a sensor and a field (`fields` in `SUBSCRIBE`: 0 value, 1 calibrated voltage, 2 ADC
+voltage; the voltages exist for analog sensors only), and a sensor may be listed once per field. Up
+to 47 entries fit one notification at an MTU of 247, which counts entries, not sensors: 15 analog
+sensors with all three fields take 45 of them. At most one notification is in flight: a
 sample that finds one pending is dropped, and the sequence number counts samples, so a gap is
 visible to the client. The subscription ends on `UNSUBSCRIBE` or disconnect.
 

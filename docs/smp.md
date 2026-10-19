@@ -61,7 +61,9 @@ characters). A configuration that is stored stops logging on every unit (see
 the build's without CDMP), with CDMP `{cdmp_id, uid, status}`, and on a
 unit with sensors `{adc_channels, gpio_channels, sensors_max}`: the ADC and GPIO channels a sensor
 can read, each numbered from 0, and the most sensors a configuration holds, which the sensors
-configuration is validated against. See [system.md](system.md) and [sensors.md](sensors.md).
+configuration is validated against. Always present: `event_channels: [uint]`, the `EventChannelId` of
+each channel the unit registered (empty without the event bus), and `settings: [tstr]`, the ids of the
+settings it carries (the application passes them to `ManagementController`; none by default). See [system.md](system.md) and [sensors.md](sensors.md).
 
 ### `network`: other units
 
@@ -71,9 +73,12 @@ next offset. At most `EERIE_LEAP_SMP_NETWORK_MAX_DEVICES` are listed.
 
 ### `live`: BLE live values
 
-`SUBSCRIBE` (write) `{ids: [sensor ID hash], period}` replaces the subscription and answers
-`{period, max}` with the period actually used (at least 50 ms) and the number of sensors that
-fit into one notification. `UNSUBSCRIBE` (write) stops. Errors: `TOO_MANY` (2), `NOT_LISTENING`
+`SUBSCRIBE` (write) `{ids: [sensor ID hash], period, fields?: [uint]}` replaces the subscription and
+answers `{period, max, fields: true}` with the period actually used (at least 50 ms) and the number of
+entries that fit into one notification. `fields` is parallel to `ids`: 0 value, 1 calibrated voltage,
+2 ADC voltage; absent means 0 for every entry. A different length or an unknown field is `EINVAL`. A
+sensor may be listed several times with different fields. Older firmware ignores `fields` and answers
+without `fields: true`. `UNSUBSCRIBE` (write) stops. Errors: `TOO_MANY` (2), `NOT_LISTENING`
 (3, the central has not enabled `live` notifications). See [bluetooth.md](bluetooth.md).
 
 ### `calibration`: sample one ADC channel
@@ -131,7 +136,7 @@ so a unit serves the kinds it has the services for, and `KINDS` says which.
 
 | Command | Request | Response |
 | --- | --- | --- |
-| `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) and whether the volume is mounted now. A unit without kinds answers an empty list. |
+| `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail, free?, used?}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) whether the volume is mounted now and, only while it is, `free` and `used` (bytes on the kind's volume). `free` is the number `WRITE` checks `len` against, and only a hint: files take whole blocks, so a `len` below it can still end in `NO_SPACE`. A unit without kinds answers an empty list. |
 | `LIST` (read) | `{kind, off?}` | `{entries: [{name, size}], next?}` |
 | `READ` (read) | `{kind, name, off}` | `{off, data}`; at `off = 0` also `len`, the size of the file; the chunk that ends at `len` also `crc`, the CRC32 of the whole file |
 | `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |

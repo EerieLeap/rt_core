@@ -13,7 +13,7 @@ with the mount prefix. The interface (`IFsService`) offers `WriteFile` (overwrit
 fails with `-ENOENT` before the target is touched), `ListFiles`, `ListDirectory` (a page of a
 directory's entries with their sizes and types), `GetFileSize` (of a file: a directory has none),
 `GetTotalSpace`, `GetUsedSpace` (both in bytes of the volume's allocation units, a FAT cluster or a
-littlefs block, so the difference is the room that files can still take) and `Format`. All calls
+littlefs block, so the difference is the room that files can still take, as a hint: every file takes whole blocks, so a file below the free space can still fail with `-ENOSPC`, and the write stays the authority) and `Format`. All calls
 hold one mutex per service.
 
 Zephyr's FAT rename deletes the target first, so a file renamed onto itself is lost. `Rename`
@@ -88,7 +88,7 @@ when the store is, if the volume is available, otherwise when a write needs it.
   heap; empty for a file that is missing, empty, unreadable or that changed size while it was read),
   `Delete`, `Exists` and `GetSize` (nothing for a directory). No name rules apply here: a widget's
   `FILE_PATH` may hold a sub-path.
-- `IsAvailable()` and `GetFreeSpace()` (total minus used space, 0 when unavailable).
+- `IsAvailable()`, `GetSpace()` (free and used bytes from one reading of the volume's total and used space; both 0 when unavailable) and `GetFreeSpace()` (its `free`). Free space is a hint, as above; the SMP `assets` `KINDS` reports both.
 - `List(first, max_entries, extensions, ...)` reads a page of the directory and keeps the files whose
   names are valid for the extensions; directories and other names are skipped but counted, and each
   kept entry carries its directory position. A directory that does not exist lists nothing.
