@@ -92,6 +92,7 @@ const mgmt_handler AssetsMgmtGroup::HANDLERS[] = {
     { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleWrite> },
     { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleDelete> },
     { .mh_read = Dispatch<&AssetsMgmtGroup::HandleStat>, .mh_write = nullptr },
+    { .mh_read = nullptr, .mh_write = Dispatch<&AssetsMgmtGroup::HandleRename> },
 };
 
 AssetsMgmtGroup::AssetsMgmtGroup(
@@ -201,6 +202,10 @@ int AssetsMgmtGroup::HandleStat(smp_streamer* ctxt) {
     return RunJob(Command::STAT, ctxt);
 }
 
+int AssetsMgmtGroup::HandleRename(smp_streamer* ctxt) {
+    return RunJob(Command::RENAME, ctxt);
+}
+
 int AssetsMgmtGroup::RunJob(Command command, smp_streamer* ctxt) {
     // Initialize() creates the task; without it no job could ever run and the wait below would not end.
     if(!job_task_.has_value())
@@ -256,6 +261,8 @@ int AssetsMgmtGroup::ExecuteJob(const Job& job) {
             return ExecuteDelete(job.ctxt);
         case Command::STAT:
             return ExecuteStat(job.ctxt);
+        case Command::RENAME:
+            return ExecuteRename(job.ctxt);
     }
 
     return MGMT_ERR_ENOTSUP;
@@ -936,6 +943,106 @@ int AssetsMgmtGroup::ExecuteDelete(smp_streamer* ctxt) {
 
     if(!store.Delete(asset_name))
         return Fail(ctxt, Error::IO_ERROR);
+
+    return MGMT_ERR_EOK;
+}
+
+int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
+    uint32_t kind = 0;
+    zcbor_string name{};
+    zcbor_string target{};
+    std::array keys = {
+        SmpMapKey("kind", zcbor_uint32_decode, &kind),
+        SmpMapKey("name", zcbor_tstr_decode, &name),
+        SmpMapKey("to", zcbor_tstr_decode, &target),
+    };
+
+    if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found || !keys[1].found || !keys[2].found)
+        return MGMT_ERR_EINVAL;
+
+    const std::string_view asset_name = ToView(name);
+    const std::string_view to_name = ToView(target);
+
+    // A rename takes a name away and makes one: both bits.
+    std::shared_ptr<const AssetProvider> provider = FindProvider(kind);
+    if(provider == nullptr)
+        return Fail(ctxt, Error::UNKNOWN_KIND);
+
+    if(!HasAccess(provider->access, AssetAccess::WRITE) || !HasAccess(provider->access, AssetAccess::DELETE))
+        return Fail(ctxt, Error::DENIED);
+
+    if(!AssetStore::IsValidName(asset_name, provider->extensions)
+        || !AssetStore::IsValidName(to_name, provider->extensions)) {
+
+        return Fail(ctxt, Error::BAD_NAME);
+    }
+
+    // IFsService::Rename() refuses these, because FAT would delete the file.
+    if(EqualsIgnoreCase(asset_name, to_name))
+        return Fail(ctxt, Error::BAD_NAME);
+
+    AssetStore& store = *provider->store;
+
+    if(!store.IsAvailable())
+        return Fail(ctxt, Error::UNAVAILABLE);
+
+    const std::optional<size_t> size = store.GetSize(asset_name);
+    if(!size.has_value())
+        return Fail(ctxt, Error::NOT_FOUND);
+
+    if(provider->is_in_use
+        && (provider->is_in_use(AssetAccess::DELETE, asset_name) || provider->is_in_use(AssetAccess::WRITE, to_name))) {
+
+        return Fail(ctxt, Error::IN_USE);
+    }
+
+    // The staged file of an upload is renamed onto its target by its last chunk: not while this
+    // takes the name away or replaces it.
+    if(upload_.writer.IsOpen()
+        && upload_.kind == provider->kind
+        && (EqualsIgnoreCase(upload_.name, asset_name) || EqualsIgnoreCase(upload_.name, to_name))) {
+
+        return Fail(ctxt, Error::BUSY);
+    }
+
+    // FatFs has no open-file locking: renaming or replacing an open file corrupts the volume.
+    if(MayBeReadSessionOf(provider->kind, asset_name) || MayBeReadSessionOf(provider->kind, to_name))
+        CloseReadSession();
+
+    // A chunk sent again must not be taken for one that stored a file that is not there now.
+    InvalidateLastCommit(provider->kind, asset_name);
+    InvalidateLastCommit(provider->kind, to_name);
+
+    // The checkpoint of the source follows the file if it is current: the bytes are the same.
+    const bool follows = checkpoint_.is_valid
+        && checkpoint_.kind == provider->kind
+        && checkpoint_.size == *size
+        && checkpoint_.generation == store.GetGeneration()
+        && checkpoint_.name == asset_name;
+
+    const int rc = store.Rename(asset_name, to_name);
+    if(rc != 0) {
+        InvalidateCheckpoint(provider->kind, asset_name);
+        InvalidateCheckpoint(provider->kind, to_name);
+
+        return Fail(ctxt, ToError(rc));
+    }
+
+    InvalidateCheckpoint(provider->kind, to_name);
+
+    if(follows) {
+        checkpoint_.is_valid = false;
+
+        try {
+            checkpoint_.name.assign(to_name);
+            checkpoint_.generation = store.GetGeneration();
+            checkpoint_.is_valid = true;
+        } catch(const std::bad_alloc&) {
+            LOG_WRN("Out of memory moving the checkpoint, a STAT will read the file.");
+        }
+    } else {
+        InvalidateCheckpoint(provider->kind, asset_name);
+    }
 
     return MGMT_ERR_EOK;
 }

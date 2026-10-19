@@ -111,6 +111,13 @@ public:
         /// taken) and covers the whole file, otherwise the unit reads the file, and keeps the result as
         /// the checkpoint. An open download is left as it is.
         STAT = 5,
+        /// Write `{kind, name, to}`: `{}`. Renames a file of the kind, replacing `to` as a WRITE would.
+        /// Checked in this order: the kind, then its WRITE and DELETE bits (DENIED), both names
+        /// (BAD_NAME), two names that differ only in ASCII case (BAD_NAME: FAT would delete the file),
+        /// the volume, whether `name` exists (NOT_FOUND), whether `name` is in use for DELETE and `to`
+        /// for WRITE (IN_USE), and whether an upload of either name is open (BUSY). A download of
+        /// either name is closed first. The checkpoint of `name` goes on as one of `to`.
+        RENAME = 6,
     };
 
     /** @brief Group error codes, returned in the SMP v2 `err` map. */
@@ -230,6 +237,7 @@ private:
     int HandleWrite(smp_streamer* ctxt);
     int HandleDelete(smp_streamer* ctxt);
     int HandleStat(smp_streamer* ctxt);
+    int HandleRename(smp_streamer* ctxt);
 
     int RunJob(Command command, smp_streamer* ctxt);
     WorkQueueTaskResult ProcessJob();
@@ -242,6 +250,7 @@ private:
     int ExecuteWrite(smp_streamer* ctxt);
     int ExecuteDelete(smp_streamer* ctxt);
     int ExecuteStat(smp_streamer* ctxt);
+    int ExecuteRename(smp_streamer* ctxt);
 
     int WriteFirstChunk(
         smp_streamer* ctxt,

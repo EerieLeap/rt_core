@@ -201,6 +201,12 @@ public:
      */
     std::pmr::vector<uint8_t> Load(std::string_view relative_path) const;
     bool Delete(std::string_view relative_path);
+    /**
+     * @brief Renames @p from to @p to, both relative to the directory, replacing a file at @p to
+     *        (see IFsService::Rename()). Increases the generation, also when it fails.
+     * @return 0; -ENODEV when unavailable; otherwise the result of IFsService::Rename().
+     */
+    int Rename(std::string_view from, std::string_view to);
     bool Exists(std::string_view relative_path) const;
     /** @return The size of the file; nullopt when it is missing or is no file, a directory say. */
     std::optional<size_t> GetSize(std::string_view relative_path) const;

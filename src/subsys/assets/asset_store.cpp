@@ -444,6 +444,17 @@ bool AssetStore::Delete(std::string_view relative_path) {
     return is_deleted;
 }
 
+int AssetStore::Rename(std::string_view from, std::string_view to) {
+    if(!fs_service_->IsAvailable())
+        return -ENODEV;
+
+    const int rc = fs_service_->Rename(GetPath(from), GetPath(to));
+    // Counted even when it failed: FAT deletes the target before it renames.
+    (*write_counter_)++;
+
+    return rc;
+}
+
 bool AssetStore::Exists(std::string_view relative_path) const {
     if(!fs_service_->IsAvailable())
         return false;

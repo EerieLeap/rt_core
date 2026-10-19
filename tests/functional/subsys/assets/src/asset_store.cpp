@@ -685,6 +685,25 @@ ZTEST(asset_store, test_generation_changes_with_every_save_delete_and_commit) {
     zassert_not_equal(store.GetGeneration(), generation);
 }
 
+ZTEST(asset_store, test_rename_moves_a_file_within_the_directory_and_changes_the_generation) {
+    auto store = MakeStore();
+
+    zassert_true(store.Save("a.bin", MakeBlob(100)));
+    zassert_true(store.Save("b.bin", MakeBlob(50)));
+
+    uint64_t generation = store.GetGeneration();
+
+    zassert_equal(store.Rename("a.bin", "b.bin"), 0);
+    zassert_not_equal(store.GetGeneration(), generation);
+    zassert_false(store.Exists("a.bin"));
+    zassert_equal(store.GetSize("b.bin").value_or(0), 100, "The target is replaced");
+
+    // A failure counts as well.
+    generation = store.GetGeneration();
+    zassert_equal(store.Rename("missing.bin", "c.bin"), -ENOENT);
+    zassert_not_equal(store.GetGeneration(), generation);
+}
+
 ZTEST(asset_store, test_get_space_is_free_and_used_of_one_volume) {
     auto store = MakeStore();
 

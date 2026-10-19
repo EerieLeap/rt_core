@@ -304,6 +304,13 @@ public:
         );
     }
 
+    Response Rename(uint32_t kind, std::string_view name, std::string_view to) {
+        return client.Write(
+            SmpGroupId::ASSETS, std::to_underlying(Command::RENAME),
+            CborMap().Put("kind", kind).PutText("name", name).PutText("to", to).Build()
+        );
+    }
+
     Response Stat(uint32_t kind, std::string_view name) {
         return client.Read(
             SmpGroupId::ASSETS, std::to_underlying(Command::STAT),
@@ -2949,6 +2956,143 @@ ZTEST_F(smp_assets_group, test_read_resume_after_a_same_size_overwrite_computes_
     zassert_equal(download.crc, Crc(new_data), "The CRC of the old content is not kept");
 }
 
+// ======== RENAME ========
+
+ZTEST_F(smp_assets_group, test_rename_moves_the_file_and_replaces_the_target) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1000, 51);
+    harness.Put("images/a.bin", data);
+
+    zassert_true(harness.Rename(IMAGES, "a.bin", "b.bin").IsOk());
+
+    zassert_false(harness.volume->Exists("images/a.bin"));
+    zassert_true(harness.FileContent("images/b.bin") == data);
+
+    // An existing target is replaced, as a WRITE would.
+    const Bytes other = Pattern(300, 52);
+    harness.Put("images/c.bin", other);
+
+    zassert_true(harness.Rename(IMAGES, "b.bin", "c.bin").IsOk());
+
+    zassert_false(harness.volume->Exists("images/b.bin"));
+    zassert_true(harness.FileContent("images/c.bin") == data);
+}
+
+ZTEST_F(smp_assets_group, test_rename_checks_the_request_in_order) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/a.bin", Pattern(100, 1));
+
+    AssertError(harness.Rename(77, "a.bin", "b.bin"), Error::UNKNOWN_KIND);
+    // LOGS has no WRITE, CAN_SCRIPTS no DELETE.
+    AssertError(harness.Rename(LOGS, "a.mdf", "b.mdf"), Error::DENIED);
+    AssertError(harness.Rename(CAN_SCRIPTS, "a.lua", "b.lua"), Error::DENIED);
+    AssertError(harness.Rename(IMAGES, "a.txt", "b.bin"), Error::BAD_NAME);
+    AssertError(harness.Rename(IMAGES, "a.bin", "b.txt"), Error::BAD_NAME);
+    AssertError(harness.Rename(IMAGES, "a.bin", ".b.bin"), Error::BAD_NAME);
+    AssertError(harness.Rename(ANIMATIONS, "a.json", "b.json"), Error::UNAVAILABLE);
+    AssertError(harness.Rename(IMAGES, "missing.bin", "b.bin"), Error::NOT_FOUND);
+
+    zassert_true(harness.volume->Exists("images/a.bin"));
+}
+
+ZTEST_F(smp_assets_group, test_rename_to_the_same_name_in_another_case_is_bad_name) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/a.bin", Pattern(100, 1));
+
+    AssertError(harness.Rename(IMAGES, "a.bin", "A.bin"), Error::BAD_NAME);
+    AssertError(harness.Rename(IMAGES, "a.bin", "a.bin"), Error::BAD_NAME);
+
+    zassert_true(harness.volume->Exists("images/a.bin"));
+}
+
+ZTEST_F(smp_assets_group, test_rename_of_a_file_in_use_is_refused) {
+    Harness& harness = *fixture->harness;
+    harness.Put("scripts/used.lua", Pattern(100, 1));
+    harness.Put("scripts/free.lua", Pattern(100, 2));
+    harness.in_use.names.insert("used.lua");
+
+    // The source is taken away.
+    AssertError(harness.Rename(SENSOR_SCRIPTS, "used.lua", "new.lua"), Error::IN_USE);
+    zassert_equal(harness.in_use.calls.back().first, AssetAccess::DELETE);
+
+    // The target would be replaced.
+    AssertError(harness.Rename(SENSOR_SCRIPTS, "free.lua", "used.lua"), Error::IN_USE);
+    zassert_equal(harness.in_use.calls.back().first, AssetAccess::WRITE);
+
+    zassert_true(harness.volume->Exists("scripts/used.lua"));
+    zassert_true(harness.volume->Exists("scripts/free.lua"));
+}
+
+ZTEST_F(smp_assets_group, test_rename_closes_a_read_session_on_either_name) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(LARGE_FILE_SIZE, 53);
+    harness.Put("images/a.bin", data);
+    harness.Put("images/b.bin", Pattern(LARGE_FILE_SIZE, 54));
+    harness.Put("images/c.bin", Pattern(LARGE_FILE_SIZE, 55));
+
+    // On the source.
+    Harness::DataOf(harness.Read(IMAGES, "a.bin", 0));
+    atomic_val_t closed = atomic_get(&files_closed);
+    zassert_true(harness.Rename(IMAGES, "a.bin", "d.bin").IsOk());
+    zassert_true(atomic_get(&files_closed) > closed, "The download of the source is closed");
+
+    // On the target.
+    Harness::DataOf(harness.Read(IMAGES, "b.bin", 0));
+    closed = atomic_get(&files_closed);
+    zassert_true(harness.Rename(IMAGES, "c.bin", "b.bin").IsOk());
+    zassert_true(atomic_get(&files_closed) > closed, "The download of the target is closed");
+
+    // The moved file downloads whole.
+    zassert_equal(harness.DownloadFrom(IMAGES, "d.bin", 0, data.size()).crc, Crc(data));
+}
+
+ZTEST_F(smp_assets_group, test_rename_moves_the_checkpoint_with_the_file) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 56);
+    const Bytes other = Pattern(data.size(), 57);
+
+    // The upload leaves a checkpoint of the whole file.
+    zassert_true(harness.UploadAll(IMAGES, "a.bin", data).IsOk());
+
+    zassert_true(harness.Rename(IMAGES, "a.bin", "b.bin").IsOk());
+
+    const atomic_val_t mark = atomic_get(&bytes_read_from_files);
+    const auto response = harness.Stat(IMAGES, "b.bin");
+
+    zassert_equal(response.Value("crc"), Crc(data));
+    zassert_equal(BytesReadSince(mark), 0, "The checkpoint followed the file");
+
+    // The checkpoint of the target is dropped: a file of the same size replaces it.
+    zassert_true(harness.UploadAll(IMAGES, "c.bin", other).IsOk());
+    zassert_true(harness.Rename(IMAGES, "b.bin", "c.bin").IsOk());
+    zassert_equal(harness.Stat(IMAGES, "c.bin").Value("crc"), Crc(data));
+    AssertError(harness.Stat(IMAGES, "b.bin"), Error::NOT_FOUND);
+}
+
+ZTEST_F(smp_assets_group, test_rename_while_an_upload_of_either_name_is_open_is_busy) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(3 * UPLOAD_CHUNK_SIZE, 58);
+    harness.Put("images/a.bin", Pattern(100, 1));
+    harness.Put("images/b.bin", Pattern(100, 2));
+
+    const auto started = harness.WriteFirst(
+        IMAGES, "b.bin", std::span<const uint8_t>(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data)
+    );
+    zassert_true(started.IsOk());
+    const uint32_t token = started.Value("tok");
+
+    // The target of the upload, and its source.
+    AssertError(harness.Rename(IMAGES, "a.bin", "b.bin"), Error::BUSY);
+    AssertError(harness.Rename(IMAGES, "b.bin", "c.bin"), Error::BUSY);
+    zassert_true(harness.volume->Exists("images/a.bin"));
+
+    // Other names are no business of the upload.
+    zassert_true(harness.Rename(IMAGES, "a.bin", "c.bin").IsOk());
+
+    zassert_true(harness.SendRest(IMAGES, "b.bin", data, token, UPLOAD_CHUNK_SIZE).IsOk());
+    zassert_true(harness.FileContent("images/b.bin") == data);
+}
+
 // ======== Dispatch ========
 
 ZTEST_F(smp_assets_group, test_unregistered_group_is_not_supported) {
@@ -2959,6 +3103,8 @@ ZTEST_F(smp_assets_group, test_unregistered_group_is_not_supported) {
     zassert_equal(harness.List(IMAGES).Value("rc"), MGMT_ERR_ENOTSUP);
     zassert_equal(harness.Read(IMAGES, "a.bin", 0).Value("rc"), MGMT_ERR_ENOTSUP);
     zassert_equal(harness.Delete(IMAGES, "a.bin").Value("rc"), MGMT_ERR_ENOTSUP);
+    zassert_equal(harness.Stat(IMAGES, "a.bin").Value("rc"), MGMT_ERR_ENOTSUP);
+    zassert_equal(harness.Rename(IMAGES, "a.bin", "b.bin").Value("rc"), MGMT_ERR_ENOTSUP);
 }
 
 ZTEST_F(smp_assets_group, test_a_group_that_is_served_again_answers) {
