@@ -153,6 +153,15 @@ registry by kind (`FILE_PATH` is a path relative to the kind's directory, a bare
 client uploaded); a client that overwrites or deletes a file a widget shows changes it at the widget's
 next render.
 
+**Store generation and checkpoint.** `AssetStore::GetGeneration()` changes whenever the files of a
+store may have: the upper 32 bits are the volume's mount generation (`IFsService::GetMountGeneration()`,
+which counts mounts, so an SD card edited on a PC ends it; 0 always for a service that cannot tell),
+the lower 32 a write counter that `Save()`, `Delete()` and `AssetWriter::Commit()` increase, whether or
+not they succeed. The SMP `STAT` keeps the CRC of a file as a checkpoint taken at a generation; it is
+current only while the generation is the same, and a same-size overwrite through the store ends it. A
+commit of an upload seeds the checkpoint with the CRC it verified, so a `STAT` after an upload reads
+nothing. This assumes that assets are written only through their store.
+
 **Script references.** A controller that owns stored script paths adds a referrer with
 `AddReferrer(owner, fn)`, which says whether its configuration refers to a path relative to the
 volume. `SensorsController` answers for every sensor's `script_path`, enabled or not,

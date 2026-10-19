@@ -21,7 +21,7 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 | `live` | 67 | `BleService` | `SUBSCRIBE` 0, `UNSUBSCRIBE` 1 |
 | `calibration` | 68 | `AdcController` | `START` 0, `STOP` 1, `READ` 2 |
 | `files` | 69 | `ManagementController` | `LIST` 0 |
-| `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4 |
+| `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4, `STAT` 5 |
 
 ### `config`: read and write stored configurations
 
@@ -141,6 +141,7 @@ so a unit serves the kinds it has the services for, and `KINDS` says which.
 | `READ` (read) | `{kind, name, off}` | `{off, data}`; at `off = 0` also `len`, the size of the file; the chunk that ends at `len` also `crc`, the CRC32 of the whole file |
 | `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |
 | `DELETE` (write) | `{kind, name}` | `{}` |
+| `STAT` (read) | `{kind, name}` | `{len, crc?}`: the size of the file and the CRC32 of the whole file, the one `READ` sends; `crc` is left out for a file above `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE` that no current checkpoint covers |
 
 The CRC32 is the IEEE one (`zlib.crc32`). The kind numbers are `0` `images`, `1` `animations`,
 `2` `sensor_scripts`, `3` `can_scripts` and `4` `logs`; they are append only, and
@@ -222,6 +223,15 @@ needs room for both).
 - A first chunk with the upload's own token starts the upload over, for the same file or another: the
   staged data goes, and the room it held counts for the check.
 
+**`STAT`.** Lets a client compare a file with a local one without downloading it. Checked as `READ` is,
+in this order: the kind (`UNKNOWN_KIND`), its read access (`DENIED`), the name (`BAD_NAME`), the volume
+(`UNAVAILABLE`), the file (`NOT_FOUND`) and whether it is in use (`IN_USE`). The CRC comes from the
+running CRC of an open download that has read the whole file, or from the checkpoint when it is
+current ([filesystem.md](filesystem.md#assets-eerie_leap_assets)); otherwise the unit reads the file
+on the configuration work queue while the client waits, up to `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE`,
+and keeps the result as the checkpoint. A larger file answers its size alone. An open download is left
+as it is.
+
 **`DELETE`.** A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
 and so is the log the writer is writing, which cannot be downloaded either. A download of the file is
 closed first.
@@ -281,6 +291,7 @@ sending unit's `smp_bus_share_percent` (25 % by default, see [canbus.md](canbus.
 | `EERIE_LEAP_SMP_CONFIG_SESSION_TIMEOUT_MS` | 5000 | Idle time after which a config transfer is abandoned. |
 | `EERIE_LEAP_SMP_NETWORK_MAX_DEVICES` | 1..254, 32 | Devices the `network` group can list. |
 | `EERIE_LEAP_SMP_ASSETS` | y | Serves the `assets` group. Depends on `EERIE_LEAP_ASSETS` and `EERIE_LEAP_CONTROLLER_MANAGEMENT`, and on `FS_FATFS_REENTRANT` when the file system is FAT (`FAT_FILESYSTEM_ELM`), which Zephyr leaves off. Selects `MCUMGR_SMP_CBOR_MIN_ENCODING_LEVEL_4` with `ZCBOR_CANONICAL`: `KINDS` nests four levels. |
+| `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE` | 4194304 | Largest file `STAT` reads to compute a CRC; a larger one answers its size alone unless a checkpoint covers it. |
 | `EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS` | 5000 | Idle time after which a download is closed or an upload abandoned and its staged file deleted. |
 | `MCUMGR_TRANSPORT_NETBUF_COUNT` | 6 | Packet pool size (rt_core default; boards may override). |
 | `MCUMGR_TRANSPORT_NETBUF_SIZE` | 1024 | Largest packet. The `assets` group's transfer buffer has this size, and a `READ` chunk is a little smaller. |
