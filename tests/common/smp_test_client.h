@@ -106,6 +106,9 @@ struct Response {
     std::vector<ListEntry> entry_lists;
     // The number of maps in each list of the body, by key; says an empty list was there.
     std::map<std::string, size_t> list_sizes;
+    // Lists of plain unsigned values and of text values, by key.
+    std::map<std::string, std::vector<uint32_t>> uint_lists;
+    std::map<std::string, std::vector<std::string>> text_lists;
     std::optional<uint32_t> error_group;
     std::optional<uint32_t> error;
 
@@ -286,6 +289,23 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                     return false;
                 size_t size = 0;
                 while(!zcbor_array_at_end(zsd)) {
+                    if(MajorType(zsd) == 0) {
+                        uint32_t item = 0;
+                        if(!zcbor_uint32_decode(zsd, &item))
+                            return false;
+                        response.uint_lists[name].push_back(item);
+                        size++;
+                        continue;
+                    }
+                    if(MajorType(zsd) == 3) {
+                        zcbor_string item{};
+                        if(!zcbor_tstr_decode(zsd, &item))
+                            return false;
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
+                        response.text_lists[name].emplace_back(reinterpret_cast<const char*>(item.value), item.len);
+                        size++;
+                        continue;
+                    }
                     Entry entry;
                     TextEntry texts;
                     FlagEntry flags;

@@ -1,10 +1,17 @@
+#include <array>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <zephyr/ztest.h>
 
 #include "domain/canbus_com_domain/smp/network_mgmt_group.h"
 #include "domain/system_domain/smp/device_mgmt_group.h"
+#include "subsys/event_bus/event_channel.h"
+#include "subsys/event_bus/event_channel_id.h"
+#include "subsys/event_bus/event_channel_registry.h"
 
 #include "cdmp_test_features.h"
 #include "smp_groups_test_support.h"
@@ -92,6 +99,60 @@ ZTEST(smp_device_group, test_info_reports_the_sensor_inputs) {
     zassert_equal(response.Value("adc_channels"), 4);
     zassert_equal(response.Value("gpio_channels"), 8);
     zassert_equal(response.Value("sensors_max"), 64);
+}
+
+namespace {
+
+enum class DeviceTestEvent : uint32_t {
+    Updated = 0
+};
+enum class DeviceTestPayload : uint32_t {
+    Value = 0
+};
+
+class DeviceTestChannel : public eerie_leap::subsys::event_bus::EventChannel<DeviceTestEvent, DeviceTestPayload> {
+public:
+    explicit DeviceTestChannel(std::string name) :
+        EventChannel(std::move(name)) {}
+};
+
+} // namespace
+
+// The registry is one per binary, so this registers the channels it expects and no other test lists them.
+ZTEST(smp_device_group, test_info_lists_the_registered_event_channels_and_settings) {
+    using eerie_leap::subsys::event_bus::EventChannelId;
+    using eerie_leap::subsys::event_bus::EventChannelRegistry;
+
+    static DeviceTestChannel sensors("device_test_sensors");
+    static DeviceTestChannel logging("device_test_logging");
+    auto& registry = EventChannelRegistry::GetInstance();
+    zassert_ok(registry.Register(EventChannelId::Sensors, sensors));
+    zassert_ok(registry.Register(EventChannelId::Logging, logging));
+
+    static constexpr std::array<std::string_view, 2> SETTINGS{ "display.brightness", "display.contrast" };
+    DeviceMgmtGroup group(BUILD_NUMBER, nullptr, std::nullopt, SETTINGS);
+    group.Register();
+    SmpTestClient client;
+
+    const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
+
+    zassert_true(response.IsOk());
+    const std::vector<uint32_t> channels{ 1, 2 };
+    zassert_equal(response.uint_lists.at("event_channels"), channels, "Navigation and Settings are not registered");
+    const std::vector<std::string> settings{ "display.brightness", "display.contrast" };
+    zassert_equal(response.text_lists.at("settings"), settings);
+}
+
+ZTEST(smp_device_group, test_info_lists_no_settings_by_default) {
+    DeviceMgmtGroup group(BUILD_NUMBER, nullptr);
+    group.Register();
+    SmpTestClient client;
+
+    const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.list_sizes.at("settings"), 0, "The key is there, empty");
+    zassert_true(response.list_sizes.contains("event_channels"), "Always present, whatever is registered");
 }
 
 ZTEST(smp_device_group, test_only_one_instance_is_registered) {

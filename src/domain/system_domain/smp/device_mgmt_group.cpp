@@ -1,8 +1,14 @@
+#include <array>
 #include <optional>
 #include <utility>
 
 #include "domain/system_domain/models/product_info.h"
 #include "domain/system_domain/models/system_configuration.h"
+
+#include "subsys/event_bus/event_channel_id.h"
+#ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+    #include "subsys/event_bus/event_channel_registry.h"
+#endif
 
 #include "device_mgmt_group.h"
 
@@ -11,7 +17,12 @@ namespace eerie_leap::domain::system_domain::smp {
 using eerie_leap::domain::system_domain::models::ProductInfo;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
+using eerie_leap::subsys::event_bus::EventChannelId;
+using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 using eerie_leap::subsys::smp::SmpGroupId;
+#ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+using eerie_leap::subsys::event_bus::EventChannelRegistry;
+#endif
 
 const mgmt_handler DeviceMgmtGroup::HANDLERS[] = {
     { .mh_read = Dispatch<&DeviceMgmtGroup::HandleInfo>, .mh_write = nullptr },
@@ -20,15 +31,53 @@ const mgmt_handler DeviceMgmtGroup::HANDLERS[] = {
 DeviceMgmtGroup::DeviceMgmtGroup(
     uint32_t build_number,
     std::shared_ptr<const ICdmpNetworkInfo> network_info,
-    std::optional<SensorCapabilities> sensor_capabilities
+    std::optional<SensorCapabilities> sensor_capabilities,
+    std::span<const std::string_view> setting_ids
 ) :
     SmpGroup(SmpGroupId::DEVICE, HANDLERS, nullptr),
     build_number_(build_number),
     network_info_(std::move(network_info)),
-    sensor_capabilities_(sensor_capabilities) {}
+    sensor_capabilities_(sensor_capabilities),
+    setting_ids_(setting_ids) {}
 
 DeviceMgmtGroup::~DeviceMgmtGroup() {
     Unregister();
+}
+
+bool DeviceMgmtGroup::PutEventChannels(zcbor_state_t* zse) {
+    // No allocation in a handler: a fixed table sized from the last id.
+    std::array<uint32_t, std::to_underlying(LAST_EVENT_CHANNEL_ID)> ids{};
+    size_t count = 0;
+
+#ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+    const auto& registry = EventChannelRegistry::GetInstance();
+    for(uint32_t id = 1; id <= std::to_underlying(LAST_EVENT_CHANNEL_ID); id++) {
+        if(registry.Find(static_cast<EventChannelId>(id)) != nullptr)
+            ids.at(count++) = id;
+    }
+#endif
+
+    if(!zcbor_tstr_put_lit(zse, "event_channels") || !zcbor_list_start_encode(zse, count))
+        return false;
+
+    for(size_t i = 0; i < count; i++) {
+        if(!zcbor_uint32_put(zse, ids.at(i)))
+            return false;
+    }
+
+    return zcbor_list_end_encode(zse, count);
+}
+
+bool DeviceMgmtGroup::PutSettings(zcbor_state_t* zse) const {
+    if(!zcbor_tstr_put_lit(zse, "settings") || !zcbor_list_start_encode(zse, setting_ids_.size()))
+        return false;
+
+    for(const std::string_view id : setting_ids_) {
+        if(!zcbor_tstr_encode_ptr(zse, id.data(), id.size()))
+            return false;
+    }
+
+    return zcbor_list_end_encode(zse, setting_ids_.size());
 }
 
 int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
@@ -70,6 +119,12 @@ int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
             && zcbor_tstr_put_lit(zse, "sensors_max")
             && zcbor_uint32_put(zse, sensor_capabilities_->sensors_max);
     }
+
+    if(ok)
+        ok = PutEventChannels(zse);
+
+    if(ok)
+        ok = PutSettings(zse);
 
     return MGMT_RETURN_CHECK(ok);
 }
