@@ -52,7 +52,7 @@ inline constexpr uint32_t BINDING_TEST_SOURCE = 0xB1D0;
 class BindingTestChannel : public EventChannel<BindingEventType, BindingPayloadType> {
 public:
     explicit BindingTestChannel(std::string name) :
-        EventChannel(std::move(name)) {}
+        EventChannel(std::move(name), BindingEventType::Other, BindingPayloadType::Flag) {}
 };
 
 // Records what SubscribeEventBinding() hands the channel, so a test can evaluate the filter itself,

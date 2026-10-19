@@ -16,7 +16,7 @@ private:
     static constexpr size_t K_MAX_QUEUED_EVENTS = 128;
 
     SensorEventsChannel() :
-        EventChannel("sensor_events", K_MAX_QUEUED_EVENTS) {}
+        EventChannel("sensor_events", LAST_SENSOR_EVENT_TYPE, LAST_SENSOR_PAYLOAD_TYPE, K_MAX_QUEUED_EVENTS) {}
 
 public:
     static SensorEventsChannel& GetInstance() {

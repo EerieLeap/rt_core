@@ -17,7 +17,7 @@ private:
     static constexpr size_t K_MAX_QUEUED_EVENTS = 8;
 
     LoggingEventsChannel() :
-        EventChannel("logging_events", K_MAX_QUEUED_EVENTS) {}
+        EventChannel("logging_events", LAST_LOGGING_EVENT_TYPE, LAST_LOGGING_PAYLOAD_TYPE, K_MAX_QUEUED_EVENTS) {}
 
 public:
     static LoggingEventsChannel& GetInstance() {

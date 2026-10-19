@@ -17,8 +17,15 @@ using eerie_leap::subsys::threading::ScopedMutex;
 using eerie_leap::utilities::memory::Mrm;
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
-EventChannel<TEventType, TPayloadType>::EventChannel(std::string name, size_t max_queued_events) :
+EventChannel<TEventType, TPayloadType>::EventChannel(
+    std::string name,
+    TEventType last_event_type,
+    TPayloadType last_payload_key,
+    size_t max_queued_events
+) :
     name_(std::move(name)),
+    last_event_type_(std::to_underlying(last_event_type)),
+    last_payload_key_(std::to_underlying(last_payload_key)),
     max_queued_events_(std::max<size_t>(max_queued_events, 1)),
     event_queue_(Mrm::GetExtPmr()) {
 

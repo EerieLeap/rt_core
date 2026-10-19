@@ -70,7 +70,7 @@ void AssertImported(
 class LateLoggingEventsChannel : public LoggingChannel {
 private:
     LateLoggingEventsChannel() :
-        LoggingChannel("late_logging_events", 8) {}
+        LoggingChannel("late_logging_events", LAST_LOGGING_EVENT_TYPE, LAST_LOGGING_PAYLOAD_TYPE, 8) {}
 
 public:
     static LateLoggingEventsChannel& GetInstance() {

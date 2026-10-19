@@ -306,3 +306,17 @@ ZTEST(event_binding_subscription, test_an_async_publish_reaches_the_handler_on_t
     zassert_equal(std::get<float>(*probe.LastValue()), 3.0F);
     zassert_equal(probe.ThreadName(), std::string("binding_test_bus"));
 }
+
+ZTEST(event_binding_subscription, test_ChannelsKnowTheirLastEventTypeAndPayloadKey) {
+    const auto& channel = RegisterBindingTestChannels().primary;
+
+    zassert_true(channel.HasEventType(std::to_underlying(BindingEventType::Updated)));
+    zassert_true(channel.HasEventType(std::to_underlying(BindingEventType::Other)), "The last value counts");
+    zassert_false(channel.HasEventType(std::to_underlying(BindingEventType::Other) + 1));
+    zassert_false(channel.HasEventType(0xFFFFFFFF));
+
+    zassert_true(channel.HasPayloadKey(std::to_underlying(BindingPayloadType::Id)));
+    zassert_true(channel.HasPayloadKey(std::to_underlying(BindingPayloadType::Flag)), "The last value counts");
+    zassert_false(channel.HasPayloadKey(std::to_underlying(BindingPayloadType::Flag) + 1));
+    zassert_false(channel.HasPayloadKey(0xFFFFFFFF));
+}

@@ -33,7 +33,7 @@ namespace {
 class TestChannel : public EventChannel<TestEventType, TestPayloadType> {
 public:
     explicit TestChannel(std::string name) :
-        EventChannel(std::move(name), 4) {}
+        EventChannel(std::move(name), TestEventType::Gamma, TestPayloadType::Flag, 4) {}
 };
 
 class CountingBus : public IEventBus {

@@ -38,6 +38,8 @@ public:
 
 private:
     std::string name_;
+    uint32_t last_event_type_;
+    uint32_t last_payload_key_;
     size_t max_queued_events_;
 
     SubscriberMap<TEventType, TPayloadType> subscribers_;
@@ -85,7 +87,14 @@ private:
     void Dispatch(const EventMessage& event);
 
 protected:
-    explicit EventChannel(std::string name, size_t max_queued_events = DEFAULT_MAX_QUEUED_EVENTS);
+    // @p last_event_type and @p last_payload_key are the enums' last values (each enum's LAST_
+    // constant), which bound HasEventType() and HasPayloadKey().
+    EventChannel(
+        std::string name,
+        TEventType last_event_type,
+        TPayloadType last_payload_key,
+        size_t max_queued_events = DEFAULT_MAX_QUEUED_EVENTS
+    );
 
 public:
     ~EventChannel() override = default;
@@ -128,6 +137,13 @@ public:
 
     uint32_t GetSubscriptionGeneration() const override {
         return subscription_generation_.load(std::memory_order_acquire);
+    }
+
+    bool HasEventType(uint32_t event_type) const override {
+        return event_type <= last_event_type_;
+    }
+    bool HasPayloadKey(uint32_t payload_key) const override {
+        return payload_key <= last_payload_key_;
     }
 
     void Publish(const EventMessage& event);

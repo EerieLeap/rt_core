@@ -113,7 +113,7 @@ enum class DeviceTestPayload : uint32_t {
 class DeviceTestChannel : public eerie_leap::subsys::event_bus::EventChannel<DeviceTestEvent, DeviceTestPayload> {
 public:
     explicit DeviceTestChannel(std::string name) :
-        EventChannel(std::move(name)) {}
+        EventChannel(std::move(name), DeviceTestEvent::Updated, DeviceTestPayload::Value) {}
 };
 
 } // namespace

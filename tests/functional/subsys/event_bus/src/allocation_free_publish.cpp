@@ -82,7 +82,7 @@ using ProbeEvent = Event<ProbeEventType, ProbePayloadType>;
 class ProbeChannel : public EventChannel<ProbeEventType, ProbePayloadType> {
 public:
     explicit ProbeChannel(size_t capacity) :
-        EventChannel("probe", capacity) {}
+        EventChannel("probe", ProbeEventType::DataUpdated, ProbePayloadType::Value, capacity) {}
 };
 
 class ManualBus : public IEventBus {

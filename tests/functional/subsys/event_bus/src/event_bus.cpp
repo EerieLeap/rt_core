@@ -56,13 +56,13 @@ constexpr int DISPATCH_TIMEOUT_MS = 1000;
 class TestChannel : public EventChannel<TestEventType, TestPayloadType> {
 public:
     explicit TestChannel(std::string name, size_t max_queued_events = 64) :
-        EventChannel(std::move(name), max_queued_events) {}
+        EventChannel(std::move(name), TestEventType::Gamma, TestPayloadType::Label, max_queued_events) {}
 };
 
 class OtherChannel : public EventChannel<OtherEventType, OtherPayloadType> {
 public:
     explicit OtherChannel(std::string name) :
-        EventChannel(std::move(name), 16) {}
+        EventChannel(std::move(name), OtherEventType::Signal, OtherPayloadType::Value, 16) {}
 };
 
 class TestEventBus : public EventBus {

@@ -11,4 +11,7 @@ enum class LoggingPayloadType : std::uint32_t {
     Reason    // uint32_t, a LoggingStatusReason; sent with IsActive = false
 };
 
+// The channel bounds HasPayloadKey() with it; appending a value means moving this to it.
+inline constexpr LoggingPayloadType LAST_LOGGING_PAYLOAD_TYPE = LoggingPayloadType::Reason;
+
 } // namespace eerie_leap::domain::logging_domain::event_bus

@@ -41,7 +41,9 @@ Code: `src/subsys/event_bus/`. A typed publish/subscribe transport:
 
 - An `EventChannel<EventType, PayloadType>` owns subscribers and a fixed ring of queued events.
   Payloads are small inline maps (up to 6 keys) of `int`, `uint32_t`, `float`, `std::string` or
-  `bool`.
+  `bool`. A channel states the last value of its two enums in its constructor (`LAST_SENSOR_EVENT_TYPE`
+  and the like, next to each enum; both enums are dense from 0 and append only), so `IEventChannel`
+  answers `HasEventType()` and `HasPayloadKey()` without the caller knowing the enums.
 - An `EventBus` owns one cooperative worker thread (default priority 10) and drains the channels
   registered with it round-robin, one event at a time. A channel not registered with a bus drops
   publishes but still accepts subscriptions.

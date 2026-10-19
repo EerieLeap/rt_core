@@ -47,6 +47,12 @@ public:
     // Moves on every subscribe and unsubscribe, so a caller that caches Accepts() knows when to
     // ask again. Read without the subscriber lock.
     virtual uint32_t GetSubscriptionGeneration() const = 0;
+
+    // Whether the channel's event type or payload key enum has the value, so a configuration a
+    // client applies can be refused before it stores a binding that would never fire. Both enums
+    // are dense from 0 and append only.
+    virtual bool HasEventType(uint32_t event_type) const = 0;
+    virtual bool HasPayloadKey(uint32_t payload_key) const = 0;
 };
 
 // Channels are singletons that outlive every bus, so the slots observe rather than
