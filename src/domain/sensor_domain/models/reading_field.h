@@ -11,4 +11,12 @@ enum class ReadingField : uint8_t {
     ADC_VOLTAGE = 2,        ///< ADC voltage before calibration, PHYSICAL_ANALOG only.
 };
 
+// Appending a field means moving this to it; IsValidReadingField() follows.
+inline constexpr ReadingField LAST_READING_FIELD = ReadingField::ADC_VOLTAGE;
+
+// Whether a wire value names a field at all.
+constexpr bool IsValidReadingField(uint32_t field) {
+    return field <= static_cast<uint32_t>(LAST_READING_FIELD);
+}
+
 } // namespace eerie_leap::domain::sensor_domain::models

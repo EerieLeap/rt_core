@@ -138,22 +138,37 @@ inline DecodedSample Decode(std::span<const uint8_t> data) {
     return sample;
 }
 
+// One VALUE field per entry, what a client without `fields` gets.
+inline std::vector<ReadingField> AllValues(size_t count) {
+    return std::vector<ReadingField>(count, ReadingField::VALUE);
+}
+
 // A frame with processed values for some sensors.
 struct Readings {
     std::shared_ptr<SensorReadingsFrame> frame = std::make_shared<SensorReadingsFrame>();
     std::vector<std::shared_ptr<Sensor>> sensors;
     std::vector<std::optional<float>> values;
+    std::vector<std::optional<float>> calibrated_voltages;
+    std::vector<std::optional<float>> adc_voltages;
 
-    uint32_t Add(std::string_view id, std::optional<float> value) {
+    uint32_t
+    Add(std::string_view id,
+        std::optional<float> value,
+        std::optional<float> calibrated_voltage = std::nullopt,
+        std::optional<float> adc_voltage = std::nullopt) {
         const auto sensor = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), id);
         sensors.push_back(sensor);
         values.push_back(value);
+        calibrated_voltages.push_back(calibrated_voltage);
+        adc_voltages.push_back(adc_voltage);
 
         // Slots exist per configuration, so every added sensor reconfigures the frame and replays the readings.
         frame->Configure(sensors);
         for(size_t i = 0; i < sensors.size(); i++) {
             SensorReading reading(sensors[i].get());
             reading.source = ReadingSource::PROCESSING;
+            reading.calibrated_voltage = calibrated_voltages[i];
+            reading.adc_voltage = adc_voltages[i];
             if(values[i].has_value()) {
                 reading.status = ReadingStatus::PROCESSED;
                 // NOLINTNEXTLINE(bugprone-optional-value-conversion): the plain copy of the optional trips GCC's maybe-uninitialized

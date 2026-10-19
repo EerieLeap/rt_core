@@ -35,6 +35,18 @@ struct GroupHarness {
         group.Register();
     }
 
+    Response
+    SubscribeFields(const std::vector<uint32_t>& hashes, const std::vector<uint32_t>& fields, uint32_t period_ms) {
+        return client.Write(
+            SmpGroupId::LIVE, Id(Command::SUBSCRIBE),
+            CborMap()
+                .Put("ids", std::span<const uint32_t>(hashes))
+                .Put("fields", std::span<const uint32_t>(fields))
+                .Put("period", period_ms)
+                .Build()
+        );
+    }
+
     Response Subscribe(const std::vector<uint32_t>& hashes, uint32_t period_ms) {
         return client.Write(
             SmpGroupId::LIVE, Id(Command::SUBSCRIBE),
@@ -62,6 +74,7 @@ ZTEST(smp_live_group, test_subscribe_reports_the_period_and_capacity) {
     zassert_true(response.IsOk());
     zassert_equal(response.Value("period"), LiveDataService::MIN_PERIOD_MS);
     zassert_equal(response.Value("max"), 47);
+    zassert_true(response.flags.at("fields"), "Tells a unit that knows `fields`");
     zassert_true(harness.service->IsSubscribed());
 
     const auto notifications = harness.notifier->WaitForNotifications(1);
@@ -117,5 +130,55 @@ ZTEST(smp_live_group, test_unsubscribe_stops_the_samples) {
     const auto response = harness.client.Write(SmpGroupId::LIVE, Id(Command::UNSUBSCRIBE), CborMap().Build());
 
     zassert_true(response.IsOk());
+    zassert_false(harness.service->IsSubscribed());
+}
+
+ZTEST(smp_live_group, test_absent_fields_mean_values) {
+    GroupHarness harness;
+    const uint32_t hash = harness.readings.Add("analog", 80.0F, 4.0F, 2.0F);
+
+    zassert_true(harness.Subscribe({ hash, hash }, 50).IsOk());
+
+    const auto notifications = harness.notifier->WaitForNotifications(1);
+    zassert_equal(notifications.size(), 1);
+    const auto sample = Decode(notifications[0]);
+    zassert_equal(sample.values.size(), 2);
+    zassert_equal(sample.values[0].second, 80.0F);
+    zassert_equal(sample.values[1].second, 80.0F);
+}
+
+ZTEST(smp_live_group, test_one_sensor_three_times_with_each_field) {
+    GroupHarness harness;
+    const uint32_t hash = harness.readings.Add("analog", 80.0F, 4.0F, 2.0F);
+
+    const auto response = harness.SubscribeFields({ hash, hash, hash }, { 0, 1, 2 }, 50);
+    zassert_true(response.IsOk());
+    zassert_true(response.flags.at("fields"));
+
+    const auto notifications = harness.notifier->WaitForNotifications(1);
+    zassert_equal(notifications.size(), 1);
+    const auto sample = Decode(notifications[0]);
+    zassert_equal(sample.values.size(), 3);
+    zassert_equal(sample.values[0].second, 80.0F);
+    zassert_equal(sample.values[1].second, 4.0F);
+    zassert_equal(sample.values[2].second, 2.0F);
+}
+
+ZTEST(smp_live_group, test_fields_of_another_length_are_invalid) {
+    GroupHarness harness;
+    const uint32_t hash = harness.readings.Add("sensor", 1.0F);
+
+    zassert_equal(harness.SubscribeFields({ hash, hash }, { 0 }, 50).Value("rc"), MGMT_ERR_EINVAL);
+    zassert_equal(harness.SubscribeFields({ hash }, { 0, 1 }, 50).Value("rc"), MGMT_ERR_EINVAL);
+    zassert_equal(harness.SubscribeFields({ hash }, {}, 50).Value("rc"), MGMT_ERR_EINVAL);
+    zassert_false(harness.service->IsSubscribed());
+}
+
+ZTEST(smp_live_group, test_an_unknown_field_is_invalid) {
+    GroupHarness harness;
+    const uint32_t hash = harness.readings.Add("sensor", 1.0F);
+
+    zassert_equal(harness.SubscribeFields({ hash, hash }, { 0, 3 }, 50).Value("rc"), MGMT_ERR_EINVAL);
+    zassert_equal(harness.SubscribeFields({ hash }, { 4000000000U }, 50).Value("rc"), MGMT_ERR_EINVAL);
     zassert_false(harness.service->IsSubscribed());
 }

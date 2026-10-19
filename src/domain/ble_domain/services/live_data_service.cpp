@@ -37,18 +37,22 @@ size_t LiveDataService::GetCapacity() const {
     return std::min(MAX_SENSORS, (size - LiveDataEncoder::HEADER_SIZE) / LiveDataEncoder::ENTRY_SIZE);
 }
 
-LiveDataService::SubscribeResult
-LiveDataService::Subscribe(std::span<const uint32_t> sensor_id_hashes, uint32_t period_ms) {
+LiveDataService::SubscribeResult LiveDataService::Subscribe(
+    std::span<const uint32_t> sensor_id_hashes,
+    std::span<const ReadingField> fields,
+    uint32_t period_ms
+) {
 
     const size_t capacity = GetCapacity();
     if(capacity == 0)
         return SubscribeResult::NOT_LISTENING;
-    if(sensor_id_hashes.size() > capacity)
+    if(sensor_id_hashes.size() > capacity || fields.size() != sensor_id_hashes.size())
         return SubscribeResult::TOO_MANY;
 
     {
         ScopedMutex guard(lock_);
         std::ranges::copy(sensor_id_hashes, sensor_id_hashes_.begin());
+        std::ranges::copy(fields, fields_.begin());
         sensor_count_ = sensor_id_hashes.size();
         period_ms_ = ClampPeriod(period_ms);
     }
@@ -99,7 +103,9 @@ void LiveDataService::Sample() {
     }
 
     const auto values = std::span(values_).first(sensor_count_);
-    sensor_readings_frame_->GetReadingValues(std::span(sensor_id_hashes_).first(sensor_count_), values);
+    sensor_readings_frame_->GetReadingFields(
+        std::span(sensor_id_hashes_).first(sensor_count_), std::span(fields_).first(sensor_count_), values
+    );
 
     const size_t size = LiveDataEncoder::Encode(sequence, k_uptime_get_32(), values, buffer_);
     if(size == 0 || size > notifier_->GetMaxNotificationSize()) {

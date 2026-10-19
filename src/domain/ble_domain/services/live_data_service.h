@@ -12,12 +12,14 @@
 #include <zephyr/kernel.h>
 
 #include "domain/ble_domain/utilities/live_data_encoder.h"
+#include "domain/sensor_domain/models/reading_field.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/bluetooth/i_ble_notifier.h"
 
 namespace eerie_leap::domain::ble_domain::services {
 
 using eerie_leap::domain::ble_domain::utilities::LiveDataEncoder;
+using eerie_leap::domain::sensor_domain::models::ReadingField;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::bluetooth::IBleNotifier;
 
@@ -52,6 +54,7 @@ private:
     // Guards the subscription and the buffers between the subscriber and the sample work.
     mutable k_mutex lock_{};
     std::array<uint32_t, MAX_SENSORS> sensor_id_hashes_{};
+    std::array<ReadingField, MAX_SENSORS> fields_{};
     size_t sensor_count_ = 0;
     uint32_t period_ms_ = MIN_PERIOD_MS;
     uint8_t sequence_ = 0;
@@ -83,8 +86,11 @@ public:
     /**
      * @brief Replaces the subscription and samples right away.
      * @param sensor_id_hashes Hashes of the configured sensor IDs; notifications refer to them by position.
+     *        A sensor may be listed more than once with different fields.
+     * @param fields One field per hash, the number that entry carries.
      */
-    SubscribeResult Subscribe(std::span<const uint32_t> sensor_id_hashes, uint32_t period_ms);
+    SubscribeResult
+    Subscribe(std::span<const uint32_t> sensor_id_hashes, std::span<const ReadingField> fields, uint32_t period_ms);
     /** @brief Stops sampling, e.g. on request or when the central disconnects. */
     void Unsubscribe();
     /** @brief A `live` notification left. */

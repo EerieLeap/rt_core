@@ -33,13 +33,13 @@ ZTEST(live_data_service, test_subscription_is_limited_to_one_notification) {
     const std::array<uint32_t, 3> hashes = { 1, 2, 3 };
 
     notifier->SetMaxSize(0);
-    zassert_equal(service.Subscribe(hashes, 100), SubscribeResult::NOT_LISTENING);
+    zassert_equal(service.Subscribe(hashes, AllValues(hashes.size()), 100), SubscribeResult::NOT_LISTENING);
 
     notifier->SetMaxSize(20);
-    zassert_equal(service.Subscribe(hashes, 100), SubscribeResult::TOO_MANY);
+    zassert_equal(service.Subscribe(hashes, AllValues(hashes.size()), 100), SubscribeResult::TOO_MANY);
     zassert_false(service.IsSubscribed());
 
-    zassert_equal(service.Subscribe(std::span(hashes).first(2), 100), SubscribeResult::OK);
+    zassert_equal(service.Subscribe(std::span(hashes).first(2), AllValues(2), 100), SubscribeResult::OK);
     zassert_true(service.IsSubscribed());
 }
 
@@ -53,7 +53,7 @@ ZTEST(live_data_service, test_samples_carry_values_by_subscription_position) {
 
     const std::array<uint32_t, 4> hashes = { last, pending, 12345, first };
     const uint32_t before_ms = k_uptime_get_32();
-    zassert_equal(service.Subscribe(hashes, 1000), SubscribeResult::OK);
+    zassert_equal(service.Subscribe(hashes, AllValues(hashes.size()), 1000), SubscribeResult::OK);
 
     const auto notifications = notifier->WaitForNotifications(1);
     zassert_equal(notifications.size(), 1);
@@ -69,6 +69,42 @@ ZTEST(live_data_service, test_samples_carry_values_by_subscription_position) {
     zassert_equal(sample.values[1].second, 1.5F);
 }
 
+ZTEST(live_data_service, test_fields_must_match_the_sensors) {
+    const auto notifier = std::make_shared<FakeNotifier>();
+    const Readings readings;
+    LiveDataService service(notifier, readings.frame);
+    const std::array<uint32_t, 2> hashes = { 1, 2 };
+
+    zassert_equal(service.Subscribe(hashes, AllValues(1), 100), SubscribeResult::TOO_MANY);
+    zassert_false(service.IsSubscribed());
+}
+
+ZTEST(live_data_service, test_one_sensor_listed_for_each_field) {
+    const auto notifier = std::make_shared<FakeNotifier>();
+    Readings readings;
+    const uint32_t analog = readings.Add("analog", 80.0F, 4.0F, 2.0F);
+    const uint32_t plain = readings.Add("plain", 1.5F);
+    LiveDataService service(notifier, readings.frame);
+
+    const std::array<uint32_t, 4> hashes = { analog, analog, analog, plain };
+    const std::array<ReadingField, 4> fields = { ReadingField::VALUE, ReadingField::CALIBRATED_VOLTAGE,
+        ReadingField::ADC_VOLTAGE, ReadingField::ADC_VOLTAGE };
+    zassert_equal(service.Subscribe(hashes, fields, 1000), SubscribeResult::OK);
+
+    const auto notifications = notifier->WaitForNotifications(1);
+    zassert_equal(notifications.size(), 1);
+
+    // Each entry is one position; the plain sensor has no ADC voltage, so its entry is left out.
+    const auto sample = Decode(notifications[0]);
+    zassert_equal(sample.values.size(), 3);
+    zassert_equal(sample.values[0].first, 0);
+    zassert_equal(sample.values[0].second, 80.0F);
+    zassert_equal(sample.values[1].first, 1);
+    zassert_equal(sample.values[1].second, 4.0F);
+    zassert_equal(sample.values[2].first, 2);
+    zassert_equal(sample.values[2].second, 2.0F);
+}
+
 ZTEST(live_data_service, test_period_is_at_least_the_minimum) {
     zassert_equal(LiveDataService::ClampPeriod(10), LiveDataService::MIN_PERIOD_MS);
     zassert_equal(LiveDataService::ClampPeriod(200), 200);
@@ -81,7 +117,7 @@ ZTEST(live_data_service, test_period_is_at_least_the_minimum) {
     };
 
     const std::array<uint32_t, 1> hashes = { readings.Add("sensor", 1.0F) };
-    zassert_equal(service.Subscribe(hashes, 10), SubscribeResult::OK);
+    zassert_equal(service.Subscribe(hashes, AllValues(hashes.size()), 10), SubscribeResult::OK);
     k_msleep(175);
     service.Unsubscribe();
 
@@ -96,7 +132,9 @@ ZTEST(live_data_service, test_one_notification_in_flight) {
     LiveDataService service(notifier, readings.frame);
 
     const std::array<uint32_t, 1> hashes = { readings.Add("sensor", 1.0F) };
-    zassert_equal(service.Subscribe(hashes, LiveDataService::MIN_PERIOD_MS), SubscribeResult::OK);
+    zassert_equal(
+        service.Subscribe(hashes, AllValues(hashes.size()), LiveDataService::MIN_PERIOD_MS), SubscribeResult::OK
+    );
     k_msleep(200);
 
     zassert_equal(notifier->Notifications().size(), 1, "The first notification never reported back");
@@ -117,7 +155,9 @@ ZTEST(live_data_service, test_sample_without_a_buffer_is_dropped) {
     notifier->SetResult(-ENOMEM);
 
     const std::array<uint32_t, 1> hashes = { readings.Add("sensor", 1.0F) };
-    zassert_equal(service.Subscribe(hashes, LiveDataService::MIN_PERIOD_MS), SubscribeResult::OK);
+    zassert_equal(
+        service.Subscribe(hashes, AllValues(hashes.size()), LiveDataService::MIN_PERIOD_MS), SubscribeResult::OK
+    );
     k_msleep(120);
 
     zassert_true(notifier->Notifications().empty());
@@ -136,7 +176,9 @@ ZTEST(live_data_service, test_unsubscribe_stops_sampling) {
     };
 
     const std::array<uint32_t, 1> hashes = { readings.Add("sensor", 1.0F) };
-    zassert_equal(service.Subscribe(hashes, LiveDataService::MIN_PERIOD_MS), SubscribeResult::OK);
+    zassert_equal(
+        service.Subscribe(hashes, AllValues(hashes.size()), LiveDataService::MIN_PERIOD_MS), SubscribeResult::OK
+    );
     zassert_equal(notifier->WaitForNotifications(1).size(), 1);
 
     service.Unsubscribe();
