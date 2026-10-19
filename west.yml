@@ -22,6 +22,8 @@ manifest:
           - zcbor           # CBOR light JSON like data format
           - fatfs           # FATFS filesystem
           - littlefs        # littleFS lightweight filesystem
+          - mbedtls         # PSA crypto for Bluetooth SMP (lint.bluetooth)
+          - tf-psa-crypto   # PSA crypto for Bluetooth SMP (lint.bluetooth)
 
   self:
     path: rt_core
