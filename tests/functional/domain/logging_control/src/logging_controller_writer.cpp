@@ -510,10 +510,7 @@ constexpr const char* OTHER_LOG_NAME = "log_data_20000101T000000Z_0000.mf4";
 
 // The name of the one log file on the volume; empty when there is none, or more than one.
 std::string TheLogFileName(FsService& fs_service) {
-    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
-        return {};
-
-    const auto names = fs_service.ListFiles(LogFileNaming::LOGS_DIR);
+    const auto names = logging_controller_test::ListLogFileNames(fs_service);
 
     return names.size() == 1 ? names.front() : std::string();
 }

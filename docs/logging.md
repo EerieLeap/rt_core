@@ -104,6 +104,23 @@ open file and the log of the last session can be fetched, and a rotation has non
 files. Only a unit with a log writer registers the kind: `LoggingController` in the writer role, with
 the SD service and a registry (see [Wiring](#wiring)); the remote role registers nothing.
 
+**End times.** A finalized MDF4 header holds no end time, so the writer records it
+(`LogEndTimes`, `services/log_end_times.h`): when it closes a file with a successful finalize, on a
+stop or a rotation, it records the time of the file's last tick (the file's start for one closed before
+its first tick), and a file that could not be finalized gets none. The index lives in memory and in
+`logs/end_times.txt` (`LogFileNaming::END_TIMES_FILE_NAME`), a line `<end_ms> <file name>` per log,
+`end_ms` in Unix milliseconds, UTC. It ends in neither log extension, so the `logs` kind never serves
+it. A record appends a line; the file is rewritten from memory once its lines outnumber the cap twice.
+It is read once per mount, when `LoggingController` wires the writer and at a `Start()` after the card
+came back: unreadable lines and the entries of logs that are gone are dropped and the file is rewritten
+pruned (a missing or corrupt file is an empty index, with a warning); a deleted log's entry is ignored
+until then, since nothing lists it. Logs are never renamed, so a name keyed entry stays right. At most
+256 entries are kept, the oldest recorded leaving first (a log older than that lists without an end).
+An index failure is logged and never fails a close or the session; a lookup (`Find()`) takes a lock
+and does no I/O. `AssetProvider::get_end_ms` (called on the configuration work queue) makes the
+`logs` provider add `end_ms` to the entries of `assets LIST` (see [smp.md](smp.md)), so a client shows
+a log's duration without reading it.
+
 ### Status events and failures
 
 The writer publishes `StatusUpdated` on the `logging_events` channel (see

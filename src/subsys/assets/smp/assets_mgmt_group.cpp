@@ -53,10 +53,16 @@ static_assert(
 // Names are shorter than 256 bytes, so their head is two bytes at most.
 static_assert(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH < 256);
 
+// The largest unsigned integer: a head byte and eight value bytes (`end_ms`).
+constexpr size_t MAX_UINT64_SIZE = 9;
+
 // Room an entry of a list needs besides its name: the map, the `name` and `size` keys, the name's
-// head, a 32-bit size and the end of the map. That is 19 bytes at most.
-constexpr size_t LIST_ENTRY_OVERHEAD = 24;
-static_assert(LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + MAP_END_SIZE);
+// head, a 32-bit size, the `end_ms` key with a 64-bit value and the end of the map. That is 35 bytes
+// at most.
+constexpr size_t LIST_ENTRY_OVERHEAD = 40;
+static_assert(
+    LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(6) + MAX_UINT64_SIZE + MAP_END_SIZE
+);
 
 // Room kept behind the last entry that is listed: the end of the list, `next` and the end of the
 // response map. That is 12 bytes at most.
@@ -379,12 +385,22 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
             break;
 
         const auto size = static_cast<uint32_t>(std::min<size_t>(entry.size, UINT32_MAX));
-        ok = zcbor_map_start_encode(zse, 2)
+
+        // Only an end that is known and not before the epoch.
+        std::optional<int64_t> end_ms;
+        if(provider->get_end_ms)
+            end_ms = provider->get_end_ms(entry.name);
+        const bool has_end = end_ms.has_value() && *end_ms >= 0;
+        const uint32_t pairs = has_end ? 3 : 2;
+
+        ok = zcbor_map_start_encode(zse, pairs)
             && zcbor_tstr_put_lit(zse, "name")
             && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
             && zcbor_tstr_put_lit(zse, "size")
             && zcbor_uint32_put(zse, size)
-            && zcbor_map_end_encode(zse, 2);
+            && (!has_end
+                || (zcbor_tstr_put_lit(zse, "end_ms") && zcbor_uint64_put(zse, static_cast<uint64_t>(*end_ms))))
+            && zcbor_map_end_encode(zse, pairs);
         listed++;
     }
 

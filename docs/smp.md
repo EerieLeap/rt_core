@@ -137,7 +137,7 @@ so a unit serves the kinds it has the services for, and `KINDS` says which.
 | Command | Request | Response |
 | --- | --- | --- |
 | `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail, free?, used?}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) whether the volume is mounted now and, only while it is, `free` and `used` (bytes on the kind's volume). `free` is the number `WRITE` checks `len` against, and only a hint: files take whole blocks, so a `len` below it can still end in `NO_SPACE`. A unit without kinds answers an empty list. |
-| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size}], next?}` |
+| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size, end_ms?}], next?}` |
 | `READ` (read) | `{kind, name, off}` | `{off, data}`; at `off = 0` also `len`, the size of the file; the chunk that ends at `len` also `crc`, the CRC32 of the whole file |
 | `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |
 | `DELETE` (write) | `{kind, name}` | `{}` |
@@ -155,7 +155,12 @@ ignoring ASCII case) with at least one character before it; any other name is `B
 checks the kind and the volume only: it needs no access bit and takes no name. A later chunk of
 `WRITE` is matched to the open upload instead, and checks neither access nor name (see below).
 
-**`LIST`.** The entries come from directory position `off` (0 when absent), at most 48 directory
+**`LIST`.** `end_ms` is the end of the file in milliseconds since the Unix epoch (UTC), given for the
+`logs` kind only and only for a file this unit's writer recorded when it finalized it (a normal stop
+or a rotation; not a file left unfinalized, a log from before the index, or one copied onto the card);
+the duration is `end_ms` less the start in the name.
+
+The entries come from directory position `off` (0 when absent), at most 48 directory
 entries per request, in the file system's order, not sorted. Only files whose names are valid for the
 kind are listed: directories, dot files and other extensions are skipped but counted. `next` is the
 position to ask for next, absent once the directory is done; a page can be empty while `next` is

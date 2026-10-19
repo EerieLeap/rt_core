@@ -86,6 +86,8 @@ using Entry = std::map<std::string, uint32_t>;
 using TextEntry = std::map<std::string, std::string>;
 using FlagEntry = std::map<std::string, bool>;
 using ListEntry = std::map<std::string, std::vector<std::string>>;
+// Unsigned values that do not fit 32 bits.
+using WideEntry = std::map<std::string, uint64_t>;
 
 // A decoded response body: unsigned values, floats, booleans, byte and text strings, one list of maps
 // of unsigned, text, boolean and text list values, and the group error.
@@ -104,6 +106,8 @@ struct Response {
     // Their boolean values and their lists of text values, index for index.
     std::vector<FlagEntry> entry_flags;
     std::vector<ListEntry> entry_lists;
+    // Their unsigned values above 32 bits (kept out of `entries`), index for index.
+    std::vector<WideEntry> entry_wide;
     // The number of maps in each list of the body, by key; says an empty list was there.
     std::map<std::string, size_t> list_sizes;
     // Lists of plain unsigned values and of text values, by key.
@@ -163,13 +167,14 @@ inline uint8_t AdditionalInfo(const zcbor_state_t* state) {
 }
 
 // Decodes a map of unsigned values into entry; its text values into texts, its booleans into flags
-// and its lists of text values into lists, when given.
+// its lists of text values into lists and its unsigned values above 32 bits into wide, when given.
 inline bool DecodeEntry(
     zcbor_state_t* zsd,
     Entry& entry,
     TextEntry* texts = nullptr,
     FlagEntry* flags = nullptr,
-    ListEntry* lists = nullptr
+    ListEntry* lists = nullptr,
+    WideEntry* wide = nullptr
 ) {
 
     if(!zcbor_map_start_decode(zsd))
@@ -219,6 +224,19 @@ inline bool DecodeEntry(
 
             // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
             (*texts)[name] = std::string(reinterpret_cast<const char*>(value.value), value.len);
+            continue;
+        }
+
+        if(wide != nullptr) {
+            uint64_t wide_value = 0;
+            if(!zcbor_uint64_decode(zsd, &wide_value))
+                return false;
+
+            if(wide_value > UINT32_MAX)
+                (*wide)[name] = wide_value;
+            else
+                entry[name] = static_cast<uint32_t>(wide_value);
+
             continue;
         }
 
@@ -310,12 +328,14 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                     TextEntry texts;
                     FlagEntry flags;
                     ListEntry lists;
-                    if(!DecodeEntry(zsd, entry, &texts, &flags, &lists))
+                    WideEntry wide;
+                    if(!DecodeEntry(zsd, entry, &texts, &flags, &lists, &wide))
                         return false;
                     response.entries.push_back(entry);
                     response.entry_texts.push_back(texts);
                     response.entry_flags.push_back(flags);
                     response.entry_lists.push_back(lists);
+                    response.entry_wide.push_back(wide);
                     size++;
                 }
                 if(!zcbor_list_end_decode(zsd))

@@ -229,6 +229,10 @@ inline std::vector<LogFile> ReadLogFiles(FsService& fs_service) {
         return files;
 
     for(const auto& name : fs_service.ListFiles(LogFileNaming::LOGS_DIR)) {
+        // The end-time index beside the logs is no log.
+        if(!name.ends_with(".mf4"))
+            continue;
+
         LogFile file;
         file.path = std::string(LogFileNaming::LOGS_DIR) + "/" + name;
         file.content = ReadWholeFile(fs_service, file.path);
@@ -248,7 +252,13 @@ inline size_t CountLogFiles(FsService& fs_service) {
     if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
         return 0;
 
-    return fs_service.ListFiles(LogFileNaming::LOGS_DIR).size();
+    size_t count = 0;
+    for(const auto& name : fs_service.ListFiles(LogFileNaming::LOGS_DIR)) {
+        if(name.ends_with(".mf4"))
+            count++;
+    }
+
+    return count;
 }
 
 // Polls @p condition every 10 ms until it holds or @p timeout_ms passed.

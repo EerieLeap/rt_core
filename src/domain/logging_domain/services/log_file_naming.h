@@ -18,6 +18,9 @@ public:
     /// The directory of the log files, relative to the log volume; also the directory of the LOGS
     /// assets.
     static constexpr const char* LOGS_DIR = "logs";
+    /// The end-time index (see LogEndTimes), in LOGS_DIR. Not a log: it ends in neither of the log
+    /// extensions, so the `logs` asset kind never lists, reads or deletes it.
+    static constexpr const char* END_TIMES_FILE_NAME = "end_times.txt";
     static constexpr size_t PATH_MAX_LENGTH = 128;
     static constexpr uint32_t RANDOM_SUFFIX_MODULO = 10000;
 

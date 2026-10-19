@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <exception>
 #include <span>
+#include <stdexcept>
 #include <utility>
 
 #include <zephyr/kernel.h>
@@ -52,6 +53,9 @@ using eerie_leap::subsys::event_bus::GetEventBindingError;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::subsys::threading::ScopedMutex;
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+using eerie_leap::domain::logging_domain::services::LogEndTimes;
+#endif
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
 using eerie_leap::domain::logging_domain::services::LogFileNaming;
 #endif
@@ -397,6 +401,18 @@ bool LoggingController::BuildRole() {
         return false;
     }
 
+    // Where the writer records the end of each log it finalizes, and the `logs` listing reads it from.
+    // Shared, so the listing outlives the writer's destruction safely. A failure only loses end times.
+    try {
+        if(sd_fs_service_ == nullptr)
+            throw std::runtime_error("no log volume");
+        auto end_times = std::make_shared<LogEndTimes>(sd_fs_service_);
+        end_times->Load();
+        log_writer_service_->SetEndTimes(std::move(end_times));
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to set up the log end times: %s", e.what());
+    }
+
     log_writer_supervisor_ = std::make_shared<LogWriterSupervisor>(
         config_work_queue_thread_, log_writer_service_, logging_configuration_manager_, sensors_configuration_manager_,
         tool_id_, MakeDeviceIdProvider(canbus_com_service_)
@@ -589,6 +605,13 @@ void LoggingController::RegisterAssets() {
 
             return writer != nullptr && writer->IsOpenFile(store->GetPath(name));
         };
+
+        // A finalized file's end, from memory (the index never does I/O on a lookup).
+        if(const auto end_times = log_writer_service_->GetEndTimes(); end_times != nullptr) {
+            provider.get_end_ms = [end_times](std::string_view name) {
+                return end_times->Find(name);
+            };
+        }
 
         is_assets_registered_ = assets_manager_->Register(std::move(provider));
     } catch(const std::exception& e) {

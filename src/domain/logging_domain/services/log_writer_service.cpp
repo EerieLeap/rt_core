@@ -134,7 +134,13 @@ bool LogWriterService::DoStart() {
     while(sensor_readings_frame_->TakeRawCanFrames(task.raw_readings, task.raw_frames) > 0) {
     }
 
-    if(!OpenLogFile(time_service_->GetCurrentTime()))
+    const auto start_time = time_service_->GetCurrentTime();
+
+    // Reads the index when the card came since the last read; a failure only loses end times.
+    if(end_times_ != nullptr)
+        end_times_->Load();
+
+    if(!OpenLogFile(start_time))
         return false;
 
     LOG_INF("Logging started. Log file created: %s", file_path_.CStr());
@@ -163,6 +169,7 @@ bool LogWriterService::DoStart() {
     task.last_sync_ms = now_ms;
 
     has_failed_ = false;
+    SetSession(true, std::chrono::duration_cast<std::chrono::milliseconds>(start_time.time_since_epoch()).count());
     atomic_set(&task.is_running, 1);
 
     // Before the first tick is armed, so a failure of that tick is never published ahead of it.
@@ -190,6 +197,7 @@ bool LogWriterService::DoStop() {
         k_sleep(K_MSEC(1));
 
     CloseLogFile(task);
+    SetSession(false);
 
     LOG_INF("Logging stopped.");
 
@@ -259,6 +267,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
 
     // Before the file exists, so that no moment of it goes unreported; every failure below clears it.
     SetOpenFile(file_path_.ToString());
+    file_start_time_ = start_time;
 
     try {
         // Write mode keeps the stream seekable, which the MDF4 logger needs to finalize the file.
@@ -290,6 +299,8 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
         return false;
     }
 
+    SetOpenFileBytes(logger_->GetBytesWritten());
+
     return true;
 }
 
@@ -319,7 +330,67 @@ bool LogWriterService::CloseLogFile(LogWriterTask& task) {
     // Once the file is closed and final, not while it is being finalized: a reader takes it from here.
     ClearOpenFile();
 
+    // After it is final, so a listing that finds the end finds a file that can be read.
+    if(is_finalized)
+        RecordEndTime(task);
+
     return is_finalized;
+}
+
+void LogWriterService::RecordEndTime(const LogWriterTask& task) {
+    if(end_times_ == nullptr)
+        return;
+
+    try {
+        // The last tick written into this file; a file closed before its first tick ends where it began.
+        const auto end_time = task.last_tick_time > file_start_time_ ? task.last_tick_time : file_start_time_;
+        const auto end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time.time_since_epoch()).count();
+
+        const auto path = file_path_.ToString();
+        const auto separator = path.rfind('/');
+        end_times_->Record(separator == std::string_view::npos ? path : path.substr(separator + 1), end_ms);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to record the end of %s: %s", file_path_.CStr(), e.what());
+    }
+}
+
+void LogWriterService::SetEndTimes(std::shared_ptr<LogEndTimes> end_times) {
+    end_times_ = std::move(end_times);
+}
+
+void LogWriterService::SetSession(bool is_active, int64_t since_ms) {
+    ScopedMutex lock(open_file_mutex_);
+
+    is_session_active_ = is_active;
+    session_since_ms_ = since_ms;
+}
+
+void LogWriterService::SetOpenFileBytes(uint64_t bytes) {
+    ScopedMutex lock(open_file_mutex_);
+
+    open_file_bytes_ = bytes;
+}
+
+std::optional<LogSessionInfo> LogWriterService::GetSessionInfo() const {
+    ScopedMutex lock(open_file_mutex_);
+
+    if(!is_session_active_)
+        return std::nullopt;
+
+    LogSessionInfo info;
+    info.since_ms = session_since_ms_;
+
+    const auto path = open_file_path_.ToString();
+    if(!path.empty()) {
+        const auto separator = path.rfind('/');
+        const auto name = separator == std::string_view::npos ? path : path.substr(separator + 1);
+        const size_t length = std::min(name.size(), LogSessionInfo::MAX_FILE_NAME_LENGTH);
+
+        name.copy(info.file_name.data(), length);
+        info.file_bytes = open_file_bytes_;
+    }
+
+    return info;
 }
 
 void LogWriterService::SetOpenFile(std::string_view path) {
@@ -332,6 +403,7 @@ void LogWriterService::ClearOpenFile() {
     ScopedMutex lock(open_file_mutex_);
 
     open_file_path_.Clear();
+    open_file_bytes_ = 0;
 }
 
 bool LogWriterService::IsOpenFile(std::string_view path) const {
@@ -436,7 +508,9 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
             }
         }
 
-        task.is_rotation_due = task.max_log_size_bytes > 0 && task.logger->GetBytesWritten() >= task.max_log_size_bytes;
+        const uint64_t file_bytes = task.logger->GetBytesWritten();
+        task.is_rotation_due = task.max_log_size_bytes > 0 && file_bytes >= task.max_log_size_bytes;
+        SetOpenFileBytes(file_bytes);
     } catch(const std::exception& e) {
         task.stats.write_errors++;
         LOG_ERR("Failed to write the log file; logging stops. %s", e.what());

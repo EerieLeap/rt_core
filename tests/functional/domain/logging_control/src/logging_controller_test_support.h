@@ -1080,12 +1080,24 @@ StoreLoggingConfiguration(LoggingController& controller, std::initializer_list<s
     );
 }
 
+// The log files of the logs directory: the end-time index beside them is no log.
+inline std::vector<std::string> ListLogFileNames(FsService& fs_service) {
+    std::vector<std::string> names;
+
+    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
+        return names;
+
+    for(auto& name : fs_service.ListFiles(LogFileNaming::LOGS_DIR)) {
+        if(name.ends_with(".mf4"))
+            names.push_back(std::move(name));
+    }
+
+    return names;
+}
+
 // The bytes of the log file the writer wrote, the only one of a case; empty when there is none.
 inline std::vector<uint8_t> ReadTheLogFile(FsService& fs_service) {
-    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
-        return {};
-
-    const auto names = fs_service.ListFiles(LogFileNaming::LOGS_DIR);
+    const auto names = ListLogFileNames(fs_service);
     if(names.size() != 1)
         return {};
 
@@ -1110,10 +1122,7 @@ inline bool ContainsText(const std::vector<uint8_t>& content, std::string_view t
 
 // The log files of the data directory: one per session.
 inline size_t CountLogFiles(FsService& fs_service) {
-    if(!fs_service.Exists(LogFileNaming::LOGS_DIR))
-        return 0;
-
-    return fs_service.ListFiles(LogFileNaming::LOGS_DIR).size();
+    return ListLogFileNames(fs_service).size();
 }
 
 // A property of the header comment, as the logger writes LoggerMetadata.

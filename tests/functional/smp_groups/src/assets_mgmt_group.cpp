@@ -237,6 +237,22 @@ public:
         Register(AssetKind::IMAGES, "images", images_store, IMAGE_EXTENSIONS, ALL_ACCESS, max_size);
     }
 
+    // Registers the logs kind anew with a hook that gives the end of a file, as the logging controller does.
+    void ReregisterLogsWithEnds(std::function<std::optional<int64_t>(std::string_view)> get_end_ms) {
+        registry->Unregister(AssetKind::LOGS);
+        zassert_true(registry->Register(
+            {
+                .kind = AssetKind::LOGS,
+                .name = "logs",
+                .store = std::make_shared<AssetStore>(volume, "logs"),
+                .extensions = LOG_EXTENSIONS,
+                .access = READ_ONLY,
+                .max_size = 0,
+                .get_end_ms = std::move(get_end_ms),
+            }
+        ));
+    }
+
     // Registers the can scripts kind anew on the root of the volume, where the directory of the staged
     // files is too.
     void ReregisterCanScriptsAtRoot() {
@@ -730,6 +746,55 @@ ZTEST_F(smp_assets_group, test_list_is_per_kind) {
     zassert_str_equal(logs.files[0].first.c_str(), "run.mdf");
 
     zassert_true(harness.ListAll(CAN_SCRIPTS).files.empty(), "A kind whose directory is empty lists nothing");
+}
+
+ZTEST_F(smp_assets_group, test_list_gives_the_end_of_the_files_whose_end_is_known) {
+    Harness& harness = *fixture->harness;
+
+    harness.Put("logs/known.mdf", Pattern(30, 1));
+    harness.Put("logs/unknown.mdf", Pattern(40, 1));
+
+    static constexpr int64_t END_MS = 1790000000123;
+    harness.ReregisterLogsWithEnds([](std::string_view name) -> std::optional<int64_t> {
+        if(name == "known.mdf")
+            return END_MS;
+        return std::nullopt;
+    });
+
+    const auto response = harness.List(LOGS);
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 2);
+
+    size_t known = 0;
+    for(size_t i = 0; i < response.entries.size(); i++) {
+        const std::string& name = response.entry_texts[i].at("name");
+
+        if(name == "known.mdf") {
+            known++;
+            zassert_equal(response.entries[i].at("size"), 30);
+            zassert_true(response.entry_wide[i].contains("end_ms"), "A known end is listed");
+            zassert_equal(response.entry_wide[i].at("end_ms"), static_cast<uint64_t>(END_MS));
+        } else {
+            zassert_false(response.entry_wide[i].contains("end_ms"), "%s has no end to list", name.c_str());
+            zassert_false(response.entries[i].contains("end_ms"));
+        }
+    }
+
+    zassert_equal(known, 1);
+}
+
+ZTEST_F(smp_assets_group, test_list_without_an_end_hook_lists_name_and_size_only) {
+    Harness& harness = *fixture->harness;
+
+    harness.Put("logs/run.mdf", Pattern(30, 1));
+
+    const auto response = harness.List(LOGS);
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 1);
+    zassert_equal(response.entries[0].size(), 1, "Only `size` is a number");
+    zassert_equal(response.entries[0].at("size"), 30);
+    zassert_true(response.entry_wide[0].empty());
+    zassert_str_equal(response.entry_texts[0].at("name").c_str(), "run.mdf");
 }
 
 ZTEST_F(smp_assets_group, test_list_pages_through_entries_that_are_no_assets) {
