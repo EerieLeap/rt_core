@@ -14,6 +14,7 @@
 
 #include <zephyr/kernel.h>
 
+#include "domain/sensor_domain/models/reading_field.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_limits.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
@@ -25,6 +26,7 @@
 namespace eerie_leap::domain::sensor_domain::utilities {
 
 using eerie_leap::domain::sensor_domain::models::ReadingError;
+using eerie_leap::domain::sensor_domain::models::ReadingField;
 using eerie_leap::domain::sensor_domain::models::ReadingSource;
 using eerie_leap::domain::sensor_domain::models::ReadingStatus;
 using eerie_leap::domain::sensor_domain::models::Sensor;
@@ -49,7 +51,8 @@ private:
     struct Record {
         float value = 0.0F;
         float raw_value = 0.0F;
-        float voltage = 0.0F;
+        float calibrated_voltage = 0.0F;
+        float adc_voltage = 0.0F;
         int64_t timestamp = 0;
         uint8_t flags = 0;
         ReadingStatus status = ReadingStatus::UNINITIALIZED;
@@ -58,8 +61,9 @@ private:
 
         static constexpr uint8_t K_HAS_VALUE = 1U << 0;
         static constexpr uint8_t K_HAS_RAW_VALUE = 1U << 1;
-        static constexpr uint8_t K_HAS_VOLTAGE = 1U << 2;
+        static constexpr uint8_t K_HAS_CALIBRATED_VOLTAGE = 1U << 2;
         static constexpr uint8_t K_HAS_TIMESTAMP = 1U << 3;
+        static constexpr uint8_t K_HAS_ADC_VOLTAGE = 1U << 4;
 
         static Record Pack(const SensorReading& reading) {
             Record record;
@@ -72,9 +76,13 @@ private:
                 record.raw_value = *reading.raw_value;
                 record.flags |= K_HAS_RAW_VALUE;
             }
-            if(reading.voltage.has_value()) {
-                record.voltage = *reading.voltage;
-                record.flags |= K_HAS_VOLTAGE;
+            if(reading.calibrated_voltage.has_value()) {
+                record.calibrated_voltage = *reading.calibrated_voltage;
+                record.flags |= K_HAS_CALIBRATED_VOLTAGE;
+            }
+            if(reading.adc_voltage.has_value()) {
+                record.adc_voltage = *reading.adc_voltage;
+                record.flags |= K_HAS_ADC_VOLTAGE;
             }
             if(reading.timestamp.has_value()) {
                 record.timestamp = reading.timestamp->time_since_epoch().count();
@@ -95,8 +103,10 @@ private:
                 reading.value = value;
             if((flags & K_HAS_RAW_VALUE) != 0)
                 reading.raw_value = raw_value;
-            if((flags & K_HAS_VOLTAGE) != 0)
-                reading.voltage = voltage;
+            if((flags & K_HAS_CALIBRATED_VOLTAGE) != 0)
+                reading.calibrated_voltage = calibrated_voltage;
+            if((flags & K_HAS_ADC_VOLTAGE) != 0)
+                reading.adc_voltage = adc_voltage;
             if((flags & K_HAS_TIMESTAMP) != 0) {
                 reading.timestamp = std::chrono::system_clock::time_point(
                     std::chrono::system_clock::duration(timestamp)
@@ -436,6 +446,49 @@ public:
         for(size_t i = 0; i < count; i++) {
             const auto slot = FindSlotLocked(sensor_id_hashes[i]);
             values[i] = slot.has_value() ? ToOptional(values_[slot->index]) : std::nullopt;
+        }
+    }
+
+    /**
+     * @brief Copies one number per entry of @p sensor_id_hashes and @p fields under a single lock, so
+     *        the entries of one sensor come from the same moment.
+     *
+     * VALUE is the latest processed value, as GetReadingValues() gives it. The voltages come from
+     * the sensor's latest reading, so they show while processing fails.
+     * @param values One entry per hash, empty for an unknown sensor, a field the sensor does not
+     *               have, or a sensor without a reading yet.
+     */
+    void GetReadingFields(
+        std::span<const uint32_t> sensor_id_hashes,
+        std::span<const ReadingField> fields,
+        std::span<std::optional<float>> values
+    ) const {
+        const size_t count = std::min({ sensor_id_hashes.size(), fields.size(), values.size() });
+
+        ScopedMutex guard(lock_);
+
+        for(size_t i = 0; i < count; i++) {
+            values[i] = std::nullopt;
+
+            const auto slot = FindSlotLocked(sensor_id_hashes[i]);
+            if(!slot.has_value())
+                continue;
+
+            const Slot& entry = slots_[slot->index];
+
+            switch(fields[i]) {
+                case ReadingField::VALUE:
+                    values[i] = ToOptional(values_[slot->index]);
+                    break;
+                case ReadingField::CALIBRATED_VOLTAGE:
+                    if(entry.has_reading && (entry.latest.flags & Record::K_HAS_CALIBRATED_VOLTAGE) != 0)
+                        values[i] = entry.latest.calibrated_voltage;
+                    break;
+                case ReadingField::ADC_VOLTAGE:
+                    if(entry.has_reading && (entry.latest.flags & Record::K_HAS_ADC_VOLTAGE) != 0)
+                        values[i] = entry.latest.adc_voltage;
+                    break;
+            }
         }
     }
 

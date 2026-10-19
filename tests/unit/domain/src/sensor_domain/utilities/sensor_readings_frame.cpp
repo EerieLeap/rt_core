@@ -5,6 +5,7 @@
 #include <eerie_memory.hpp>
 #include <zephyr/ztest.h>
 
+#include "domain/sensor_domain/models/reading_field.h"
 #include "domain/sensor_domain/models/reading_status.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_limits.h"
@@ -463,6 +464,80 @@ ZTEST(sensor_readings_frame, test_GetReadingValues_reads_each_hash_in_order) {
     zassert_false(values[1].has_value(), "A sensor without a processed value is empty");
     zassert_false(values[2].has_value());
     zassert_equal(values[3].value(), 1.5F);
+}
+
+ZTEST(sensor_readings_frame, test_GetReadingFields_reads_value_and_both_voltages_of_one_sensor) {
+    auto sensors = SensorReadingsFrameGetTestSensors();
+    const auto sensor_readings_frame = MakeFrame(sensors);
+
+    SensorReading analog = MakeReading(sensors[0], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 7.5F);
+    analog.calibrated_voltage = 4.0F;
+    analog.adc_voltage = 2.0F;
+    sensor_readings_frame->AddOrUpdateReading(analog);
+    sensor_readings_frame->AddOrUpdateReading(
+        MakeReading(sensors[1], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 1.25F)
+    );
+
+    const uint32_t analog_hash = sensors[0]->id_hash;
+    const std::array<uint32_t, 6> hashes = { analog_hash, analog_hash, analog_hash, sensors[1]->id_hash,
+        sensors[1]->id_hash, StringHelpers::GetHash("unknown") };
+    const std::array<ReadingField, 6> fields = { ReadingField::VALUE, ReadingField::CALIBRATED_VOLTAGE,
+        ReadingField::ADC_VOLTAGE, ReadingField::VALUE, ReadingField::ADC_VOLTAGE, ReadingField::VALUE };
+    std::array<std::optional<float>, 6> values;
+    values.fill(0.0F);
+
+    sensor_readings_frame->GetReadingFields(hashes, fields, values);
+
+    zassert_equal(values[0].value(), 7.5F);
+    zassert_equal(values[1].value(), 4.0F);
+    zassert_equal(values[2].value(), 2.0F);
+    zassert_equal(values[3].value(), 1.25F);
+    zassert_false(values[4].has_value(), "A sensor without an ADC has no ADC voltage");
+    zassert_false(values[5].has_value());
+}
+
+ZTEST(sensor_readings_frame, test_GetReadingFields_keeps_the_voltages_when_processing_errored) {
+    auto sensors = SensorReadingsFrameGetTestSensors();
+    const auto sensor_readings_frame = MakeFrame(sensors);
+
+    SensorReading good = MakeReading(sensors[0], ReadingSource::PROCESSING, ReadingStatus::PROCESSED, 5.5F);
+    good.calibrated_voltage = 1.0F;
+    good.adc_voltage = 0.5F;
+    sensor_readings_frame->AddOrUpdateReading(good);
+
+    // The reader got its voltages, the expression then failed.
+    SensorReading failed = MakeReading(sensors[0], ReadingSource::PROCESSING, ReadingStatus::UNINITIALIZED);
+    failed.calibrated_voltage = 3.0F;
+    failed.adc_voltage = 1.5F;
+    failed.SetError(ReadingError::EXPRESSION_FAILED);
+    sensor_readings_frame->AddOrUpdateReading(failed);
+
+    const std::array<uint32_t, 3> hashes = { sensors[0]->id_hash, sensors[0]->id_hash, sensors[0]->id_hash };
+    const std::array<ReadingField, 3> fields = { ReadingField::VALUE, ReadingField::CALIBRATED_VOLTAGE,
+        ReadingField::ADC_VOLTAGE };
+    std::array<std::optional<float>, 3> values;
+
+    sensor_readings_frame->GetReadingFields(hashes, fields, values);
+
+    zassert_equal(values[0].value(), 5.5F, "The value is the last processed one");
+    zassert_equal(values[1].value(), 3.0F, "The voltages are the latest reading's");
+    zassert_equal(values[2].value(), 1.5F);
+}
+
+ZTEST(sensor_readings_frame, test_GetReadingFields_is_empty_before_any_reading) {
+    auto sensors = SensorReadingsFrameGetTestSensors();
+    const auto sensor_readings_frame = MakeFrame(sensors);
+
+    const std::array<uint32_t, 3> hashes = { sensors[0]->id_hash, sensors[0]->id_hash, sensors[0]->id_hash };
+    const std::array<ReadingField, 3> fields = { ReadingField::VALUE, ReadingField::CALIBRATED_VOLTAGE,
+        ReadingField::ADC_VOLTAGE };
+    std::array<std::optional<float>, 3> values;
+    values.fill(0.0F);
+
+    sensor_readings_frame->GetReadingFields(hashes, fields, values);
+
+    for(const auto& value : values)
+        zassert_false(value.has_value());
 }
 
 ZTEST(sensor_readings_frame, test_can_frame_is_stored_apart_from_the_reading) {

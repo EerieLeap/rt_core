@@ -245,8 +245,8 @@ ZTEST(allocation_free_pipeline, test_steady_state_samples_do_not_allocate) {
     zassert_equal(analog.status, ReadingStatus::PROCESSED);
     const float expected_volts = pipeline.generation->adc_configuration->channel_configurations->at(0)
                                      ->calibrator->InterpolateToCalibratedRange(1.0F);
-    zassert_within(analog.voltage.value(), expected_volts, 0.01F);
-    zassert_within(analog.value.value(), analog.voltage.value() * 20.0F, 1e-3F);
+    zassert_within(analog.calibrated_voltage.value(), expected_volts, 0.01F);
+    zassert_within(analog.value.value(), analog.calibrated_voltage.value() * 20.0F, 1e-3F);
 
     CanFrame can_frame;
     zassert_true(pipeline.frame->TryGetCanFrame(pipeline.sensors[2]->id_hash, can_frame));

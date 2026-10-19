@@ -39,8 +39,10 @@ SensorReading SensorReaderPhysicalAnalog::Read(const TickContext& tick) {
         return reading;
     }
 
+    reading.adc_voltage = sample_->volts;
+
     const float voltage_calibrated = calibrator_->InterpolateToCalibratedRange(sample_->volts);
-    reading.voltage = voltage_calibrated;
+    reading.calibrated_voltage = voltage_calibrated;
 
     reading.value = runtime_->voltage_interpolator->Interpolate(voltage_calibrated, true);
     reading.raw_value = reading.value;

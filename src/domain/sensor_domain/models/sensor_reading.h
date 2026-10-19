@@ -27,8 +27,9 @@ struct SensorReading {
     uint32_t sensor_id_hash = 0;
 
     std::optional<float> value;
-    std::optional<float> raw_value; ///< The value before the expression was applied.
-    std::optional<float> voltage;   ///< Calibrated ADC voltage, PHYSICAL_ANALOG only.
+    std::optional<float> raw_value;          ///< The value before the expression was applied.
+    std::optional<float> calibrated_voltage; ///< ADC voltage after the ADC calibration, PHYSICAL_ANALOG only.
+    std::optional<float> adc_voltage;        ///< ADC voltage before calibration, PHYSICAL_ANALOG only.
     std::optional<std::chrono::system_clock::time_point> timestamp;
 
     ReadingSource source = ReadingSource::NONE;

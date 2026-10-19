@@ -112,7 +112,7 @@ ZTEST(adc_apply_restart, test_ApplyCborConfiguration_restarts_processing_with_th
 
                 observed[observed_count++] = { .timestamp = reading->timestamp.value(),
                     .status = reading->status,
-                    .voltage = reading->voltage.value_or(0.0F) };
+                    .voltage = reading->calibrated_voltage.value_or(0.0F) };
             }
 
             k_msleep(2);

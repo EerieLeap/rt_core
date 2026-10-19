@@ -286,9 +286,9 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_true(proc_reading_2.value.has_value());
     const float proc_reading_2_value = reading_2_value * 4 + 1.6F;
     zassert_equal(proc_reading_2.value.value(), proc_reading_2_value);
-    zassert_true(proc_reading_2.voltage.has_value());
+    zassert_true(proc_reading_2.calibrated_voltage.has_value());
     // Calibrated voltages are sensor volts: the simulator's 0..3.3 V at the pin maps onto 0..sensor_max_v.
-    zassert_between_inclusive(proc_reading_2.voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
+    zassert_between_inclusive(proc_reading_2.calibrated_voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_2.raw_value.has_value());
     zassert_between_inclusive(proc_reading_2.raw_value.value(), 0.0F, 200.0F);
 
@@ -299,8 +299,8 @@ ZTEST(sensor_processor, test_ProcessReading) {
     zassert_true(proc_reading_1.value.has_value());
     const float proc_reading_1_value = reading_1_value * 2 + proc_reading_2_value + 1;
     zassert_equal(proc_reading_1.value.value(), proc_reading_1_value);
-    zassert_true(proc_reading_1.voltage.has_value());
-    zassert_between_inclusive(proc_reading_1.voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
+    zassert_true(proc_reading_1.calibrated_voltage.has_value());
+    zassert_between_inclusive(proc_reading_1.calibrated_voltage.value(), 0.0F, AdcRange::Default().sensor_max_v);
     zassert_true(proc_reading_1.raw_value.has_value());
     zassert_between_inclusive(proc_reading_1.raw_value.value(), 0.0F, 100.0F);
 

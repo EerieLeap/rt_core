@@ -1,3 +1,4 @@
+#include <cmath>
 #include <eerie_memory.hpp>
 #include <zephyr/ztest.h>
 
@@ -446,7 +447,8 @@ ZTEST(sensors_reader, test_Read_analog_reports_a_failed_sample) {
     zassert_equal(reading.status, ReadingStatus::ERROR);
     zassert_equal(reading.error, ReadingError::READER_FAILED);
     zassert_false(reading.value.has_value(), "A failed conversion has no value, not 0");
-    zassert_false(reading.voltage.has_value());
+    zassert_false(reading.calibrated_voltage.has_value());
+    zassert_false(reading.adc_voltage.has_value());
     zassert_equal(reading.source, ReadingSource::PROCESSING);
     zassert_true(reading.timestamp.has_value());
     zassert_equal(reading.timestamp.value(), tick.timestamp);
@@ -471,8 +473,12 @@ ZTEST(sensors_reader, test_Read_analog_calibrates_a_valid_sample) {
     const SensorReading reading = fixture.reader->Read(tick);
 
     zassert_equal(reading.status, ReadingStatus::INTERPOLATED);
-    zassert_true(reading.voltage.has_value());
-    zassert_within(reading.voltage.value(), 4.0F, 1e-4F);
+    zassert_true(reading.calibrated_voltage.has_value());
+    zassert_within(reading.calibrated_voltage.value(), 4.0F, 1e-4F);
+    // The sample as the ADC measured it, before the calibration moved it.
+    zassert_true(reading.adc_voltage.has_value());
+    zassert_within(reading.adc_voltage.value(), 2.0F, 1e-4F);
+    zassert_true(std::abs(reading.adc_voltage.value() - reading.calibrated_voltage.value()) > 1.0F);
     // The sensor reads 0..5 V as 0..100.
     zassert_true(reading.value.has_value());
     zassert_within(reading.value.value(), 80.0F, 1e-3F);
