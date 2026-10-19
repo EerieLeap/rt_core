@@ -35,7 +35,7 @@
 #include "domain/logging_domain/control/i_logging_command_sender.h"
 #include "domain/logging_domain/control/i_logging_control.h"
 #include "domain/logging_domain/control/i_logging_restart_monitor.h"
-#include "domain/logging_domain/control/models/logging_trigger.h"
+#include "domain/logging_domain/control/models/logging_control_binding.h"
 #include "domain/logging_domain/event_bus/logging_event_type.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "domain/logging_domain/event_bus/logging_payload_type.h"
@@ -57,7 +57,7 @@ namespace logging_control_test {
 using eerie_leap::domain::logging_domain::control::ILoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::control::ILoggingRestartMonitor;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
+using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
@@ -713,13 +713,13 @@ PublishStatus(bool is_active, std::optional<LoggingStatusReason> reason = std::n
 // ======== Triggers ========
 
 // A trigger on the Value of one sensor.
-inline LoggingTrigger SensorTrigger(std::string_view sensor_id) {
-    LoggingTrigger trigger;
-    trigger.binding.channel = EventChannelId::Sensors;
-    trigger.binding.event_type = static_cast<uint32_t>(SensorEventType::DataUpdated);
-    trigger.binding.payload_key = static_cast<uint32_t>(SensorPayloadType::Value);
-    trigger.binding.selector_key = static_cast<uint32_t>(SensorPayloadType::SensorId);
-    trigger.binding.selector_value = std::pmr::string(sensor_id);
+inline LoggingControlBinding SensorTrigger(std::string_view sensor_id) {
+    LoggingControlBinding trigger;
+    trigger.event.channel = EventChannelId::Sensors;
+    trigger.event.event_type = static_cast<uint32_t>(SensorEventType::DataUpdated);
+    trigger.event.payload_key = static_cast<uint32_t>(SensorPayloadType::Value);
+    trigger.event.selector_key = static_cast<uint32_t>(SensorPayloadType::SensorId);
+    trigger.event.selector_value = std::pmr::string(sensor_id);
 
     return trigger;
 }

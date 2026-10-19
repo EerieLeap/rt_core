@@ -27,7 +27,7 @@ struct Fixture {
     std::unique_ptr<LoggingTriggerSet> set;
 
     void Build(
-        const std::vector<LoggingTrigger>& triggers,
+        const std::vector<LoggingControlBinding>& triggers,
         const LoggingTriggerSet::SelectorResolver& resolver = nullptr,
         LoggingTriggerSet::FirstValue first_value = LoggingTriggerSet::FirstValue::OneStarts
     ) {
@@ -197,11 +197,11 @@ ZTEST(logging_trigger_set, test_AnUnknownStateStaysUnknownAcrossAnUnreadableValu
 }
 
 ZTEST(logging_trigger_set, test_AnUnknownChannelDoesNothing) {
-    LoggingTrigger no_channel = SensorTrigger("switch");
-    no_channel.binding.channel = EventChannelId::None;
+    LoggingControlBinding no_channel = SensorTrigger("switch");
+    no_channel.event.channel = EventChannelId::None;
     // Navigation is a valid id that this binary never registers.
-    LoggingTrigger unregistered = SensorTrigger("switch");
-    unregistered.binding.channel = EventChannelId::Navigation;
+    LoggingControlBinding unregistered = SensorTrigger("switch");
+    unregistered.event.channel = EventChannelId::Navigation;
 
     F().Build({ no_channel, unregistered, SensorTrigger("switch") });
 
@@ -270,7 +270,7 @@ ZTEST(logging_trigger_set, test_ARebuiltSetSeesTheSwitchAsNew) {
 ZTEST(logging_trigger_set, test_ANullControlIsRefused) {
     bool is_refused = false;
     try {
-        const std::vector<LoggingTrigger> triggers = { SensorTrigger("switch") };
+        const std::vector<LoggingControlBinding> triggers = { SensorTrigger("switch") };
         LoggingTriggerSet set(nullptr, triggers);
     } catch(const std::invalid_argument&) {
         is_refused = true;

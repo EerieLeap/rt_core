@@ -13,7 +13,7 @@ static size_t cbor_get_size_CborLoggingControlConfig(const CborLoggingControlCon
     builder.AddIndefiniteArrayStart();
 
     builder.AddIndefiniteArrayStart();
-    for(const auto& trigger : config.CborLoggingTriggerConfig_m) {
+    for(const auto& trigger : config.CborLoggingControlBindingConfig_m) {
         builder.AddIndefiniteArrayStart()
             .AddUint(trigger.channel)
             .AddUint(trigger.event_type)

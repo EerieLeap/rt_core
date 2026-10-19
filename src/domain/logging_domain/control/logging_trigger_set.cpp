@@ -50,7 +50,7 @@ struct LoggingTriggerSet::Trigger {
     ILoggingControl* logging_control;
     size_t index;
     // What it selects, for the log lines and for OnConfigurationUpdated(). Read-only after construction.
-    EventBinding binding;
+    EventBinding event;
     // The unit it starts and stops; ILoggingControl::ALL_UNITS is every unit that can log.
     uint32_t target_uid;
 
@@ -76,7 +76,7 @@ struct LoggingTriggerSet::Trigger {
                 is_unreadable_logged = true;
                 LOG_WRN(
                     "Logging trigger %u (channel %u) ignores a value that is not 0, 1 or a bool.",
-                    static_cast<unsigned>(index), static_cast<unsigned>(binding.channel)
+                    static_cast<unsigned>(index), static_cast<unsigned>(event.channel)
                 );
             }
 
@@ -103,7 +103,7 @@ struct LoggingTriggerSet::Trigger {
 
 LoggingTriggerSet::LoggingTriggerSet(
     std::shared_ptr<ILoggingControl> logging_control,
-    std::span<const LoggingTrigger> triggers,
+    std::span<const LoggingControlBinding> triggers,
     const SelectorResolver& is_selector_known,
     FirstValue first_value
 ) :
@@ -118,7 +118,7 @@ LoggingTriggerSet::LoggingTriggerSet(
         triggers_.reserve(triggers.size());
 
         for(size_t i = 0; i < triggers.size(); i++) {
-            const auto& binding = triggers[i].binding;
+            const auto& binding = triggers[i].event;
 
             if(is_selector_known && !is_selector_known(binding)) {
                 LOG_WRN(
@@ -129,7 +129,7 @@ LoggingTriggerSet::LoggingTriggerSet(
 
             auto trigger = std::make_shared<Trigger>(Trigger{ .logging_control = logging_control_.get(),
                 .index = i,
-                .binding = binding,
+                .event = binding,
                 .target_uid = triggers[i].target_uid,
                 .last_state = std::nullopt,
                 .first_value = first_value });
@@ -187,7 +187,7 @@ void LoggingTriggerSet::OnConfigurationUpdated(const SelectorResolver& is_select
     if(is_selector_known) {
         try {
             for(size_t i = 0; i < triggers_.size(); i++)
-                is_known[i] = is_selector_known(triggers_[i]->binding);
+                is_known[i] = is_selector_known(triggers_[i]->event);
         } catch(...) {
             // Withdraws nothing, but the baselines below are set all the same.
             std::ranges::fill(is_known, true);
@@ -231,12 +231,12 @@ void LoggingTriggerSet::OnConfigurationUpdated(const SelectorResolver& is_select
         if(changes[i] == Change::Withdrawn) {
             LOG_WRN(
                 "Logging trigger %u (channel %u) selects nothing after the sensors update; it waits for its sensor.",
-                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.binding.channel)
+                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.event.channel)
             );
         } else if(changes[i] == Change::Restored) {
             LOG_INF(
                 "Logging trigger %u (channel %u) has its sensor again; its first value is a baseline.",
-                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.binding.channel)
+                static_cast<unsigned>(trigger.index), static_cast<unsigned>(trigger.event.channel)
             );
         }
     }

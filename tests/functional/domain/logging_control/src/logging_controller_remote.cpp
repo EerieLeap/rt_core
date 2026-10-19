@@ -303,13 +303,13 @@ ZTEST(logging_controller_remote, test_TriggersAreCheckedAgainstTheSensors) {
     configuration.triggers.push_back(SensorTrigger("off"));
 
     auto by_hash = SensorTrigger("known");
-    by_hash.binding.selector_value = static_cast<int>(StringHelpers::GetHash("known"));
+    by_hash.event.selector_value = static_cast<int>(StringHelpers::GetHash("known"));
     configuration.triggers.push_back(std::move(by_hash));
 
-    LoggingTrigger status;
-    status.binding.channel = EventChannelId::Logging;
-    status.binding.event_type = static_cast<uint32_t>(LoggingEventType::StatusUpdated);
-    status.binding.payload_key = static_cast<uint32_t>(LoggingPayloadType::IsActive);
+    LoggingControlBinding status;
+    status.event.channel = EventChannelId::Logging;
+    status.event.event_type = static_cast<uint32_t>(LoggingEventType::StatusUpdated);
+    status.event.payload_key = static_cast<uint32_t>(LoggingPayloadType::IsActive);
     configuration.triggers.push_back(std::move(status));
 
     LogCounter::Get().Watch("logging_trigger_set_logger");

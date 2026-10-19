@@ -4,7 +4,7 @@
 #include <memory_resource>
 #include <vector>
 
-#include "domain/logging_domain/control/models/logging_trigger.h"
+#include "domain/logging_domain/control/models/logging_control_binding.h"
 
 namespace eerie_leap::domain::logging_domain::control::models {
 
@@ -16,7 +16,7 @@ struct LoggingControlConfiguration {
     static constexpr size_t MAX_TRIGGERS = 16;
 
     // Default: none.
-    std::pmr::vector<LoggingTrigger> triggers;
+    std::pmr::vector<LoggingControlBinding> triggers;
 
     LoggingControlConfiguration(std::allocator_arg_t, allocator_type alloc) :
         triggers(alloc) {}

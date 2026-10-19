@@ -18,8 +18,8 @@ using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using eerie_leap::configuration::cbor::CborSerializer;
 using eerie_leap::domain::logging_domain::control::configuration::parsers::LoggingControlConfigurationCborParser;
+using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::subsys::event_bus::EventChannelId;
 
 ZTEST_SUITE(logging_control_configuration_parser, NULL, NULL, NULL, NULL, NULL);
@@ -39,17 +39,17 @@ const Bytes NO_SELECTOR = { 0x9F, 0x9F, 0x9F, 0x01, 0x00, 0x01, 0xF4, 0x00, 0x00
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
 const Bytes K_EMPTY = { 0x9F, 0x9F, 0xFF, 0xFF };
 
-LoggingTrigger MakeTrigger(uint32_t event_type = 0, uint32_t payload_key = 1, uint32_t selector_key = 0) {
-    LoggingTrigger trigger;
-    trigger.binding.channel = EventChannelId::Sensors;
-    trigger.binding.event_type = event_type;
-    trigger.binding.payload_key = payload_key;
-    trigger.binding.selector_key = selector_key;
+LoggingControlBinding MakeTrigger(uint32_t event_type = 0, uint32_t payload_key = 1, uint32_t selector_key = 0) {
+    LoggingControlBinding trigger;
+    trigger.event.channel = EventChannelId::Sensors;
+    trigger.event.event_type = event_type;
+    trigger.event.payload_key = payload_key;
+    trigger.event.selector_key = selector_key;
 
     return trigger;
 }
 
-LoggingControlConfiguration MakeConfiguration(std::vector<LoggingTrigger> triggers) {
+LoggingControlConfiguration MakeConfiguration(std::vector<LoggingControlBinding> triggers) {
     LoggingControlConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     for(auto& trigger : triggers)
         configuration.triggers.push_back(std::move(trigger));
@@ -78,8 +78,8 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
     zassert_equal(actual.triggers.size(), expected.triggers.size());
 
     for(size_t i = 0; i < expected.triggers.size(); i++) {
-        const auto& a = expected.triggers[i].binding;
-        const auto& b = actual.triggers[i].binding;
+        const auto& a = expected.triggers[i].event;
+        const auto& b = actual.triggers[i].event;
 
         zassert_equal(b.channel, a.channel, "trigger %u", static_cast<unsigned>(i));
         zassert_equal(b.event_type, a.event_type);
@@ -100,15 +100,15 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
 
 ZTEST(logging_control_configuration_parser, test_TriggersRoundTripThroughCbor) {
     auto text = MakeTrigger(0, 1, 0);
-    text.binding.selector_value = std::pmr::string("ignition");
+    text.event.selector_value = std::pmr::string("ignition");
     auto number = MakeTrigger(300, 70000, 2);
-    number.binding.channel = EventChannelId::Settings;
-    number.binding.selector_value = -7;
+    number.event.channel = EventChannelId::Settings;
+    number.event.selector_value = -7;
     auto flag = MakeTrigger(1, 2, 3);
-    flag.binding.channel = EventChannelId::Logging;
-    flag.binding.selector_value = true;
+    flag.event.channel = EventChannelId::Logging;
+    flag.event.selector_value = true;
     auto none = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 9);
-    none.binding.channel = EventChannelId::Navigation;
+    none.event.channel = EventChannelId::Navigation;
     text.target_uid = 0x12345678;
     number.target_uid = 1;
     none.target_uid = 0xFFFFFFFF;
@@ -125,7 +125,7 @@ ZTEST(logging_control_configuration_parser, test_TriggersRoundTripThroughCbor) {
 
     AssertSame(configuration, *restored);
     zassert_true(
-        std::holds_alternative<std::monostate>(restored->triggers[3].binding.selector_value),
+        std::holds_alternative<std::monostate>(restored->triggers[3].event.selector_value),
         "A trigger without a selector has none"
     );
 }
@@ -142,7 +142,7 @@ ZTEST(logging_control_configuration_parser, test_AnEmptyConfigurationRoundTrips)
 
 ZTEST(logging_control_configuration_parser, test_TheEncodingIsStable) {
     auto with_selector = MakeTrigger();
-    with_selector.binding.selector_value = std::pmr::string("ab");
+    with_selector.event.selector_value = std::pmr::string("ab");
     with_selector.target_uid = 0x01020304;
     zassert_true(Encode(MakeConfiguration({ with_selector })) == TEXT_SELECTOR, "A text selector");
 
@@ -163,7 +163,7 @@ ZTEST(logging_control_configuration_parser, test_AnAbsentSelectorIsIgnoredWhatev
     const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *Decode(bytes));
 
     zassert_equal(restored->triggers.size(), 1);
-    zassert_true(std::holds_alternative<std::monostate>(restored->triggers[0].binding.selector_value));
+    zassert_true(std::holds_alternative<std::monostate>(restored->triggers[0].event.selector_value));
 }
 
 ZTEST(logging_control_configuration_parser, test_ATriggerWithoutAFieldDoesNotDecode) {
@@ -197,10 +197,10 @@ ZTEST(logging_control_configuration_parser, test_AListSelectorDoesNotDecode) {
 ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
     // The worst case the validator lets through: the most triggers, each with the longest id and
     // numbers that need every byte. The buffer is as long as the size calculator says.
-    std::vector<LoggingTrigger> triggers;
+    std::vector<LoggingControlBinding> triggers;
     for(size_t i = 0; i < LoggingControlConfiguration::MAX_TRIGGERS; i++) {
         auto trigger = MakeTrigger(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
-        trigger.binding.selector_value = std::pmr::string(64, static_cast<char>('a' + i));
+        trigger.event.selector_value = std::pmr::string(64, static_cast<char>('a' + i));
         trigger.target_uid = 0xFFFFFFFF;
         triggers.push_back(std::move(trigger));
     }
@@ -214,9 +214,9 @@ ZTEST(logging_control_configuration_parser, test_TheSizeCoversTheEncoding) {
 
     // And with negative numbers and bools, which have their own sizes.
     auto number = MakeTrigger();
-    number.binding.selector_value = -100000;
+    number.event.selector_value = -100000;
     auto flag = MakeTrigger();
-    flag.binding.selector_value = true;
+    flag.event.selector_value = true;
     zassert_false(Encode(MakeConfiguration({ number, flag })).empty());
 }
 
@@ -235,7 +235,7 @@ ZTEST(logging_control_configuration_parser, test_MoreTriggersThanTheSchemaAllows
 
     const auto sixteen = Decode(build(16));
     zassert_not_null(sixteen.get());
-    zassert_equal(sixteen->CborLoggingTriggerConfig_m.size(), 16);
+    zassert_equal(sixteen->CborLoggingControlBindingConfig_m.size(), 16);
 
     zassert_is_null(Decode(build(17)).get());
 }
@@ -260,7 +260,7 @@ ZTEST(logging_control_configuration_parser, test_DeserializeValidates) {
 ZTEST(logging_control_configuration_parser, test_SerializeValidates) {
     bool is_rejected = false;
     try {
-        LoggingControlConfigurationCborParser::Serialize(MakeConfiguration({ LoggingTrigger{} }));
+        LoggingControlConfigurationCborParser::Serialize(MakeConfiguration({ LoggingControlBinding{} }));
     } catch(const std::invalid_argument&) {
         is_rejected = true;
     }

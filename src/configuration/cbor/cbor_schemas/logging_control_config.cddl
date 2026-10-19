@@ -1,11 +1,11 @@
 ; The logging triggers of a unit (ConfigurationService type 8). Every field is required.
 CborLoggingControlConfig = [
-    triggers: [0*16 CborLoggingTriggerConfig]
+    triggers: [0*16 CborLoggingControlBindingConfig]
 ]
 
 ; An event binding whose value, read as a bool, is the wanted logging state. The fields are those
 ; of the UI's CborPropertyBinding without its UI-only ones (target, direction, outbound_event_type).
-CborLoggingTriggerConfig = [
+CborLoggingControlBindingConfig = [
     channel: uint,                          ; EventChannelId: 1 sensors, 2 logging, ...
     event_type: uint,                       ; the channel's event type
     payload_key: uint,                      ; the channel's payload key whose value is read

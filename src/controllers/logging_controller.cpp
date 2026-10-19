@@ -16,8 +16,8 @@
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 
+#include "domain/logging_domain/control/models/logging_control_binding.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
-#include "domain/logging_domain/control/models/logging_trigger.h"
 #include "domain/sensor_domain/event_bus/sensor_payload_type.h"
 
 #include "domain/logging_domain/control/canbus_com_logging_command_sender.h"
@@ -43,7 +43,7 @@ namespace eerie_leap::controllers {
 
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingCommandSender;
 using eerie_leap::domain::logging_domain::control::CanbusComLoggingRestartMonitor;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
+using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
 using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::EventChannelId;
@@ -494,9 +494,9 @@ std::unique_ptr<LoggingTriggerSet> LoggingController::BuildTriggerSet(LoggingTri
     if(configuration == nullptr)
         LOG_WRN("No logging control configuration is available; no triggers.");
 
-    const std::span<const LoggingTrigger> triggers = configuration != nullptr
-        ? std::span<const LoggingTrigger>(configuration->triggers)
-        : std::span<const LoggingTrigger>();
+    const std::span<const LoggingControlBinding> triggers = configuration != nullptr
+        ? std::span<const LoggingControlBinding>(configuration->triggers)
+        : std::span<const LoggingControlBinding>();
 
     auto set = std::make_unique<LoggingTriggerSet>(
         logging_control_, triggers, MakeSelectorResolver(sensors_configuration_manager_), first_value

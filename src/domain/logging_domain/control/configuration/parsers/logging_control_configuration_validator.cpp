@@ -28,7 +28,7 @@ void LoggingControlConfigurationValidator::Validate(const LoggingControlConfigur
     }
 
     for(size_t i = 0; i < configuration.triggers.size(); i++) {
-        const auto& binding = configuration.triggers[i].binding;
+        const auto& binding = configuration.triggers[i].event;
 
         if(!IsValidEventChannelId(binding.channel))
             InvalidLoggingControlConfiguration("Trigger " + std::to_string(i) + " names an unknown event channel.");

@@ -11,7 +11,7 @@ namespace eerie_leap::domain::logging_domain::control::configuration::parsers {
 
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
+using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::utilities::cbor::CborHelpers;
 
@@ -26,9 +26,9 @@ LoggingControlConfigurationCborParser::Serialize(const LoggingControlConfigurati
     auto cbor_config = make_unique_pmr<CborLoggingControlConfig>(Mrm::GetExtPmr());
 
     for(const auto& trigger : configuration.triggers) {
-        const auto& binding = trigger.binding;
+        const auto& binding = trigger.event;
 
-        CborLoggingTriggerConfig cbor_trigger{ .channel = static_cast<uint32_t>(binding.channel),
+        CborLoggingControlBindingConfig cbor_trigger{ .channel = static_cast<uint32_t>(binding.channel),
             .event_type = binding.event_type,
             .payload_key = binding.payload_key,
             .has_selector = binding.HasSelector(),
@@ -44,7 +44,7 @@ LoggingControlConfigurationCborParser::Serialize(const LoggingControlConfigurati
         else if(const auto* flag = std::get_if<bool>(&binding.selector_value))
             cbor_trigger.selector_value = *flag;
 
-        cbor_config->CborLoggingTriggerConfig_m.push_back(cbor_trigger);
+        cbor_config->CborLoggingControlBindingConfig_m.push_back(cbor_trigger);
     }
 
     return cbor_config;
@@ -57,22 +57,22 @@ PmrUniquePtr<LoggingControlConfiguration> LoggingControlConfigurationCborParser:
 
     auto configuration = make_unique_pmr<LoggingControlConfiguration>(mr);
 
-    for(const auto& cbor_trigger : config.CborLoggingTriggerConfig_m) {
-        LoggingTrigger trigger;
-        trigger.binding.channel = static_cast<EventChannelId>(cbor_trigger.channel);
-        trigger.binding.event_type = cbor_trigger.event_type;
-        trigger.binding.payload_key = cbor_trigger.payload_key;
-        trigger.binding.selector_key = cbor_trigger.selector_key;
+    for(const auto& cbor_trigger : config.CborLoggingControlBindingConfig_m) {
+        LoggingControlBinding trigger;
+        trigger.event.channel = static_cast<EventChannelId>(cbor_trigger.channel);
+        trigger.event.event_type = cbor_trigger.event_type;
+        trigger.event.payload_key = cbor_trigger.payload_key;
+        trigger.event.selector_key = cbor_trigger.selector_key;
         trigger.target_uid = cbor_trigger.target_uid;
 
         // Whatever is stored without a selector is dropped, so an absent selector is one value.
         if(cbor_trigger.has_selector) {
             if(const auto* text = std::get_if<zcbor_string>(&cbor_trigger.selector_value))
-                trigger.binding.selector_value = CborHelpers::ToPmrString(mr, *text);
+                trigger.event.selector_value = CborHelpers::ToPmrString(mr, *text);
             else if(const auto* number = std::get_if<int32_t>(&cbor_trigger.selector_value))
-                trigger.binding.selector_value = static_cast<int>(*number);
+                trigger.event.selector_value = static_cast<int>(*number);
             else if(const auto* flag = std::get_if<bool>(&cbor_trigger.selector_value))
-                trigger.binding.selector_value = *flag;
+                trigger.event.selector_value = *flag;
         }
 
         configuration->triggers.push_back(std::move(trigger));

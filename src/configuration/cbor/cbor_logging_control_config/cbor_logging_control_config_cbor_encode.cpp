@@ -17,7 +17,7 @@
 } while(0)
 
 static bool encode_CborSelectorValueType(zcbor_state_t *state, const CborLoggingTriggerSelectorValue *input);
-static bool encode_CborLoggingTriggerConfig(zcbor_state_t *state, const struct CborLoggingTriggerConfig *input);
+static bool encode_CborLoggingControlBindingConfig(zcbor_state_t *state, const struct CborLoggingControlBindingConfig *input);
 static bool encode_CborLoggingControlConfig(zcbor_state_t *state, const struct CborLoggingControlConfig *input);
 
 
@@ -40,8 +40,8 @@ static bool encode_CborSelectorValueType(
 	return res;
 }
 
-static bool encode_CborLoggingTriggerConfig(
-		zcbor_state_t *state, const struct CborLoggingTriggerConfig *input)
+static bool encode_CborLoggingControlBindingConfig(
+		zcbor_state_t *state, const struct CborLoggingControlBindingConfig *input)
 {
 	zcbor_log("%s\r\n", __func__);
 
@@ -62,10 +62,10 @@ static bool encode_CborLoggingControlConfig(
 {
 	zcbor_log("%s\r\n", __func__);
 
-	size_t CborLoggingTriggerConfig_m_count = input->CborLoggingTriggerConfig_m.size();
+	size_t CborLoggingControlBindingConfig_m_count = input->CborLoggingControlBindingConfig_m.size();
 
 	// The 16 below is the schema's 0*16 (logging_control_config.cddl), as in the decoder.
-	bool res = (((zcbor_list_start_encode(state, 1) && ((((zcbor_list_start_encode(state, 16) && ((zcbor_multi_encode_minmax(0, 16, &CborLoggingTriggerConfig_m_count, (zcbor_encoder_t *)encode_CborLoggingTriggerConfig, state, input->CborLoggingTriggerConfig_m.data(), sizeof(struct CborLoggingTriggerConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 16)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 1))));
+	bool res = (((zcbor_list_start_encode(state, 1) && ((((zcbor_list_start_encode(state, 16) && ((zcbor_multi_encode_minmax(0, 16, &CborLoggingControlBindingConfig_m_count, (zcbor_encoder_t *)encode_CborLoggingControlBindingConfig, state, input->CborLoggingControlBindingConfig_m.data(), sizeof(struct CborLoggingControlBindingConfig))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 16)))) || (zcbor_list_map_end_force_encode(state), false)) && zcbor_list_end_encode(state, 1))));
 
 	log_result(state, res, __func__);
 	return res;

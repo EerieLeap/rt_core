@@ -12,8 +12,8 @@
 
 using namespace eerie_leap::utilities::memory;
 using eerie_leap::domain::logging_domain::control::configuration::parsers::LoggingControlConfigurationValidator;
+using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 
@@ -21,16 +21,16 @@ ZTEST_SUITE(logging_control_configuration_validator, NULL, NULL, NULL, NULL, NUL
 
 namespace {
 
-LoggingTrigger MakeTrigger(EventChannelId channel = EventChannelId::Sensors) {
-    LoggingTrigger trigger;
-    trigger.binding.channel = channel;
-    trigger.binding.event_type = 0;
-    trigger.binding.payload_key = 1;
+LoggingControlBinding MakeTrigger(EventChannelId channel = EventChannelId::Sensors) {
+    LoggingControlBinding trigger;
+    trigger.event.channel = channel;
+    trigger.event.event_type = 0;
+    trigger.event.payload_key = 1;
 
     return trigger;
 }
 
-LoggingControlConfiguration MakeConfiguration(std::vector<LoggingTrigger> triggers) {
+LoggingControlConfiguration MakeConfiguration(std::vector<LoggingControlBinding> triggers) {
     LoggingControlConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     for(auto& trigger : triggers)
         configuration.triggers.push_back(std::move(trigger));
@@ -86,17 +86,17 @@ ZTEST(logging_control_configuration_validator, test_AChannelThatThisUnitDoesNotR
 
 ZTEST(logging_control_configuration_validator, test_ASelectorMustBeTextAnIntegerOrABool) {
     auto text = MakeTrigger();
-    text.binding.selector_value = std::pmr::string("ignition");
+    text.event.selector_value = std::pmr::string("ignition");
     auto number = MakeTrigger();
-    number.binding.selector_value = 12;
+    number.event.selector_value = 12;
     auto flag = MakeTrigger();
-    flag.binding.selector_value = false;
+    flag.event.selector_value = false;
     zassert_true(
         Rejection(MakeConfiguration({ text, number, flag, MakeTrigger() })).empty(), "Three kinds of selector and none"
     );
 
     auto real = MakeTrigger();
-    real.binding.selector_value = 1.5;
+    real.event.selector_value = 1.5;
     const auto real_message = Rejection(MakeConfiguration({ MakeTrigger(), real }));
     zassert_true(
         real_message.contains("Trigger 1 selector value must be text, an integer or a bool."), "%s",
@@ -104,23 +104,23 @@ ZTEST(logging_control_configuration_validator, test_ASelectorMustBeTextAnInteger
     );
 
     auto numbers = MakeTrigger();
-    numbers.binding.selector_value = std::pmr::vector<int>{ 1, 2 };
+    numbers.event.selector_value = std::pmr::vector<int>{ 1, 2 };
     zassert_false(Rejection(MakeConfiguration({ numbers })).empty(), "A list cannot select");
 }
 
 ZTEST(logging_control_configuration_validator, test_TheEventTypeAndTheKeysAreChannelLocal) {
     auto trigger = MakeTrigger();
-    trigger.binding.event_type = 0xFFFFFFFF;
-    trigger.binding.payload_key = 0xFFFFFFFF;
-    trigger.binding.selector_key = 0xFFFFFFFF;
-    trigger.binding.selector_value = 1;
+    trigger.event.event_type = 0xFFFFFFFF;
+    trigger.event.payload_key = 0xFFFFFFFF;
+    trigger.event.selector_key = 0xFFFFFFFF;
+    trigger.event.selector_value = 1;
 
     zassert_true(Rejection(MakeConfiguration({ trigger })).empty(), "The validator does not know the channel's enums");
 }
 
 ZTEST(logging_control_configuration_validator, test_AtMostSixteenTriggers) {
-    zassert_true(Rejection(MakeConfiguration(std::vector<LoggingTrigger>(16, MakeTrigger()))).empty());
+    zassert_true(Rejection(MakeConfiguration(std::vector<LoggingControlBinding>(16, MakeTrigger()))).empty());
 
-    const auto message = Rejection(MakeConfiguration(std::vector<LoggingTrigger>(17, MakeTrigger())));
+    const auto message = Rejection(MakeConfiguration(std::vector<LoggingControlBinding>(17, MakeTrigger())));
     zassert_true(message.contains("At most 16 triggers."), "%s", message.c_str());
 }

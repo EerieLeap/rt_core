@@ -575,8 +575,8 @@ logging configuration, which only a unit with a log writer has. Schema
 (`logging_control_config.cddl`), file `config/logging_control_config.cbor`:
 
 ```
-CborLoggingTriggerConfig = [ channel: uint, event_type: uint, payload_key: uint, has_selector: bool, selector_key: uint, selector_value: int / tstr / bool, target_uid: uint ]
-CborLoggingControlConfig = [ triggers: [0*16 CborLoggingTriggerConfig] ]
+CborLoggingControlBindingConfig = [ channel: uint, event_type: uint, payload_key: uint, has_selector: bool, selector_key: uint, selector_value: int / tstr / bool, target_uid: uint ]
+CborLoggingControlConfig = [ triggers: [0*16 CborLoggingControlBindingConfig] ]
 ```
 
 | Field | Rules and meaning |

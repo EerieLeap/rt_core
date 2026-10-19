@@ -15,13 +15,13 @@
 	} \
 } while(0)
 
-// CborLoggingControlConfig = [triggers: [0*16 CborLoggingTriggerConfig]]
+// CborLoggingControlConfig = [triggers: [0*16 CborLoggingControlBindingConfig]]
 // The cap is the schema's (logging_control_config.cddl), the encoder's and
 // LoggingControlConfiguration::kMaxTriggers; the CBOR parser asserts the last agrees.
 static constexpr size_t k_max_triggers = 16;
 
 static bool decode_CborSelectorValueType(zcbor_state_t *state, CborLoggingTriggerSelectorValue *result);
-static bool decode_CborLoggingTriggerConfig(zcbor_state_t *state, struct CborLoggingTriggerConfig *result);
+static bool decode_CborLoggingControlBindingConfig(zcbor_state_t *state, struct CborLoggingControlBindingConfig *result);
 static bool decode_CborLoggingControlConfig(zcbor_state_t *state, struct CborLoggingControlConfig *result);
 
 
@@ -69,8 +69,8 @@ static bool decode_CborSelectorValueType(
 	return res;
 }
 
-static bool decode_CborLoggingTriggerConfig(
-		zcbor_state_t *state, struct CborLoggingTriggerConfig *result)
+static bool decode_CborLoggingControlBindingConfig(
+		zcbor_state_t *state, struct CborLoggingControlBindingConfig *result)
 {
 	zcbor_log("%s\r\n", __func__);
 
@@ -102,16 +102,16 @@ static bool decode_CborLoggingControlConfig(
 
 	while (!zcbor_array_at_end(state)) {
 		// The schema's 0*16, checked before the element is stored.
-		if (result->CborLoggingTriggerConfig_m.size() >= k_max_triggers) {
+		if (result->CborLoggingControlBindingConfig_m.size() >= k_max_triggers) {
 			zcbor_list_map_end_force_decode(state);
 			zcbor_list_end_decode(state);
 			zcbor_list_end_decode(state);
 			return false;
 		}
 
-		result->CborLoggingTriggerConfig_m.emplace_back();
-		if (!decode_CborLoggingTriggerConfig(state, &result->CborLoggingTriggerConfig_m.back())) {
-			result->CborLoggingTriggerConfig_m.pop_back();
+		result->CborLoggingControlBindingConfig_m.emplace_back();
+		if (!decode_CborLoggingControlBindingConfig(state, &result->CborLoggingControlBindingConfig_m.back())) {
+			result->CborLoggingControlBindingConfig_m.pop_back();
 			zcbor_list_map_end_force_decode(state);
 			zcbor_list_end_decode(state);
 			zcbor_list_end_decode(state);

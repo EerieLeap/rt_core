@@ -11,12 +11,12 @@
 #include "subsys/event_bus/event_binding.h"
 #include "subsys/event_bus/i_scoped_subscription.h"
 
-#include "domain/logging_domain/control/models/logging_trigger.h"
+#include "domain/logging_domain/control/models/logging_control_binding.h"
 #include "i_logging_control.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
-using eerie_leap::domain::logging_domain::control::models::LoggingTrigger;
+using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::DispatchGuard;
 using eerie_leap::subsys::event_bus::EventBinding;
@@ -58,7 +58,7 @@ public:
     // (std::bad_alloc), having withdrawn what it subscribed.
     LoggingTriggerSet(
         std::shared_ptr<ILoggingControl> logging_control,
-        std::span<const LoggingTrigger> triggers,
+        std::span<const LoggingControlBinding> triggers,
         const SelectorResolver& is_selector_known = nullptr,
         FirstValue first_value = FirstValue::OneStarts
     );

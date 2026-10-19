@@ -47,7 +47,7 @@ std::shared_ptr<LoggingControlConfigurationManager> MakeManager(const std::share
     );
 }
 
-LoggingControlConfiguration MakeConfiguration(const std::vector<LoggingTrigger>& triggers) {
+LoggingControlConfiguration MakeConfiguration(const std::vector<LoggingControlBinding>& triggers) {
     LoggingControlConfiguration configuration(std::allocator_arg, Mrm::GetDefaultPmr());
     for(const auto& trigger : triggers)
         configuration.triggers.push_back(trigger);
@@ -56,28 +56,28 @@ LoggingControlConfiguration MakeConfiguration(const std::vector<LoggingTrigger>&
 }
 
 // One trigger of each selector kind, with values that need more than one byte.
-std::vector<LoggingTrigger> MixedTriggers() {
-    LoggingTrigger text = SensorTrigger("ignition");
+std::vector<LoggingControlBinding> MixedTriggers() {
+    LoggingControlBinding text = SensorTrigger("ignition");
 
-    LoggingTrigger number;
-    number.binding.channel = EventChannelId::Settings;
-    number.binding.event_type = 300;
-    number.binding.payload_key = 4;
-    number.binding.selector_key = 2;
-    number.binding.selector_value = -7;
+    LoggingControlBinding number;
+    number.event.channel = EventChannelId::Settings;
+    number.event.event_type = 300;
+    number.event.payload_key = 4;
+    number.event.selector_key = 2;
+    number.event.selector_value = -7;
 
-    LoggingTrigger flag;
-    flag.binding.channel = EventChannelId::Logging;
-    flag.binding.event_type = 0;
-    flag.binding.payload_key = 1;
-    flag.binding.selector_key = 0;
-    flag.binding.selector_value = true;
+    LoggingControlBinding flag;
+    flag.event.channel = EventChannelId::Logging;
+    flag.event.event_type = 0;
+    flag.event.payload_key = 1;
+    flag.event.selector_key = 0;
+    flag.event.selector_value = true;
 
-    LoggingTrigger none;
-    none.binding.channel = EventChannelId::Navigation;
-    none.binding.event_type = 5;
-    none.binding.payload_key = 6;
-    none.binding.selector_key = 9;
+    LoggingControlBinding none;
+    none.event.channel = EventChannelId::Navigation;
+    none.event.event_type = 5;
+    none.event.payload_key = 6;
+    none.event.selector_key = 9;
 
     return { text, number, flag, none };
 }
@@ -86,8 +86,8 @@ void AssertSame(const LoggingControlConfiguration& expected, const LoggingContro
     zassert_equal(actual.triggers.size(), expected.triggers.size());
 
     for(size_t i = 0; i < expected.triggers.size(); i++) {
-        const auto& a = expected.triggers[i].binding;
-        const auto& b = actual.triggers[i].binding;
+        const auto& a = expected.triggers[i].event;
+        const auto& b = actual.triggers[i].event;
 
         zassert_equal(b.channel, a.channel, "trigger %u channel", static_cast<unsigned>(i));
         zassert_equal(b.event_type, a.event_type);
@@ -151,8 +151,8 @@ ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefuse
     zassert_true(manager->Update(good));
     const auto stored = manager->GetCborConfigurationInfo();
 
-    LoggingTrigger no_channel = SensorTrigger("a");
-    no_channel.binding.channel = EventChannelId::None;
+    LoggingControlBinding no_channel = SensorTrigger("a");
+    no_channel.event.channel = EventChannelId::None;
     zassert_false(manager->Update(MakeConfiguration({ no_channel })), "A trigger without a channel is refused");
     AssertSame(good, *manager->Get());
     zassert_equal(manager->GetCborConfigurationInfo().crc, stored.crc, "and nothing is stored");
@@ -174,7 +174,7 @@ ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefuse
 
     zassert_true(manager->ApplyCborConfiguration(K_VALID), "Valid CBOR applies");
     zassert_equal(manager->Get()->triggers.size(), 1);
-    const auto& binding = manager->Get()->triggers[0].binding;
+    const auto& binding = manager->Get()->triggers[0].event;
     zassert_equal(binding.channel, EventChannelId::Sensors);
     zassert_true(std::get<std::pmr::string>(binding.selector_value) == "ab");
 }
@@ -197,7 +197,7 @@ ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEach
     zassert_equal(calls->load(), 1);
     zassert_equal(thread->load(), k_current_get(), "on the storing thread");
 
-    zassert_false(manager->Update(MakeConfiguration({ LoggingTrigger{} })), "A refused store calls nobody");
+    zassert_false(manager->Update(MakeConfiguration({ LoggingControlBinding{} })), "A refused store calls nobody");
     zassert_equal(calls->load(), 1);
 
     // An apply on the configuration work queue, as SMP does it.

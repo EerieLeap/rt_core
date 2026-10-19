@@ -12,7 +12,7 @@
 // choice. Text is a view into the encoded bytes or into the configuration being encoded.
 using CborLoggingTriggerSelectorValue = std::variant<int32_t, zcbor_string, bool>;
 
-struct CborLoggingTriggerConfig {
+struct CborLoggingControlBindingConfig {
 	uint32_t channel{};
 	uint32_t event_type{};
 	uint32_t payload_key{};
@@ -27,10 +27,10 @@ struct CborLoggingTriggerConfig {
 struct CborLoggingControlConfig {
 	using allocator_type = std::pmr::polymorphic_allocator<>;
 
-	std::pmr::vector<CborLoggingTriggerConfig> CborLoggingTriggerConfig_m;
+	std::pmr::vector<CborLoggingControlBindingConfig> CborLoggingControlBindingConfig_m;
 
 	CborLoggingControlConfig(std::allocator_arg_t, allocator_type alloc)
-		: CborLoggingTriggerConfig_m(alloc) {}
+		: CborLoggingControlBindingConfig_m(alloc) {}
 
 	CborLoggingControlConfig(const CborLoggingControlConfig&) = delete;
 	CborLoggingControlConfig& operator=(const CborLoggingControlConfig&) noexcept = default;
@@ -39,5 +39,5 @@ struct CborLoggingControlConfig {
 	~CborLoggingControlConfig() = default;
 
 	CborLoggingControlConfig(CborLoggingControlConfig&& other, allocator_type alloc)
-		: CborLoggingTriggerConfig_m(std::move(other.CborLoggingTriggerConfig_m), alloc) {}
+		: CborLoggingControlBindingConfig_m(std::move(other.CborLoggingControlBindingConfig_m), alloc) {}
 };

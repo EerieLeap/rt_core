@@ -477,7 +477,7 @@ private:
 public:
     explicit SensorProbe(std::string_view sensor_id) {
         subscription_ = SubscribeEventBinding(
-            SensorTrigger(sensor_id).binding, [context = context_](const EventData& value) {
+            SensorTrigger(sensor_id).event, [context = context_](const EventData& value) {
                 const auto* number = std::get_if<float>(&value);
                 if(number == nullptr)
                     return;
