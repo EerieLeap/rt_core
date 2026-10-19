@@ -46,12 +46,26 @@ void LoggingControlConfigurationValidator::Validate(const LoggingControlConfigur
         }
 
         // The event type, the payload key and the selector key are enums of the channel, which is
-        // not known here.
+        // not known here; ValidateBindings() asks the unit applying the configuration.
         if(binding.HasSelector() && !IsSelectorValue(binding.selector_value)) {
             InvalidLoggingControlConfiguration(
                 "Trigger " + std::to_string(i) + " selector value must be text, an integer or a bool."
             );
         }
+    }
+}
+
+void LoggingControlConfigurationValidator::ValidateBindings(
+    const LoggingControlConfiguration& configuration,
+    const EventBindingChecker& check_binding
+) {
+    if(!check_binding)
+        return;
+
+    for(size_t i = 0; i < configuration.triggers.size(); i++) {
+        const auto reason = check_binding(configuration.triggers[i].event);
+        if(!reason.empty())
+            InvalidLoggingControlConfiguration("Trigger " + std::to_string(i) + " " + std::string(reason));
     }
 }
 

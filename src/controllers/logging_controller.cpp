@@ -48,6 +48,7 @@ using eerie_leap::domain::sensor_domain::event_bus::SelectsSensor;
 using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
+using eerie_leap::subsys::event_bus::GetEventBindingError;
 using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::subsys::threading::ScopedMutex;
@@ -298,7 +299,8 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     logging_control_configuration_manager_ = std::make_shared<LoggingControlConfigurationManager>(
         std::make_unique<config_services::CborConfigurationService<CborLoggingControlConfig>>(
             LOGGING_CONTROL_CONFIGURATION_NAME, fs_service_, config_work_queue_thread_
-        )
+        ),
+        GetEventBindingError
     );
 
     // 2. Before the set is built and before the updated handler exists, so its store neither

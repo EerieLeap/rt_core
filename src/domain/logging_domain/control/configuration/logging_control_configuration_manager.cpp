@@ -4,6 +4,8 @@
 
 #include "subsys/threading/scoped_mutex.h"
 
+#include "domain/logging_domain/control/configuration/parsers/logging_control_configuration_validator.h"
+
 #include "logging_control_configuration_manager.h"
 
 namespace eerie_leap::domain::logging_domain::control::configuration {
@@ -12,12 +14,15 @@ LOG_MODULE_REGISTER(logging_control_configuration_manager_logger);
 
 using namespace eerie_memory;
 using namespace eerie_leap::configuration::services;
+using eerie_leap::domain::logging_domain::control::configuration::parsers::LoggingControlConfigurationValidator;
 using eerie_leap::subsys::threading::ScopedMutex;
 
 LoggingControlConfigurationManager::LoggingControlConfigurationManager(
-    std::unique_ptr<CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service
+    std::unique_ptr<CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service,
+    EventBindingChecker check_binding
 ) :
-    CborConfigurationManagerBase("LoggingControl", std::move(cbor_configuration_service)) {
+    CborConfigurationManagerBase("LoggingControl", std::move(cbor_configuration_service)),
+    check_binding_(std::move(check_binding)) {
 
     // Before the default is created: that store notifies too.
     k_mutex_init(&handler_mutex_);
@@ -90,6 +95,10 @@ PmrUniquePtr<LoggingControlConfiguration>
 LoggingControlConfigurationManager::Deserialize(const CborLoggingControlConfig& cbor_config) {
 
     return LoggingControlConfigurationCborParser::Deserialize(Mrm::GetExtPmr(), cbor_config);
+}
+
+void LoggingControlConfigurationManager::ValidateApply(const LoggingControlConfiguration& configuration) {
+    LoggingControlConfigurationValidator::ValidateBindings(configuration, check_binding_);
 }
 
 bool LoggingControlConfigurationManager::CreateDefaultConfiguration() {

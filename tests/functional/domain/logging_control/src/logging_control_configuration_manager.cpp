@@ -4,6 +4,8 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -13,6 +15,7 @@
 #include "configuration/cbor/cbor_logging_control_config/cbor_logging_control_config.h"
 #include "configuration/services/cbor_configuration_service.h"
 #include "subsys/device_tree/dt_fs.h"
+#include "subsys/event_bus/event_binding.h"
 #include "subsys/fs/services/fs_service.h"
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -27,6 +30,8 @@ using eerie_leap::configuration::services::CborConfigurationService;
 using eerie_leap::domain::logging_domain::control::configuration::LoggingControlConfigurationManager;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
 using eerie_leap::subsys::device_tree::DtFs;
+using eerie_leap::subsys::event_bus::EventBinding;
+using eerie_leap::subsys::event_bus::EventBindingChecker;
 using eerie_leap::subsys::fs::services::FsService;
 using eerie_leap::utilities::memory::Mrm;
 
@@ -41,9 +46,11 @@ std::shared_ptr<FsService> FormattedFs() {
     return fs_service;
 }
 
-std::shared_ptr<LoggingControlConfigurationManager> MakeManager(const std::shared_ptr<FsService>& fs_service) {
+std::shared_ptr<LoggingControlConfigurationManager>
+MakeManager(const std::shared_ptr<FsService>& fs_service, EventBindingChecker check_binding = {}) {
     return std::make_shared<LoggingControlConfigurationManager>(
-        std::make_unique<CborConfigurationService<CborLoggingControlConfig>>("logging_control_config", fs_service)
+        std::make_unique<CborConfigurationService<CborLoggingControlConfig>>("logging_control_config", fs_service),
+        std::move(check_binding)
     );
 }
 
@@ -177,6 +184,42 @@ ZTEST(logging_control_configuration_manager, test_AnInvalidConfigurationIsRefuse
     const auto& binding = manager->Get()->triggers[0].event;
     zassert_equal(binding.channel, EventChannelId::Sensors);
     zassert_true(std::get<std::pmr::string>(binding.selector_value) == "ab");
+}
+
+ZTEST(logging_control_configuration_manager, test_ABindingCheckerRefusesAnApplyOnly) {
+    const auto fs_service = FormattedFs();
+
+    // This unit "has" no channel but Sensors, as K_VALID's trigger names.
+    const auto manager = MakeManager(fs_service, [](const EventBinding& binding) -> std::string_view {
+        return binding.channel == EventChannelId::Sensors ? "" : "names an event channel this unit does not carry.";
+    });
+    const auto good = MakeConfiguration({ SensorTrigger("a") });
+    zassert_true(manager->Update(good));
+    const auto stored = manager->GetCborConfigurationInfo();
+
+    // A rejected binding is refused on apply, with the trigger and the reason, and nothing is stored.
+    const Bytes logging_trigger = { 0x9F, 0x9F, 0x9F, 0x02, 0x00, 0x01, 0xF4, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF };
+    std::array<char, 128> reason{};
+    zassert_false(manager->ApplyCborConfiguration(logging_trigger, reason), "The checker rejects the trigger");
+    zassert_not_null(
+        std::strstr(reason.data(), "Trigger 0 names an event channel this unit does not carry."), "with the reason: %s",
+        reason.data()
+    );
+    AssertSame(good, *manager->Get());
+    zassert_equal(manager->GetCborConfigurationInfo().crc, stored.crc, "and nothing is stored");
+
+    zassert_true(manager->ApplyCborConfiguration(K_VALID), "A binding the checker accepts applies");
+
+    // Update() and loading do not ask: a stored configuration must still load.
+    const auto other = MakeConfiguration(MixedTriggers());
+    zassert_true(manager->Update(other), "Update() does not call the checker");
+    const auto restarted = MakeManager(fs_service, [](const EventBinding&) -> std::string_view {
+        return "refuses all.";
+    });
+    AssertSame(other, *restarted->Get());
+
+    // Without a checker the same bytes apply.
+    zassert_true(MakeManager(FormattedFs())->ApplyCborConfiguration(logging_trigger), "No checker, no check");
 }
 
 ZTEST(logging_control_configuration_manager, test_TheUpdatedHandlerRunsAfterEachStore) {

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory_resource>
 #include <string>
+#include <string_view>
 #include <variant>
 
 #include "utilities/type/config_value.h"
@@ -41,5 +43,11 @@ inline bool IsSelectorValue(const ConfigValue& value) {
         || std::holds_alternative<int>(value)
         || std::holds_alternative<bool>(value);
 }
+
+// Why this unit could not resolve a binding, or empty when it can: GetEventBindingError()
+// (event_binding_subscription.h) on a unit with the event bus. The managers that store bindings
+// take one from their controller to check a configuration a client applies, so their domains still
+// link without the event bus.
+using EventBindingChecker = std::function<std::string_view(const EventBinding& binding)>;
 
 } // namespace eerie_leap::subsys::event_bus

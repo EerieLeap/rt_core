@@ -9,6 +9,8 @@
 #include "configuration/services/cbor_configuration_service.h"
 #include "utilities/memory/memory_resource_manager.h"
 
+#include "subsys/event_bus/event_binding.h"
+
 #include "domain/configuration_domain/utilities/cbor_configuration_manager_base.h"
 #include "domain/configuration_domain/utilities/i_configuration_manager.h"
 #include "domain/logging_domain/control/configuration/parsers/logging_control_configuration_cbor_parser.h"
@@ -22,6 +24,7 @@ using eerie_leap::domain::configuration_domain::utilities::CborConfigurationMana
 using eerie_leap::domain::configuration_domain::utilities::IConfigurationManager;
 using eerie_leap::domain::logging_domain::control::configuration::parsers::LoggingControlConfigurationCborParser;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
+using eerie_leap::subsys::event_bus::EventBindingChecker;
 
 // The stored logging triggers (ConfigurationService::Type::LoggingControl). The controller creates
 // it with the file name "logging_control_config" and registers it; the default is no triggers.
@@ -35,6 +38,8 @@ private:
     k_mutex handler_mutex_{};
     std::shared_ptr<const ConfigurationUpdatedHandler> configuration_updated_handler_;
 
+    EventBindingChecker check_binding_;
+
     // Logs what the handler throws: the configuration is stored by then.
     void NotifyUpdated();
 
@@ -44,9 +49,18 @@ private:
     Deserialize(const CborLoggingControlConfig& cbor_config) override;
     bool CreateDefaultConfiguration() override;
 
+    // Refuses a client's trigger the unit cannot resolve; loading and Update() do not call it.
+    void ValidateApply(const LoggingControlConfiguration& configuration) override;
+
 public:
+    /**
+     * @param check_binding Tells why this unit could not resolve a trigger's binding (the
+     *        controller passes GetEventBindingError). A client's apply is refused for the first
+     *        trigger it rejects; without one the bindings are not checked against the unit.
+     */
     explicit LoggingControlConfigurationManager(
-        std::unique_ptr<config_service::CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service
+        std::unique_ptr<config_service::CborConfigurationService<CborLoggingControlConfig>> cbor_configuration_service,
+        EventBindingChecker check_binding = {}
     );
 
     // Called after a configuration has been stored through Update() or ApplyCborConfiguration(), not

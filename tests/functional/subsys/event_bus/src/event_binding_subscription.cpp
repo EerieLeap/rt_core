@@ -23,6 +23,7 @@ using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::EventBindingHandler;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventData;
+using eerie_leap::subsys::event_bus::GetEventBindingError;
 using eerie_leap::subsys::event_bus::SubscribeEventBinding;
 using eerie_leap::utilities::string::StringHelpers;
 using eerie_leap::utilities::type::ConfigValue;
@@ -319,4 +320,42 @@ ZTEST(event_binding_subscription, test_ChannelsKnowTheirLastEventTypeAndPayloadK
     zassert_true(channel.HasPayloadKey(std::to_underlying(BindingPayloadType::Flag)), "The last value counts");
     zassert_false(channel.HasPayloadKey(std::to_underlying(BindingPayloadType::Flag) + 1));
     zassert_false(channel.HasPayloadKey(0xFFFFFFFF));
+}
+
+ZTEST(event_binding_subscription, test_AnErrorIsGivenForABindingThisUnitCannotResolve) {
+    zassert_true(GetEventBindingError(ValueBinding()).empty(), "A resolvable binding has none");
+    zassert_true(
+        GetEventBindingError(SelectedBinding(BindingPayloadType::Id, std::pmr::string("a"))).empty(),
+        "nor does one with a selector"
+    );
+
+    auto unregistered = ValueBinding();
+    unregistered.channel = EventChannelId::Navigation;
+    zassert_false(GetEventBindingError(unregistered).empty(), "A channel nobody registered");
+
+    auto none = ValueBinding();
+    none.channel = EventChannelId::None;
+    zassert_false(GetEventBindingError(none).empty(), "None");
+
+    auto event_type = ValueBinding();
+    event_type.event_type = std::to_underlying(BindingEventType::Other) + 1;
+    const auto event_error = GetEventBindingError(event_type);
+    zassert_true(event_error.contains("event type"), "%.*s", static_cast<int>(event_error.size()), event_error.data());
+
+    auto payload_key = ValueBinding();
+    payload_key.payload_key = std::to_underlying(BindingPayloadType::Flag) + 1;
+    const auto key_error = GetEventBindingError(payload_key);
+    zassert_true(key_error.contains("payload key"), "%.*s", static_cast<int>(key_error.size()), key_error.data());
+
+    auto selector = SelectedBinding(BindingPayloadType::Id, std::pmr::string("a"));
+    selector.selector_key = std::to_underlying(BindingPayloadType::Flag) + 1;
+    const auto selector_error = GetEventBindingError(selector);
+    zassert_true(
+        selector_error.contains("selects"), "%.*s", static_cast<int>(selector_error.size()), selector_error.data()
+    );
+
+    // Without a selector its key is ignored, as the subscription ignores it.
+    auto no_selector = ValueBinding();
+    no_selector.selector_key = 0xFFFFFFFF;
+    zassert_true(GetEventBindingError(no_selector).empty());
 }

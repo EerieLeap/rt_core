@@ -1,5 +1,6 @@
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -8,6 +9,7 @@
 #include "domain/logging_domain/control/configuration/parsers/logging_control_configuration_validator.h"
 #include "domain/logging_domain/control/models/logging_control_configuration.h"
 #include "domain/sensor_domain/event_bus/sensor_payload_type.h"
+#include "subsys/event_bus/event_binding.h"
 #include "subsys/event_bus/event_channel_id.h"
 #include "utilities/memory/memory_resource_manager.h"
 
@@ -16,6 +18,7 @@ using eerie_leap::domain::logging_domain::control::configuration::parsers::Loggi
 using eerie_leap::domain::logging_domain::control::models::LoggingControlBinding;
 using eerie_leap::domain::logging_domain::control::models::LoggingControlConfiguration;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
+using eerie_leap::subsys::event_bus::EventBinding;
 using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 
@@ -156,4 +159,41 @@ ZTEST(logging_control_configuration_validator, test_ATriggerOnSensorsMustSelectB
 
     auto logging = MakeTrigger(EventChannelId::Logging);
     zassert_true(Rejection(MakeConfiguration({ logging })).empty(), "Other channels need no selector");
+}
+
+ZTEST(logging_control_configuration_validator, test_ValidateBindingsRefusesTheFirstTriggerTheCheckerRejects) {
+    int calls = 0;
+    const auto checker = [&calls](const EventBinding& binding) -> std::string_view {
+        calls++;
+
+        return binding.channel == EventChannelId::Logging ? "names an event type its channel does not have." : "";
+    };
+
+    const auto configuration = MakeConfiguration(
+        { MakeTrigger(), MakeTrigger(EventChannelId::Logging), MakeTrigger(EventChannelId::Logging) }
+    );
+
+    std::string message;
+    try {
+        LoggingControlConfigurationValidator::ValidateBindings(configuration, checker);
+    } catch(const std::invalid_argument& e) {
+        message = e.what();
+    }
+
+    zassert_equal(
+        message, "Invalid logging control configuration. Trigger 1 names an event type its channel does not have.",
+        "%s", message.c_str()
+    );
+    zassert_equal(calls, 2, "It stops at the first rejection");
+}
+
+ZTEST(logging_control_configuration_validator, test_ValidateBindingsPassesWhenTheCheckerHasNoReason) {
+    const auto accepting = [](const EventBinding&) -> std::string_view {
+        return {};
+    };
+    const auto configuration = MakeConfiguration({ MakeTrigger(), MakeTrigger(EventChannelId::Logging) });
+
+    LoggingControlConfigurationValidator::ValidateBindings(configuration, accepting);
+    LoggingControlConfigurationValidator::ValidateBindings(configuration, {});
+    LoggingControlConfigurationValidator::ValidateBindings(MakeConfiguration({}), accepting);
 }

@@ -581,16 +581,21 @@ CborLoggingControlConfig = [ triggers: [0*16 CborLoggingControlBindingConfig] ]
 
 | Field | Rules and meaning |
 | --- | --- |
-| `channel` | An `EventChannelId` (1 sensors, 2 logging, ...). A channel the unit does not register makes the trigger do nothing. |
-| `event_type`, `payload_key` | The channel's enum values: for `Sensors`, `DataUpdated` (0) and `Value` (1). |
+| `channel` | An `EventChannelId` (1 sensors, 2 logging, ...). A channel the unit does not register makes the trigger do nothing; a client's apply refuses it. |
+| `event_type`, `payload_key` | The channel's enum values: for `Sensors`, `DataUpdated` (0) and `Value` (1). A client's apply refuses a value past the channel's last. |
 | `has_selector` | Whether the selector applies. Without it `selector_key` and `selector_value` are ignored; `selector_value` is written as 0. |
 | `selector_key`, `selector_value` | The payload key the selector matches and its value: for a sensor, `SensorId` (0) and the sensor's text id (matched by its hash), an integer or a bool. A trigger on `Sensors` must have a `SensorId` selector. |
 | `target_uid` | The CDMP UID (`CdmpDeviceInfo::uid`) of the unit the trigger starts and stops; 0 is every unit that can log. |
 
 Every field is required, so a file stored before `target_uid` existed does not decode (the file is kept and an unsaved default, no triggers, is used until a valid one is stored), and a stored list of more than 16 triggers does not decode. Any `target_uid` is valid: the validator has no rule for it. The validator
 checks the count, that each channel is an `EventChannelId`, that a selector is text, an integer
-or a bool, and that a `Sensors` trigger selects by `SensorId`. It is structural: it does not
-resolve channels or sensors. The default is no triggers.
+or a bool, and that a `Sensors` trigger selects by `SensorId`. That is structural and runs on load,
+save and apply: it does not resolve channels or sensors. When a client applies a configuration, the
+manager also asks the unit (`GetEventBindingError()`, passed by the controller as its
+`EventBindingChecker`) and refuses the first trigger whose channel this unit does not register, or
+whose event type, payload key or selector key its channel does not have: "Invalid logging control
+configuration. Trigger 2 names an event type its channel does not have." Loading and `Update()` skip
+that check, so a stored configuration still loads. The default is no triggers.
 
 ## Status on other units
 

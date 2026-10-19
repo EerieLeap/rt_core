@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <memory_resource>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -50,6 +51,23 @@ bool SelectorMatches(const EventData& selector, const EventData& candidate) {
     const auto* value = std::get_if<bool>(&candidate);
 
     return flag != nullptr && value != nullptr && *value == *flag;
+}
+
+std::string_view GetEventBindingError(const EventBinding& binding) {
+    const auto* channel = EventChannelRegistry::GetInstance().Find(binding.channel);
+    if(channel == nullptr)
+        return "names an event channel this unit does not carry.";
+
+    if(!channel->HasEventType(binding.event_type))
+        return "names an event type its channel does not have.";
+
+    if(!channel->HasPayloadKey(binding.payload_key))
+        return "names a payload key its channel does not have.";
+
+    if(binding.HasSelector() && !channel->HasPayloadKey(binding.selector_key))
+        return "selects on a payload key its channel does not have.";
+
+    return {};
 }
 
 AnySubscription SubscribeEventBinding(const EventBinding& binding, EventBindingHandler handler) {

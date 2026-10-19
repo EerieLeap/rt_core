@@ -96,6 +96,12 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
   sensor and makes `SensorEventsPublisher` publish every reading, which its acceptance cache exists
   to avoid; a selector on another key would have that cache, keyed by sensor, answer from a
   sensor's first reading. The logging control validator (and rt_gauge's UI validator) refuses it.
+- `GetEventBindingError(binding)` (`event_binding_subscription.h`) says why this unit cannot
+  resolve a binding, as a sentence tail, or returns empty: a channel not registered, an event
+  type, payload key or (with a selector) selector key its channel does not have. Managers that
+  store bindings take it as an `EventBindingChecker` (`event_binding.h`, a `std::function`, so
+  their domains link without the event bus) from their controller and call it only on a client's
+  apply; a stored configuration still loads.
 - `SubscribeEventBinding(binding, handler)` (`event_binding_subscription.h`) resolves and
   subscribes in one step. The selector becomes the channel filter, run under the subscriber lock.
   The handler receives the value under the payload key, on the dispatching thread. It returns null

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <optional>
+#include <string_view>
 
 #include "event.h"
 #include "event_binding.h"
@@ -20,6 +21,13 @@ std::optional<EventData> ToSelectorValue(const ConfigValue& value);
 // Whether a payload entry matches a resolved selector: a hash matches the same uint32, an integer
 // the same int or uint32, a bool the same bool.
 bool SelectorMatches(const EventData& selector, const EventData& candidate);
+
+// Why this unit could not resolve @p binding, as the rest of a sentence about it ("names an event
+// type its channel does not have."): the channel registered under its id is missing, or lacks its
+// event type, its payload key or, with a selector, its selector key. Empty when it resolves. Only
+// what the registry knows; IsSelectorValue() and the rules of each channel stay with the validators.
+// An EventBindingChecker.
+std::string_view GetEventBindingError(const EventBinding& binding);
 
 // Subscribes @p handler to the value @p binding names. The selector becomes the channel's filter,
 // evaluated under its subscriber lock, so an event for another sensor never wakes the handler; an
