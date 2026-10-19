@@ -162,6 +162,12 @@ current only while the generation is the same, and a same-size overwrite through
 commit of an upload seeds the checkpoint with the CRC it verified, so a `STAT` after an upload reads
 nothing. This assumes that assets are written only through their store.
 
+**Rename.** The SMP `RENAME` moves a file within its kind (`AssetStore::Rename()`, which increases the
+generation also when it fails: FAT deletes the target before it renames). The checkpoint of the source
+follows the file when it is current, since the bytes are the same; one of the target is dropped. The
+`images` and `animations` kinds have no in-use check, so a widget showing the renamed file keeps its
+loaded copy and shows nothing after its next rebuild, as after `DELETE`.
+
 **Script references.** A controller that owns stored script paths adds a referrer with
 `AddReferrer(owner, fn)`, which says whether its configuration refers to a path relative to the
 volume. `SensorsController` answers for every sensor's `script_path`, enabled or not,

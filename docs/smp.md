@@ -21,7 +21,7 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 | `live` | 67 | `BleService` | `SUBSCRIBE` 0, `UNSUBSCRIBE` 1 |
 | `calibration` | 68 | `AdcController` | `START` 0, `STOP` 1, `READ` 2 |
 | `files` | 69 | `ManagementController` | `LIST` 0 |
-| `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4, `STAT` 5 |
+| `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4, `STAT` 5, `RENAME` 6 |
 
 ### `config`: read and write stored configurations
 
@@ -142,6 +142,7 @@ so a unit serves the kinds it has the services for, and `KINDS` says which.
 | `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |
 | `DELETE` (write) | `{kind, name}` | `{}` |
 | `STAT` (read) | `{kind, name}` | `{len, crc?}`: the size of the file and the CRC32 of the whole file, the one `READ` sends; `crc` is left out for a file above `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE` that no current checkpoint covers |
+| `RENAME` (write) | `{kind, name, to}` | `{}` |
 
 The CRC32 is the IEEE one (`zlib.crc32`). The kind numbers are `0` `images`, `1` `animations`,
 `2` `sensor_scripts`, `3` `can_scripts` and `4` `logs`; they are append only, and
@@ -231,6 +232,14 @@ current ([filesystem.md](filesystem.md#assets-eerie_leap_assets)); otherwise the
 on the configuration work queue while the client waits, up to `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE`,
 and keeps the result as the checkpoint. A larger file answers its size alone. An open download is left
 as it is.
+
+**`RENAME`.** Moves a file within its kind and replaces `to` if it exists, as a `WRITE` would. It
+takes a name away and makes one, so the kind needs both the upload and the delete bit. Checked in this
+order: the kind (`UNKNOWN_KIND`), its access (`DENIED`), both names (`BAD_NAME`), two names that differ
+only in ASCII case (`BAD_NAME`: FAT would delete the file; a case change needs a copy and a delete),
+the volume (`UNAVAILABLE`), whether `name` exists (`NOT_FOUND`), whether the kind uses `name` (as for
+`DELETE`) or `to` (as for `WRITE`) (`IN_USE`), and whether an upload of either name is open (`BUSY`). A
+download of either name is closed first.
 
 **`DELETE`.** A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
 and so is the log the writer is writing, which cannot be downloaded either. A download of the file is
