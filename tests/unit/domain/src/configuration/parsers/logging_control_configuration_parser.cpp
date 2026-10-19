@@ -271,3 +271,56 @@ ZTEST(logging_control_configuration_parser, test_SerializeValidates) {
 
     zassert_true(is_rejected, "A trigger without a channel is not stored");
 }
+
+namespace {
+
+// {Logging (2), 0, 1, selector key 0 = <selector>, target 0}; the selector bytes come from the test.
+Bytes IntegerSelector(const Bytes& selector) {
+    Bytes bytes = { 0x9F, 0x9F, 0x9F, 0x02, 0x00, 0x01, 0xF5, 0x00 };
+    bytes.insert(bytes.end(), selector.begin(), selector.end());
+    bytes.insert(bytes.end(), { 0x00, 0xFF, 0xFF, 0xFF });
+
+    return bytes;
+}
+
+} // namespace
+
+ZTEST(logging_control_configuration_parser, test_AnIntegerSelectorMayBeWrittenInTheUint32Range) {
+    // 0xFFFFFFFF is the int -1 with the same 32 bits, which is how a hash above INT32_MAX is kept.
+    const auto max = Decode(IntegerSelector({ 0x1A, 0xFF, 0xFF, 0xFF, 0xFF }));
+    zassert_not_null(max.get());
+    const auto restored = LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *max);
+    zassert_equal(restored->triggers.size(), 1);
+    const auto* number = std::get_if<int>(&restored->triggers[0].event.selector_value);
+    zassert_not_null(number, "an int");
+    zassert_equal(*number, -1);
+
+    const auto above = Decode(IntegerSelector({ 0x1A, 0x80, 0x00, 0x00, 0x00 })); // 2^31
+    zassert_not_null(above.get());
+    const auto* wrapped = std::get_if<int>(
+        &LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *above)
+            ->triggers[0]
+            .event.selector_value
+    );
+    zassert_not_null(wrapped);
+    zassert_equal(*wrapped, INT32_MIN);
+
+    // The negative spelling of the same selector still decodes.
+    const auto negative = Decode(IntegerSelector({ 0x3A, 0x7F, 0xFF, 0xFF, 0xFF })); // -2^31
+    zassert_not_null(negative.get());
+    const auto* low = std::get_if<int>(
+        &LoggingControlConfigurationCborParser::Deserialize(Mrm::GetDefaultPmr(), *negative)
+            ->triggers[0]
+            .event.selector_value
+    );
+    zassert_not_null(low);
+    zassert_equal(*low, INT32_MIN);
+}
+
+ZTEST(logging_control_configuration_parser, test_AnIntegerSelectorOutsideTheRangeDoesNotDecode) {
+    zassert_is_null(Decode(IntegerSelector({ 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 })).get(), "2^32");
+    zassert_is_null(Decode(IntegerSelector({ 0x3A, 0x80, 0x00, 0x00, 0x00 })).get(), "-2^31 - 1");
+    zassert_is_null(
+        Decode(IntegerSelector({ 0x1B, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF })).get(), "2^64 - 1"
+    );
+}

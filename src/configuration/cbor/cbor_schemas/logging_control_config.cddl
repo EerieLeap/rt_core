@@ -15,5 +15,7 @@ CborLoggingControlBindingConfig = [
     target_uid: uint                        ; CDMP UID of the unit to start and stop, 0 = every unit that can log
 ]
 
-; Text matches its hash, as payloads carry text ids.
-CborSelectorValueType = int / tstr / bool
+; Text matches its hash, as payloads carry text ids. An integer may be written in the uint32 range
+; (a hash above 2^31-1 as is) or negative; the unit keeps the same 32 bits either way.
+CborSelectorValueType = CborSelectorInteger / tstr / bool
+CborSelectorInteger = -2147483648..4294967295

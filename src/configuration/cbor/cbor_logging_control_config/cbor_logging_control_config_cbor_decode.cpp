@@ -26,7 +26,11 @@ static bool decode_CborLoggingControlConfig(zcbor_state_t *state, struct CborLog
 
 
 // int / tstr / bool: each alternative is tried in turn from the same position, as the gauge's
-// decode_CborPropertyValueType does.
+// decode_CborPropertyValueType does. An integer may be written in -2^31..2^32-1, so a hash above
+// INT32_MAX needs no negative spelling; it is stored as the int32 with the same 32 bits, which
+// SelectorMatches() compares against a hash. The encoder writes the int32 (negative for such a
+// value), the same selector, and an apply stores the received bytes as they are. An integer outside
+// the range fails the decode rather than falling through to the other alternatives.
 static bool decode_CborSelectorValueType(
 		zcbor_state_t *state, CborLoggingTriggerSelectorValue *result)
 {
@@ -36,9 +40,15 @@ static bool decode_CborSelectorValueType(
 	zcbor_state_t backup_state = *state;
 
 	{
-		int32_t val;
-		if (zcbor_int32_decode(state, &val)) {
-			*result = val;
+		int64_t val;
+		if (zcbor_int64_decode(state, &val)) {
+			if (val < INT32_MIN || val > UINT32_MAX) {
+				*state = backup_state;
+				log_result(state, false, __func__);
+				return false;
+			}
+
+			*result = static_cast<int32_t>(static_cast<uint32_t>(val));
 			res = true;
 		}
 	}

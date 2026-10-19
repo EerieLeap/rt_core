@@ -575,7 +575,8 @@ logging configuration, which only a unit with a log writer has. Schema
 (`logging_control_config.cddl`), file `config/logging_control_config.cbor`:
 
 ```
-CborLoggingControlBindingConfig = [ channel: uint, event_type: uint, payload_key: uint, has_selector: bool, selector_key: uint, selector_value: int / tstr / bool, target_uid: uint ]
+CborLoggingControlBindingConfig = [ channel: uint, event_type: uint, payload_key: uint, has_selector: bool, selector_key: uint, selector_value: CborSelectorInteger / tstr / bool, target_uid: uint ]
+CborSelectorInteger = -2147483648..4294967295
 CborLoggingControlConfig = [ triggers: [0*16 CborLoggingControlBindingConfig] ]
 ```
 
@@ -584,7 +585,7 @@ CborLoggingControlConfig = [ triggers: [0*16 CborLoggingControlBindingConfig] ]
 | `channel` | An `EventChannelId` (1 sensors, 2 logging, ...). A channel the unit does not register makes the trigger do nothing; a client's apply refuses it. |
 | `event_type`, `payload_key` | The channel's enum values: for `Sensors`, `DataUpdated` (0) and `Value` (1). A client's apply refuses a value past the channel's last. |
 | `has_selector` | Whether the selector applies. Without it `selector_key` and `selector_value` are ignored; `selector_value` is written as 0. |
-| `selector_key`, `selector_value` | The payload key the selector matches and its value: for a sensor, `SensorId` (0) and the sensor's text id (matched by its hash), an integer or a bool. A trigger on `Sensors` must have a `SensorId` selector. |
+| `selector_key`, `selector_value` | The payload key the selector matches and its value: for a sensor, `SensorId` (0) and the sensor's text id (matched by its hash), an integer or a bool. An integer is -2^31..2^32-1 (a hash above 2^31-1 may be written as is; it is kept as the same 32 bits, and a larger integer does not decode). A trigger on `Sensors` must have a `SensorId` selector. |
 | `target_uid` | The CDMP UID (`CdmpDeviceInfo::uid`) of the unit the trigger starts and stops; 0 is every unit that can log. |
 
 Every field is required, so a file stored before `target_uid` existed does not decode (the file is kept and an unsaved default, no triggers, is used until a valid one is stored), and a stored list of more than 16 triggers does not decode. Any `target_uid` is valid: the validator has no rule for it. The validator

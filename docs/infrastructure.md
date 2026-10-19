@@ -90,7 +90,11 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
   `LAST_EVENT_CHANNEL_ID` to it; `IsValidEventChannelId()` and the registry's table follow.
 - A selector is text, an integer or a bool (`IsSelectorValue()`). Text is compared by its hash,
   because payloads carry ids hashed (`ToSelectorValue()`, `SelectorMatches()`). An integer matches
-  an `int` or `uint32_t` entry, a bool a `bool` entry.
+  an `int` or `uint32_t` entry, a bool a `bool` entry. The stored integer is an int32, but the
+  CBOR decoders of logging triggers (and rt_gauge's, of widget bindings) accept -2^31..2^32-1: a
+  hash above `INT32_MAX` may be written as is and is kept as the int32 of the same 32 bits, which
+  `SelectorMatches()` compares against a `uint32_t` entry (the encoder writes it negative, the
+  same selector).
 - A binding to the `Sensors` channel must select a sensor by its `SensorId`
   (`SelectsSensor()`, `sensor_event_binding.h`, header only). Without a selector it receives every
   sensor and makes `SensorEventsPublisher` publish every reading, which its acceptance cache exists
