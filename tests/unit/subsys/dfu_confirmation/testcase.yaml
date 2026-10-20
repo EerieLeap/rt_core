@@ -1,0 +1,9 @@
+common:
+  tags:
+    - unit
+    - subsys.dfu_confirmation
+  platform_allow:
+    - native_sim
+
+tests:
+  unit.subsys.dfu_confirmation: {}
