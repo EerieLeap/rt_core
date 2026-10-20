@@ -140,11 +140,13 @@ The writer publishes `StatusUpdated` on the `logging_events` channel (see
 | `WriteFailed` | A record or a sync did not reach the card: the stream refuses every write after one that failed or fell short (a full or removed card). |
 | `NoSpace` | Less than `EERIE_LEAP_LOG_MIN_FREE_SPACE_MB` was free at a rotation. |
 | `RotationFailed` | The next file of a rotation could not be opened or its header written. |
+| `FirmwareUpdate` | The unit stopped logging for a firmware update: an upload started, or an `os reset` is coming (see [Firmware updates](#firmware-updates)). `Stop()` finalized and closed the file, as for `Stopped`; it is no failure. |
 
-A fifth reason, `Unavailable`, comes only from other units' status (see
+The reason `Unavailable` (value 4) comes only from other units' status (see
 [Status on other units](#status-on-other-units)). `GetReasonName()` (`event_bus/logging_status_reason.h`)
 names every reason for logs and the shell, `Unavailable` included, and gives `"unknown"` for a value
-from a newer unit.
+from a newer unit. The values are persisted in the CDMP record and sent over SMP: new ones are
+appended, never renumbered (`FirmwareUpdate` is 5).
 
 A failure ends the session on the writer thread: the error is counted in `write_errors` (not for
 `NoSpace`) and logged once, the failure is published, and no further tick is scheduled.
@@ -207,10 +209,21 @@ The rules:
   when the dependent is started, so the dependent does not start the writer.
 - `HandleLoggingCommand(is_start)` is the `LOGGING` command from another unit: a start or a stop
   request, accepted either way.
+- `RequestStopWithReason(reason)` is a stop whose status carries `reason` instead of `Stopped` (the
+  firmware update's `FirmwareUpdate`; see [Firmware updates](#firmware-updates)). It is a stop in
+  every other way: it clears the wanted state, and the latest request wins. The reason goes to
+  `LogWriterService::StopWithReason()`, which publishes it with the stop; a writer that is stopped
+  already publishes nothing, and the reason is dropped. The status handler takes `FirmwareUpdate` for
+  an ordinary stop, not for a failure.
+- `WaitUntilIdle(timeout_ms)` returns true once every request made before the call has been served and
+  the task is not running: a stop ordered before it is complete then, the file finalized and closed.
+  It polls every millisecond and allocates nothing. Never call it from the configuration work queue,
+  where it would wait for the task that runs there.
 
 | Code | Thread |
 | --- | --- |
-| `RequestStart(target_uid)`, `RequestStop(target_uid)`, `IsActive()` | Any; no lock. |
+| `RequestStart(target_uid)`, `RequestStop(target_uid)`, `RequestStopWithReason(reason)`, `IsActive()` | Any; no lock. |
+| `WaitUntilIdle(timeout_ms)` | Any thread but the configuration work queue; blocks at most `timeout_ms`. |
 | Status handler | The bus thread that carries `logging_events`. Records the status; on a failure it reschedules the task. |
 | Updated handler | The thread that stored the logging configuration (the configuration work queue for an SMP apply). Reschedules the task. |
 | Every writer `Start()` and `Stop()`, the logger factory | The configuration work queue. |
@@ -520,6 +533,46 @@ nothing either.
   wanted start and re-asserts it by the rules of [Remote control](#remote-control).
 - The stop ends a session another trigger, the shell or another unit started.
 
+### Firmware updates
+
+A unit that writes logs ends logging when its firmware is updated (`EERIE_LEAP_DFU`): the flash
+stalls of an upload would distort the log, and the reset that ends it would cut the file.
+`FirmwareUpdateLoggingStop` (`control/firmware_update_logging_stop.h`) registers two MCUmgr
+notification callbacks (`mgmt_callback_register()`), which run on the MCUmgr work queue:
+
+| Event | Build needs | The hook |
+| --- | --- | --- |
+| `MGMT_EVT_OP_IMG_MGMT_DFU_STARTED`: an upload starts (its first chunk, offset 0) | `MCUMGR_MGMT_NOTIFICATION_HOOKS` for the registration; the `img` group sends the event only with `MCUMGR_GRP_IMG_STATUS_HOOKS` (`EERIE_LEAP_DFU` selects it) | `RequestStopWithReason(FirmwareUpdate)` on the supervisor, and returns. |
+| `MGMT_EVT_OP_OS_MGMT_RESET`: an `os reset` was received, before the unit reboots | `MCUMGR_GRP_OS_RESET_HOOK` | The same stop, then `WaitUntilIdle(2000)`: the supervisor's task has run the stop on the configuration work queue, so the file is finalized and closed. |
+
+Both return `MGMT_CB_OK`: a logging stop that does not finish is no reason to refuse an upload or a
+reset. The reset hook waits at most `RESET_WAIT_MS` (2 s), logs a warning when the wait runs out and
+lets the reset go ahead; the MCUmgr work queue is blocked meanwhile and the reset's response comes up
+to that long late, which is fine for a reset. On the configuration work queue itself the hook does not
+wait (the stop could not run there) and says so.
+
+- **Nothing restarts logging.** The stop clears the wanted state, so a sensors restart does not
+  bring the writer back, and a stored configuration does not either. A start by hand (the shell, the
+  SMP `logging` group), a trigger or a `LOGGING` command starts it again, and it is an ordinary start:
+  the reason reads `Stopped` while active. After the reset the unit starts with logging stopped, as
+  after any reboot. Another unit's wanted start is not undone by the update (see
+  [Remote control](#remote-control)): a switch on the gauge that is still on sends the start again
+  when the updated unit returns.
+- **Nothing to stop, nothing happens.** While the writer is stopped the hooks publish no status and
+  write no file, and the reset hook returns at once.
+- **The status.** The stop publishes `StatusUpdated` with the reason `FirmwareUpdate`, which the
+  unit's own `logging STATUS` reports until the next start, and its CDMP record carries. It is no
+  failure (see [Status on other units](#status-on-other-units)).
+- **The remote role registers nothing.** The gauge writes no logs. `FirmwareUpdateLoggingStop` is
+  built by the writer role of `LoggingController` after `Initialize()` has built everything else, and
+  only registers what the build has: without `MCUMGR_MGMT_NOTIFICATION_HOOKS` it registers nothing
+  and a firmware update does not stop logging (`AreFirmwareUpdateHooksRegistered()` tells).
+- **Limits.** An MCUmgr callback carries no context, so the hooks reach their instance through a
+  slot of the file: one `FirmwareUpdateLoggingStop` is registered at a time, and a second one's
+  `Register()` fails. Zephyr does not lock its callback list: register at start-up and unregister at
+  teardown, not while a request can arrive. The destructor waits for a hook in progress (up to
+  2 s).
+
 ### Triggers
 
 `LoggingTriggerSet` (`control/logging_trigger_set.h`) subscribes the configured triggers. A trigger
@@ -688,6 +741,11 @@ publishes nothing, so that cleanup is the only `Stopped` that can follow a failu
 
 `Unavailable` (4) is only ever imported; the writer never publishes it. Code that switches over
 `LoggingStatusReason` handles it too.
+
+`FirmwareUpdate` (5) is a unit's own reason, published when it stops for a firmware update (see
+[Firmware updates](#firmware-updates)). It is not a failure: the unit's record carries it (and a
+`Stopped` after it would replace it), but the combined status picks only the failures, so the
+other units see `Stopped`.
 
 **Timing.** A change reaches the other units with one notification, or with a resend within
 350 ms when that is lost, and otherwise with the next heartbeat (3 s) and a replay. A logger that
@@ -890,7 +948,7 @@ builds, in this order:
 | 6 | The triggers' updated handler. | Same. |
 | 7 | With a configuration service, `ConfigurationUpdateLoggingStop` (initialized; it registers nothing before `Start()`), without a sender in both roles: the control sends the stop. |
 | 8 | Registration with `ConfigurationService`: logging (type 5), then logging control (type 8). | Logging control (type 8). |
-| 9 | With `EERIE_LEAP_ASSETS`, a registry and the log volume: the `logs` kind (see [Log files as assets](#log-files-as-assets)). | Nothing. |
+| 9 | With `EERIE_LEAP_ASSETS`, a registry and the log volume: the `logs` kind (see [Log files as assets](#log-files-as-assets)). Then the MCUmgr hooks that end logging for a firmware update, with `MCUMGR_MGMT_NOTIFICATION_HOOKS` (see [Firmware updates](#firmware-updates)). | Nothing. |
 
 Registration is the last step that can fail, because `ConfigurationService` cannot unregister, so a
 failed `Initialize()` leaves nothing behind. The `logs` kind follows it: a registration the registry
@@ -919,14 +977,16 @@ does not clear it; the logging status reports those. A unit without a writer nev
 **Getters.** `GetControl()` is the role's `ILoggingControl`;
 `GetLoggingControlConfigurationManager()` serves both roles. The writer role adds
 `GetDependentService()`, `GetConfigurationManager()` (the logging manager) and
-`GetLogWriterService()`. After `Initialize()` returned 0, the composition root registers
+`GetLogWriterService()`. `AreFirmwareUpdateHooksRegistered()` tells whether the writer role's firmware
+update hooks are registered (never in the remote role). After `Initialize()` returned 0, the composition root registers
 `GetDependentService()` with `SensorsController::RegisterDependentService()`, before
 `SensorsController::Start()`; the controller does not, as it never sees `SensorsController`. A
 failed controller registers nothing and the root skips what depends on it.
 
 **Teardown.** The destructor withdraws everything that refers to the controller, in an order that is
 safe while the bus threads and the configuration and CDMP work queues run. It also runs after a
-failed or skipped `Initialize()`. The `logs` kind is unregistered first, so no request asks the
+failed or skipped `Initialize()`. The firmware update hooks go first, waiting for one in progress, so
+none reaches the supervisor past this; the `logs` kind is unregistered next, so no request asks the
 writer about a file past this.
 
 1. Destroys the update stop: its handler is cleared, a report in its body is waited for, and a

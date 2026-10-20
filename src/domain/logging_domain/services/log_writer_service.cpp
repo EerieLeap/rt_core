@@ -23,6 +23,7 @@ namespace eerie_leap::domain::logging_domain::services {
 
 using namespace eerie_leap::subsys::random;
 using namespace eerie_leap::utilities::string;
+using eerie_leap::domain::logging_domain::event_bus::GetReasonName;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
@@ -199,11 +200,39 @@ bool LogWriterService::DoStop() {
     CloseLogFile(task);
     SetSession(false);
 
-    LOG_INF("Logging stopped.");
+    const LoggingStatusReason reason = stop_reason_;
+    if(reason == LoggingStatusReason::Stopped)
+        LOG_INF("Logging stopped.");
+    else
+        LOG_INF("Logging stopped (%s).", GetReasonName(reason));
 
-    PublishStatus(false, LoggingStatusReason::Stopped);
+    PublishStatus(false, reason);
 
     return true;
+}
+
+bool LogWriterService::StopWithReason(LoggingStatusReason reason) {
+    // Dropped whether Stop() returns, throws or finds nothing to stop, so no later stop carries it.
+    struct ReasonReset {
+        std::atomic<LoggingStatusReason>& reason;
+
+        explicit ReasonReset(std::atomic<LoggingStatusReason>& stop_reason) :
+            reason(stop_reason) {}
+
+        ~ReasonReset() {
+            reason = LoggingStatusReason::Stopped;
+        }
+
+        ReasonReset(const ReasonReset&) = delete;
+        ReasonReset& operator=(const ReasonReset&) = delete;
+        ReasonReset(ReasonReset&&) = delete;
+        ReasonReset& operator=(ReasonReset&&) = delete;
+    };
+
+    stop_reason_ = reason;
+    const ReasonReset reset(stop_reason_);
+
+    return Stop();
 }
 
 LogWriterStats LogWriterService::GetStats() const {

@@ -35,6 +35,10 @@ struct LogWriterSupervisor::State {
 
     // Written by any thread, taken by the task.
     std::atomic<Request> pending_request = Request::None;
+    // What the pending stop publishes as its reason; written before the request, taken by the task.
+    std::atomic<LoggingStatusReason> stop_reason = LoggingStatusReason::Stopped;
+    // Whether the task is running, for WaitUntilIdle().
+    std::atomic<bool> is_processing = false;
     // Set by a successful start, cleared by a stop or a failure: whether a sensors restart brings the
     // writer back. Configuration work queue only; atomic so a dependent called from elsewhere is no
     // data race.
@@ -54,9 +58,10 @@ struct LogWriterSupervisor::State {
         return false;
     }
 
-    bool StopWriter() {
+    // The status of the stop names @p reason when the writer runs.
+    bool StopWriter(LoggingStatusReason reason = LoggingStatusReason::Stopped) {
         try {
-            if(log_writer_service->Stop())
+            if(log_writer_service->StopWithReason(reason))
                 return true;
 
             LOG_ERR("Failed to stop the log writer.");
@@ -286,14 +291,35 @@ void LogWriterSupervisor::RequestStart(uint32_t /*target_uid*/) {
 }
 
 void LogWriterSupervisor::RequestStop(uint32_t /*target_uid*/) {
+    RequestStopWithReason(LoggingStatusReason::Stopped);
+}
+
+void LogWriterSupervisor::RequestStopWithReason(LoggingStatusReason reason) {
     if(!is_initialized_) {
         LOG_ERR("Logging stop requested before the supervisor was initialized.");
         return;
     }
 
+    // Before the request, so a run that takes the stop takes its reason too.
+    state_->stop_reason = reason;
     state_->pending_request = Request::Stop;
     if(task_.has_value())
         task_->Reschedule(K_NO_WAIT);
+}
+
+bool LogWriterSupervisor::WaitUntilIdle(int32_t timeout_ms) const {
+    const int64_t deadline = k_uptime_get() + timeout_ms;
+
+    // The run sets is_processing before it takes a request, so what it took is read as gone only
+    // after the flag is set: the requests are read first, the flag last.
+    while(state_->pending_request != Request::None || is_restart_due_ || state_->is_processing) {
+        if(k_uptime_get() >= deadline)
+            return false;
+
+        k_msleep(1);
+    }
+
+    return true;
 }
 
 bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
@@ -320,6 +346,26 @@ std::shared_ptr<IService> LogWriterSupervisor::GetDependentService() const {
 // One task does it all, in a fixed order: a failed session is closed before a request acts, and a
 // restart for a stored configuration comes last, unless this run opened a session with it.
 WorkQueueTaskResult LogWriterSupervisor::Process() {
+    // Set before anything is taken, cleared when the run ends however it does (WaitUntilIdle()).
+    struct Busy {
+        std::atomic<bool>& flag;
+
+        explicit Busy(std::atomic<bool>& is_busy) :
+            flag(is_busy) {
+            flag = true;
+        }
+
+        ~Busy() {
+            flag = false;
+        }
+
+        Busy(const Busy&) = delete;
+        Busy& operator=(const Busy&) = delete;
+        Busy(Busy&&) = delete;
+        Busy& operator=(Busy&&) = delete;
+    };
+    const Busy busy(state_->is_processing);
+
     // Taken first. The handler sets it after the new configuration is in place, so a start below
     // reads that configuration; one set while this run starts the writer stays for the next run,
     // which the handler has queued.
@@ -333,7 +379,7 @@ WorkQueueTaskResult LogWriterSupervisor::Process() {
             is_new_session = ApplyStart();
             break;
         case Request::Stop:
-            ApplyStop();
+            ApplyStop(state_->stop_reason.exchange(LoggingStatusReason::Stopped));
             break;
         case Request::None:
             break;
@@ -394,9 +440,9 @@ bool LogWriterSupervisor::ApplyStart() {
     return is_started;
 }
 
-void LogWriterSupervisor::ApplyStop() {
+void LogWriterSupervisor::ApplyStop(LoggingStatusReason reason) {
     state_->is_logging_requested = false;
-    state_->StopWriter();
+    state_->StopWriter(reason);
 }
 
 // A stored logging configuration takes effect at the next start, so a running writer is restarted:
@@ -435,8 +481,9 @@ void LogWriterSupervisor::OnStatusUpdated(const LoggingEventsChannel::EventMessa
         reason = static_cast<LoggingStatusReason>(std::get<uint32_t>(reason_entry->second));
     reason_ = reason;
 
-    // A stop publishes Stopped; anything else ended a session that the task now closes.
-    if(reason == LoggingStatusReason::Stopped)
+    // A stop publishes Stopped, or the reason it was ordered for; anything else ended a session that the
+    // task now closes.
+    if(reason == LoggingStatusReason::Stopped || reason == LoggingStatusReason::FirmwareUpdate)
         return;
 
     failure_reason_ = reason;

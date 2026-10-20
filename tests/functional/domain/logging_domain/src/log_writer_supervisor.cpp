@@ -198,6 +198,115 @@ ZTEST(log_writer_supervisor, test_TheLatestRequestWins) {
     zassert_equal(CountLogFiles(*rig.fs_service), 1, "the start that lost must open no file");
 }
 
+// A stop that names a reason (the firmware update's) is a stop in every other way: the file is
+// finalized and the status says why, once. The reason is not kept for a later stop.
+ZTEST(log_writer_supervisor, test_AStopWithAReasonPublishesItOnce) {
+    auto rig = MakeLogWriterRig();
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+
+    supervisor.RequestStopWithReason(LoggingStatusReason::FirmwareUpdate);
+    zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+    zassert_true(rig.log_writer_service->IsStopped(), "the stop must leave the writer stopped");
+
+    auto events = recorder.GetEvents();
+    zassert_false(events[1].is_active, "the status of the stop is inactive");
+    zassert_true(events[1].reason == LoggingStatusReason::FirmwareUpdate, "and names the reason");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return !supervisor.IsActive() && supervisor.GetReason() == LoggingStatusReason::FirmwareUpdate;
+            },
+            1000
+        ),
+        "the supervisor reports the reason"
+    );
+
+    const auto files = ReadLogFiles(*rig.fs_service);
+    zassert_equal(files.size(), 1, "one file (found %zu)", files.size());
+    AssertFinalizedFile(files[0].content, "the file");
+
+    // It is no failure: the task stops nothing more and nothing starts the writer again.
+    k_msleep(50);
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+    zassert_true(rig.log_writer_service->IsStopped());
+    zassert_equal(recorder.GetEvents().size(), 2, "a reason other than Stopped, but no failure, publishes no more");
+
+    // A start by hand logs again, and an ordinary stop names no firmware update.
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(3), "the start must publish its status");
+    zassert_true(
+        WaitFor(
+            [&] {
+                return supervisor.IsActive() && supervisor.GetReason() == LoggingStatusReason::Stopped;
+            },
+            1000
+        ),
+        "the reason is cleared by the start"
+    );
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(4), "the stop must publish its status");
+    events = recorder.GetEvents();
+    zassert_true(events[3].reason == LoggingStatusReason::Stopped, "the reason of the first stop was not kept");
+}
+
+// A stop for a firmware update with nothing to stop publishes nothing, and its reason does not wait
+// for the next stop.
+ZTEST(log_writer_supervisor, test_AStopWithAReasonWhileStoppedPublishesNothing) {
+    auto rig = MakeLogWriterRig();
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
+
+    supervisor.RequestStopWithReason(LoggingStatusReason::FirmwareUpdate);
+    zassert_true(supervisor.WaitUntilIdle(1000), "the stop is served");
+    k_msleep(50);
+    zassert_equal(recorder.GetEvents().size(), 0, "nothing was running, so nothing is published");
+    zassert_true(supervisor.GetReason() == LoggingStatusReason::Stopped);
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
+    zassert_true(
+        recorder.GetEvents()[1].reason == LoggingStatusReason::Stopped, "an ordinary stop after it names no reason"
+    );
+}
+
+// The wait ends when the task has run the requests and the stop is complete, not before; it gives up
+// at its bound when the queue is held.
+ZTEST(log_writer_supervisor, test_WaitUntilIdleWaitsForTheStop) {
+    auto rig = MakeLogWriterRig();
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSupervisor(rig);
+
+    zassert_true(supervisor.WaitUntilIdle(0), "with nothing requested there is nothing to wait for");
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+
+    zassert_true(Gate().Close(*rig.config_work_queue), "the configuration work queue could not be held");
+    supervisor.RequestStopWithReason(LoggingStatusReason::FirmwareUpdate);
+
+    const int64_t start_ms = k_uptime_get();
+    zassert_false(supervisor.WaitUntilIdle(100), "the stop cannot run while the queue is held");
+    const int64_t waited_ms = k_uptime_get() - start_ms;
+    zassert_true(waited_ms >= 90, "it waited its bound (%lld ms)", static_cast<long long>(waited_ms));
+    zassert_true(rig.log_writer_service->IsRunning(), "and the writer still runs");
+
+    Gate().Open();
+    zassert_true(supervisor.WaitUntilIdle(5000), "the stop is served once the queue runs");
+    zassert_true(rig.log_writer_service->IsStopped(), "and complete when the wait ends");
+
+    const auto files = ReadLogFiles(*rig.fs_service);
+    zassert_equal(files.size(), 1, "one file (found %zu)", files.size());
+    AssertFinalizedFile(files[0].content, "the file");
+}
+
 // While the task waits inside the writer's Stop() for a held tick, another request and IsActive()
 // return at once; the request runs once the stop is done.
 ZTEST(log_writer_supervisor, test_ARequestNeverWaitsForTheWriter) {

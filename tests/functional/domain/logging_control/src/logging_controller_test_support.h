@@ -20,6 +20,18 @@
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
 
+#ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
+// clang-format off
+// The group headers use the macros of callbacks.h and include nothing, so it must come first; the
+// include sort would put them before it.
+    #include <zephyr/mgmt/mcumgr/mgmt/callbacks.h>
+    #include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt_callbacks.h>
+    #ifdef CONFIG_MCUMGR_GRP_OS_RESET_HOOK
+        #include <zephyr/mgmt/mcumgr/grp/os_mgmt/os_mgmt_callbacks.h>
+    #endif
+// clang-format on
+#endif
+
 #include "controllers/logging_controller.h"
 #include "controllers/sensors_controller.h"
 
@@ -1131,5 +1143,40 @@ inline std::string Property(const char* name, const std::string& value) {
 }
 
 #endif // CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+
+// ======== MCUmgr's notifications ========
+
+#ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
+
+// What the img group does when an upload starts, without a server: it notifies the registered
+// callbacks. The status the callbacks returned together.
+inline mgmt_cb_return NotifyUploadStarted() {
+    int32_t rc = MGMT_ERR_EOK;
+    uint16_t group = 0;
+
+    const auto status = mgmt_callback_notify(MGMT_EVT_OP_IMG_MGMT_DFU_STARTED, nullptr, 0, &rc, &group);
+    zassert_equal(rc, MGMT_ERR_EOK, "A hook of the upload start raised an error");
+
+    return status;
+}
+
+    #ifdef CONFIG_MCUMGR_GRP_OS_RESET_HOOK
+
+// What the os group does when it receives a reset, before it reboots: it asks the callbacks, and the
+// reset goes ahead only for MGMT_CB_OK. Nothing reboots here.
+inline mgmt_cb_return NotifyReset() {
+    int32_t rc = MGMT_ERR_EOK;
+    uint16_t group = 0;
+    os_mgmt_reset_data data{};
+
+    const auto status = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_RESET, &data, sizeof(data), &rc, &group);
+    zassert_equal(rc, MGMT_ERR_EOK, "A hook of the reset raised an error");
+
+    return status;
+}
+
+    #endif
+
+#endif // CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
 
 } // namespace logging_controller_test

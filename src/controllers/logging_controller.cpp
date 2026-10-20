@@ -56,6 +56,7 @@ using eerie_leap::subsys::event_bus::SelectorMatches;
 using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::subsys::threading::ScopedMutex;
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::logging_domain::services::LogEndTimes;
 #endif
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
@@ -257,6 +258,15 @@ uint32_t LoggingController::GetUnitUid() const {
     return network_info != nullptr ? network_info->GetDeviceInfo().uid : 0;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): reads a member in the writer role
+bool LoggingController::AreFirmwareUpdateHooksRegistered() const {
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    return firmware_update_logging_stop_ != nullptr && firmware_update_logging_stop_->IsRegistered();
+#else
+    return false;
+#endif
+}
+
 bool LoggingController::HasDependencies() const {
     bool has_all = true;
 
@@ -382,6 +392,7 @@ bool LoggingController::Build(const ConfigurationSetup& setup_test_configuration
     // 9. Nothing after this can fail, so a controller that failed to initialize serves nothing.
     RegisterAssets();
     RegisterSmpGroup();
+    RegisterFirmwareUpdateHooks();
 
     return true;
 }
@@ -652,6 +663,37 @@ void LoggingController::RegisterSmpGroup() {
 #endif
 }
 
+void LoggingController::RegisterFirmwareUpdateHooks() {
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    if(log_writer_supervisor_ == nullptr)
+        return;
+
+    try {
+        // The hooks run on the MCUmgr work queue: these two functions are all they call. The supervisor and
+        // the queue are held until Teardown() drops the hooks, which waits for one in progress.
+        auto hooks = std::make_unique<FirmwareUpdateLoggingStop>(
+            [supervisor = log_writer_supervisor_] {
+                supervisor->RequestStopWithReason(LoggingStatusReason::FirmwareUpdate);
+            },
+            [supervisor = log_writer_supervisor_, queue = config_work_queue_thread_](int32_t timeout_ms) {
+                // The stop runs on the configuration work queue, which would wait for itself.
+                if(queue->IsCurrentThread()) {
+                    LOG_WRN("A reset was requested on the configuration work queue: the log is not awaited.");
+                    return false;
+                }
+
+                return supervisor->WaitUntilIdle(timeout_ms);
+            }
+        );
+
+        if(hooks->Register())
+            firmware_update_logging_stop_ = std::move(hooks);
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to register the firmware update hooks of the logging: %s", e.what());
+    }
+#endif
+}
+
 void LoggingController::UnregisterAssets() {
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
     if(assets_manager_ != nullptr && is_assets_registered_)
@@ -717,6 +759,11 @@ void LoggingController::StopLogWriter() {
 // Also the failed-Initialize() path and the destructor, so each step tolerates a member that was
 // never built, and the whole can run again.
 void LoggingController::Teardown() {
+#ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    // First: a hook in progress is waited for, and none reaches the supervisor after this.
+    firmware_update_logging_stop_.reset();
+#endif
+
 #ifdef CONFIG_EERIE_LEAP_SMP
     // The group dispatches to the control and the writer.
     logging_mgmt_group_.reset();
