@@ -24,7 +24,7 @@ SystemConfigurationManager::SystemConfigurationManager(
 
     LOG_INF(
         "HW Version: %s, SW Version: %s", SystemConfiguration::GetFormattedHwVersion().c_str(),
-        configuration->GetFormattedSwVersion().c_str()
+        SystemConfiguration::GetFormattedSwVersion().c_str()
     );
     LOG_INF("Device ID: %llu", configuration->device_id);
 }

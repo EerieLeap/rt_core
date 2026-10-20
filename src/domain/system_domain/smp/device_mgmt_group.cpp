@@ -29,13 +29,11 @@ const mgmt_handler DeviceMgmtGroup::HANDLERS[] = {
 };
 
 DeviceMgmtGroup::DeviceMgmtGroup(
-    uint32_t build_number,
     std::shared_ptr<const ICdmpNetworkInfo> network_info,
     std::optional<SensorCapabilities> sensor_capabilities,
     std::span<const std::string_view> setting_ids
 ) :
     SmpGroup(SmpGroupId::DEVICE, HANDLERS, nullptr),
-    build_number_(build_number),
     network_info_(std::move(network_info)),
     sensor_capabilities_(sensor_capabilities),
     setting_ids_(setting_ids) {}
@@ -100,7 +98,9 @@ int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
         && zcbor_tstr_put_lit(zse, "sw")
         && zcbor_uint32_put(zse, SystemConfiguration::SW_VERSION)
         && zcbor_tstr_put_lit(zse, "build")
-        && zcbor_uint32_put(zse, build_number_);
+        && zcbor_uint32_put(zse, SystemConfiguration::SW_BUILD)
+        && zcbor_tstr_put_lit(zse, "board")
+        && zcbor_tstr_put_lit(zse, CONFIG_BOARD_TARGET);
 
     if(ok && device.has_value()) {
         ok = zcbor_tstr_put_lit(zse, "cdmp_id")

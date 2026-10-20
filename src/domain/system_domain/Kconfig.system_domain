@@ -32,20 +32,35 @@ menu "EerieLeap System Domain config"
         range 0 65535
         default 0
 
+    # The software version is the application's VERSION file (Zephyr sources it as Kconfig macros);
+    # MCUboot's image version comes from the same file. An application without one, such as a test
+    # suite, gets 0 unless it sets the options.
+    #
+    # An int default cannot be conditional on the macro as Kconfig.mcuboot's string default is: an
+    # undefined $(VERSION_MAJOR) expands to blank, which does not parse, and a quoted "" gives a
+    # non-int default warning, which Zephyr turns into an error. So the macro goes through `expr`,
+    # where the leading 0 makes a blank one 0.
     config EERIE_LEAP_SW_VERSION_MAJOR
         int "Software version major (8-bit)"
         range 0 255
-        default 0
+        default $(shell,expr 0$(VERSION_MAJOR) + 0)
 
     config EERIE_LEAP_SW_VERSION_MINOR
         int "Software version minor (8-bit)"
         range 0 255
-        default 0
+        default $(shell,expr 0$(VERSION_MINOR) + 0)
 
     config EERIE_LEAP_SW_VERSION_PATCH
         int "Software version patch (16-bit)"
         range 0 65535
-        default 0
+        default $(shell,expr 0$(PATCHLEVEL) + 0)
+
+    config EERIE_LEAP_SW_VERSION_BUILD
+        int "Software build number (8-bit)"
+        range 0 255
+        default $(shell,expr 0$(VERSION_TWEAK) + 0)
+        help
+          The VERSION file's tweak. The device group reports it as `build`.
 
 endmenu
 

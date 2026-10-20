@@ -17,6 +17,9 @@ struct SystemConfiguration {
     static constexpr uint32_t SW_VERSION = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR << 24
         | CONFIG_EERIE_LEAP_SW_VERSION_MINOR << 16 | CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
 
+    /// The application VERSION file's tweak; the device group reports it as `build`.
+    static constexpr uint32_t SW_BUILD = CONFIG_EERIE_LEAP_SW_VERSION_BUILD;
+
     uint32_t build_number = 0;
 
     SystemConfiguration(std::allocator_arg_t, [[maybe_unused]] allocator_type alloc) {}
@@ -44,7 +47,7 @@ struct SystemConfiguration {
         return { version_str };
     }
 
-    std::string GetFormattedSwVersion() const {
+    static std::string GetFormattedSwVersion() {
         const uint8_t sw_version_major = CONFIG_EERIE_LEAP_SW_VERSION_MAJOR;
         const uint8_t sw_version_minor = CONFIG_EERIE_LEAP_SW_VERSION_MINOR;
         const uint16_t sw_version_patch = CONFIG_EERIE_LEAP_SW_VERSION_PATCH;
@@ -52,7 +55,7 @@ struct SystemConfiguration {
         char version_str[32];
         snprintf(
             version_str, sizeof(version_str), "%u.%u.%u.%u", sw_version_major, sw_version_minor, sw_version_patch,
-            build_number
+            SW_BUILD
         );
 
         return { version_str };

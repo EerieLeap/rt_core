@@ -32,6 +32,11 @@ config EERIE_LEAP_SW_VERSION_PATCH
 	range 0 65535
 	default 0
 
+config EERIE_LEAP_SW_VERSION_BUILD
+	int "Software build number"
+	range 0 255
+	default 0
+
 config EERIE_LEAP_CANBUS_AUTO_DETECT_INTERVAL_MS
 	int "Canbus auto detect activity check interval ms"
 	default 5000
