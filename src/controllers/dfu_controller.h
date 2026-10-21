@@ -14,6 +14,7 @@
 #include "subsys/dfu/image_upload_guard.h"
 #include "subsys/dfu/smp/dfu_mgmt_group.h"
 #include "subsys/dfu/work_queue_probe.h"
+#include "subsys/threading/work_queue_thread.h"
 
 namespace eerie_leap::controllers {
 
@@ -27,6 +28,7 @@ using eerie_leap::subsys::dfu::ImageUploadGuard;
 using eerie_leap::subsys::dfu::IWatchdog;
 using eerie_leap::subsys::dfu::WorkQueueProbe;
 using eerie_leap::subsys::dfu::smp::DfuMgmtGroup;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 /**
  * @brief Firmware update of a unit: the identity check of uploads, the `dfu` SMP group and the confirmation
@@ -61,6 +63,8 @@ private:
     std::optional<ImageUploadGuard> upload_guard_;
     std::unique_ptr<DfuMgmtGroup> dfu_mgmt_group_;
     std::unique_ptr<WorkQueueProbe> mcumgr_probe_;
+    // Keep the probed queues alive until the probes, which are declared after them and so destroyed first, are gone.
+    std::vector<std::shared_ptr<WorkQueueThread>> probed_queues_;
     std::vector<std::unique_ptr<WorkQueueProbe>> probes_;
 
     TickItem tick_{};
@@ -111,11 +115,20 @@ public:
     [[nodiscard]] int Initialize();
 
     /**
-     * @brief Adds a probe that proves the work queue @p work_q still runs, for as long as the image is unconfirmed.
+     * @brief Adds a probe that proves the work queue of @p work_queue_thread still runs, for as long as the
+     *        image is unconfirmed.
      *
-     * The controller owns the probe. Does nothing for a confirmed image, which needs no probes.
+     * The controller owns the probe and keeps the queue alive for it, so the queue may be released by
+     * its other owners first (an early return from `main()`). Does nothing for a confirmed image, which
+     * needs no probes, or for a queue that is not running.
      *
      * @param name Names the probe in the log; must outlive the controller (a literal).
+     */
+    void RegisterLivenessProbe(const char* name, const std::shared_ptr<WorkQueueThread>& work_queue_thread);
+
+    /**
+     * @brief The same for a queue that is never freed (a static one, such as MCUmgr's).
+     *
      * @param work_q An initialized work queue that outlives the controller.
      */
     void RegisterLivenessProbe(const char* name, k_work_q* work_q);

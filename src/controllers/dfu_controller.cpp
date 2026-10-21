@@ -156,7 +156,9 @@ void DfuController::InjectBenchFault() const {
 
     if constexpr(IS_BENCH_HANG) {
         LOG_ERR("Bench fault: hanging the unconfirmed image.");
-        // The tick runs on the system work queue, so the watchdog is fed until the boot deadline passes.
+        // main() never gets on, so boot complete is never reported. The tick runs on the system work queue,
+        // which outranks main(), and does not judge the probes while VERIFYING, so the watchdog is fed until
+        // the boot deadline passes (60 s by default); the unit then resets one watchdog timeout later.
         while(true)
             k_busy_wait(1000);
     }
@@ -165,13 +167,30 @@ void DfuController::InjectBenchFault() const {
         LOG_WRN("Bench fault: the unconfirmed image will not report boot complete.");
 }
 
+void DfuController::RegisterLivenessProbe(const char* name, const std::shared_ptr<WorkQueueThread>& work_queue_thread) {
+    if(work_queue_thread == nullptr || confirmation_ == nullptr || !confirmation_->NeedsTick())
+        return;
+
+    k_work_q* work_q = nullptr;
+    try {
+        work_q = work_queue_thread->GetWorkQueue();
+    } catch(const std::exception& e) {
+        LOG_WRN("The %s work queue is not probed: %s", name, e.what());
+        return;
+    }
+
+    // Kept first: the probe is destroyed before the queue.
+    probed_queues_.push_back(work_queue_thread);
+    RegisterLivenessProbe(name, work_q);
+}
+
 void DfuController::RegisterLivenessProbe(const char* name, k_work_q* work_q) {
     if(confirmation_ == nullptr || !confirmation_->NeedsTick() || work_q == nullptr)
         return;
 
-    auto probe = std::make_unique<WorkQueueProbe>(name, work_q);
-    confirmation_->AddProbe(*probe);
-    probes_.push_back(std::move(probe));
+    // Owned before the machine sees it: a push that throws leaves nothing registered.
+    probes_.push_back(std::make_unique<WorkQueueProbe>(name, work_q));
+    confirmation_->AddProbe(*probes_.back());
 }
 
 void DfuController::ReportBootComplete() {

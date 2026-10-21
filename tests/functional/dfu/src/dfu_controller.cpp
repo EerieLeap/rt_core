@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <zephyr/kernel.h>
 #include <zephyr/ztest.h>
@@ -22,17 +23,27 @@ using eerie_leap::subsys::dfu::IBootControl;
 using eerie_leap::subsys::dfu::ImageConfirmationConfig;
 using eerie_leap::subsys::dfu::IWatchdog;
 using eerie_leap::subsys::dfu::ZephyrWatchdog;
+using eerie_leap::subsys::threading::WorkQueueThread;
 
 namespace {
 
 constexpr uint8_t STATUS = 0;
 
-// The timing of the injected configuration: ticks every 50 ms.
+// The timing of the injected configuration: ticks every 100 ms, and a probe may wait 200 ms.
 constexpr ImageConfirmationConfig FAKE_CONFIG{
     .self_confirm = true,
     .boot_deadline_ms = 600,
     .confirm_delay_ms = 300,
-    .watchdog_timeout_ms = 200,
+    .watchdog_timeout_ms = 400,
+};
+
+// The same, with a confirmation delay that outlasts the tests which block a queue after boot complete: they
+// must not race the confirmation.
+constexpr ImageConfirmationConfig SLOW_CONFIRM_CONFIG{
+    .self_confirm = true,
+    .boot_deadline_ms = 600,
+    .confirm_delay_ms = 3000,
+    .watchdog_timeout_ms = 400,
 };
 
 class FakeBootControl final : public IBootControl {
@@ -161,6 +172,24 @@ struct dfu_controller_fixture {
     FakeBootControl boot_control;
     FakeWatchdog watchdog;
     std::optional<DfuController> controller;
+    // Owned by the fixture, not by a test: a failed assertion leaves the test body without running its
+    // destructors, and a blocker that is gone while its work still holds the static queue would wedge the
+    // rest of the suite.
+    std::vector<std::unique_ptr<Blocker>> blockers;
+
+    Blocker& NewBlocker() {
+        blockers.push_back(std::make_unique<Blocker>());
+
+        return *blockers.back();
+    }
+
+    // Lets every blocked queue go on, and forgets the blockers.
+    void ReleaseBlockers() {
+        for(const auto& blocker : blockers)
+            blocker->Release();
+
+        blockers.clear();
+    }
 };
 
 void* SetUp() {
@@ -171,6 +200,7 @@ void* SetUp() {
 void Before(void* data) {
     auto* fixture = static_cast<dfu_controller_fixture*>(data);
 
+    fixture->ReleaseBlockers();
     fixture->controller.reset();
     fixture->boot_control.is_confirmed = false;
     fixture->boot_control.confirm_calls = 0;
@@ -184,7 +214,11 @@ void Before(void* data) {
 }
 
 void After(void* data) {
-    static_cast<dfu_controller_fixture*>(data)->controller.reset();
+    auto* fixture = static_cast<dfu_controller_fixture*>(data);
+
+    // The blocked queues first: the probes of the controller wait for their work items.
+    fixture->ReleaseBlockers();
+    fixture->controller.reset();
 }
 
 void TearDown(void* data) {
@@ -217,7 +251,7 @@ ZTEST_F(dfu_controller, test_confirmed_image_arms_nothing) {
 
 ZTEST_F(dfu_controller, test_confirmed_image_skips_the_probes) {
     TestWorkQueue& work_q = TestWorkQueue::Instance();
-    Blocker blocker;
+    Blocker& blocker = fixture->NewBlocker();
 
     fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, FAKE_CONFIG);
     fixture->boot_control.is_confirmed = true;
@@ -346,9 +380,9 @@ ZTEST_F(dfu_controller, test_unconfirmed_image_arms_the_watchdog_and_disables_it
 
 ZTEST_F(dfu_controller, test_a_stuck_queue_stops_the_feeding) {
     TestWorkQueue& work_q = TestWorkQueue::Instance();
-    Blocker blocker;
+    Blocker& blocker = fixture->NewBlocker();
 
-    fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, FAKE_CONFIG);
+    fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, SLOW_CONFIRM_CONFIG);
     zassert_equal(fixture->controller->Initialize(), 0);
     fixture->controller->RegisterLivenessProbe("test_queue", work_q.Get());
     fixture->controller->ReportBootComplete();
@@ -378,6 +412,90 @@ ZTEST_F(dfu_controller, test_a_stuck_queue_stops_the_feeding) {
     zassert_equal(fixture->boot_control.confirm_calls.load(), 0, "A failed image must not confirm");
 
     blocker.Release();
+}
+
+// A queue that is stuck from the moment the boot completes never runs its probe: the image fails and is never
+// confirmed, although the confirmation delay (300 ms) ends before the probe's time is up and the failure is found.
+ZTEST_F(dfu_controller, test_a_queue_stuck_at_boot_complete_fails_the_image_without_confirming) {
+    TestWorkQueue& work_q = TestWorkQueue::Instance();
+    Blocker& blocker = fixture->NewBlocker();
+
+    fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, FAKE_CONFIG);
+    zassert_equal(fixture->controller->Initialize(), 0);
+    fixture->controller->RegisterLivenessProbe("test_queue", work_q.Get());
+    blocker.Block(work_q.Get());
+    fixture->controller->ReportBootComplete();
+
+    zassert_true(
+        WaitFor(
+            [&] {
+                return fixture->controller->GetState() == DfuState::FAILED;
+            },
+            1000
+        ),
+        "A stuck probe must fail the image"
+    );
+    k_msleep(300);
+    zassert_equal(fixture->boot_control.confirm_calls.load(), 0, "The image must not confirm with a probe outstanding");
+
+    blocker.Release();
+}
+
+// While the image verifies, a unit that is still booting may keep its queues from running for a long time.
+ZTEST_F(dfu_controller, test_a_stuck_queue_does_not_fail_a_verifying_image) {
+    TestWorkQueue& work_q = TestWorkQueue::Instance();
+    Blocker& blocker = fixture->NewBlocker();
+
+    fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, FAKE_CONFIG);
+    zassert_equal(fixture->controller->Initialize(), 0);
+    fixture->controller->RegisterLivenessProbe("test_queue", work_q.Get());
+    blocker.Block(work_q.Get());
+
+    // Well past what a probe may wait, still inside the boot deadline.
+    k_msleep(350);
+    zassert_equal(fixture->controller->GetState(), DfuState::VERIFYING);
+    const int feeds = fixture->watchdog.feeds.load();
+    zassert_true(feeds >= 2, "The watchdog is fed while the boot may still complete");
+
+    blocker.Release();
+}
+
+// The queue of a WorkQueueThread is kept alive for its probe, whoever else releases it.
+ZTEST_F(dfu_controller, test_a_probe_keeps_its_queue_alive) {
+    auto queue_thread = std::make_shared<WorkQueueThread>("dfu_test_queue", 2048, 5);
+    zassert_true(queue_thread->Initialize());
+
+    fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, FAKE_CONFIG);
+    zassert_equal(fixture->controller->Initialize(), 0);
+    fixture->controller->RegisterLivenessProbe("owned_queue", queue_thread);
+    queue_thread.reset();
+
+    fixture->controller->ReportBootComplete();
+
+    zassert_true(WaitFor(
+        [&] {
+            return fixture->controller->GetState() == DfuState::CONFIRMED;
+        },
+        2000
+    ));
+}
+
+// A queue that is not running cannot be probed: it is skipped, and the unit goes on.
+ZTEST_F(dfu_controller, test_a_queue_that_is_not_running_is_skipped) {
+    const auto queue_thread = std::make_shared<WorkQueueThread>("dfu_test_idle", 2048, 5);
+
+    fixture->controller.emplace(fixture->boot_control, &fixture->watchdog, FAKE_CONFIG);
+    zassert_equal(fixture->controller->Initialize(), 0);
+    fixture->controller->RegisterLivenessProbe("idle_queue", queue_thread);
+    fixture->controller->RegisterLivenessProbe("missing_queue", std::shared_ptr<WorkQueueThread>());
+    fixture->controller->ReportBootComplete();
+
+    zassert_true(WaitFor(
+        [&] {
+            return fixture->controller->GetState() == DfuState::CONFIRMED;
+        },
+        2000
+    ));
 }
 
 ZTEST_F(dfu_controller, test_a_running_queue_keeps_the_image_healthy) {

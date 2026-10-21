@@ -36,11 +36,17 @@ struct ImageConfirmationConfig {
  * - Initialize(): a confirmed image stays CONFIRMED and nothing is armed (one IsConfirmed() call, no
  *   waiting). An unconfirmed one (a test boot) installs and starts the watchdog, sets the boot deadline and
  *   is VERIFYING.
- * - ReportBootComplete(): VERIFYING becomes CONFIRMING; Confirm() follows once the delay has passed.
- * - Tick(), every GetTickIntervalMs(): feeds the watchdog while every probe has run since the last tick.
- *   A probe that did not run, or a missed boot deadline, makes the state FAILED, which never feeds again,
- *   so the watchdog resets the unit and the bootloader reverts. An image that a client confirmed meanwhile
- *   becomes CONFIRMED and the watchdog is disabled.
+ * - ReportBootComplete(): VERIFYING becomes CONFIRMING; Confirm() follows once the delay has passed, on a tick
+ *   where every probe has run since it was posted: the image is never confirmed while a probe is outstanding,
+ *   so a queue that is stuck when the delay expires delays the confirmation to the next tick, and the
+ *   probe's time limit (below) then decides.
+ * - Tick(), every GetTickIntervalMs(): feeds the watchdog. In VERIFYING the probes are not judged: a unit
+ *   that is still booting runs its init code at a higher priority than the work queues the probes watch,
+ *   which starve for as long as it takes, and the boot deadline already catches a boot that hangs. In
+ *   CONFIRMING a probe that has waited half the watchdog timeout or more without running makes the state FAILED, and
+ *   so does a missed boot deadline. FAILED never feeds again, so the watchdog resets the unit and the
+ *   bootloader reverts. An image that a client confirmed meanwhile becomes CONFIRMED and the watchdog is
+ *   disabled, from FAILED too, as long as the watchdog has not fired.
  *
  * Thread safety: Tick() runs on one work queue, Initialize(), AddProbe() and ReportBootComplete() on the
  * main thread (before or while Tick() runs), and the getters on any thread, the MCUmgr work queue among
@@ -55,8 +61,10 @@ public:
 private:
     struct ProbeEntry {
         IProbe* probe = nullptr;
-        /// False until the first tick after AddProbe() posts the probe, so a new probe gets a full interval.
+        /// False until the first tick in CONFIRMING posts the probe, which therefore gets its time to run.
         bool armed = false;
+        /// When the probe was last posted. Milliseconds, wrapping.
+        uint32_t armed_at_ms = 0;
     };
 
     IBootControl& boot_control_;
@@ -83,7 +91,15 @@ private:
     void DisableWatchdog();
     /// The image is permanent: CONFIRMED, and the watchdog off.
     void StandDown();
-    [[nodiscard]] bool CheckAndRearmProbes();
+    /**
+     * @brief Judges the probes that were posted earlier and posts the ones that ran.
+     *
+     * @param all_ran Set to whether every probe ran since it was posted, none was posted just now and none is
+     *                still waiting. The image is confirmed only on a tick where it is true.
+     * @return False when a probe has waited half the watchdog timeout or more without running: the unit is
+     *         not healthy.
+     */
+    [[nodiscard]] bool CheckAndRearmProbes(uint32_t now, bool& all_ran);
 
 public:
     /**
@@ -114,8 +130,8 @@ public:
     /**
      * @brief Registers a probe; it outlives the machine. Safe while Tick() runs.
      *
-     * The probe is first posted by the next tick and first judged by the one after, so it has a full
-     * interval to run.
+     * The probe is posted by the first tick in CONFIRMING and judged from the next one on, so it has its
+     * time to run.
      */
     void AddProbe(IProbe& probe);
 
@@ -133,7 +149,11 @@ public:
     /** @brief The period at which the owner calls Tick(): a quarter of the watchdog timeout, at least 1 ms. */
     [[nodiscard]] uint32_t GetTickIntervalMs() const;
 
-    /** @brief True while a Tick() has work to do: an armed state, or a watchdog still to be disabled. */
+    /**
+     * @brief True while a Tick() has work to do: an armed state, or a watchdog still to be disabled.
+     *
+     * A FAILED image counts while the watchdog runs: a client's confirm before the reset stands it down.
+     */
     [[nodiscard]] bool NeedsTick() const;
 
     [[nodiscard]] DfuState GetState() const;

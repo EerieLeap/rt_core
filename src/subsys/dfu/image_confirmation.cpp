@@ -78,26 +78,49 @@ void ImageConfirmation::StandDown() {
     DisableWatchdog();
 }
 
-bool ImageConfirmation::CheckAndRearmProbes() {
+bool ImageConfirmation::CheckAndRearmProbes(uint32_t now, bool& all_ran) {
     ScopedMutex lock(probes_mutex_);
 
-    bool all_ran = true;
-    for(const ProbeEntry& entry : probes_) {
-        if(entry.armed && !entry.probe->Check()) {
-            LOG_ERR("The %s probe did not run within %u ms.", entry.probe->GetName(), GetTickIntervalMs());
+    all_ran = true;
+
+    // A probe may wait for half the watchdog timeout: long enough to ride out a busy queue, and the tick that
+    // gives up stops the feeding with the watchdog's own timeout still to run out.
+    const uint32_t allowed_ms = config_.watchdog_timeout_ms / 2;
+
+    bool is_healthy = true;
+    for(ProbeEntry& entry : probes_) {
+        if(!entry.armed) {
+            entry.probe->Arm();
+            entry.armed = true;
+            entry.armed_at_ms = now;
+            // Posted just now: it has not had its time to run.
+            all_ran = false;
+            continue;
+        }
+
+        // How long ago the probe was posted: how late it ran if it did, at most (the tick may be the later of
+        // the two), and how long it has been waiting if it did not.
+        const uint32_t age_ms = now - entry.armed_at_ms;
+
+        if(entry.probe->Check()) {
+            if(age_ms > allowed_ms)
+                LOG_WRN("The %s probe ran, but at most %u ms after it was posted.", entry.probe->GetName(), age_ms);
+
+            entry.probe->Arm();
+            entry.armed_at_ms = now;
+        } else if(age_ms >= allowed_ms) {
+            LOG_ERR(
+                "The %s probe has not run for %u ms (the limit is %u ms).", entry.probe->GetName(), age_ms, allowed_ms
+            );
+            is_healthy = false;
+            all_ran = false;
+        } else {
+            // Within its time: it stays posted and the unit keeps being fed, but the image is not confirmed.
             all_ran = false;
         }
     }
 
-    if(!all_ran)
-        return false;
-
-    for(ProbeEntry& entry : probes_) {
-        entry.probe->Arm();
-        entry.armed = true;
-    }
-
-    return true;
+    return is_healthy;
 }
 
 int ImageConfirmation::Initialize() {
@@ -158,14 +181,15 @@ void ImageConfirmation::Tick() {
         return;
     }
 
-    if(state == DfuState::FAILED)
-        return;
-
+    // From any armed state, FAILED included: a client's confirm before the watchdog fires keeps the image.
     if(boot_control_.IsConfirmed()) {
         LOG_INF("The image was confirmed by a client.");
         StandDown();
         return;
     }
+
+    if(state == DfuState::FAILED)
+        return;
 
     const uint32_t now = NowMs();
 
@@ -180,7 +204,10 @@ void ImageConfirmation::Tick() {
             return;
     }
 
-    if(!CheckAndRearmProbes()) {
+    // Only once the boot is complete: while it runs, the init code may keep the work queues from running for
+    // longer than a probe is allowed, and the boot deadline covers a boot that hangs.
+    bool all_ran = true;
+    if(state_.load(std::memory_order_acquire) == DfuState::CONFIRMING && !CheckAndRearmProbes(now, all_ran)) {
         state_.store(DfuState::FAILED, std::memory_order_release);
         LOG_ERR("The watchdog is no longer fed.");
         return;
@@ -196,6 +223,12 @@ void ImageConfirmation::Tick() {
 
     if(!IsReached(now, confirm_at_ms_.load(std::memory_order_relaxed)))
         return;
+
+    // Not while a probe is outstanding: a queue that is stuck right now must get its chance to fail the image first.
+    if(!all_ran) {
+        LOG_INF("The confirmation waits for the probes that have not run yet.");
+        return;
+    }
 
     if(const int result = boot_control_.Confirm(); result != 0) {
         LOG_ERR("Confirming the image failed (%d); retrying in %u ms.", result, GetTickIntervalMs());
@@ -218,7 +251,8 @@ bool ImageConfirmation::NeedsTick() const {
         case DfuState::CONFIRMED:
             return is_watchdog_armed_.load(std::memory_order_acquire);
         case DfuState::FAILED:
-            break;
+            // Until the watchdog resets the unit, a client's confirm still wins.
+            return is_watchdog_armed_.load(std::memory_order_acquire);
     }
 
     return false;

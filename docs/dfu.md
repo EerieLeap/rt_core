@@ -177,7 +177,7 @@ share a unit during an update.
 | --- | --- | --- |
 | `EERIE_LEAP_DFU` | y with `BOOTLOADER_MCUBOOT` and `EERIE_LEAP_DOMAIN_SYSTEM` | Image management. Depends on `EERIE_LEAP_SMP`, `FLASH` and `FLASH_MAP`. Selects `STREAM_FLASH`, `IMG_MANAGER`, `IMG_ERASE_PROGRESSIVELY`, `IMG_ENABLE_IMAGE_CHECK`, `MCUMGR_GRP_IMG`, `MCUMGR_GRP_IMG_MUTEX`, `MCUMGR_GRP_IMG_VERBOSE_ERR`, `MCUMGR_MGMT_NOTIFICATION_HOOKS`, `MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK`, `MCUMGR_GRP_IMG_STATUS_HOOKS`, `MCUMGR_GRP_OS_RESET_HOOK`, `MCUMGR_GRP_OS_BOOTLOADER_INFO`, and with the controller `SMP_CLIENT` (for `smp_get_wq()`); implies `WATCHDOG` and `HWINFO`. `IMG_MANAGER`'s choice already defaults to `MCUBOOT_IMG_MANAGER`, which cannot be selected. Default `MCUMGR_GRP_IMG_TOO_LARGE_CHECK` is `MCUMGR_GRP_IMG_TOO_LARGE_SYSBUILD` with `BOOTLOADER_MCUBOOT` (set by redeclaring the choice). |
 | `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_DFU` | `img_mgmt` runs on the MCUmgr work queue: bootutil trailer reads, stream flash writes and the SHA-256 image check do not fit 2048 bytes. To be trimmed after measuring on hardware. |
-| `EERIE_LEAP_CONTROLLER_DFU` | y with `EERIE_LEAP_DFU` | The controller: registers the guard and the group, confirms a new image. |
+| `EERIE_LEAP_CONTROLLER_DFU` | y with `EERIE_LEAP_DFU` and `EERIE_LEAP_DOMAIN_SYSTEM` (the product ID) | The controller: registers the guard and the group, confirms a new image. |
 | `EERIE_LEAP_DFU_SELF_CONFIRM` | y | n leaves confirmation to the client (bench), which is how the revert path is tested. |
 | `EERIE_LEAP_DFU_BOOT_DEADLINE_MS` | 60000 | Boot to boot complete, for an unconfirmed image. |
 | `EERIE_LEAP_DFU_CONFIRM_DELAY_MS` | 20000 | Boot complete to confirmation. |
@@ -241,9 +241,9 @@ happens in the background after `ReportBootComplete()`.
 | State | Meaning | Next |
 | --- | --- | --- |
 | `CONFIRMED` 0 | The running image is permanent. Nothing is armed. | |
-| `VERIFYING` 1 | Unconfirmed (a test boot): the watchdog is armed and the boot deadline runs. | `ReportBootComplete()` makes it `CONFIRMING`; the deadline makes it `FAILED` |
-| `CONFIRMING` 2 | Boot complete was reported; the unit counts the confirmation delay with its probes passing. `confirm_in_ms` is the time left. | The delay passes: the image is confirmed, `CONFIRMED`. A probe that fails: `FAILED` |
-| `FAILED` 3 | The deadline passed or a probe stuck. The watchdog is not fed again, so it resets the unit and MCUboot reverts. | A reset |
+| `VERIFYING` 1 | Unconfirmed (a test boot): the watchdog is armed and the boot deadline runs. The probes are not judged. | `ReportBootComplete()` makes it `CONFIRMING`; the deadline makes it `FAILED` |
+| `CONFIRMING` 2 | Boot complete was reported; the unit counts the confirmation delay with its probes running. `confirm_in_ms` is the time left. | The delay passes: the image is confirmed, `CONFIRMED`. A probe that waits half the watchdog timeout without running: `FAILED` |
+| `FAILED` 3 | The deadline passed or a probe stuck. The watchdog is not fed again, so it resets the unit and MCUboot reverts. | A reset; or `CONFIRMED`, when a client confirms through `img_mgmt` before the watchdog fires |
 
 A client that confirms the image through `img_mgmt` earlier ends the machine at its next tick: the state
 becomes `CONFIRMED` and the watchdog is disabled.
@@ -255,38 +255,55 @@ becomes `CONFIRMED` and the watchdog is disabled.
    `watchdog0` watchdog (`EERIE_LEAP_DFU_WATCHDOG_TIMEOUT_MS`, reset of the whole SoC), sets the boot
    deadline (`EERIE_LEAP_DFU_BOOT_DEADLINE_MS`, counted from here) and starts the periodic tick.
 2. **The tick** is a delayable work item on the system work queue, rescheduled every `TIMEOUT / 4` while the
-   state is `VERIFYING` or `CONFIRMING` (and once more to disable a watchdog after the image confirmed). Each
-   tick feeds the watchdog while every probe has run since the last tick, so the watchdog is fed only while
-   the unit is alive and the deadline has not passed.
+   state is `VERIFYING` or `CONFIRMING` (and while the watchdog runs in `FAILED` or after the image confirmed,
+   to look for a client's confirm and to disable the watchdog). Each tick feeds the watchdog while the unit
+   is alive: the boot deadline has not passed and, in `CONFIRMING`, no probe is stuck.
 3. **Boot complete.** The application calls `ReportBootComplete()` once the unit can be managed again.
    Reported after the deadline, the state becomes `FAILED` instead.
-4. **Confirmation.** `EERIE_LEAP_DFU_CONFIRM_DELAY_MS` after boot complete, with the probes passing, a tick
+4. **Confirmation.** `EERIE_LEAP_DFU_CONFIRM_DELAY_MS` after boot complete, on a tick where every probe has run
+   since it was posted (never while one is outstanding, so a queue that gets stuck as the delay expires is
+   judged first), a tick
    writes the confirmation (`boot_write_img_confirmed()`; a failed write is logged and retried on the next
    tick), the state becomes `CONFIRMED` and the watchdog is disabled. A permanent product watchdog is a
    separate decision.
 
 ### Liveness probes
 
-A probe (`IProbe`, `WorkQueueProbe`) is a `k_work` posted to a work queue the unit depends on. Each tick
-checks that every probe ran since the previous tick and posts it again. A queue stuck on one item or whose
-thread died never runs it, and the tick then stops feeding: the state is `FAILED`. A probe added later gets a
-full interval before it is judged.
+A probe (`IProbe`, `WorkQueueProbe`) is a `k_work` posted to a work queue the unit depends on; a queue stuck
+on one item or whose thread died never runs it.
+
+- **Not judged while `VERIFYING`.** During the boot the init code of `main()` (priority 0) outranks the work
+  queues the probes watch (the configuration queue at 5, CDMP at 6, MCUmgr at 7), so they can starve for as
+  long as the display or the UI takes to build, with a healthy unit. The boot deadline catches a boot that
+  hangs, so the tick only feeds the watchdog.
+- **Judged while `CONFIRMING`.** The first tick after boot complete posts every probe; from then on each tick
+  re-posts the ones that ran. A probe that has waited **half the watchdog timeout** (4 s by default) or more
+  without running makes the state `FAILED`: the tick stops feeding and the watchdog resets the unit. One that
+  runs, however late, keeps the unit healthy; the log says how long after it was posted the tick found it (an
+  upper bound, since the tick is the later of the two). The image is confirmed only on a tick where every
+  probe has run since it was posted; a probe that is still waiting, or was posted by this very tick, postpones
+  the confirmation to the next tick. A probe added later is posted by the next tick and has
+  its time to run like the others.
 
 - `DfuController` probes the **MCUmgr work queue** itself (`smp_get_wq()`, which Zephyr builds only with
   `CONFIG_SMP_CLIENT`; `EERIE_LEAP_DFU` selects it with the controller). A unit whose management queue is stuck
   cannot be updated or confirmed by a client, so it must not stay.
-- The application adds the queues it depends on with `RegisterLivenessProbe(name, k_work_q*)`; the controller
-  owns the probe. The gauge registers the configuration work queue and, when it has a CAN COM service, the
-  CDMP work queue (`CanbusComService::GetWorkQueueThread()`). Registering on a confirmed image does nothing.
+- The application adds the queues it depends on with `RegisterLivenessProbe(name, work_queue_thread)`, which
+  keeps the queue alive for its probe (a `main()` that returns early frees its own references first), or
+  with `RegisterLivenessProbe(name, k_work_q*)` for a queue that is never freed. The controller owns the probe.
+  The gauge registers the configuration work queue and, when the CAN COM service runs, the CDMP work queue
+  (`CanbusComService::GetWorkQueueThread()`). Registering on a confirmed image does nothing.
 
-A probe also fails while a long operation holds its queue for more than a tick interval (2 s with the
-default timeout), which is why they only count while the image is unconfirmed.
+A long operation that holds a queue for half the watchdog timeout or more during `CONFIRMING` therefore fails
+the image, which is why probes only count while the image is unconfirmed.
 
 ### Boot complete
 
 The composition root reports it once the unit can be managed again: the management controller initialized
-(the config and device groups are served) and at least one SMP transport is up (the BLE access point, or the
-CAN COM service). The gauge does it after the BLE controller starts. A `main()` that returns early (file
+(the config and device groups are served) and at least one SMP transport is really up: the BLE access point
+started (`BleController::Start()` succeeded), or the CAN COM service runs (`CanbusController::Start()`
+succeeded; the service object exists on a unit whose bus did not come up, so its existence proves nothing).
+The gauge does it after the BLE controller starts. A `main()` that returns early (file
 system, display or UI failure) never reports, so it ends in a revert.
 
 ### Watchdog
@@ -310,8 +327,8 @@ client's confirm needs no coordination: the next tick sees `boot_is_img_confirme
 
 | Fault | Ends in |
 | --- | --- |
-| The image crashes or hangs before boot complete | The deadline passes, the ticks stop feeding, the watchdog resets. A crash that halts the CPU (`k_panic()`) is reset by the watchdog directly. |
-| A work queue the unit depends on stops | The probe fails, the ticks stop feeding, reset |
+| The image crashes or hangs before boot complete | The deadline passes, the ticks stop feeding, the watchdog resets one timeout later. A crash that halts the CPU (`k_panic()`) is reset by the watchdog directly. |
+| A work queue the unit depends on stops | Before boot complete: the deadline, as for a hang. After: the probe has waited half the watchdog timeout, the ticks stop feeding, reset |
 | `main()` returns early | No boot complete, the deadline, reset |
 | Power is lost during the window | MCUboot reverts at the next boot, so an ignition cycle within about a minute of an update undoes it |
 | The confirmation write fails | Logged and retried on every tick; the watchdog is fed meanwhile, so a persistent failure ends only in the next reset's revert |
@@ -329,7 +346,7 @@ confirmed image that comes back after the revert runs normally:
 | --- | --- |
 | `EERIE_LEAP_DFU_BENCH_FAULT_NONE` | None (default). |
 | `EERIE_LEAP_DFU_BENCH_FAULT_CRASH` | `k_panic()` at the end of `Initialize()`. |
-| `EERIE_LEAP_DFU_BENCH_FAULT_HANG` | A busy-wait loop at the end of `Initialize()`; the application never starts. The watchdog is armed and the tick runs on the system work queue, so the unit resets when the boot deadline stops the feeding. |
+| `EERIE_LEAP_DFU_BENCH_FAULT_HANG` | A busy-wait loop at the end of `Initialize()`; the application never starts, so boot complete is never reported. The tick runs on the system work queue, which outranks `main()`, and does not judge the probes while `VERIFYING`, so the watchdog is fed until the boot deadline (60 s) stops the feeding; the unit resets one watchdog timeout later (about 8 s on the S3, to be measured). |
 | `EERIE_LEAP_DFU_BENCH_FAULT_NO_REPORT` | `ReportBootComplete()` is ignored: the image never confirms itself and the deadline resets the unit. |
 
 The faults come after the watchdog is armed; one before it would hang a unit that nothing resets.
