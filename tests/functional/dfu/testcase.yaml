@@ -22,3 +22,9 @@ tests:
   # No MCUboot in the configuration, as the rt_core test builds of other suites have it: the image
   # manager and img_mgmt run on the flash simulator, without a swap mode.
   functional.dfu.no_bootloader: {}
+  # The bench fault that never reports boot complete: an unconfirmed image does not confirm itself.
+  functional.dfu.bench_no_report:
+    extra_configs:
+      - CONFIG_BOOTLOADER_MCUBOOT=y
+      - CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_MOVE=y
+      - CONFIG_EERIE_LEAP_DFU_BENCH_FAULT_NO_REPORT=y

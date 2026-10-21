@@ -104,7 +104,10 @@ every chunk, before it writes it. The chunks go through an `ImageIdentityCollect
 | `WRONG_BOARD` | This product, another board. | 4 |
 | `BAD_IDENTITY` | Malformed header, TLV area (info header, lengths), identity value (format, lengths, characters), a second identity, a gap in the chunks, data beyond `len`, or more than 128 bytes of protected TLVs. | 5 |
 
-A refusal answers the chunk with an SMP v2 error `{group: 72, rc: <error>}` and:
+A refusal answers the chunk with an SMP v2 error `{err: {group: 72, rc: <error>}}`. `img_mgmt` appends
+its usual `off` after the hook refuses, and the guard has reset the upload by then, so the answer also
+carries `off: 0`: **a client checks `err` before it reads `off`**. A refusal emits no
+`MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED`. The guard also:
 
 - resets `img_mgmt`'s upload state, so that a resume with the same `sha` starts over instead of
   continuing into the erased image;
@@ -154,7 +157,9 @@ error codes of its own; that is why the group exists. `device info` (65) carries
 - `IMG_ENABLE_IMAGE_CHECK`: the client sends the SHA-256 of the whole file as `sha` with the first
   chunk. The unit answers an upload of an image that is in the slot already with the full offset, lets
   a client resume at offset 0 with the same `sha` (the answer carries the unit's offset), and checks the
-  slot against the hash after the last chunk (`match` in the answer; allow about 5 s for it).
+  slot against the hash after the last chunk (`match` in the answer; allow about 5 s for it). A first
+  chunk that carries a full 32-byte `sha` waits for the same check, over `len` bytes of the slot,
+  before it is answered, so it gets the same timeout.
 - `MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK`, `MCUMGR_GRP_IMG_STATUS_HOOKS`, `MCUMGR_MGMT_NOTIFICATION_HOOKS`:
   the identity check above, and the notifications the logging controller and the confirmation use.
 - `MCUMGR_GRP_IMG_MUTEX`: the upload state can be reset from the guard.
@@ -170,7 +175,7 @@ share a unit during an update.
 
 | Symbol | Default | Meaning |
 | --- | --- | --- |
-| `EERIE_LEAP_DFU` | y with `BOOTLOADER_MCUBOOT` | Image management. Depends on `EERIE_LEAP_SMP`, `FLASH` and `FLASH_MAP`. Selects `STREAM_FLASH`, `IMG_MANAGER`, `IMG_ERASE_PROGRESSIVELY`, `IMG_ENABLE_IMAGE_CHECK`, `MCUMGR_GRP_IMG`, `MCUMGR_GRP_IMG_MUTEX`, `MCUMGR_GRP_IMG_VERBOSE_ERR`, `MCUMGR_MGMT_NOTIFICATION_HOOKS`, `MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK`, `MCUMGR_GRP_IMG_STATUS_HOOKS`, `MCUMGR_GRP_OS_RESET_HOOK`, `MCUMGR_GRP_OS_BOOTLOADER_INFO`. `IMG_MANAGER`'s choice already defaults to `MCUBOOT_IMG_MANAGER`, which cannot be selected. Default `MCUMGR_GRP_IMG_TOO_LARGE_CHECK` is `MCUMGR_GRP_IMG_TOO_LARGE_SYSBUILD` with `BOOTLOADER_MCUBOOT` (set by redeclaring the choice). |
+| `EERIE_LEAP_DFU` | y with `BOOTLOADER_MCUBOOT` and `EERIE_LEAP_DOMAIN_SYSTEM` | Image management. Depends on `EERIE_LEAP_SMP`, `FLASH` and `FLASH_MAP`. Selects `STREAM_FLASH`, `IMG_MANAGER`, `IMG_ERASE_PROGRESSIVELY`, `IMG_ENABLE_IMAGE_CHECK`, `MCUMGR_GRP_IMG`, `MCUMGR_GRP_IMG_MUTEX`, `MCUMGR_GRP_IMG_VERBOSE_ERR`, `MCUMGR_MGMT_NOTIFICATION_HOOKS`, `MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK`, `MCUMGR_GRP_IMG_STATUS_HOOKS`, `MCUMGR_GRP_OS_RESET_HOOK`, `MCUMGR_GRP_OS_BOOTLOADER_INFO`, and with the controller `SMP_CLIENT` (for `smp_get_wq()`); implies `WATCHDOG` and `HWINFO`. `IMG_MANAGER`'s choice already defaults to `MCUBOOT_IMG_MANAGER`, which cannot be selected. Default `MCUMGR_GRP_IMG_TOO_LARGE_CHECK` is `MCUMGR_GRP_IMG_TOO_LARGE_SYSBUILD` with `BOOTLOADER_MCUBOOT` (set by redeclaring the choice). |
 | `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_DFU` | `img_mgmt` runs on the MCUmgr work queue: bootutil trailer reads, stream flash writes and the SHA-256 image check do not fit 2048 bytes. To be trimmed after measuring on hardware. |
 | `EERIE_LEAP_CONTROLLER_DFU` | y with `EERIE_LEAP_DFU` | The controller: registers the guard and the group, confirms a new image. |
 | `EERIE_LEAP_DFU_SELF_CONFIRM` | y | n leaves confirmation to the client (bench), which is how the revert path is tested. |
@@ -191,11 +196,15 @@ through the AP's route on BLE or by its CDMP ID on CAN.
    about a downgrade. Refuse if slot 1 is in use: a test image is running and slot 1 holds the backup
    (`img_mgmt` refuses it too).
 3. **Size the chunks.** `os mcumgr params` gives `buf_size` and `buf_count`. A chunk is `buf_size - 64`
-   bytes. The window is **1 for a unit behind CAN** (see [smp.md](smp.md#transports)), otherwise
+   bytes, except the first: it also carries `image`, `len` and the 32-byte `sha`, so `buf_size - 64`
+   would overflow the packet (1024 bytes). Size the first chunk by encoding the request and fitting the
+   data to what is left, as the bench client does. The window is **1 for a unit behind CAN** (see [smp.md](smp.md#transports)), otherwise
    the smaller of the BLE `info` window and `buf_count - 1`.
 4. **Upload.** `img_mgmt upload` with `image 0`, `len`, `sha` (SHA-256 of the file) and `off`/`data`.
    After a lost connection start again at `off 0` with the same `sha`; the unit answers with its offset.
-   The last chunk waits for the slot check (allow about 5 s). Errors in group 72 mean a wrong image.
+   The last chunk, and the first when it carries a full `sha`, wait for the slot check (allow about 5 s
+   for each). Errors in group 72 mean a wrong image; the answer to a refused chunk also has `off: 0`,
+   so read `err` first.
 5. **Mark test.** `img_mgmt` state write with the image's `hash` and `confirm: false`.
 6. **Reset.** `os reset`. Update the AP last: its reset drops the BLE link.
 7. **Wait for the swap.** The unit is silent for it, minutes for a gauge. Find it again by **UID**: after
@@ -208,9 +217,122 @@ through the AP's route on BLE or by its CDMP ID on CAN.
 
 ## Confirmation
 
-The confirmation of a new image (the watchdog, the liveness probes, the boot deadline and the
-self-confirmation delay of the table above) is done by `DfuController` and is described here with it.
-`dfu STATUS` reports where it stands.
+After a swap the new image runs **unconfirmed**: MCUboot reverts to the previous one at the next reset
+unless the image confirms itself. `DfuController` (`src/controllers/dfu_controller.*`, built with
+`EERIE_LEAP_CONTROLLER_DFU`) decides when it has proved healthy. It owns `McubootBootControl`
+(`boot_is_img_confirmed()`, `boot_write_img_confirmed()`), `ZephyrWatchdog`, `ImageConfirmation` (the state
+machine, `src/subsys/dfu/image_confirmation.*`), the upload guard and the `dfu` group, and it is the
+`dfu` group's status source.
+
+### The normal boot is not delayed
+
+The application constructs the controller first in `main()` and calls `Initialize()`. On a **confirmed**
+image (every boot but the one after a swap, and the preprogrammed image of a first flash) that is one
+read of the slot trailer, a few flash words, plus reading the reset cause and registering the upload guard
+and the `dfu` group. It arms no watchdog, creates no probe and schedules no work item, and nothing waits:
+a confirmed unit boots as fast as one without DFU, apart from what MCUboot itself adds. On an **unconfirmed**
+image the unit boots exactly as usual too: arming the watchdog takes microseconds, and the confirmation
+happens in the background after `ReportBootComplete()`.
+
+### States
+
+`dfu STATUS` reports the state (see [the `dfu` group](#the-dfu-group-72)):
+
+| State | Meaning | Next |
+| --- | --- | --- |
+| `CONFIRMED` 0 | The running image is permanent. Nothing is armed. | |
+| `VERIFYING` 1 | Unconfirmed (a test boot): the watchdog is armed and the boot deadline runs. | `ReportBootComplete()` makes it `CONFIRMING`; the deadline makes it `FAILED` |
+| `CONFIRMING` 2 | Boot complete was reported; the unit counts the confirmation delay with its probes passing. `confirm_in_ms` is the time left. | The delay passes: the image is confirmed, `CONFIRMED`. A probe that fails: `FAILED` |
+| `FAILED` 3 | The deadline passed or a probe stuck. The watchdog is not fed again, so it resets the unit and MCUboot reverts. | A reset |
+
+A client that confirms the image through `img_mgmt` earlier ends the machine at its next tick: the state
+becomes `CONFIRMED` and the watchdog is disabled.
+
+### Timeline of a test boot
+
+1. **Arming** (`Initialize()`, first in `main()`). The controller reads the reset cause (`hwinfo`, logged and
+   reported by `dfu STATUS`) and asks `boot_is_img_confirmed()`. Unconfirmed: it installs and starts the
+   `watchdog0` watchdog (`EERIE_LEAP_DFU_WATCHDOG_TIMEOUT_MS`, reset of the whole SoC), sets the boot
+   deadline (`EERIE_LEAP_DFU_BOOT_DEADLINE_MS`, counted from here) and starts the periodic tick.
+2. **The tick** is a delayable work item on the system work queue, rescheduled every `TIMEOUT / 4` while the
+   state is `VERIFYING` or `CONFIRMING` (and once more to disable a watchdog after the image confirmed). Each
+   tick feeds the watchdog while every probe has run since the last tick, so the watchdog is fed only while
+   the unit is alive and the deadline has not passed.
+3. **Boot complete.** The application calls `ReportBootComplete()` once the unit can be managed again.
+   Reported after the deadline, the state becomes `FAILED` instead.
+4. **Confirmation.** `EERIE_LEAP_DFU_CONFIRM_DELAY_MS` after boot complete, with the probes passing, a tick
+   writes the confirmation (`boot_write_img_confirmed()`; a failed write is logged and retried on the next
+   tick), the state becomes `CONFIRMED` and the watchdog is disabled. A permanent product watchdog is a
+   separate decision.
+
+### Liveness probes
+
+A probe (`IProbe`, `WorkQueueProbe`) is a `k_work` posted to a work queue the unit depends on. Each tick
+checks that every probe ran since the previous tick and posts it again. A queue stuck on one item or whose
+thread died never runs it, and the tick then stops feeding: the state is `FAILED`. A probe added later gets a
+full interval before it is judged.
+
+- `DfuController` probes the **MCUmgr work queue** itself (`smp_get_wq()`, which Zephyr builds only with
+  `CONFIG_SMP_CLIENT`; `EERIE_LEAP_DFU` selects it with the controller). A unit whose management queue is stuck
+  cannot be updated or confirmed by a client, so it must not stay.
+- The application adds the queues it depends on with `RegisterLivenessProbe(name, k_work_q*)`; the controller
+  owns the probe. The gauge registers the configuration work queue and, when it has a CAN COM service, the
+  CDMP work queue (`CanbusComService::GetWorkQueueThread()`). Registering on a confirmed image does nothing.
+
+A probe also fails while a long operation holds its queue for more than a tick interval (2 s with the
+default timeout), which is why they only count while the image is unconfirmed.
+
+### Boot complete
+
+The composition root reports it once the unit can be managed again: the management controller initialized
+(the config and device groups are served) and at least one SMP transport is up (the BLE access point, or the
+CAN COM service). The gauge does it after the BLE controller starts. A `main()` that returns early (file
+system, display or UI failure) never reports, so it ends in a revert.
+
+### Watchdog
+
+`ZephyrWatchdog` drives the `watchdog0` alias (the timer group 0 MWDT on both gauge boards, enabled in the
+devicetree) with `wdt_install_timeout`, `wdt_setup`, `wdt_feed` and `wdt_disable`. `EERIE_LEAP_DFU` implies
+`CONFIG_WATCHDOG`. A build without it or without the alias (native_sim, the test suites) still compiles:
+`IsSupported()` is false, the controller passes no watchdog to the state machine, and the machine still
+tracks the state and confirms; a `FAILED` image is then not reset. `wdt_esp32` programs two stages and
+counts 0.5 ms (S3) or 1 ms (P4) ticks, so the real time to reset differs from the configured one; it is
+measured on the bench and not compensated yet.
+
+### Self-confirmation and the client
+
+`EERIE_LEAP_DFU_SELF_CONFIRM=y` (the default) lets the unit confirm itself. With `n` only a client's
+`img_mgmt` confirm makes the image permanent: the unit keeps feeding the watchdog while healthy, never
+confirms, and the next reset reverts. That is how the revert path is tested from the bench client. The
+client's confirm needs no coordination: the next tick sees `boot_is_img_confirmed()` and stands down.
+
+### Failure paths
+
+| Fault | Ends in |
+| --- | --- |
+| The image crashes or hangs before boot complete | The deadline passes, the ticks stop feeding, the watchdog resets. A crash that halts the CPU (`k_panic()`) is reset by the watchdog directly. |
+| A work queue the unit depends on stops | The probe fails, the ticks stop feeding, reset |
+| `main()` returns early | No boot complete, the deadline, reset |
+| Power is lost during the window | MCUboot reverts at the next boot, so an ignition cycle within about a minute of an update undoes it |
+| The confirmation write fails | Logged and retried on every tick; the watchdog is fed meanwhile, so a persistent failure ends only in the next reset's revert |
+
+After the reset MCUboot swaps the previous image back, and `dfu STATUS` shows `CONFIRMED` with the watchdog
+bit in `reset_cause`.
+
+### Bench faults
+
+`EERIE_LEAP_DFU_BENCH_FAULT` (a choice; never for a shipped build) builds an image that fails on purpose, for
+the revert drills (plan 3.7). A fault applies only while the image is **unconfirmed**, so the previous,
+confirmed image that comes back after the revert runs normally:
+
+| Option | Fault |
+| --- | --- |
+| `EERIE_LEAP_DFU_BENCH_FAULT_NONE` | None (default). |
+| `EERIE_LEAP_DFU_BENCH_FAULT_CRASH` | `k_panic()` at the end of `Initialize()`. |
+| `EERIE_LEAP_DFU_BENCH_FAULT_HANG` | A busy-wait loop at the end of `Initialize()`; the application never starts. The watchdog is armed and the tick runs on the system work queue, so the unit resets when the boot deadline stops the feeding. |
+| `EERIE_LEAP_DFU_BENCH_FAULT_NO_REPORT` | `ReportBootComplete()` is ignored: the image never confirms itself and the deadline resets the unit. |
+
+The faults come after the watchdog is armed; one before it would hang a unit that nothing resets.
 
 ## Tests
 
@@ -224,4 +346,12 @@ self-confirmation delay of the table above) is done by `DfuController` and is de
   one per identity case. It covers an accepted upload and the listing, each refusal and the erased
   header sector, the resume, the size checks, the state write giving `BOOT_SWAP_TYPE_TEST`, and the
   `dfu STATUS` answers.
+- `functional.dfu`, `dfu_controller` suite: `DfuController` with the real bootutil on the flash simulator
+  (slot 0's trailer written with the magic only, so `boot_is_img_confirmed()` is false): a confirmed
+  image arms nothing; an unconfirmed one is `VERIFYING`, stays so without boot complete, becomes
+  `CONFIRMING` after `ReportBootComplete()` and confirms itself after the (shortened) delay, with no
+  watchdog (native_sim has none); a client confirm stands it down. With fake boot control and watchdog
+  (`DfuController`'s injected constructor): the watchdog is armed, fed and disabled, a stuck work queue
+  and a missed deadline stop the feeding, a running queue keeps the image healthy. The scenario
+  `functional.dfu.bench_no_report` builds the `NO_REPORT` fault.
 - `functional.subsys.smp_ble`: a 1024-byte group-1 packet passes the BLE router unchanged.

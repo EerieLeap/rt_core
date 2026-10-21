@@ -1,6 +1,7 @@
 menuconfig EERIE_LEAP_DFU
     bool "EerieLeap firmware update"
-    default y if BOOTLOADER_MCUBOOT
+    # A unit without the system domain has no product ID for the image identity.
+    default y if BOOTLOADER_MCUBOOT && EERIE_LEAP_DOMAIN_SYSTEM
     depends on EERIE_LEAP_SMP && FLASH && FLASH_MAP
     select STREAM_FLASH
     select IMG_MANAGER
@@ -14,6 +15,12 @@ menuconfig EERIE_LEAP_DFU
     select MCUMGR_GRP_IMG_STATUS_HOOKS
     select MCUMGR_GRP_OS_RESET_HOOK
     select MCUMGR_GRP_OS_BOOTLOADER_INFO if BOOTLOADER_MCUBOOT
+    # DfuController probes the MCUmgr work queue (smp_get_wq(), which Zephyr builds only with the SMP client).
+    select SMP_CLIENT if EERIE_LEAP_CONTROLLER_DFU
+    # The hardware watchdog that resets an unconfirmed image that hangs (watchdog0), and the reset cause
+    # that dfu STATUS reports. A board without them still builds: the controller adapts.
+    imply WATCHDOG
+    imply HWINFO
     help
       MCUmgr image management (img_mgmt, group 1) behind MCUboot: uploads into
       the secondary slot, checked against the unit's product and board (the

@@ -108,6 +108,11 @@ public:
         return cdmp_service_;
     }
 
+    /** @brief The CDMP work queue, which the SMP-CAN transport shares; for liveness probes (DfuController). */
+    [[nodiscard]] std::shared_ptr<eerie_leap::subsys::threading::WorkQueueThread> GetWorkQueueThread() const {
+        return cdmp_service_->GetWorkQueueThread();
+    }
+
     /** @brief The claimed CDMP ID while SMP is bound to it, 0 otherwise. */
     [[nodiscard]] uint8_t GetAddress() const override {
         return smp_transport_->GetAddress();
