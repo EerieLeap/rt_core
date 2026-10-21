@@ -345,7 +345,9 @@ The standard `img_mgmt` group does the transfer; this one reports what it does n
 - Errors, in the `err` map of the answer to an `img_mgmt` upload (the identity check refuses the
   chunk): `NO_IDENTITY` 2 (no identity TLV in the image), `WRONG_PRODUCT` 3, `WRONG_BOARD` 4,
   `BAD_IDENTITY` 5 (malformed header, TLVs or identity). For SMP v1 clients they translate to `EINVAL`.
-  The refused upload's partial image is erased, so it is not listed.
+  The refused upload's partial image is erased, so it is not listed. The answer to the refused chunk
+  carries `err` and also `off: 0` (`img_mgmt` appends its offset after the hook refuses and the upload
+  state has been reset): check `err` before `off`. A refusal emits no `DFU_STOPPED` notification.
 
 Threading: the handler reads a snapshot from the confirmation state and allocates, blocks and throws
 nothing.
@@ -357,7 +359,10 @@ nothing.
 | CAN | `EERIE_LEAP_SMP_CAN` | Between units on the CDMP COM channel; see [cdmp.md](cdmp.md). |
 | BLE | `EERIE_LEAP_SMP_BLE` | From a central to this unit or, forwarded over CAN, to another unit; see [bluetooth.md](bluetooth.md). |
 
-Firmware images are `img_mgmt` upload chunks of `buf_size - 64` bytes. **Window rule for image chunks
+Firmware images are `img_mgmt` upload chunks of `buf_size - 64` bytes, except the first, which also
+carries `image`, `len` and the 32-byte `sha` and has to be sized by encoding it (`buf_size - 64`
+overflows the 1024-byte packet); a first chunk with a full `sha` waits for the unit's check of the slot
+like the last one (allow about 5 s). **Window rule for image chunks
 over CAN:** a client sends them to a unit behind CAN **one at a time** (a window of 1). The target
 erases a flash sector for every 4 KB of image with interrupts off for tens of milliseconds, during
 which the CAN controller's receive buffers fill and frames are lost; a second request already on the
@@ -387,7 +392,7 @@ sending unit's `smp_bus_share_percent` (25 % by default, see [canbus.md](canbus.
 | `MCUMGR_TRANSPORT_NETBUF_SIZE` | 1024 | Largest packet. The `assets` group's transfer buffer has this size, and a `READ` chunk is a little smaller. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO` | 7 | MCUmgr handler thread, below sensor processing. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_CONTROLLER_ADC` or `EERIE_LEAP_DFU` | The calibration group pauses and resumes processing on this queue, which 2048 bytes do not cover; `img_mgmt` (bootutil trailer reads, stream flash writes, the image check) runs on it too. |
-| `EERIE_LEAP_DFU` and its options | y with `BOOTLOADER_MCUBOOT` | `img_mgmt`, the identity check, the `dfu` group and the confirmation; see [dfu.md](dfu.md#kconfig). |
+| `EERIE_LEAP_DFU` and its options | y with `BOOTLOADER_MCUBOOT` and `EERIE_LEAP_DOMAIN_SYSTEM` | `img_mgmt`, the identity check, the `dfu` group and the confirmation; see [dfu.md](dfu.md#kconfig). |
 | `FS_LITTLEFS_NUM_FILES`, `FS_FATFS_NUM_FILES` | 6 with `EERIE_LEAP_SMP_ASSETS` | Open files of the file system the build uses (littlefs, FAT): a download and an upload stay open between requests, next to the log writer and the transient opens. rt_core's default. |
 | `EERIE_LEAP_CONTROLLER_MANAGEMENT` | n | Serves `config`, `device`, `files` and, with `EERIE_LEAP_SMP_ASSETS`, `assets`. Depends on `EERIE_LEAP_SMP` and `EERIE_LEAP_DOMAIN_SYSTEM`; create it after every configuration manager is registered. It serves the `AssetsManager` it is given, whose kinds may come and go; given none, `KINDS` lists nothing. |
 
