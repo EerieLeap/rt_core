@@ -112,6 +112,10 @@ bool CanbusComService::IsReachable(uint8_t target) const {
     return address != 0 && target != address && cdmp_service_->IsDeviceOnline(target);
 }
 
+bool CanbusComService::IsSmpBound() const {
+    return smp_transport_->GetAddress() != 0 && cdmp_service_->GetDeviceInfo().status == CdmpDeviceStatus::ONLINE;
+}
+
 bool CanbusComService::Forward(uint8_t target, SmpPacket packet) {
     return smp_transport_->Forward(target, std::move(packet));
 }

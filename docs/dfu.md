@@ -215,6 +215,12 @@ through the AP's route on BLE or by its CDMP ID on CAN.
    `reset_cause`. An ignition cycle within a minute of an update undoes it the same way.
 9. **Roll back (optional, any time later).** Mark the slot 1 backup *test*, reset, and wait as in 7 and 8.
 
+**Keep the CDMP major version across a rollout.** A unit that boots an image with another CDMP major
+version is refused at its ID claim and enters `VERSION_MISMATCH` without a device ID, so it has no SMP
+address on CAN and is in no unit's table: the AP cannot reach it (only its own BLE link, if it has one),
+and a CAN-only unit does not report boot complete, so MCUboot reverts it (a unit with BLE still confirms). A major
+bump therefore needs every unit reset before the first of them boots into it (see [cdmp.md](cdmp.md#services)).
+
 ## Confirmation
 
 After a swap the new image runs **unconfirmed**: MCUboot reverts to the previous one at the next reset
@@ -301,9 +307,11 @@ the image, which is why probes only count while the image is unconfirmed.
 
 The composition root reports it once the unit can be managed again: the management controller initialized
 (the config and device groups are served) and at least one SMP transport is really up: the BLE access point
-started (`BleController::Start()` succeeded), or the CAN COM service runs (`CanbusController::Start()`
-succeeded; the service object exists on a unit whose bus did not come up, so its existence proves nothing).
-The gauge does it after the BLE controller starts. A `main()` that returns early (file
+started (`BleController::Start()` succeeded), or the unit is reachable over CAN (`CanbusComService::IsSmpBound()`:
+CDMP online with a claimed ID and SMP bound to it, so a unit without a bus or refused for its CDMP version never
+qualifies). The ID comes a few seconds after the COM service starts, so an unconfirmed image polls for it in `main()`
+for up to half of `EERIE_LEAP_DFU_BOOT_DEADLINE_MS`, then does not report and the deadline reverts; a confirmed image
+does not wait. The gauge does it after the BLE controller starts. A `main()` that returns early (file
 system, display or UI failure) never reports, so it ends in a revert.
 
 ### Watchdog
