@@ -1,0 +1,91 @@
+menuconfig EERIE_LEAP_DFU
+    bool "EerieLeap firmware update"
+    default y if BOOTLOADER_MCUBOOT
+    depends on EERIE_LEAP_SMP && FLASH && FLASH_MAP
+    select STREAM_FLASH
+    select IMG_MANAGER
+    select IMG_ERASE_PROGRESSIVELY
+    select IMG_ENABLE_IMAGE_CHECK
+    select MCUMGR_GRP_IMG
+    select MCUMGR_GRP_IMG_MUTEX
+    select MCUMGR_GRP_IMG_VERBOSE_ERR if MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
+    select MCUMGR_MGMT_NOTIFICATION_HOOKS
+    select MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK
+    select MCUMGR_GRP_IMG_STATUS_HOOKS
+    select MCUMGR_GRP_OS_RESET_HOOK
+    select MCUMGR_GRP_OS_BOOTLOADER_INFO if BOOTLOADER_MCUBOOT
+    help
+      MCUmgr image management (img_mgmt, group 1) behind MCUboot: uploads into
+      the secondary slot, checked against the unit's product and board (the
+      image identity TLV), the dfu SMP group (72) and, with
+      EERIE_LEAP_CONTROLLER_DFU, the confirmation of a new image.
+
+      Test builds on native_sim set it without BOOTLOADER_MCUBOOT: img_mgmt
+      and the image manager run there on the flash simulator. The image
+      manager is MCUboot's (MCUBOOT_IMG_MANAGER, the only member of its choice
+      and its default, so it cannot be selected here).
+
+# Not a member of a choice, so it cannot be selected: the choice is declared again with a default.
+# With MCUboot built by sysbuild an upload that cannot be swapped (the slot minus the swap
+# trailer) is refused on its first chunk. Without sysbuild ROM_END_OFFSET and
+# MCUBOOT_UPDATE_FOOTER_SIZE are 0, the member is not available, and the default does not apply.
+choice MCUMGR_GRP_IMG_TOO_LARGE_CHECK
+    default MCUMGR_GRP_IMG_TOO_LARGE_SYSBUILD if EERIE_LEAP_DFU && BOOTLOADER_MCUBOOT
+endchoice
+
+if EERIE_LEAP_DFU
+
+config EERIE_LEAP_DFU_SELF_CONFIRM
+    bool "A new image confirms itself once it is healthy"
+    default y
+    help
+      With n, only a client's img_mgmt confirm makes a new image permanent,
+      so a reset reverts it; a bench setting for testing the revert path.
+
+config EERIE_LEAP_DFU_BOOT_DEADLINE_MS
+    int "Boot to boot complete, for an unconfirmed image"
+    default 60000
+    help
+      An unconfirmed image that has not reported boot complete by then stops
+      feeding the watchdog, so the unit resets and MCUboot reverts.
+
+config EERIE_LEAP_DFU_CONFIRM_DELAY_MS
+    int "Boot complete to confirmation"
+    default 20000
+    help
+      How long an unconfirmed image runs with passing liveness probes after
+      boot complete before it confirms itself.
+
+config EERIE_LEAP_DFU_WATCHDOG_TIMEOUT_MS
+    int "Hardware watchdog timeout while unconfirmed"
+    default 8000
+    help
+      The watchdog0 timeout armed while the running image is unconfirmed. It
+      is fed every quarter of this while every liveness probe has run.
+
+choice EERIE_LEAP_DFU_BENCH_FAULT
+    prompt "Bench fault injected into a test image"
+    default EERIE_LEAP_DFU_BENCH_FAULT_NONE
+    help
+      Builds an image that fails on purpose, for the revert drills. Never for
+      a shipped build.
+
+config EERIE_LEAP_DFU_BENCH_FAULT_NONE
+    bool "None"
+
+config EERIE_LEAP_DFU_BENCH_FAULT_CRASH
+    bool "Crash at boot"
+
+config EERIE_LEAP_DFU_BENCH_FAULT_HANG
+    bool "Hang at boot"
+
+config EERIE_LEAP_DFU_BENCH_FAULT_NO_REPORT
+    bool "Never report boot complete"
+
+endchoice
+
+module = EERIE_LEAP_DFU
+module-str = EerieLeap DFU
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # EERIE_LEAP_DFU

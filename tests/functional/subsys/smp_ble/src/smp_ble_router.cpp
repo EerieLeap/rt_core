@@ -89,6 +89,26 @@ ZTEST(smp_ble_router, test_peer_route_is_forwarded_and_its_response_notified) {
     zassert_true(packets[0].packet == response);
 }
 
+ZTEST(smp_ble_router, test_image_chunk_of_the_largest_packet_is_forwarded_unchanged) {
+    const RouterHarness harness;
+    harness.forwarder->address = 5;
+    harness.forwarder->reachable = { 7 };
+
+    // An img_mgmt upload chunk (group 1) fills a whole packet buffer, and reaches the router in
+    // writes of a small ATT payload; nothing in it is parsed but the header.
+    const Bytes request = MakeImageChunkRequest(CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE, 30);
+    zassert_equal(request.size(), CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE);
+
+    const Bytes routed = Routed(7, request);
+    for(size_t offset = 0; offset < routed.size(); offset += 20)
+        harness.router->OnReceive(std::span(routed).subspan(offset, std::min<size_t>(20, routed.size() - offset)));
+
+    zassert_equal(harness.forwarder->forwarded.size(), 1);
+    zassert_equal(harness.forwarder->forwarded[0].first, 7);
+    zassert_true(harness.forwarder->forwarded[0].second == request, "The forwarded packet differs");
+    zassert_equal(harness.router->GetRxDroppedCount(), 0);
+}
+
 ZTEST(smp_ble_router, test_refused_forward_is_dropped) {
     const RouterHarness harness;
     harness.forwarder->reachable = { 7 };

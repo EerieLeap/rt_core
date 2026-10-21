@@ -135,8 +135,12 @@ config MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO
 
 # The calibration group pauses and resumes the sensor processing service on this queue: a resume
 # rebuilds the ISR readers and may unwind an exception, which 2048 bytes do not cover.
+#
+# The firmware update runs img_mgmt on this queue too: the image check (SHA-256 over the slot), the
+# bootutil trailer reads and the stream flash writes need more than 2048 bytes. To be trimmed after
+# measuring the peak (thread analyzer) on hardware.
 config MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE
-    default 4096 if EERIE_LEAP_CONTROLLER_ADC
+    default 4096 if EERIE_LEAP_CONTROLLER_ADC || EERIE_LEAP_DFU
 
 endif
 

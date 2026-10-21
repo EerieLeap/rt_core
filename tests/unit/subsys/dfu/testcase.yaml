@@ -1,0 +1,10 @@
+common:
+  tags:
+    - unit
+    - subsys.dfu
+  # The firmware update needs a flash with image slots: native_sim's simulator has them.
+  platform_allow:
+    - native_sim
+
+tests:
+  unit.subsys.dfu: {}

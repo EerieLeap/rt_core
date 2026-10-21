@@ -8,7 +8,7 @@ application's `main()` only chooses what to build and in which order to start it
 
 | Layer | Directory | Contents |
 | --- | --- | --- |
-| Subsystems | `src/subsys/` | Hardware and OS wrappers: ADC, CAN, GPIO, filesystem, assets, Bluetooth, SMP, CDMP, Lua, expression engine, MDF, threading, time, event bus, random, CFB, device tree accessors. |
+| Subsystems | `src/subsys/` | Hardware and OS wrappers: ADC, CAN, GPIO, filesystem, assets, Bluetooth, SMP, firmware update, CDMP, Lua, expression engine, MDF, threading, time, event bus, random, CFB, device tree accessors. |
 | Domains | `src/domain/` | One concern each: system, ADC, sensors, CAN bus, CAN COM, logging, scripting, BLE, configuration. A domain with user settings owns a model, a CBOR schema, a validator, a configuration manager and, with SMP, a management group. |
 | Controllers | `src/controllers/` | Composition roots: each builds the services of one domain, registers its configuration manager and wires it to the others. |
 | Configuration | `src/configuration/` | CBOR storage service and generated zcbor code. |
@@ -25,7 +25,8 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [sensors.md](sensors.md) | Sensor types, the processing pipeline, indicator conditioning, rate groups, event-driven sensors, the readings frame, sensor events |
 | [canbus.md](canbus.md) | CAN buses, messages and signals, sending, reconfiguration |
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
-| [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`, `assets`) and transports |
+| [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`, `assets`, `logging`, `dfu`) and transports |
+| [dfu.md](dfu.md) | Firmware update: MCUboot swap and revert, slot layout rules, the image identity check, the `dfu` group, confirmation, client flow |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
 | [logging.md](logging.md) | Log writer, logging control, triggers and the logging controller, the MDF4 logger, logging configuration, logging status on other units |
 | [system.md](system.md) | Product identity and the system configuration |
