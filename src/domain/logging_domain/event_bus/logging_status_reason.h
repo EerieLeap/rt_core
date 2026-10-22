@@ -13,7 +13,8 @@ enum class LoggingStatusReason : std::uint32_t {
     WriteFailed,    // A record or a sync did not reach the card.
     NoSpace,        // Less than EERIE_LEAP_LOG_MIN_FREE_SPACE_MB was free at a rotation.
     RotationFailed, // The next file of a rotation could not be opened or its header written.
-    Unavailable     // Only imported: no unit reports a status (no logger is online, or this unit is not).
+    Unavailable,    // Only imported: no unit reports a status (no logger is online, or this unit is not).
+    FirmwareUpdate  // The unit stopped logging for a firmware update: an upload started, or a reset is coming.
 };
 
 // The reason as log and shell text. No default case, so a new value is a -Wswitch warning until it
@@ -31,6 +32,8 @@ constexpr const char* GetReasonName(LoggingStatusReason reason) {
             return "rotation failed";
         case LoggingStatusReason::Unavailable:
             return "unavailable";
+        case LoggingStatusReason::FirmwareUpdate:
+            return "firmware update";
     }
 
     return "unknown";

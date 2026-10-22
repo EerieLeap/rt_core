@@ -47,7 +47,6 @@ private:
     std::shared_ptr<ConfigurationService> configuration_service_;
     std::shared_ptr<WorkQueueThread> config_work_queue_thread_;
     std::shared_ptr<const ICdmpNetworkInfo> network_info_;
-    uint32_t build_number_;
     std::optional<SensorCapabilities> sensor_capabilities_;
     std::shared_ptr<const IFsService> sd_fs_service_;
     std::span<const std::string_view> setting_ids_;
@@ -77,7 +76,6 @@ public:
         std::shared_ptr<ConfigurationService> configuration_service,
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
         std::shared_ptr<const ICdmpNetworkInfo> network_info,
-        uint32_t build_number,
         std::optional<SensorCapabilities> sensor_capabilities = std::nullopt,
         std::shared_ptr<const IFsService> sd_fs_service = nullptr,
         const std::shared_ptr<AssetsManager>& assets_manager = nullptr,

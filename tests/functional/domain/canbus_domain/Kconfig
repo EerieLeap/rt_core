@@ -32,6 +32,11 @@ config EERIE_LEAP_SW_VERSION_PATCH
         range 0 65535
         default 0
 
+config EERIE_LEAP_SW_VERSION_BUILD
+        int "Software build number"
+        range 0 255
+        default 0
+
 config EERIE_LEAP_ADC_VOLTAGE_MAX_MV
         int "ADC voltage max"
         default 3100

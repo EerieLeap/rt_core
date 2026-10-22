@@ -17,10 +17,10 @@ namespace eerie_leap::domain::system_domain::smp {
 using eerie_leap::domain::system_domain::models::ProductInfo;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
-using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 using eerie_leap::subsys::smp::SmpGroupId;
 #ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventChannelRegistry;
 #endif
 
@@ -29,13 +29,11 @@ const mgmt_handler DeviceMgmtGroup::HANDLERS[] = {
 };
 
 DeviceMgmtGroup::DeviceMgmtGroup(
-    uint32_t build_number,
     std::shared_ptr<const ICdmpNetworkInfo> network_info,
     std::optional<SensorCapabilities> sensor_capabilities,
     std::span<const std::string_view> setting_ids
 ) :
     SmpGroup(SmpGroupId::DEVICE, HANDLERS, nullptr),
-    build_number_(build_number),
     network_info_(std::move(network_info)),
     sensor_capabilities_(sensor_capabilities),
     setting_ids_(setting_ids) {}
@@ -47,7 +45,7 @@ DeviceMgmtGroup::~DeviceMgmtGroup() {
 bool DeviceMgmtGroup::PutEventChannels(zcbor_state_t* zse) {
     // No allocation in a handler: a fixed table sized from the last id.
     std::array<uint32_t, std::to_underlying(LAST_EVENT_CHANNEL_ID)> ids{};
-    size_t count = 0;
+    size_t count = 0; // NOLINT(misc-const-correctness): incremented under CONFIG_EERIE_LEAP_EVENT_BUS
 
 #ifdef CONFIG_EERIE_LEAP_EVENT_BUS
     const auto& registry = EventChannelRegistry::GetInstance();
@@ -100,7 +98,9 @@ int DeviceMgmtGroup::HandleInfo(smp_streamer* ctxt) {
         && zcbor_tstr_put_lit(zse, "sw")
         && zcbor_uint32_put(zse, SystemConfiguration::SW_VERSION)
         && zcbor_tstr_put_lit(zse, "build")
-        && zcbor_uint32_put(zse, build_number_);
+        && zcbor_uint32_put(zse, SystemConfiguration::SW_BUILD)
+        && zcbor_tstr_put_lit(zse, "board")
+        && zcbor_tstr_put_lit(zse, CONFIG_BOARD_TARGET);
 
     if(ok && device.has_value()) {
         ok = zcbor_tstr_put_lit(zse, "cdmp_id")

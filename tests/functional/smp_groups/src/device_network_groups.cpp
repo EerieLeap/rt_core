@@ -8,6 +8,7 @@
 #include <zephyr/ztest.h>
 
 #include "domain/canbus_com_domain/smp/network_mgmt_group.h"
+#include "domain/system_domain/models/system_configuration.h"
 #include "domain/system_domain/smp/device_mgmt_group.h"
 #include "subsys/event_bus/event_channel.h"
 #include "subsys/event_bus/event_channel_id.h"
@@ -23,12 +24,11 @@ using namespace smp_groups_test;
 
 using eerie_leap::domain::canbus_com_domain::smp::NetworkMgmtGroup;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
+using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::domain::system_domain::smp::DeviceMgmtGroup;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
 
 namespace {
-
-constexpr uint32_t BUILD_NUMBER = 42;
 
 CdmpDeviceInfo MakeDevice(uint8_t device_id) {
     return {
@@ -51,7 +51,7 @@ ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
         .features = DISPLAY_FEATURES,
         .status = CdmpDeviceStatus::ONLINE,
     };
-    DeviceMgmtGroup group(BUILD_NUMBER, network_info);
+    DeviceMgmtGroup group(network_info);
     group.Register();
     SmpTestClient client;
 
@@ -64,7 +64,9 @@ ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
     zassert_false(response.Has("family"));
     zassert_equal(response.Value("hw"), (1U << 24) | (2U << 16) | 3U);
     zassert_equal(response.Value("sw"), (4U << 24) | (5U << 16) | 6U);
-    zassert_equal(response.Value("build"), BUILD_NUMBER);
+    zassert_equal(response.Value("build"), SystemConfiguration::SW_BUILD);
+    zassert_equal(response.Value("build"), 7, "The VERSION tweak, set by prj.conf here");
+    zassert_equal(response.texts.at("board"), CONFIG_BOARD_TARGET);
     zassert_equal(response.Value("cdmp_id"), 7);
     zassert_equal(response.Value("uid"), 0xCAFEBABE);
     zassert_false(response.Has("device_type"));
@@ -72,7 +74,7 @@ ZTEST(smp_device_group, test_info_reports_product_versions_and_cdmp_identity) {
 }
 
 ZTEST(smp_device_group, test_info_without_cdmp_has_no_identity) {
-    DeviceMgmtGroup group(BUILD_NUMBER, nullptr);
+    DeviceMgmtGroup group(nullptr);
     group.Register();
     SmpTestClient client;
 
@@ -86,16 +88,13 @@ ZTEST(smp_device_group, test_info_without_cdmp_has_no_identity) {
 }
 
 ZTEST(smp_device_group, test_info_reports_the_sensor_inputs) {
-    DeviceMgmtGroup group(
-        BUILD_NUMBER, nullptr, SensorCapabilities{ .adc_channels = 4, .gpio_channels = 8, .sensors_max = 64 }
-    );
+    DeviceMgmtGroup group(nullptr, SensorCapabilities{ .adc_channels = 4, .gpio_channels = 8, .sensors_max = 64 });
     group.Register();
     SmpTestClient client;
 
     const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::INFO));
 
     zassert_true(response.IsOk());
-    zassert_equal(response.Value("build"), BUILD_NUMBER);
     zassert_equal(response.Value("adc_channels"), 4);
     zassert_equal(response.Value("gpio_channels"), 8);
     zassert_equal(response.Value("sensors_max"), 64);
@@ -130,7 +129,7 @@ ZTEST(smp_device_group, test_info_lists_the_registered_event_channels_and_settin
     zassert_ok(registry.Register(EventChannelId::Logging, logging));
 
     static constexpr std::array<std::string_view, 2> SETTINGS{ "display.brightness", "display.contrast" };
-    DeviceMgmtGroup group(BUILD_NUMBER, nullptr, std::nullopt, SETTINGS);
+    DeviceMgmtGroup group(nullptr, std::nullopt, SETTINGS);
     group.Register();
     SmpTestClient client;
 
@@ -144,7 +143,7 @@ ZTEST(smp_device_group, test_info_lists_the_registered_event_channels_and_settin
 }
 
 ZTEST(smp_device_group, test_info_lists_no_settings_by_default) {
-    DeviceMgmtGroup group(BUILD_NUMBER, nullptr);
+    DeviceMgmtGroup group(nullptr);
     group.Register();
     SmpTestClient client;
 
@@ -156,8 +155,8 @@ ZTEST(smp_device_group, test_info_lists_no_settings_by_default) {
 }
 
 ZTEST(smp_device_group, test_only_one_instance_is_registered) {
-    DeviceMgmtGroup first(BUILD_NUMBER, nullptr);
-    DeviceMgmtGroup second(BUILD_NUMBER, nullptr);
+    DeviceMgmtGroup first(nullptr);
+    DeviceMgmtGroup second(nullptr);
     first.Register();
 
     bool threw = false;

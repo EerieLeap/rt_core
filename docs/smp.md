@@ -5,7 +5,8 @@ response maps in 8-byte-header packets, carried over CAN between units and over 
 or PC. rt_core adds its own groups on top of MCUmgr's `os` group (echo, reset, `mcumgr params`).
 
 Code: `src/subsys/smp/` (group helper, transports), the groups next to their domains
-(`src/domain/*/smp/`), the `assets` group with the assets (`src/subsys/assets/smp/`).
+(`src/domain/*/smp/`), the `assets` group with the assets (`src/subsys/assets/smp/`), the `dfu` group
+with the firmware update (`src/subsys/dfu/smp/`).
 
 ## Groups
 
@@ -13,8 +14,15 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 (`err` map with the group and the codes below); for SMP v1 clients they are translated to
 `rc` codes. Reads are `read` operations, writes are `write` operations.
 
+Two groups are MCUmgr's own: `os` (0: echo, `mcumgr params`, reset) is on every unit, and `img_mgmt`
+(1: image list, upload, state, erase) is on every unit with `EERIE_LEAP_DFU`. They need no group of
+rt_core, work unchanged over every transport, and pass the BLE access point's router like any other
+packet (it parses the 8-byte header only). See [dfu.md](dfu.md).
+
 | Group | ID | Served by | Commands |
 | --- | --- | --- | --- |
+| `os` | 0 | MCUmgr (`EERIE_LEAP_SMP`) | `ECHO` 0, `MCUMGR_PARAMS` 6, `RESET` 5, `BOOTLOADER_INFO` 8 (with `EERIE_LEAP_DFU` under MCUboot) |
+| `img_mgmt` | 1 | MCUmgr (`EERIE_LEAP_DFU`) | `STATE` 0 (read: list; write: test, confirm), `UPLOAD` 1, `ERASE` 5 |
 | `config` | 64 | `ManagementController` | `LIST` 0, `STORED_CRC` 1, `READ` 2, `WRITE` 3 |
 | `device` | 65 | `ManagementController` | `INFO` 0 |
 | `network` | 66 | `CanbusController` | `DEVICES` 0 |
@@ -23,6 +31,7 @@ Group IDs start at MCUmgr's first user group ID (64). Every group uses SMP v2 gr
 | `files` | 69 | `ManagementController` | `LIST` 0 |
 | `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4, `STAT` 5, `RENAME` 6 |
 | `logging` | 71 | `LoggingController` | `STATUS` 0, `START` 1, `STOP` 2 |
+| `dfu` | 72 | `DfuController` | `STATUS` 0 |
 
 ### `config`: read and write stored configurations
 
@@ -57,9 +66,10 @@ characters). A configuration that is stored stops logging on every unit (see
 
 ### `device`: identity
 
-`INFO` (read) returns `{product, revision, features, hw, sw, build}` (versions packed as
-`major << 24 | minor << 16 | patch`; `features` is the `ProductFeature` mask the unit sends on CDMP now,
-the build's without CDMP), with CDMP `{cdmp_id, uid, status}`, and on a
+`INFO` (read) returns `{product, revision, features, hw, sw, build, board}` (versions packed as
+`major << 24 | minor << 16 | patch`; `build` is the application `VERSION` file's tweak; `board` is the text
+`CONFIG_BOARD_TARGET`, which with `product` tells which image the unit accepts; `features` is the
+`ProductFeature` mask the unit sends on CDMP now, the build's without CDMP), with CDMP `{cdmp_id, uid, status}`, and on a
 unit with sensors `{adc_channels, gpio_channels, sensors_max}`: the ADC and GPIO channels a sensor
 can read, each numbered from 0, and the most sensors a configuration holds, which the sensors
 configuration is validated against. Always present: `event_channels: [uint]`, the `EventChannelId` of
@@ -298,9 +308,10 @@ when `EERIE_LEAP_SMP` is on.
 | `STOP` (write) | `{uid?}` | `{}` |
 
 - `active` is a boolean, `reason` the `LoggingStatusReason` (0 `Stopped`, 1 `WriteFailed`, 2 `NoSpace`,
-  3 `RotationFailed`, 4 `Unavailable`) of the last status on `logging_events`; 0 while `active`, as in the CDMP
-  record. On a unit with a log writer it is that unit's own status. On a unit without one (the gauge)
-  it is the combined status the units share, and `Unavailable` while none reports.
+  3 `RotationFailed`, 4 `Unavailable`, 5 `FirmwareUpdate`) of the last status on `logging_events`; 0
+  while `active`, as in the CDMP record. On a unit with a log writer it is that unit's own status (after
+  a firmware upload started, `FirmwareUpdate`). On a unit without one (the gauge) it is the combined
+  status the units share, and `Unavailable` while none reports.
 - `since_ms` is the start of the session in Unix milliseconds, UTC, and only present while this unit's
   own writer runs a session. `file` (the asset name in the [`logs`](#assets-asset-kinds) kind) and
   `bytes` (that file's size so far, headers included) are present only while a file is open; the file
@@ -318,12 +329,47 @@ bits is a bad request (`rc` `EINVAL`).
 Threading: the handlers run on the MCUmgr work queue and only read atomics, call the writer's session
 getter and store a request; they allocate, block and throw nothing.
 
+### `dfu`: firmware update status and errors
+
+The standard `img_mgmt` group does the transfer; this one reports what it does not
+(see [dfu.md](dfu.md) for the whole update and its confirmation).
+
+| Command | Request | Response |
+| --- | --- | --- |
+| `STATUS` (read) | | `{confirmed, state, confirm_in_ms?, reset_cause}` |
+
+- `confirmed` is a boolean: the running image is confirmed. `state` is 0 `CONFIRMED`, 1 `VERIFYING` (a
+  test boot waiting for boot complete), 2 `CONFIRMING` (boot complete, counting the self-confirmation
+  delay) or 3 `FAILED` (the deadline passed, a reset follows). `confirm_in_ms` is the time left in
+  `CONFIRMING` only. `reset_cause` is the `hwinfo` mask of this boot.
+- Errors, in the `err` map of the answer to an `img_mgmt` upload (the identity check refuses the
+  chunk): `NO_IDENTITY` 2 (no identity TLV in the image), `WRONG_PRODUCT` 3, `WRONG_BOARD` 4,
+  `BAD_IDENTITY` 5 (malformed header, TLVs or identity). For SMP v1 clients they translate to `EINVAL`.
+  The refused upload's partial image is erased, so it is not listed. The answer to the refused chunk
+  carries `err` and also `off: 0` (`img_mgmt` appends its offset after the hook refuses and the upload
+  state has been reset): check `err` before `off`. A refusal emits no `DFU_STOPPED` notification.
+
+Threading: the handler reads a snapshot from the confirmation state and allocates, blocks and throws
+nothing.
+
 ## Transports
 
 | Transport | Kconfig | Route |
 | --- | --- | --- |
 | CAN | `EERIE_LEAP_SMP_CAN` | Between units on the CDMP COM channel; see [cdmp.md](cdmp.md). |
 | BLE | `EERIE_LEAP_SMP_BLE` | From a central to this unit or, forwarded over CAN, to another unit; see [bluetooth.md](bluetooth.md). |
+
+Firmware images are `img_mgmt` upload chunks of `buf_size - 64` bytes, except the first, which also
+carries `image`, `len` and the 32-byte `sha` and has to be sized by encoding it (`buf_size - 64`
+overflows the 1024-byte packet); a first chunk with a full `sha` waits for the unit's check of the slot
+like the last one (allow about 5 s). **Window rule for image chunks
+over CAN:** a client sends them to a unit behind CAN **one at a time** (a window of 1). The target
+erases a flash sector for every 4 KB of image with interrupts off for tens of milliseconds, during
+which the CAN controller's receive buffers fill and frames are lost; a second request already on the
+wire arrives during an erase and is dropped, and the client then waits out its timeout. One chunk in
+flight costs about a tenth of the rate and loses nothing. Over BLE to the access point itself, the
+`info` window stays. The AP forwards image chunks to a peer as it forwards any packet (pass-through,
+no staging), so the phone stays connected for the whole transfer.
 
 Both transports share MCUmgr's packet pool, and requests and responses draw from it, so a client
 keeps fewer requests in flight than the `buf_count` that `mcumgr params` reports: a window of
@@ -345,7 +391,8 @@ sending unit's `smp_bus_share_percent` (25 % by default, see [canbus.md](canbus.
 | `MCUMGR_TRANSPORT_NETBUF_COUNT` | 6 | Packet pool size (rt_core default; boards may override). |
 | `MCUMGR_TRANSPORT_NETBUF_SIZE` | 1024 | Largest packet. The `assets` group's transfer buffer has this size, and a `READ` chunk is a little smaller. |
 | `MCUMGR_TRANSPORT_WORKQUEUE_THREAD_PRIO` | 7 | MCUmgr handler thread, below sensor processing. |
-| `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_CONTROLLER_ADC` | The calibration group pauses and resumes processing on this queue, which 2048 bytes do not cover. |
+| `MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE` | 4096 with `EERIE_LEAP_CONTROLLER_ADC` or `EERIE_LEAP_DFU` | The calibration group pauses and resumes processing on this queue, which 2048 bytes do not cover; `img_mgmt` (bootutil trailer reads, stream flash writes, the image check) runs on it too. |
+| `EERIE_LEAP_DFU` and its options | y with `BOOTLOADER_MCUBOOT` and `EERIE_LEAP_DOMAIN_SYSTEM` | `img_mgmt`, the identity check, the `dfu` group and the confirmation; see [dfu.md](dfu.md#kconfig). |
 | `FS_LITTLEFS_NUM_FILES`, `FS_FATFS_NUM_FILES` | 6 with `EERIE_LEAP_SMP_ASSETS` | Open files of the file system the build uses (littlefs, FAT): a download and an upload stay open between requests, next to the log writer and the transient opens. rt_core's default. |
 | `EERIE_LEAP_CONTROLLER_MANAGEMENT` | n | Serves `config`, `device`, `files` and, with `EERIE_LEAP_SMP_ASSETS`, `assets`. Depends on `EERIE_LEAP_SMP` and `EERIE_LEAP_DOMAIN_SYSTEM`; create it after every configuration manager is registered. It serves the `AssetsManager` it is given, whose kinds may come and go; given none, `KINDS` lists nothing. |
 

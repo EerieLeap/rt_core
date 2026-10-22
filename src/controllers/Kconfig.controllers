@@ -13,6 +13,16 @@ config EERIE_LEAP_CONTROLLER_MANAGEMENT
       Add EerieLeap Management Controller, serving the config, device,
       files and assets SMP groups.
 
+config EERIE_LEAP_CONTROLLER_DFU
+    bool "EerieLeap DFU Controller"
+    # The identity check compares uploads with CONFIG_EERIE_LEAP_PRODUCT_ID.
+    depends on EERIE_LEAP_DFU && EERIE_LEAP_DOMAIN_SYSTEM
+    default y
+    help
+      Add EerieLeap DFU Controller: the image identity check on uploads, the
+      dfu SMP group and the confirmation of a new image (watchdog, liveness
+      probes, boot deadline).
+
 config EERIE_LEAP_CONTROLLER_CANBUS
     bool "EerieLeap CANBus Controller"
     depends on EERIE_LEAP_DOMAIN_CANBUS && EERIE_LEAP_DOMAIN_CANBUS_COM

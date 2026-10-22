@@ -143,6 +143,37 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
     );
 }
 
+    #ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
+
+// The gauge writes no logs, so a firmware update has none to end: no hook is registered, and an upload
+// or a reset (here: the notifications, called directly) reaches nothing of the controller.
+ZTEST(logging_controller_remote, test_TheRemoteRoleRegistersNoFirmwareUpdateHooks) {
+    F().Start();
+    const auto control = F().controller->GetControl();
+    F().peer.ShareStatus({ 0x01 });
+    zassert_true(
+        WaitUntil([&control] {
+            return control->IsActive();
+        }),
+        "The other unit logs"
+    );
+
+    zassert_false(F().controller->AreFirmwareUpdateHooksRegistered());
+
+    const int64_t begin_ms = k_uptime_get();
+    zassert_equal(NotifyUploadStarted(), MGMT_CB_OK);
+        #ifdef CONFIG_MCUMGR_GRP_OS_RESET_HOOK
+    zassert_equal(NotifyReset(), MGMT_CB_OK);
+        #endif
+    zassert_true(k_uptime_get() - begin_ms < 500, "and nothing waits");
+
+    zassert_true(control->IsActive(), "The status of the logging unit is untouched");
+    zassert_true(control->GetReason() == LoggingStatusReason::Stopped, "and so is its reason");
+    zassert_false(F().peer.WaitForBroadcast(200).has_value(), "No stop is sent to the units that log");
+}
+
+    #endif // CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
+
 // A unit without a log writer never sends the LOGGING feature, so senders skip it.
 ZTEST(logging_controller_remote, test_TheUnitNeverSendsTheLoggingFeature) {
     F().Start();

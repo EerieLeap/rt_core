@@ -36,6 +36,7 @@
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     #include "domain/canbus_com_domain/state_bridge/network_state_exporter.h"
     #include "domain/logging_domain/configuration/logging_configuration_manager.h"
+    #include "domain/logging_domain/control/firmware_update_logging_stop.h"
     #include "domain/logging_domain/control/writer_logging_control.h"
     #include "domain/logging_domain/services/log_writer_service.h"
     #include "domain/logging_domain/services/log_writer_supervisor.h"
@@ -77,6 +78,7 @@ using eerie_leap::subsys::threading::IService;
 
 using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateExporter;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
+using eerie_leap::domain::logging_domain::control::FirmwareUpdateLoggingStop;
 using eerie_leap::domain::logging_domain::control::WriterLoggingControl;
 using eerie_leap::domain::logging_domain::services::LogWriterService;
 using eerie_leap::domain::logging_domain::services::LogWriterSupervisor;
@@ -99,6 +101,11 @@ using eerie_leap::domain::canbus_com_domain::state_bridge::NetworkStateImporter;
 // A configuration stored on this unit after Start() stops logging on every unit (L9): the unit's own
 // control stops, the triggers take a baseline, and the LOGGING stop is broadcast. The composition
 // root calls Start() once the unit has finished starting.
+//
+// The writer role also ends logging for a firmware update (D8 of the firmware update plan), when
+// MCUmgr's notification hooks are built: an image upload starting stops the writer with
+// LoggingStatusReason::FirmwareUpdate, and an `os reset` stops it and waits, at most two seconds, for
+// the file to be finalized before the reset goes ahead. The remote role registers nothing.
 class LoggingController {
 public:
     // TODO: For test purposes only
@@ -174,6 +181,9 @@ public:
     [[nodiscard]] std::shared_ptr<LoggingControlConfigurationManager> GetLoggingControlConfigurationManager() const {
         return logging_control_configuration_manager_;
     }
+    // Whether the MCUmgr hooks that end logging for a firmware update are registered: only the writer
+    // role, and only when the build has MCUmgr's notification hooks.
+    [[nodiscard]] bool AreFirmwareUpdateHooksRegistered() const;
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     // For SensorsController::RegisterDependentService(), only after Initialize() returned 0.
@@ -216,6 +226,9 @@ private:
     std::shared_ptr<LogWriterService> log_writer_service_;
     std::shared_ptr<LogWriterSupervisor> log_writer_supervisor_;
     std::unique_ptr<LoggingStatusExporter> logging_status_exporter_;
+    // The MCUmgr hooks that end logging for a firmware update; null when the build has none. Dropped
+    // first by Teardown(), so no hook reaches the supervisor past it.
+    std::unique_ptr<FirmwareUpdateLoggingStop> firmware_update_logging_stop_;
     // The network half of the writer's control (Mode::Peer); null without a COM service.
     std::shared_ptr<RemoteLoggingControl> network_logging_control_;
     std::unique_ptr<CanbusComLoggingAvailabilityReporter> logging_availability_reporter_;
@@ -275,6 +288,9 @@ private:
     void RegisterAssets();
     // With CONFIG_EERIE_LEAP_SMP: serves the SMP `logging` group over logging_control_. Not fatal.
     void RegisterSmpGroup();
+    // Writer role: stops logging when a firmware upload starts and before an os reset (the MCUmgr hooks
+    // the build has). Does nothing in the remote role. Not fatal.
+    void RegisterFirmwareUpdateHooks();
     void UnregisterAssets();
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
     // From Teardown(): stops logging through the supervisor and waits for it.

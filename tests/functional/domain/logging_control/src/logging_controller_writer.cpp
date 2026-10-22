@@ -23,6 +23,7 @@
 
     #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
     #include "domain/logging_domain/configuration/logging_configuration_manager.h"
+    #include "domain/logging_domain/control/firmware_update_logging_stop.h"
     #include "domain/logging_domain/services/log_writer_supervisor.h"
     #include "domain/system_domain/models/product_feature.h"
 
@@ -90,6 +91,7 @@ struct Fixture {
         zassert_is_null(controller.GetDependentService().get());
         zassert_false(configuration_service->IsRegistered(ConfigurationService::Type::Logging));
         zassert_false(configuration_service->IsRegistered(ConfigurationService::Type::LoggingControl));
+        zassert_false(controller.AreFirmwareUpdateHooksRegistered());
     }
 };
 
@@ -492,6 +494,260 @@ ZTEST(logging_controller_writer, test_TheDeviceIdProviderDoesNotKeepTheComServic
 
     zassert_true(weak_com.expired(), "Nothing of the controller holds the COM service");
 }
+
+    #ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
+
+// ======== A firmware update ends logging (D8) ========
+
+namespace {
+
+using eerie_leap::domain::logging_domain::control::FirmwareUpdateLoggingStop;
+using eerie_leap::domain::logging_domain::services::LogWriterService;
+
+// Builds the controller, stores a logging configuration that logs "switch", and starts the writer
+// by a request; returns once it logs. The status log is the case's, made before the controller.
+std::shared_ptr<LogWriterService> StartLogging(StatusLog& log) {
+    F().Start();
+    StoreLoggingConfiguration(*F().controller, { "switch" });
+    auto writer = F().controller->GetLogWriterService();
+
+    F().controller->GetControl()->RequestStart(ALL_UNITS);
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && entry->is_active, "The writer starts");
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsRunning();
+    }));
+
+    return writer;
+}
+
+// Whether the one log file of the case was finalized: the writer records its end time then.
+bool IsLogFinalized(const LogWriterService& writer, FsService& fs_service) {
+    const auto names = logging_controller_test::ListLogFileNames(fs_service);
+    if(names.size() != 1 || writer.GetEndTimes() == nullptr)
+        return false;
+
+    return writer.GetEndTimes()->Find(names.front()).has_value();
+}
+
+} // namespace
+
+ZTEST(logging_controller_writer, test_TheWriterRegistersTheFirmwareUpdateHooks) {
+    F().Open(false);
+    zassert_equal(F().Build(F().MakeParts()).Initialize(), 0);
+
+    zassert_true(F().controller->AreFirmwareUpdateHooksRegistered(), "The writer role registers the hooks");
+
+    F().controller.reset();
+    zassert_equal(NotifyUploadStarted(), MGMT_CB_OK, "A notification with the controller gone reaches nothing");
+
+    F().Start();
+    zassert_true(F().controller->AreFirmwareUpdateHooksRegistered(), "and the next controller has them again");
+}
+
+// The flash stalls of the upload would distort the log, so the file is closed and the status says why.
+ZTEST(logging_controller_writer, test_AnUploadStartStopsLoggingWithTheFirmwareUpdateReason) {
+    F().Open(false);
+    StatusLog log;
+    const auto writer = StartLogging(log);
+    const auto control = F().controller->GetControl();
+
+    zassert_equal(NotifyUploadStarted(), MGMT_CB_OK, "The hook never refuses an upload");
+
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active, "The writer stops");
+    zassert_true(entry->reason == LoggingStatusReason::FirmwareUpdate, "and says why");
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsStopped();
+    }));
+    zassert_true(
+        WaitUntil([&control] {
+            return control->GetReason() == LoggingStatusReason::FirmwareUpdate;
+        }),
+        "The control reports the reason"
+    );
+    zassert_false(control->IsActive());
+    zassert_false(writer->GetSessionInfo().has_value(), "No session is left");
+    zassert_true(IsLogFinalized(*writer, *F().rig->fs_service), "The file was finalized");
+}
+
+// Nothing restarts it: not a sensors restart, which brings the writer back after any other stop that
+// leaves it wanted, and not the stored configuration. A start by hand does.
+ZTEST(logging_controller_writer, test_NothingStartsLoggingAgainAfterTheUploadStopped) {
+    F().Open(false);
+    StatusLog log;
+    const auto writer = StartLogging(log);
+    const auto control = F().controller->GetControl();
+    const auto dependent = F().controller->GetDependentService();
+
+    zassert_equal(NotifyUploadStarted(), MGMT_CB_OK);
+    auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active);
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsStopped();
+    }));
+
+    const auto result = std::make_shared<std::atomic<int>>(-1);
+    TestConfigQueue()->Run([dependent, result] {
+        result->store(dependent->Start() ? 1 : 0);
+    });
+    zassert_true(Flush());
+    zassert_equal(result->load(), 1, "The restart of the sensors goes through");
+    StoreLoggingConfiguration(*F().controller, { "switch" });
+    zassert_true(Flush());
+    zassert_true(writer->IsStopped(), "and neither it nor a stored configuration starts the writer");
+    zassert_false(log.WaitForEntry(200).has_value(), "No status follows the stop");
+
+    control->RequestStart(ALL_UNITS);
+    entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && entry->is_active, "A start by hand logs again");
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsRunning();
+    }));
+    zassert_true(
+        WaitUntil([&control] {
+            return control->GetReason() == LoggingStatusReason::Stopped;
+        }),
+        "and the reason is the active status's"
+    );
+
+    // An ordinary stop names no firmware update.
+    control->RequestStop(ALL_UNITS);
+    entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active);
+    zassert_true(entry->reason == LoggingStatusReason::Stopped);
+}
+
+        #ifdef CONFIG_MCUMGR_GRP_OS_RESET_HOOK
+
+// The hook returns once the file is closed, so the reboot that follows cuts nothing.
+ZTEST(logging_controller_writer, test_AnOsResetFinalizesTheLogBeforeItGoesAhead) {
+    F().Open(false);
+    StatusLog log;
+    const auto writer = StartLogging(log);
+    const auto control = F().controller->GetControl();
+
+    const int64_t begin_ms = k_uptime_get();
+    zassert_equal(NotifyReset(), MGMT_CB_OK, "The reset goes ahead");
+    const int64_t waited_ms = k_uptime_get() - begin_ms;
+
+    zassert_true(writer->IsStopped(), "The writer was stopped when the hook returned");
+    zassert_false(writer->GetSessionInfo().has_value());
+    zassert_true(IsLogFinalized(*writer, *F().rig->fs_service), "and the file was finalized");
+    zassert_true(
+        waited_ms < FirmwareUpdateLoggingStop::RESET_WAIT_MS, "without using up the bound: %d ms",
+        static_cast<int>(waited_ms)
+    );
+
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active);
+    zassert_true(entry->reason == LoggingStatusReason::FirmwareUpdate, "The status names the update");
+    zassert_true(
+        WaitUntil([&control] {
+            return control->GetReason() == LoggingStatusReason::FirmwareUpdate;
+        }),
+        "The control reports it"
+    );
+}
+
+// The stop runs on the configuration work queue. A queue that is busy cannot hold a reset back for good.
+ZTEST(logging_controller_writer, test_AResetGoesAheadWhenTheStopCannotFinishInTime) {
+    F().Open(false);
+    StatusLog log;
+    const auto writer = StartLogging(log);
+
+    const auto release = std::make_shared<k_sem>();
+    k_sem_init(release.get(), 0, 1);
+    TestConfigQueue()->Run([release] {
+        k_sem_take(release.get(), Ms(10000));
+    });
+
+    LogCounter::Get().Watch("firmware_update_logging_stop_logger");
+    const int64_t begin_ms = k_uptime_get();
+    zassert_equal(NotifyReset(), MGMT_CB_OK, "The reset goes ahead after the bound");
+    const int64_t waited_ms = k_uptime_get() - begin_ms;
+
+    zassert_true(
+        waited_ms >= FirmwareUpdateLoggingStop::RESET_WAIT_MS - 50, "It waited the bound: %d ms",
+        static_cast<int>(waited_ms)
+    );
+    zassert_true(
+        waited_ms < FirmwareUpdateLoggingStop::RESET_WAIT_MS + 3000, "and no longer: %d ms", static_cast<int>(waited_ms)
+    );
+    ZASSERT_LOGGED(1, "The timeout is logged");
+    zassert_true(writer->IsRunning(), "The stop is still waiting for the queue");
+
+    k_sem_give(release.get());
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active, "and runs when the queue is free");
+    zassert_true(entry->reason == LoggingStatusReason::FirmwareUpdate);
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsStopped();
+    }));
+    zassert_true(Flush());
+}
+
+// On the configuration work queue the stop could never run during the wait: the hook gives up at once.
+ZTEST(logging_controller_writer, test_AResetOnTheConfigurationQueueDoesNotWaitForItself) {
+    F().Open(false);
+    StatusLog log;
+    const auto writer = StartLogging(log);
+
+    struct Result {
+        k_sem done{};
+        std::atomic<int> status = -1;
+        std::atomic<int64_t> waited_ms = -1;
+    };
+    const auto result = std::make_shared<Result>();
+    k_sem_init(&result->done, 0, 1);
+
+    LogCounter::Get().Watch("logging_controller_logger");
+    TestConfigQueue()->Run([result] {
+        const int64_t begin_ms = k_uptime_get();
+        result->status.store(static_cast<int>(NotifyReset()));
+        result->waited_ms.store(k_uptime_get() - begin_ms);
+        k_sem_give(&result->done);
+    });
+    zassert_equal(k_sem_take(&result->done, Ms(WAIT_MS)), 0, "The hook returned on the queue");
+
+    zassert_equal(result->status.load(), static_cast<int>(MGMT_CB_OK));
+    zassert_true(result->waited_ms.load() < 1000, "without waiting: %d ms", static_cast<int>(result->waited_ms.load()));
+    ZASSERT_LOGGED(1, "It says it did not wait");
+
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value() && !entry->is_active, "The stop still runs, behind the job");
+    zassert_true(entry->reason == LoggingStatusReason::FirmwareUpdate);
+}
+
+        #endif // CONFIG_MCUMGR_GRP_OS_RESET_HOOK
+
+// While the writer does not log, there is nothing to stop and nothing to report.
+ZTEST(logging_controller_writer, test_TheFirmwareUpdateHooksDoNothingWhileNotLogging) {
+    F().Open(false);
+    StatusLog log;
+    F().Start();
+    StoreLoggingConfiguration(*F().controller, { "switch" });
+    const auto writer = F().controller->GetLogWriterService();
+    const auto control = F().controller->GetControl();
+
+    zassert_equal(NotifyUploadStarted(), MGMT_CB_OK);
+        #ifdef CONFIG_MCUMGR_GRP_OS_RESET_HOOK
+    const int64_t begin_ms = k_uptime_get();
+    zassert_equal(NotifyReset(), MGMT_CB_OK);
+    zassert_true(
+        k_uptime_get() - begin_ms < FirmwareUpdateLoggingStop::RESET_WAIT_MS,
+        "The reset does not wait for a writer that is stopped"
+    );
+        #endif
+    zassert_true(Flush());
+
+    zassert_false(log.WaitForEntry(200).has_value(), "No status is published");
+    zassert_true(writer->IsStopped());
+    zassert_true(control->GetReason() == LoggingStatusReason::Stopped, "and the reason is not set");
+    zassert_equal(logging_controller_test::CountLogFiles(*F().rig->fs_service), 0U, "No file was written");
+}
+
+    #endif // CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
 
     #ifdef CONFIG_EERIE_LEAP_ASSETS
 

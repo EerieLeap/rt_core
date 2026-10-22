@@ -68,7 +68,8 @@ private:
     /**
      * @brief Binds SMP to the claimed CDMP ID in ONLINE and VERSION_MISMATCH, unbinds otherwise.
      *
-     * VERSION_MISMATCH keeps SMP so a unit with another CDMP version can still be managed.
+     * A node refused for its version at its first claim has no ID, so it stays unbound: it is
+     * reachable on neither side (see docs/cdmp.md).
      */
     void OnCdmpStatusChanged(CdmpDeviceStatus status);
 
@@ -108,12 +109,23 @@ public:
         return cdmp_service_;
     }
 
+    /** @brief The CDMP work queue, which the SMP-CAN transport shares; for liveness probes (DfuController). */
+    [[nodiscard]] std::shared_ptr<eerie_leap::subsys::threading::WorkQueueThread> GetWorkQueueThread() const {
+        return cdmp_service_->GetWorkQueueThread();
+    }
+
     /** @brief The claimed CDMP ID while SMP is bound to it, 0 otherwise. */
     [[nodiscard]] uint8_t GetAddress() const override {
         return smp_transport_->GetAddress();
     }
     /** @brief Whether @p target is another device that CDMP sees online, while SMP is bound. */
     [[nodiscard]] bool IsReachable(uint8_t target) const override;
+    /**
+     * @brief Whether this unit can be managed over CAN: CDMP is ONLINE with a claimed ID and SMP is bound to
+     * it, so the other units list it and an access point can forward to it. False while the node is
+     * stopped, claiming, or refused for its version (it has no ID then). Any thread.
+     */
+    [[nodiscard]] bool IsSmpBound() const;
     bool Forward(uint8_t target, SmpPacket packet) override;
     void SetResponseSink(std::shared_ptr<ISmpResponseSink> response_sink) override;
 

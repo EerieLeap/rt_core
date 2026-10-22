@@ -120,6 +120,17 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_DFU)
+        list(APPEND SRC
+            "${SRC_DIR}/subsys/dfu/*.c"
+            "${SRC_DIR}/subsys/dfu/*.cpp"
+        )
+
+        # img_mgmt.h and dfu/mcuboot.h include MCUboot's bootutil headers, which only a library linked to
+        # MCUBOOT_BOOTUTIL (the image manager's bootutil, MCUBOOT_IMG_MANAGER selects it) can see.
+        zephyr_library_link_libraries(MCUBOOT_BOOTUTIL)
+    endif()
+
     if(CONFIG_EERIE_LEAP_RANDOM)
         list(APPEND SRC
             "${SRC_DIR}/subsys/random/*.c"
@@ -275,6 +286,12 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_CONTROLLER_DFU)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/dfu_controller.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_CONTROLLER_BLE)
         list(APPEND SRC
             "${SRC_DIR}/controllers/ble_controller.cpp"
@@ -352,4 +369,10 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     # Linker script to define .debug_gdb_scripts section, in order to
     # suppress warnings for orphan debug sections
     zephyr_linker_sources(SECTIONS ${EL_COMMON_DIR}/debug_gdb_scripts.ld)
+
+    # Images for MCUboot are signed through a wrapper of Zephyr's script that adds the image identity and
+    # the real sector count. A SIGNING_SCRIPT set by sysbuild takes precedence over the property.
+    if(CONFIG_BOOTLOADER_MCUBOOT)
+        set_property(TARGET zephyr_property_target PROPERTY SIGNING_SCRIPT "${EL_COMMON_DIR}/cmake/sign_image.cmake")
+    endif()
 endif()

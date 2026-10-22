@@ -15,7 +15,7 @@ Code: `src/subsys/cdmp/` (protocol), `src/subsys/smp/can/` (SMP over CAN),
 | Features (16-bit) | The `ProductFeature` mask (`EERIE_LEAP_FEATURES_*`, see [system.md](system.md)), sent in the heartbeat (bytes 3-4) and the discovery response (bytes 6-7). There is no device type. `CdmpDevice` keeps the mask in an atomic, so any thread may change it; a receiver stores the latest heartbeat's mask as the sender's. |
 | UID (32-bit) | `CdmpUid::Generate()`: CRC32 of the SoC hardware ID (eFuse MAC on ESP32), so it is stable across reboots; random when the SoC reports none. |
 | Device ID (1..254) | Claimed at start by discovery, lowest free ID first; 0 is unassigned, 255 broadcast. |
-| Protocol version | 1.0 (`0x10`). A unit with another major version puts the whole network into `VERSION_MISMATCH`. |
+| Protocol version | 1.0 (`0x10`). A claim with another major version is refused, and only the claimant enters `VERSION_MISMATCH`. |
 
 ## Services
 
@@ -38,6 +38,11 @@ transport run on:
     the next free ID, and a version-incompatible answer ends in `VERSION_MISMATCH`. The claim skips
     IDs that are in the table or have a pending claim.
   - A stop drops the frames still queued for the service, and a start begins with an empty table.
+  - A claim with another major version is answered `VERSION_INCOMPATIBLE` by the lowest ID and recorded
+    by no unit; the units online stay `ONLINE` (the spec's network-wide mismatch is not implemented).
+    The claimant enters `VERSION_MISMATCH` with no device ID, stops its network and heartbeat services
+    and forgets its table, so it has no SMP address on CAN and is in no table: the access point cannot
+    forward to it, and a release that changes the major version cannot be rolled out over CAN.
   - `RegisterDeviceEventHandler()` reports devices that join, restart (a claim of their ID with
     the same UID) or leave the table, and `RegisterHeartbeatHandler()` passes on every heartbeat
     of a device in the table. Both run on the CDMP work queue and must not block.
@@ -74,8 +79,8 @@ and the SMP-CAN transport on the channel named by the stored CAN configuration's
 - configures the transport with `smp_can_id_base` and `smp_bus_share_percent`, and CDMP with
   `cdmp_base_can_id`;
 - binds the SMP transport to the claimed device ID when the node is `ONLINE` or
-  `VERSION_MISMATCH` (so a unit with another CDMP version can still be managed) and unbinds it
-  otherwise;
+  `VERSION_MISMATCH` and holds a valid ID, and unbinds it otherwise (a unit refused for its version
+  at its first claim holds none, see above);
 - implements `ISmpForwarder`, which the BLE access point uses to reach other units;
 - passes on the network service's device events and heartbeats (`RegisterDeviceEventHandler()`,
   `RegisterHeartbeatHandler()`): other units joining, restarting and leaving the table, and each

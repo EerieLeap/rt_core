@@ -87,6 +87,9 @@ private:
     // Set by a tick that ended the session, cleared by the next Start().
     std::atomic<bool> has_failed_ = false;
 
+    // The reason DoStop() publishes; set only for the length of StopWithReason().
+    std::atomic<LoggingStatusReason> stop_reason_ = LoggingStatusReason::Stopped;
+
     std::optional<uint64_t> max_log_size_bytes_override_;
     uint64_t min_free_space_bytes_ = static_cast<uint64_t>(CONFIG_EERIE_LEAP_LOG_MIN_FREE_SPACE_MB) * 1024 * 1024;
 
@@ -125,6 +128,13 @@ public:
 
     /** Only while stopped, and before anything can start the service: Start() reads it unguarded. */
     void SetLoggerFactory(LoggerFactory logger_factory);
+
+    /**
+     * Stop(), except that the StatusUpdated it publishes carries @p reason instead of Stopped, such as
+     * LoggingStatusReason::FirmwareUpdate. Nothing is published, and the reason is dropped, when the
+     * service is stopped already. The other results are Stop()'s.
+     */
+    bool StopWithReason(LoggingStatusReason reason);
 
     /** Counters since the last Start(); zero before the first one. */
     [[nodiscard]] LogWriterStats GetStats() const;

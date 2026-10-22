@@ -1,0 +1,26 @@
+/*
+ * Two small image slots on native_sim's flash simulator, for the firmware update suite.
+ *
+ * The stock slots are 420 KB each, many times what a test image needs, and the application's overlay
+ * (app/boards) puts the internal file system over them. 64 KB (16 sectors of 4 KB) hold the test
+ * images (about 7 KB) and the swap trailers of both swap modes, and the sector count keeps erases quick.
+ * The mcuboot, scratch and storage partitions stay where they are.
+ */
+&flash0 {
+	partitions {
+		/delete-node/ partition@c000;
+		/delete-node/ partition@75000;
+
+		slot0_partition: partition@c000 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-0";
+			reg = <0x0000c000 DT_SIZE_K(64)>;
+		};
+
+		slot1_partition: partition@1c000 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-1";
+			reg = <0x0001c000 DT_SIZE_K(64)>;
+		};
+	};
+};

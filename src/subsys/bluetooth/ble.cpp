@@ -82,7 +82,10 @@ bool Ble::Start() {
 // ===========
 
 int Ble::StartAdvertising() {
-    return k_work_reschedule(&adv_restart_work, K_NO_WAIT);
+    // k_work_reschedule() returns 0, 1 or 2 when the work is queued and a negative errno on failure.
+    const int ret = k_work_reschedule(&adv_restart_work, K_NO_WAIT);
+
+    return ret < 0 ? ret : 0;
 }
 
 void Ble::RestartAdvertisingWorkHandler(struct k_work* /*work*/) {

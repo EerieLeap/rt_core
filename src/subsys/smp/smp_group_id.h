@@ -16,6 +16,7 @@ enum class SmpGroupId : uint16_t {
     FILES = MGMT_GROUP_ID_PERUSER + 5,
     ASSETS = MGMT_GROUP_ID_PERUSER + 6,
     LOGGING = MGMT_GROUP_ID_PERUSER + 7,
+    DFU = MGMT_GROUP_ID_PERUSER + 8,
 };
 
 } // namespace eerie_leap::subsys::smp

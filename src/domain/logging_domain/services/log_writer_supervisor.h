@@ -93,6 +93,25 @@ public:
     [[nodiscard]] LoggingStatusReason GetReason() const override;
 
     /**
+     * RequestStop(), except that the status of the session it ends names @p reason, such as
+     * LoggingStatusReason::FirmwareUpdate, instead of Stopped. Nothing is published, and the reason is
+     * dropped, when the writer is stopped already. Like any stop it clears the wanted state, so the
+     * dependent does not start the writer again, and the latest request wins. Returns at once; any
+     * thread, the MCUmgr work queue included: it allocates nothing and throws nothing.
+     */
+    void RequestStopWithReason(LoggingStatusReason reason);
+
+    /**
+     * Waits until the task has served every request made before the call (a start, a stop, a restart
+     * for a stored configuration) and is not running, or @p timeout_ms passed; true when it has. The
+     * stop that a request ordered is complete then: the file is finalized and closed and the status
+     * published (to the bus, not yet to its subscribers). A request made during the wait may or may
+     * not be served. Never from the configuration work queue, which would wait for itself; polls every
+     * millisecond and allocates nothing, so the MCUmgr work queue may call it.
+     */
+    [[nodiscard]] bool WaitUntilIdle(int32_t timeout_ms) const;
+
+    /**
      * What to register with SensorsController::RegisterDependentService(), after a successful
      * Initialize(). It stops the writer for a sensors restart and starts it again only while logging
      * is still wanted and did not fail. It holds the writer and the wanted state, not the
@@ -142,7 +161,7 @@ private:
     void StopIfFailed();
     // Whether it opened a new session.
     bool ApplyStart();
-    void ApplyStop();
+    void ApplyStop(LoggingStatusReason reason);
     void RestartIfRunning();
 
     // The bus thread that carries logging_events, inside guard_.

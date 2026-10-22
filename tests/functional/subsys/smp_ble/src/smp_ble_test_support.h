@@ -71,6 +71,22 @@ inline Bytes MakeEchoRequest(std::string_view text, uint8_t sequence, SmpOperati
     return MakePacket(operation, 0, 0, sequence, body);
 }
 
+// img_mgmt group (1), upload (1): {"off": 0, "data": <bytes>}, sized so that the whole packet, header
+// included, is @p packet_size bytes. The firmware update sends chunks of this kind.
+inline Bytes MakeImageChunkRequest(size_t packet_size, uint8_t sequence) {
+    // The map (1 byte), "off" and its value (4 + 1), "data" (5) and the head of a byte string of up to 64 KiB (3).
+    constexpr size_t BODY_OVERHEAD = 1 + 4 + 1 + 5 + 3;
+    const size_t data_size = packet_size - SmpHeader::SIZE - BODY_OVERHEAD;
+
+    Bytes body = { 0xA2, 0x63, 'o', 'f', 'f', 0x00, 0x64, 'd', 'a', 't', 'a', 0x59 };
+    body.push_back(static_cast<uint8_t>(data_size >> 8));
+    body.push_back(static_cast<uint8_t>(data_size & 0xFF));
+    for(size_t i = 0; i < data_size; i++)
+        body.push_back(static_cast<uint8_t>(i * 7 + 3));
+
+    return MakePacket(SmpOperation::WRITE, 1, 1, sequence, body);
+}
+
 inline Bytes Routed(uint8_t route, const Bytes& packet) {
     Bytes routed = { route };
     routed.insert(routed.end(), packet.begin(), packet.end());

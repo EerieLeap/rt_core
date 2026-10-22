@@ -472,6 +472,48 @@ ZTEST(cdmp_network, test_incompatible_claim_is_not_recorded) {
     zassert_true(fixture.events.empty());
 }
 
+ZTEST(cdmp_network, test_lowest_id_refuses_an_incompatible_claim_and_stays_online) {
+    NetworkFixture fixture;
+    fixture.GoOnline(1);
+
+    fixture.Claim(3, 0x33333333, 0x20);
+
+    auto frame = fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM_RESPONSE);
+    zassert_true(frame.has_value(), "The lowest ID answers a claim of another major version");
+    const auto response = CdmpIdClaimResponseMessage::FromCanFrame(*frame);
+    zassert_equal(response.result, CdmpIdClaimResult::VERSION_INCOMPATIBLE);
+    zassert_equal(response.responding_device_id, 1);
+    zassert_equal(response.claiming_device_id, 3);
+
+    // Only the claimant leaves for VERSION_MISMATCH; the units that are online carry on.
+    zassert_equal(fixture.device->GetStatus(), CdmpDeviceStatus::ONLINE);
+
+    // Even a heartbeat of the refused unit finds no claim to turn into a table entry, so nothing in
+    // the table can be reached for SMP.
+    fixture.Heartbeat(3);
+
+    zassert_equal(fixture.service.GetDeviceCount(), 0);
+    zassert_false(fixture.service.IsDeviceOnline(3));
+    zassert_true(fixture.events.empty());
+}
+
+ZTEST(cdmp_network, test_unit_that_is_not_lowest_stays_silent_on_an_incompatible_claim) {
+    NetworkFixture fixture;
+    fixture.GoOnline(2);
+    fixture.Discover(1, 0x10101010, LOGGER_FEATURES);
+    fixture.events.clear();
+
+    fixture.Claim(3, 0x33333333, 0x20);
+
+    zassert_false(
+        fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM_RESPONSE, NO_FRAME_TIMEOUT_MS).has_value(),
+        "Only the lowest ID answers a version incompatibility"
+    );
+    zassert_equal(fixture.device->GetStatus(), CdmpDeviceStatus::ONLINE);
+    zassert_equal(fixture.service.GetDeviceCount(), 1, "The refused unit is not in the table");
+    zassert_true(fixture.events.empty());
+}
+
 ZTEST(cdmp_network, test_own_claim_is_not_recorded) {
     NetworkFixture fixture;
 
@@ -798,6 +840,32 @@ ZTEST(cdmp_network, test_incompatible_version_answer_ends_the_claim) {
         fixture.bus_frames.Wait(CdmpManagementMessageType::ID_CLAIM, NO_FRAME_TIMEOUT_MS).has_value(),
         "No claim follows the mismatch"
     );
+}
+
+ZTEST(cdmp_network, test_unit_refused_for_its_version_has_no_device_id_and_an_empty_table) {
+    NetworkFixture fixture;
+    fixture.StartWithoutReceiving();
+
+    fixture.device->StartDiscovery();
+
+    zassert_true(fixture.bus_frames.Wait(CdmpManagementMessageType::DISCOVERY_REQUEST).has_value());
+    fixture.Receive(DiscoveryResponseFrame(1, 0x10101010, LOGGER_FEATURES));
+
+    auto claim = fixture.WaitForClaim();
+    zassert_true(claim.has_value());
+    zassert_equal(claim->claiming_device_id, 2, "ID 1 is in the table");
+
+    fixture.Receive(ClaimResponseFrame(1, 2, CdmpIdClaimResult::VERSION_INCOMPATIBLE));
+
+    zassert_true(fixture.WaitForStatus(CdmpDeviceStatus::VERSION_MISMATCH));
+    fixture.DrainQueue();
+
+    // The ID is assigned when a claim succeeds, so a refused unit has none, and with it no SMP
+    // address on CAN. It also forgets the network it had discovered.
+    zassert_equal(fixture.device->GetDeviceId(), CdmpDevice::DEVICE_ID_UNASSIGNED);
+    zassert_equal(fixture.service.GetState(), ServiceState::STOPPED);
+    zassert_equal(fixture.service.GetDeviceCount(), 0);
+    zassert_false(fixture.service.IsDeviceOnline(1));
 }
 
 ZTEST(cdmp_network, test_frames_queued_before_a_stop_are_dropped) {

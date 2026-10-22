@@ -13,6 +13,7 @@
     #include "subsys/assets/smp/assets_mgmt_group.h"
 #endif
 #include "domain/configuration_domain/services/configuration_service.h"
+#include "domain/system_domain/models/system_configuration.h"
 #include "subsys/threading/work_queue_thread.h"
 
 #include "controllers/management_controller.h"
@@ -33,14 +34,9 @@ using eerie_leap::subsys::assets::smp::AssetsMgmtGroup;
 #endif
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::system_domain::models::SensorCapabilities;
+using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::domain::system_domain::smp::FilesMgmtGroup;
 using eerie_leap::subsys::threading::WorkQueueThread;
-
-namespace {
-
-constexpr uint32_t BUILD_NUMBER = 4321;
-
-} // namespace
 
 ZTEST_SUITE(management_controller, NULL, NULL, NULL, NULL, NULL);
 
@@ -54,7 +50,7 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
     );
 
     ManagementController controller(
-        configuration_service, work_queue, nullptr, BUILD_NUMBER,
+        configuration_service, work_queue, nullptr,
         SensorCapabilities{ .adc_channels = 0, .gpio_channels = 1, .sensors_max = 64 }
     );
     zassert_equal(controller.Initialize(), 0);
@@ -63,7 +59,8 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
 
     const auto device = client.Read(SmpGroupId::DEVICE, 0);
     zassert_true(device.IsOk());
-    zassert_equal(device.Value("build"), BUILD_NUMBER);
+    zassert_equal(device.Value("build"), SystemConfiguration::SW_BUILD);
+    zassert_equal(device.texts.at("board"), CONFIG_BOARD_TARGET);
     zassert_false(device.Has("cdmp_id"), "No CDMP identity without network info");
     zassert_equal(device.Value("adc_channels"), 0);
     zassert_equal(device.Value("gpio_channels"), 1);
@@ -84,7 +81,7 @@ ZTEST(management_controller, test_serves_the_files_group) {
     const auto request = CborMap().PutText("dir", "scripts").Build();
 
     {
-        ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER);
+        ManagementController controller(configuration_service, work_queue, nullptr);
         zassert_equal(controller.Initialize(), 0);
 
         SmpTestClient client;
@@ -100,7 +97,7 @@ ZTEST(management_controller, test_serves_the_files_group) {
     const auto card = std::make_shared<FakeFsService>();
     card->directories["scripts"] = { { .name = "oil.lua", .size = 120 } };
 
-    ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt, card);
+    ManagementController controller(configuration_service, work_queue, nullptr, std::nullopt, card);
     zassert_equal(controller.Initialize(), 0);
 
     SmpTestClient client;
@@ -143,9 +140,7 @@ ZTEST(management_controller, test_serves_the_assets_group) {
     const auto configuration_service = std::make_shared<ConfigurationService>();
 
     {
-        ManagementController controller(
-            configuration_service, work_queue, nullptr, BUILD_NUMBER, std::nullopt, nullptr, registry
-        );
+        ManagementController controller(configuration_service, work_queue, nullptr, std::nullopt, nullptr, registry);
         zassert_equal(controller.Initialize(), 0);
 
         SmpTestClient client;
@@ -187,7 +182,7 @@ ZTEST(management_controller, test_serves_an_empty_assets_group_without_a_registr
 
     const auto configuration_service = std::make_shared<ConfigurationService>();
 
-    ManagementController controller(configuration_service, work_queue, nullptr, BUILD_NUMBER);
+    ManagementController controller(configuration_service, work_queue, nullptr);
     zassert_equal(controller.Initialize(), 0);
 
     SmpTestClient client;

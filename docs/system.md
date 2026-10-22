@@ -13,7 +13,22 @@ SMP `device` group.
 | `EERIE_LEAP_REVISION` | 0..255, 0 | Hardware revision. |
 | `EERIE_LEAP_HW_VERSION_MAJOR/MINOR` | 0..255 | Packed as `major << 24 \| minor << 16 \| patch`. |
 | `EERIE_LEAP_HW_VERSION_PATCH` | 0..65535 | |
-| `EERIE_LEAP_SW_VERSION_MAJOR/MINOR/PATCH` | same | Software version, formatted `major.minor.patch.build`. |
+| `EERIE_LEAP_SW_VERSION_MAJOR/MINOR/PATCH` | 0..255, 0..255, 0..65535 | Software version, formatted `major.minor.patch.build`. |
+| `EERIE_LEAP_SW_VERSION_BUILD` | 0..255 | Build number. |
+
+The software version has one source, the application's `VERSION` file (`VERSION_MAJOR`,
+`VERSION_MINOR`, `PATCHLEVEL`, `VERSION_TWEAK`), which Zephyr reads as Kconfig macros. The four
+symbols default to those values, and MCUboot's image version (`MAJOR.MINOR.PATCHLEVEL+TWEAK`) comes from
+the same file, so the SMP `device` group and the image report the same numbers. The build number is the
+tweak. An application without a `VERSION` file, such as a test suite, gets 0 for each unless it sets the
+symbols. Do not set them in `prj.conf` in an application that has the file.
+
+The signed image also carries the unit's identity, `EERIE_LEAP_PRODUCT_ID` and the board target
+(`CONFIG_BOARD_TARGET`, for example `esp32s3_touch_amoled_1_75/esp32s3/procpu`), in a protected MCUboot
+TLV (tag 0xA0): `[format u8 = 1][product u16 LE][board_len u8][board bytes]`. `cmake/sign_image.cmake` adds
+it with `--custom-tlv`, and `--max-sectors` from the size of `slot0_partition`, through
+`CONFIG_MCUBOOT_EXTRA_IMGTOOL_ARGS` when `CONFIG_BOOTLOADER_MCUBOOT` is set. `cmake/image_identity.cmake`
+builds the same bytes for a script that signs an image the same way.
 
 ## Unit features
 
@@ -48,13 +63,14 @@ CborSystemConfig = [ device_id: uint .size 8, build_number: uint ]
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `device_id` | random 64-bit, generated once from the secure RNG | Identifies the unit for the lifetime of its internal filesystem. |
-| `build_number` | 0 | Updated by the application through `UpdateBuildNumber()`; saved only when it changes. |
+| `build_number` | 0 | Updated by the application through `UpdateBuildNumber()`; saved only when it changes. No longer reported: the `device` group and the formatted version use `EERIE_LEAP_SW_VERSION_BUILD`. |
 
 There are no validation rules. The file is `config/system_config.cbor`.
 
 ## SMP `device` group
 
-Command `INFO` (read) returns `{product, revision, features, hw, sw, build}`, on a unit
+Command `INFO` (read) returns `{product, revision, features, hw, sw, build, board}` (`build` is
+`EERIE_LEAP_SW_VERSION_BUILD`, the `VERSION` file's tweak; `board` is the text `CONFIG_BOARD_TARGET`), on a unit
 with CDMP `{cdmp_id, uid, status}`, and on a unit with sensors
 `{adc_channels, gpio_channels, sensors_max}`, which the application passes to the
 `ManagementController` from `SensorsController::GetCapabilities()`. Served by the
