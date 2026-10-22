@@ -14,7 +14,7 @@ using eerie_leap::subsys::dfu::ZephyrWatchdog;
 ZTEST_SUITE(dfu_boot_dependencies, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(dfu_boot_dependencies, test_boot_control_without_an_image_manager_is_confirmed_and_cannot_confirm) {
-#if defined(CONFIG_MCUBOOT_IMG_MANAGER)
+#ifdef CONFIG_MCUBOOT_IMG_MANAGER
     ztest_test_skip();
 #else
     McubootBootControl boot_control;

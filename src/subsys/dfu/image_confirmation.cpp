@@ -249,9 +249,8 @@ bool ImageConfirmation::NeedsTick() const {
         case DfuState::CONFIRMING:
             return true;
         case DfuState::CONFIRMED:
-            return is_watchdog_armed_.load(std::memory_order_acquire);
         case DfuState::FAILED:
-            // Until the watchdog resets the unit, a client's confirm still wins.
+            // While the watchdog runs. Until it resets a failed unit, a client's confirm still wins.
             return is_watchdog_armed_.load(std::memory_order_acquire);
     }
 

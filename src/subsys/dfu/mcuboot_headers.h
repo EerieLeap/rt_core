@@ -8,6 +8,7 @@
 // picolibc's sys/cdefs.h defines _Static_assert for C++ itself: the shim is only made where there is
 // none, and only that one is taken away again.
 #ifndef _Static_assert
+    // NOLINTNEXTLINE(bugprone-reserved-identifier,readability-identifier-naming): the bootutil C headers spell it so
     #define _Static_assert static_assert
     #define EL_DFU_STATIC_ASSERT_SHIM
 #endif

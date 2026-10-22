@@ -1,5 +1,6 @@
 #include <cerrno>
 #include <exception>
+#include <stdexcept>
 #include <utility>
 
 #include <zephyr/kernel.h>
@@ -80,7 +81,7 @@ DfuController::~DfuController() {
 }
 
 void DfuController::TickHandler(k_work* work) {
-    auto* item = CONTAINER_OF(k_work_delayable_from_work(work), TickItem, work);
+    const auto* item = CONTAINER_OF(k_work_delayable_from_work(work), TickItem, work);
     DfuController* controller = item->controller;
 
     controller->confirmation_->Tick();
@@ -118,6 +119,10 @@ int DfuController::Initialize() {
     LOG_INF("Running image is %s.", state == DfuState::CONFIRMED ? "confirmed" : "unconfirmed (test boot)");
 
     try {
+        // Cannot happen (static_assert above); checked so that the access below is.
+        if(!OWN_IDENTITY.has_value())
+            throw std::logic_error("The unit has no valid image identity.");
+
         upload_guard_.emplace(*OWN_IDENTITY);
         upload_guard_->Register();
 
@@ -148,7 +153,7 @@ int DfuController::Initialize() {
     return result;
 }
 
-void DfuController::InjectBenchFault() const {
+void DfuController::InjectBenchFault() {
     if constexpr(IS_BENCH_CRASH) {
         LOG_ERR("Bench fault: crashing the unconfirmed image.");
         k_panic();

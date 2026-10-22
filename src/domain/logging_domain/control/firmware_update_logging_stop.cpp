@@ -180,7 +180,10 @@ void FirmwareUpdateLoggingStop::OnReset() const {
     request_stop_();
 
     if(!wait_for_stop_(RESET_WAIT_MS))
-        LOG_WRN("The log writer did not confirm its stop within %d ms; the reset goes ahead.", static_cast<int>(RESET_WAIT_MS));
+        LOG_WRN(
+            "The log writer did not confirm its stop within %d ms; the reset goes ahead.",
+            static_cast<int>(RESET_WAIT_MS)
+        );
 }
 
 } // namespace eerie_leap::domain::logging_domain::control

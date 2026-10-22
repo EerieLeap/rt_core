@@ -77,7 +77,7 @@ private:
     static void TickHandler(k_work* work);
     void ScheduleTick();
     /// Fails the boot on purpose when the build asks for it (EERIE_LEAP_DFU_BENCH_FAULT_*) and the image is unconfirmed.
-    void InjectBenchFault() const;
+    static void InjectBenchFault();
 
     static ImageConfirmationConfig ConfigFromKconfig();
 

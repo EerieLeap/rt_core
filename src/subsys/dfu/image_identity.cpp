@@ -179,10 +179,8 @@ ImageIdentityResult ImageIdentityCollector::Feed(size_t offset, std::span<const 
     received_ = std::max(received_, offset + chunk.size());
 
     CopyToWindow(offset, chunk);
-    if(phase_ == Phase::HEADER && IsWindowComplete()) {
-        if(ParseHeader(image_size) == ImageIdentityResult::NEED_MORE)
-            CopyToWindow(offset, chunk);
-    }
+    if(phase_ == Phase::HEADER && IsWindowComplete() && ParseHeader(image_size) == ImageIdentityResult::NEED_MORE)
+        CopyToWindow(offset, chunk);
 
     if(phase_ == Phase::TLVS && IsWindowComplete())
         return ParseTlvs();

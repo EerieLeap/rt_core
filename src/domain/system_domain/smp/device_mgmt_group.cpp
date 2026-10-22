@@ -17,10 +17,10 @@ namespace eerie_leap::domain::system_domain::smp {
 using eerie_leap::domain::system_domain::models::ProductInfo;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::subsys::cdmp::models::CdmpDeviceInfo;
-using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::LAST_EVENT_CHANNEL_ID;
 using eerie_leap::subsys::smp::SmpGroupId;
 #ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+using eerie_leap::subsys::event_bus::EventChannelId;
 using eerie_leap::subsys::event_bus::EventChannelRegistry;
 #endif
 
@@ -45,7 +45,7 @@ DeviceMgmtGroup::~DeviceMgmtGroup() {
 bool DeviceMgmtGroup::PutEventChannels(zcbor_state_t* zse) {
     // No allocation in a handler: a fixed table sized from the last id.
     std::array<uint32_t, std::to_underlying(LAST_EVENT_CHANNEL_ID)> ids{};
-    size_t count = 0;
+    size_t count = 0; // NOLINT(misc-const-correctness): incremented under CONFIG_EERIE_LEAP_EVENT_BUS
 
 #ifdef CONFIG_EERIE_LEAP_EVENT_BUS
     const auto& registry = EventChannelRegistry::GetInstance();

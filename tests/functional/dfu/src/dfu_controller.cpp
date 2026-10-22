@@ -96,7 +96,7 @@ public:
 class TestWorkQueue {
 private:
     k_work_q work_q_{};
-    K_KERNEL_STACK_MEMBER(stack_, 2048);
+    K_KERNEL_STACK_MEMBER(stack_, 2048) {};
 
 public:
     TestWorkQueue() {
