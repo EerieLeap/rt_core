@@ -143,10 +143,6 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
     );
 }
 
-    #ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
-
-// The gauge writes no logs, so a firmware update has none to end: no hook is registered, and an upload
-// or a reset (here: the notifications, called directly) reaches nothing of the controller.
 // A UI built after the last change of the status shows its default until the status changes again.
 ZTEST(logging_controller_remote, test_RepublishStatusPublishesTheNetworksStatusAgain) {
     F().Start();
@@ -177,6 +173,10 @@ ZTEST(logging_controller_remote, test_RepublishStatusBeforeInitializeDoesNothing
     F().controller->RepublishStatus();
 }
 
+    #ifdef CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS
+
+// The gauge writes no logs, so a firmware update has none to end: no hook is registered, and an upload
+// or a reset (here: the notifications, called directly) reaches nothing of the controller.
 ZTEST(logging_controller_remote, test_TheRemoteRoleRegistersNoFirmwareUpdateHooks) {
     F().Start();
     const auto control = F().controller->GetControl();
