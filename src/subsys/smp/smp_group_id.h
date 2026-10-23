@@ -17,6 +17,8 @@ enum class SmpGroupId : uint16_t {
     ASSETS = MGMT_GROUP_ID_PERUSER + 6,
     LOGGING = MGMT_GROUP_ID_PERUSER + 7,
     DFU = MGMT_GROUP_ID_PERUSER + 8,
+    /// The UI preview of the application (rt_gauge): the id is reserved here so no group takes it.
+    UI = MGMT_GROUP_ID_PERUSER + 9,
 };
 
 } // namespace eerie_leap::subsys::smp

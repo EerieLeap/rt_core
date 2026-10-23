@@ -32,6 +32,7 @@ packet (it parses the 8-byte header only). See [dfu.md](dfu.md).
 | `assets` | 70 | `ManagementController` | `KINDS` 0, `LIST` 1, `READ` 2, `WRITE` 3, `DELETE` 4, `STAT` 5, `RENAME` 6 |
 | `logging` | 71 | `LoggingController` | `STATUS` 0, `START` 1, `STOP` 2 |
 | `dfu` | 72 | `DfuController` | `STATUS` 0 |
+| `ui` | 73 | served by the application (rt_gauge's UI preview) | `BEGIN` 0, `STAGE` 1, `PATCH` 2, `SHOW` 3, `HIGHLIGHT` 4, `END` 5, `STATUS` 6 (read) |
 
 ### `config`: read and write stored configurations
 
@@ -351,6 +352,15 @@ The standard `img_mgmt` group does the transfer; this one reports what it does n
 
 Threading: the handler reads a snapshot from the confirmation state and allocates, blocks and throws
 nothing.
+
+### `ui`: preview a UI configuration
+
+Group 73 is reserved here (`SmpGroupId::UI`) and served by the application: rt_gauge's UI preview
+(`EERIE_LEAP_UI_PREVIEW`). A client stages a whole UI configuration in chunks, which the unit checks as an
+upload is (`CborConfigurationManagerBase::ParseCborConfiguration()`) and shows without storing it, so a preview
+stores nothing and stops no logging (see [logging.md](logging.md#configuration-updates)). Its commands are
+`BEGIN` 0, `STAGE` 1, `PATCH` 2, `SHOW` 3, `HIGHLIGHT` 4, `END` 5 and `STATUS` 6 (read); the schema is rt_gauge's
+`ui_preview_smp.cddl`. A unit built without it answers the group as it answers any group it does not serve.
 
 ## Transports
 
