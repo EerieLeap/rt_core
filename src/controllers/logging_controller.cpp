@@ -249,6 +249,13 @@ int LoggingController::Start() {
     return start_result_;
 }
 
+void LoggingController::RepublishStatus() {
+#ifndef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    if(is_initialized_ && logging_status_importer_ != nullptr)
+        logging_status_importer_->Republish();
+#endif
+}
+
 uint32_t LoggingController::GetUnitUid() const {
     if(canbus_com_service_ == nullptr)
         return 0;

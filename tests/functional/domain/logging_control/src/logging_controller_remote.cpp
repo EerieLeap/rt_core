@@ -147,6 +147,36 @@ ZTEST(logging_controller_remote, test_TheRemoteRoleBuildsItsPieces) {
 
 // The gauge writes no logs, so a firmware update has none to end: no hook is registered, and an upload
 // or a reset (here: the notifications, called directly) reaches nothing of the controller.
+// A UI built after the last change of the status shows its default until the status changes again.
+ZTEST(logging_controller_remote, test_RepublishStatusPublishesTheNetworksStatusAgain) {
+    F().Start();
+    StatusLog log;
+    F().peer.ShareStatus({ 0x01 });
+    zassert_true(
+        WaitUntil([] {
+            return F().controller->GetControl()->IsActive();
+        }),
+        "The shared status reaches the control"
+    );
+
+    // What the change itself published.
+    while(log.WaitForEntry(NO_WAIT_MS).has_value()) {
+    }
+
+    F().controller->RepublishStatus();
+
+    const auto entry = log.WaitForEntry();
+    zassert_true(entry.has_value(), "The status is published again, although it did not change");
+    zassert_true(entry->is_active);
+}
+
+// Not a unit's to fail: before there is a status to republish it does nothing.
+ZTEST(logging_controller_remote, test_RepublishStatusBeforeInitializeDoesNothing) {
+    F().Build(F().MakeParts());
+
+    F().controller->RepublishStatus();
+}
+
 ZTEST(logging_controller_remote, test_TheRemoteRoleRegistersNoFirmwareUpdateHooks) {
     F().Start();
     const auto control = F().controller->GetControl();
