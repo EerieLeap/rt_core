@@ -47,6 +47,19 @@ uint32_t Crc(std::span<const uint8_t> data) {
     return crc32_ieee(data.data(), data.size());
 }
 
+// Copies @p message into @p reason, truncated to fit between characters and NUL-terminated.
+void SetReason(std::span<char> reason, std::string_view message) {
+    if(reason.empty())
+        return;
+
+    size_t length = std::min(message.size(), reason.size() - 1);
+    while(length > 0 && length < message.size() && (static_cast<uint8_t>(message[length]) & 0xC0) == 0x80)
+        length--;
+
+    std::copy_n(message.begin(), length, reason.begin());
+    reason[length] = '\0';
+}
+
 } // namespace
 
 const mgmt_handler ConfigMgmtGroup::HANDLERS[] = {
@@ -391,6 +404,9 @@ WorkQueueTaskResult ConfigMgmtGroup::ProcessJob() {
     } catch(const std::exception& e) {
         LOG_ERR("Config group job failed: %s", e.what());
         job->result = Error::UNKNOWN;
+    } catch(...) {
+        LOG_ERR("Config group job failed.");
+        job->result = Error::UNKNOWN;
     }
 
     k_sem_give(&job_done_);
@@ -428,11 +444,27 @@ ConfigMgmtGroup::Error ConfigMgmtGroup::ExecuteJob(Job& job) {
 
             apply_reason_.front() = '\0';
 
+            // Whatever the manager does, the session ends with this apply: one that is left open meets the
+            // client's next upload as BUSY until it times out.
             Error result = Error::OK;
-            if(Crc(session_.data) != session_.crc)
-                result = Error::CRC_MISMATCH;
-            else if(!configuration_service_->ApplyCborConfiguration(session_.type, session_.data, apply_reason_))
+            try {
+                if(Crc(session_.data) != session_.crc)
+                    result = Error::CRC_MISMATCH;
+                else if(!configuration_service_->ApplyCborConfiguration(session_.type, session_.data, apply_reason_))
+                    result = Error::APPLY_FAILED;
+            } catch(const std::bad_alloc&) {
+                result = Error::NO_MEMORY;
+            } catch(const std::exception& e) {
+                // A manager is meant to answer a refusal with false and a reason; one that throws instead is
+                // still a refusal, and what it threw is the reason.
+                LOG_ERR("Applying configuration type %u threw: %s", std::to_underlying(session_.type), e.what());
+                SetReason(apply_reason_, e.what());
                 result = Error::APPLY_FAILED;
+            } catch(...) {
+                LOG_ERR("Applying configuration type %u threw.", std::to_underlying(session_.type));
+                SetReason(apply_reason_, "The configuration could not be applied");
+                result = Error::APPLY_FAILED;
+            }
 
             CloseSessionLocked();
 

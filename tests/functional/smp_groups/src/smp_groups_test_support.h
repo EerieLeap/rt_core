@@ -10,6 +10,7 @@
 #include <new>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,6 +56,11 @@ public:
     int apply_count = 0;
     bool reject = false;
     std::string rejection_reason;
+    // What a manager that throws instead of refusing throws: a std::runtime_error with this text, or, when
+    // `throws_other` is set, something that is no std::exception.
+    bool throws = false;
+    bool throws_other = false;
+    std::string thrown_text;
     StoredHandler stored_handler;
 
     void SetStoredHandler(StoredHandler handler) override {
@@ -63,6 +69,11 @@ public:
 
     bool ApplyCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) override {
         apply_count++;
+        if(throws_other)
+            throw 42; // NOLINT(bugprone-std-exception-baseclass): the point is a type that is no std::exception.
+        if(throws)
+            throw std::runtime_error(thrown_text);
+
         if(reject) {
             // Without a reason the buffer is left alone, as a real manager may.
             if(!rejection_reason.empty())
