@@ -29,6 +29,9 @@ constexpr uint32_t UI = std::to_underlying(ConfigurationService::Type::Ui);
 constexpr uint32_t ADC = std::to_underlying(ConfigurationService::Type::Adc);
 constexpr uint32_t UI_MAX_SIZE = 2000;
 constexpr size_t WRITE_CHUNK_SIZE = 900;
+// test_a_manager_that_throws_refuses_the_write_with_what_it_threw_and_ends_the_session throws on the queue:
+// unwinding an exception on the QEMU targets needs more stack than the usual work queue has.
+constexpr int WORK_QUEUE_STACK_SIZE = 16384;
 
 uint32_t Crc(const Bytes& data) {
     return crc32_ieee(data.data(), data.size());
@@ -80,7 +83,7 @@ public:
     SmpTestClient client;
 
     Harness() {
-        work_queue = std::make_shared<WorkQueueThread>("smp_groups_config_wq", 4096, 5);
+        work_queue = std::make_shared<WorkQueueThread>("smp_groups_config_wq", WORK_QUEUE_STACK_SIZE, 5);
         zassert_true(work_queue->Initialize());
 
         configuration_service->RegisterCborConfigurationManager(ConfigurationService::Type::Canbus, canbus);
