@@ -365,3 +365,65 @@ ZTEST(configuration_stored_handler, test_AManagerThatOutlivesItsServiceStillStor
     zassert_true(manager->Update(TestConfiguration{ .device_id = 16 }));
     zassert_equal(manager->Get()->device_id, 16U);
 }
+
+// A preview shows a configuration and keeps none: it is checked as an upload is, and stores nothing.
+ZTEST(configuration_stored_handler, test_AParseReturnsTheModelAndLeavesEverythingAsItWas) {
+    const auto manager = F().Register(Type::Ui);
+    zassert_true(manager->Update(TestConfiguration{ .device_id = 40 }));
+    F().recorder->entries.clear();
+
+    const auto stored_info = manager->GetCborConfigurationInfo();
+    const auto stored_bytes = manager->GetCborConfiguration();
+    zassert_true(stored_info.size > 0);
+
+    char reason[64] = {};
+    const auto parsed = manager->ParseCborConfiguration(Encode(41, 2), reason);
+
+    zassert_not_null(parsed.get());
+    zassert_equal(parsed->device_id, 41U);
+    zassert_equal(parsed->build_number, 2U);
+
+    const auto info = manager->GetCborConfigurationInfo();
+    zassert_equal(info.size, stored_info.size, "The stored file's size is as it was");
+    zassert_equal(info.crc, stored_info.crc, "and its CRC");
+    zassert_true(manager->GetCborConfiguration() == stored_bytes, "and its bytes");
+    zassert_equal(manager->Get()->device_id, 40U, "The configuration in effect stays");
+    zassert_equal(F().recorder->Get().size(), 0U, "No stored handler is called");
+}
+
+ZTEST(configuration_stored_handler, test_AParseRefusesWhatAnApplyRefusesWithTheSameReason) {
+    const auto manager = F().Register(Type::Ui);
+    const auto stored_info = manager->GetCborConfigurationInfo();
+
+    char parse_reason[64] = {};
+    char apply_reason[64] = {};
+    const std::vector<uint8_t> malformed = { 0xFF, 0x01, 0x02 };
+
+    zassert_is_null(manager->ParseCborConfiguration(malformed, parse_reason).get());
+    zassert_false(manager->ApplyCborConfiguration(malformed, apply_reason));
+    zassert_equal(std::string(parse_reason), std::string(apply_reason));
+    zassert_equal(std::string(parse_reason), "Malformed CBOR");
+
+    parse_reason[0] = '\0';
+    apply_reason[0] = '\0';
+    zassert_is_null(manager->ParseCborConfiguration(Encode(REJECTED_DEVICE_ID), parse_reason).get());
+    zassert_false(manager->ApplyCborConfiguration(Encode(REJECTED_DEVICE_ID), apply_reason));
+    zassert_equal(std::string(parse_reason), "The device ID is refused.");
+    zassert_equal(std::string(parse_reason), std::string(apply_reason));
+
+    zassert_equal(manager->GetCborConfigurationInfo().crc, stored_info.crc, "Nothing was stored");
+    zassert_equal(F().recorder->Get().size(), 0U);
+}
+
+// What a preview accepts a store of the same bytes then stores, and reports.
+ZTEST(configuration_stored_handler, test_WhatAParseAcceptsAnApplyStores) {
+    const auto manager = F().Register(Type::Ui);
+    const auto bytes = Encode(50);
+
+    zassert_not_null(manager->ParseCborConfiguration(bytes, {}).get());
+    zassert_equal(F().recorder->Get().size(), 0U);
+
+    zassert_true(manager->ApplyCborConfiguration(bytes));
+    zassert_equal(manager->Get()->device_id, 50U);
+    zassert_equal(F().recorder->Get().size(), 1U);
+}

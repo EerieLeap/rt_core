@@ -508,6 +508,7 @@ writer again. The broadcast leaves before a CAN reconfiguration stops the COM se
 | The bitrate a CAN bus detected, written back to the CAN configuration | Yes. It is stored on the configuration work queue, not on the bus's thread. |
 | The same bytes stored again | Yes. |
 | A write that is rejected, malformed or fails to store | No. |
+| A UI preview (the `ui` group, group 73, which rt_gauge serves): a staged configuration is checked as an upload is, with `CborConfigurationManagerBase::ParseCborConfiguration()`, and shown without being stored | No. A UI preview, its patches included, stores nothing and stops nothing. |
 | A default created at first boot, and what the composition root stores before it calls `Start()` (the gauge's test configurations and its logging button) | No. A reboot of a unit does not stop the logging of another. |
 | A setting the unit keeps for itself, stored with `UpdateOwnSetting()`: the gauge's brightness | No. |
 | A configuration whose manager is not registered with the unit's `ConfigurationService` | Not reported. The gauge's system configuration is such a one: it is not writable over SMP and nothing stores it at run time. |

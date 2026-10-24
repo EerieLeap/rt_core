@@ -29,6 +29,9 @@ constexpr uint32_t UI = std::to_underlying(ConfigurationService::Type::Ui);
 constexpr uint32_t ADC = std::to_underlying(ConfigurationService::Type::Adc);
 constexpr uint32_t UI_MAX_SIZE = 2000;
 constexpr size_t WRITE_CHUNK_SIZE = 900;
+// test_a_manager_that_throws_refuses_the_write_with_what_it_threw_and_ends_the_session throws on the queue:
+// unwinding an exception on the QEMU targets needs more stack than the usual work queue has.
+constexpr int WORK_QUEUE_STACK_SIZE = 16384;
 
 uint32_t Crc(const Bytes& data) {
     return crc32_ieee(data.data(), data.size());
@@ -80,7 +83,7 @@ public:
     SmpTestClient client;
 
     Harness() {
-        work_queue = std::make_shared<WorkQueueThread>("smp_groups_config_wq", 4096, 5);
+        work_queue = std::make_shared<WorkQueueThread>("smp_groups_config_wq", WORK_QUEUE_STACK_SIZE, 5);
         zassert_true(work_queue->Initialize());
 
         configuration_service->RegisterCborConfigurationManager(ConfigurationService::Type::Canbus, canbus);
@@ -346,6 +349,37 @@ ZTEST_F(smp_config_group, test_apply_failed_carries_the_managers_reason) {
 
     harness.canbus->rejection_reason.clear();
     zassert_false(harness.WriteAll(CANBUS, data, Crc(data)).Has("msg"), "A reason does not outlive its write");
+}
+
+// A manager is meant to refuse with false and a reason. One that throws instead is still a refusal that carries
+// what it threw, and the write session ends with it, so the next upload is not BUSY.
+ZTEST_F(smp_config_group, test_a_manager_that_throws_refuses_the_write_with_what_it_threw_and_ends_the_session) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(1200, 4);
+    harness.canbus->throws = true;
+    harness.canbus->thrown_text =
+        "Invalid UI Screen configuration. Screen ID: 0. Composition exceeds the limit of 32 nodes.";
+
+    auto response = harness.WriteAll(CANBUS, data, Crc(data));
+    AssertError(response, Error::APPLY_FAILED);
+    zassert_equal(response.texts["msg"], harness.canbus->thrown_text);
+
+    // Straight after, from another client: no session is left open.
+    harness.canbus->thrown_text = "Invalid UI configuration. Duplicate screen IDs.";
+    response = harness.WriteAll(CANBUS, data, Crc(data));
+    AssertError(response, Error::APPLY_FAILED);
+    zassert_equal(response.texts["msg"], harness.canbus->thrown_text);
+
+    // And something that is no std::exception.
+    harness.canbus->throws = false;
+    harness.canbus->throws_other = true;
+    response = harness.WriteAll(CANBUS, data, Crc(data));
+    AssertError(response, Error::APPLY_FAILED);
+    zassert_true(response.Has("msg"));
+
+    harness.canbus->throws_other = false;
+    zassert_true(harness.WriteAll(CANBUS, data, Crc(data)).IsOk(), "The session ended with the refusals");
+    zassert_equal(harness.reports->Get().size(), 1U, "Only the good write is an update");
 }
 
 ZTEST_F(smp_config_group, test_a_long_reason_is_truncated_between_characters) {

@@ -288,18 +288,13 @@ public:
             configuration_manager_logger
         ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
 
-        const auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
-        if(cbor_config == nullptr) {
-            SetReason(reason, "Malformed CBOR");
+        // The checks of a client's apply are the ones ParseCborConfiguration() makes, so a configuration it
+        // accepts is one this accepts.
+        auto configuration = ParseCborConfiguration(cbor_data, reason);
+        if(configuration == nullptr)
             return false;
-        }
-
-        std::shared_ptr<TConfiguration> configuration;
 
         try {
-            configuration = Share(Deserialize(*cbor_config));
-            ValidateApply(*configuration);
-
             // Stored as received, so its CRC stays the one the sender computed.
             if(!cbor_configuration_service_->Save(cbor_data)) {
                 SetReason(reason, "Could not store the configuration");
@@ -319,6 +314,42 @@ public:
         NotifyStored();
 
         return true;
+    }
+
+    /**
+     * @brief Decodes and checks a configuration as a client's apply does, and stores nothing.
+     *
+     * The bytes are decoded, turned into the model by Deserialize() (which validates) and checked by
+     * ValidateApply(). The stored file and its size and CRC are not touched, the configuration in
+     * effect stays, and no handler is called, the stored handler included: a caller that only shows
+     * the result, such as a preview, stops no logging.
+     *
+     * @param reason Receives why the configuration was refused.
+     * @return The model, or null when the bytes are malformed or a check refused them.
+     */
+    std::shared_ptr<TConfiguration> ParseCborConfiguration(std::span<const uint8_t> cbor_data, std::span<char> reason) {
+        // NOLINTNEXTLINE(misc-const-correctness): the pointer is declared inside Zephyr's LOG_MODULE_DECLARE.
+        LOG_MODULE_DECLARE(
+            configuration_manager_logger
+        ); // NOLINT(misc-const-correctness): the log_source_dynamic_data pointer is declared by the Zephyr macro
+
+        const auto cbor_config = cbor_configuration_service_->Deserialize(cbor_data);
+        if(cbor_config == nullptr) {
+            SetReason(reason, "Malformed CBOR");
+            return nullptr;
+        }
+
+        try {
+            auto configuration = Share(Deserialize(*cbor_config));
+            ValidateApply(*configuration);
+
+            return configuration;
+        } catch(const std::exception& e) {
+            LOG_ERR("Failed to apply %s CBOR configuration. %s", name_, e.what());
+            SetReason(reason, e.what());
+        }
+
+        return nullptr;
     }
 
     std::pmr::vector<uint8_t> GetCborConfiguration() override {

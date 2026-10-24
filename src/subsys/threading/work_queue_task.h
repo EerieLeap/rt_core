@@ -33,8 +33,12 @@ public:
 
     virtual ~WorkQueueTaskBase() = default;
 
-    void Schedule(k_timeout_t delay = K_NO_WAIT) {
-        k_work_schedule_for_queue(work_q_, &work, delay);
+    /**
+     * @return What k_work_schedule_for_queue() returns: above 0 when the work was queued (or, running, queued
+     *         again), 0 when it was already scheduled, below 0 when the queue refused it.
+     */
+    int Schedule(k_timeout_t delay = K_NO_WAIT) {
+        return k_work_schedule_for_queue(work_q_, &work, delay);
     }
 
     void Reschedule(k_timeout_t delay = K_NO_WAIT) {

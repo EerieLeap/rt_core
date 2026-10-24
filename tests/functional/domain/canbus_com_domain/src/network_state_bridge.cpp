@@ -304,6 +304,27 @@ ZTEST_F(network_state_bridge, test_importer_publishes_the_combined_state_once_pe
     AssertImported(probe, false, LoggingStatusReason::Unavailable, "Once every record is gone");
 }
 
+// A consumer built after the last change, such as a rebuilt screen, asks for the state it missed.
+ZTEST_F(network_state_bridge, test_republish_publishes_the_combined_state_again) {
+    FakeTransport& transport = *fixture->transport;
+    StatusProbe& probe = *fixture->probe;
+    transport.SetRemoteState(2, ACTIVE);
+    fixture->importer = std::make_unique<LoggingImporter>(fixture->transport);
+    AssertImported(probe, true, std::nullopt, "First call");
+    zassert_false(probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(), "once");
+
+    fixture->importer->Republish();
+    AssertImported(probe, true, std::nullopt, "The same state, again, on request");
+    zassert_false(probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(), "once per request");
+
+    // It publishes what the records are now, and a change after it is still told once.
+    transport.RemoveRemoteState(2);
+    fixture->importer->Republish();
+    AssertImported(probe, false, LoggingStatusReason::Unavailable, "The state of the records now");
+    transport.NotifyHandlers();
+    zassert_false(probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(), "A republished state counts as published");
+}
+
 ZTEST_F(network_state_bridge, test_importer_ignores_other_state_types) {
     FakeTransport& transport = *fixture->transport;
     StatusProbe& probe = *fixture->probe;
@@ -348,6 +369,9 @@ ZTEST_F(network_state_bridge, test_importer_publishes_once_a_bus_carries_the_cha
 
     transport.NotifyHandlers();
     zassert_false(probe.WaitForEvent(NO_EVENT_TIMEOUT_MS).has_value(), "and then only a change publishes");
+
+    fixture->late_importer->Republish();
+    AssertImported(probe, true, std::nullopt, "A republish publishes the unchanged state");
 }
 
 // ======== Through CDMP ========

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "domain/canbus_com_domain/services/i_network_state_transport.h"
+#include "subsys/threading/scoped_mutex.h"
 
 #include "network_state_descriptor.h"
 
@@ -16,6 +17,7 @@ namespace eerie_leap::domain::canbus_com_domain::state_bridge {
 
 using eerie_leap::domain::canbus_com_domain::services::INetworkStateTransport;
 using eerie_leap::domain::canbus_com_domain::states::RemoteStateRecord;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 /**
  * @brief Publishes the state the other units share on the descriptor's channel, on a unit that
@@ -29,7 +31,9 @@ using eerie_leap::domain::canbus_com_domain::states::RemoteStateRecord;
  * consumers run on the channel's bus thread and cannot tell them from local events. A unit either
  * exports or imports a given descriptor, never both. Destruction stops it.
  *
- * Records are handled on the CDMP work queue, one change at a time.
+ * Records are handled on the CDMP work queue, one change at a time. Republish() publishes the current
+ * combined state again from any thread, for a consumer that was built after the last change and so
+ * missed it.
  */
 template<NetworkStateDescriptor TDescriptor>
 class NetworkStateImporter {
@@ -43,20 +47,28 @@ private:
     std::shared_ptr<INetworkStateTransport> transport_;
     int handler_id_ = -1;
 
-    // Only the handler touches these, and the CDMP work queue runs one handler at a time. They are
-    // members so that every unit's record stays off the work queue's stack.
+    // Only the handler and Republish() touch these, one at a time under mutex_. They are members so that
+    // every unit's record stays off the work queue's stack.
+    k_mutex mutex_{};
     std::array<RemoteStateRecord, INetworkStateTransport::MAX_REMOTE_RECORDS> records_{};
     std::array<State, INetworkStateTransport::MAX_REMOTE_RECORDS> states_{};
     std::optional<State> published_;
 
     void OnStatesChanged() {
+        const ScopedMutex guard(mutex_);
+
+        PublishCombined(false);
+    }
+
+    // Under mutex_. @p force publishes even a state equal to the one published last.
+    void PublishCombined(bool force) {
         const size_t count = transport_->GetRemoteStates(TDescriptor::STATE_TYPE, records_);
 
         for(size_t i = 0; i < count; i++)
             states_[i] = State(records_[i].data.GetData());
 
         State combined = TDescriptor::Combine(std::span<const State>(states_.data(), count));
-        if(published_.has_value() && *published_ == combined)
+        if(!force && published_.has_value() && *published_ == combined)
             return;
 
         // A channel no bus carries drops the event, so it does not count as published: the first
@@ -87,6 +99,8 @@ public:
     explicit NetworkStateImporter(std::shared_ptr<INetworkStateTransport> transport) :
         transport_(std::move(transport)) {
 
+        k_mutex_init(&mutex_);
+
         // In the body, not the initializer list: the handler may run on the CDMP work queue as soon as it
         // is registered, so every member it touches has to be constructed by then.
         // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): see above.
@@ -98,6 +112,19 @@ public:
 
         if(handler_id_ < 0)
             throw std::runtime_error("Network state importer failed to register its state handler");
+    }
+
+    /**
+     * @brief Publishes the combined state of every unit's record again, even when it is the one published
+     *        last, from any thread. Nothing is published while no bus carries the channel.
+     *
+     * The importer publishes only on a change, so a subscriber built afterwards, such as a screen that was
+     * rebuilt, sees the state only with the next change. The event is the one the handler publishes.
+     */
+    void Republish() {
+        const ScopedMutex guard(mutex_);
+
+        PublishCombined(true);
     }
 
     /**

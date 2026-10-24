@@ -22,6 +22,7 @@ manifest:
           - zcbor           # CBOR light JSON like data format
           - fatfs           # FATFS filesystem
           - littlefs        # littleFS lightweight filesystem
+          - mcuboot         # imgtool and bootutil for the DFU suites
           - mbedtls         # PSA crypto for Bluetooth SMP (lint.bluetooth)
           - tf-psa-crypto   # PSA crypto for Bluetooth SMP (lint.bluetooth)
 

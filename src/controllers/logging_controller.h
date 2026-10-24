@@ -169,6 +169,12 @@ public:
      */
     int Start();
 
+    // Remote role: publishes the logging status of the network again, even when it did not change, from
+    // any thread, for a consumer built after the last change (a rebuilt UI whose logging icon binds to it).
+    // Does nothing in the writer role, whose status is published as it changes, and before Initialize()
+    // succeeded. Not while the controller is being destroyed.
+    void RepublishStatus();
+
     // The role's ILoggingControl: WriterLoggingControl (the writer, and the other units through the
     // network) or RemoteLoggingControl. Whoever keeps it releases it before the controller goes, so no
     // request comes in after the teardown.

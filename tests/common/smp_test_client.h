@@ -57,6 +57,23 @@ public:
         return *this;
     }
 
+    CborMap& PutBool(std::string_view key, bool value) {
+        zassert_true(zcbor_tstr_encode_ptr(states_, key.data(), key.size()) && zcbor_bool_put(states_, value));
+        return *this;
+    }
+
+    // A map of one unsigned value, `{key: {inner_key: value}}`.
+    CborMap& PutMap(std::string_view key, std::string_view inner_key, uint32_t value) {
+        zassert_true(
+            zcbor_tstr_encode_ptr(states_, key.data(), key.size())
+            && zcbor_map_start_encode(states_, 1)
+            && zcbor_tstr_encode_ptr(states_, inner_key.data(), inner_key.size())
+            && zcbor_uint32_put(states_, value)
+            && zcbor_map_end_encode(states_, 1)
+        );
+        return *this;
+    }
+
     CborMap& PutText(std::string_view key, std::string_view value) {
         zassert_true(
             zcbor_tstr_encode_ptr(states_, key.data(), key.size())
