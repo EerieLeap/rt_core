@@ -26,7 +26,7 @@ Two instances exist in the application:
 
 | Instance | Mount | Holds |
 | --- | --- | --- |
-| Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor`, `ui_assets/` (rt_gauge's images and animations) |
+| Internal (`FsService`) | alias `intfs0`, littlefs on internal flash | `config/*.cbor`, `ui_assets/` (rt_gauge's images, animations and fonts) |
 | SD card (`SdmmcService`) | alias `sdfs0` on the `zephyr,sdhc` disk, FAT | Lua scripts (`scripts/sensors`, `scripts/can`), `logs/` |
 
 The SD service is optional for the sensors and CAN code, which accept a null SD service and then
@@ -77,7 +77,7 @@ The service is built with `CONFIG_DISK_ACCESS`, and then `EERIE_LEAP_FS` selects
 ## Assets (`EERIE_LEAP_ASSETS`)
 
 Code: `src/subsys/assets/`; selects `EERIE_LEAP_FS`. An asset is a file of one kind (images,
-animations, Lua scripts, logs) that a client lists, downloads, uploads and deletes over SMP by kind
+animations, fonts, Lua scripts, logs) that a client lists, downloads, uploads and deletes over SMP by kind
 and name, without knowing the directory behind it (the `assets` group, see [smp.md](smp.md)).
 
 **`AssetStore(fs_service, directory)`** is the files of one directory of one file system service
@@ -137,7 +137,7 @@ The rt_core controllers register their kind at the end of a successful `Initiali
 have a registry and an SD service, and take it back, with their referrers, when they are destroyed
 (`LoggingController::Teardown()`); without `EERIE_LEAP_ASSETS` they accept the registry and ignore
 it. The `LoggingController` registers `logs` in the writer role only. rt_gauge's `UiController`
-registers its two kinds on the internal volume when it initializes and removes them when it is
+registers its three kinds on the internal volume when it initializes and removes them when it is
 destroyed.
 
 | Kind | Name | Store (volume, directory) | Extensions | Access | Max | In use | Registered by |
@@ -147,8 +147,9 @@ destroyed.
 | 2 | `sensor_scripts` | SD, `scripts/sensors` | `.lua` | R W D | `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `SensorsController` |
 | 3 | `can_scripts` | SD, `scripts/can` | `.lua` | R W D | `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `CanbusController` |
 | 4 | `logs` | SD, `logs` | `.mf4` | R D | 0 | `READ` and `DELETE` of the file being written | `LoggingController`, writer role |
+| 5 | `fonts` | internal, `ui_assets/fonts` | `.ttf` | R W D | rt_gauge's `EERIE_LEAP_UI_FONT_MAX_SIZE` (256 KiB) | never | rt_gauge `UiController` |
 
-The kind numbers go over the wire: append only. Widgets find their images and animations through the
+The kind numbers go over the wire: append only. Widgets find their images, animations and fonts through the
 registry by kind (`FILE_PATH` is a path relative to the kind's directory, a bare name for a file a
 client uploaded); a client that overwrites or deletes a file a widget shows changes it at the widget's
 next render.
@@ -165,7 +166,7 @@ nothing. This assumes that assets are written only through their store.
 **Rename.** The SMP `RENAME` moves a file within its kind (`AssetStore::Rename()`, which increases the
 generation also when it fails: FAT deletes the target before it renames). The checkpoint of the source
 follows the file when it is current, since the bytes are the same; one of the target is dropped. The
-`images` and `animations` kinds have no in-use check, so a widget showing the renamed file keeps its
+`images`, `animations` and `fonts` kinds have no in-use check, so a widget showing the renamed file keeps its
 loaded copy and shows nothing after its next rebuild, as after `DELETE`.
 
 **Script references.** A controller that owns stored script paths adds a referrer with
@@ -199,7 +200,7 @@ leave its directory. The writer's log names (`EERIE_LEAP_LOG_DATA_FILE_PREFIX` p
 | Path | Filesystem | Written by |
 | --- | --- | --- |
 | `config/<type>_config.cbor` | internal | Configuration managers |
-| `ui_assets/images/*.bin`, `ui_assets/animations/*.json` | internal | Clients, as the `images` and `animations` kinds; rt_gauge's test setup writes its demo files there |
+| `ui_assets/images/*.bin`, `ui_assets/animations/*.json`, `ui_assets/fonts/*.ttf` | internal | Clients, as the `images`, `animations` and `fonts` kinds; rt_gauge's test setup writes its demo files there |
 | `scripts/sensors/*.lua`, `scripts/can/*.lua` | SD | Clients, as the `sensor_scripts` and `can_scripts` kinds; referenced by sensors and CAN messages through `script_path`. A `script_path` may name any file on the card, and a script outside these directories still runs but is not listed. |
 | `logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`LogFileNaming::LOGS_DIR`, `EERIE_LEAP_LOG_DATA_FILE_PREFIX`); UTC start time; the `logs` kind. Logs written before the directory was fixed stay in `data_logs/` and are not listed. |
 | `logs/end_times.txt` | SD | Log writer (`LogEndTimes`): the end time of each finalized log, a line `<end_ms> <name>` per file; not a log, so the `logs` kind never serves it (see [logging.md](logging.md#log-files-as-assets)). |

@@ -17,14 +17,15 @@ enum class AssetKind : uint8_t {
     SENSOR_SCRIPTS = 2,
     CAN_SCRIPTS = 3,
     LOGS = 4,
+    FONTS = 5,
 };
 
 /// Number of AssetKind values.
-inline constexpr size_t ASSET_KIND_COUNT = 5;
+inline constexpr size_t ASSET_KIND_COUNT = 6;
 
 // A kind appended without raising the count would be refused by the registry as out of range.
 static_assert(
-    ASSET_KIND_COUNT == static_cast<size_t>(std::to_underlying(AssetKind::LOGS)) + 1,
+    ASSET_KIND_COUNT == static_cast<size_t>(std::to_underlying(AssetKind::FONTS)) + 1,
     "ASSET_KIND_COUNT must follow the last AssetKind"
 );
 

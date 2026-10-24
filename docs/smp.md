@@ -140,7 +140,7 @@ The group only lists. Scripts are put on the card, and logs fetched from it, wit
 
 ### `assets`: asset kinds
 
-Files a unit keeps for its own use, such as images, animations, Lua scripts and logs, grouped by
+Files a unit keeps for its own use, such as images, animations, fonts, Lua scripts and logs, grouped by
 kind. A client addresses a file by its kind and a flat name, never by a path: the unit decides the
 directory, the extensions, what a client may do with the kind and how large an upload can be. Each
 controller registers the kinds it owns with the `AssetsManager` ([filesystem.md](filesystem.md#assets-eerie_leap_assets)),

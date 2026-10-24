@@ -138,7 +138,8 @@ ZTEST(assets_manager, test_kind_and_access_values_are_the_wire_values) {
     zassert_equal(std::to_underlying(AssetKind::SENSOR_SCRIPTS), 2);
     zassert_equal(std::to_underlying(AssetKind::CAN_SCRIPTS), 3);
     zassert_equal(std::to_underlying(AssetKind::LOGS), 4);
-    zassert_equal(ASSET_KIND_COUNT, 5);
+    zassert_equal(std::to_underlying(AssetKind::FONTS), 5);
+    zassert_equal(ASSET_KIND_COUNT, 6);
 
     zassert_equal(ToMask(AssetAccess::READ), 1);
     zassert_equal(ToMask(AssetAccess::WRITE), 2);
