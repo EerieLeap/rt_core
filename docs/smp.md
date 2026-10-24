@@ -360,7 +360,10 @@ Group 73 is reserved here (`SmpGroupId::UI`) and served by the application: rt_g
 upload is (`CborConfigurationManagerBase::ParseCborConfiguration()`) and shows without storing it, so a preview
 stores nothing and stops no logging (see [logging.md](logging.md#configuration-updates)). Its commands are
 `BEGIN` 0, `STAGE` 1, `PATCH` 2, `SHOW` 3, `HIGHLIGHT` 4, `END` 5 and `STATUS` 6 (read); the schema is rt_gauge's
-`ui_preview_smp.cddl`. A unit built without it answers the group as it answers any group it does not serve.
+`ui_preview_smp.cddl`. A `PATCH` puts and removes widgets and screens in the configuration the screens show,
+all or nothing and checked as an upload is, and reports for each operation whether the unit applied it in place,
+built a widget or a screen again, or did not show it; it stores nothing either. A unit built without the preview
+answers the group as it answers any group it does not serve.
 
 ## Transports
 
