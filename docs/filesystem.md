@@ -118,14 +118,21 @@ the old one; when that fails the staged file is deleted. `Abort()` closes and de
 
 **`AssetProvider`** is what a unit serves of one kind: the kind and its name (`"images"`), the store,
 the extensions with their dot, the allowed operations as bits (`READ` 1, `WRITE` 2, `DELETE` 4), the
-largest upload (`max_size`, 0 for a kind that takes none) and an optional `is_in_use(operation,
-name)` that refuses an operation on a file. That callback runs on the configuration work queue
-without the registry's lock and must not take the LVGL lock. `MakeScriptProvider()` builds the two
-script kinds.
+largest upload (`max_size`, 0 for a kind that takes none), an optional `is_in_use(operation,
+name)` that refuses an operation on a file and an optional span of `built_ins`. The `is_in_use` callback
+runs on the configuration work queue without the registry's lock and must not take the LVGL lock.
+`MakeScriptProvider()` builds the two script kinds.
+
+A **built-in** (`BuiltInAsset{name, data}`) is a file of the kind that is part of the firmware: bytes in
+static storage (flash) that the `assets` group serves as a read-only file, in place, with no copy and no
+volume (rt_gauge's three fonts). Its name must be valid for the kind and unique ignoring ASCII case, or
+`Register()` refuses the provider; a stored file of the same name is hidden by it. The group lists a
+built-in with `builtin: true` and answers `BUILT_IN` to a `WRITE`, `DELETE` or `RENAME` of its name (see
+[smp.md](smp.md#assets-asset-kinds)). `FindBuiltIn(provider, name)` finds one by name.
 
 **`AssetsManager`** is the registry: at most one provider per kind. `Register()` refuses a kind that
-is registered already and a provider without a store; `Unregister()` never throws, so destructors
-call it; `Find()` and `GetProviders()` (ordered by kind) hand out shared pointers, so a caller keeps
+is registered already, a provider without a store and one whose built-in names are invalid or repeat;
+`Unregister()` never throws, so destructors call it; `Find()` and `GetProviders()` (ordered by kind) hand out shared pointers, so a caller keeps
 the provider it found while another thread unregisters it. It is thread-safe: widgets call `Find()`
 under the LVGL lock and the SMP group from the configuration work queue, and its mutex is never held
 while a provider's callback or a referrer runs. It holds a kernel mutex, so create it with
@@ -147,7 +154,7 @@ destroyed.
 | 2 | `sensor_scripts` | SD, `scripts/sensors` | `.lua` | R W D | `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `SensorsController` |
 | 3 | `can_scripts` | SD, `scripts/can` | `.lua` | R W D | `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `CanbusController` |
 | 4 | `logs` | SD, `logs` | `.mf4` | R D | 0 | `READ` and `DELETE` of the file being written | `LoggingController`, writer role |
-| 5 | `fonts` | internal, `ui_assets/fonts` | `.ttf` | R W D | rt_gauge's `EERIE_LEAP_UI_FONT_MAX_SIZE` (256 KiB) | never | rt_gauge `UiController` |
+| 5 | `fonts` | internal, `ui_assets/fonts` | `.ttf` | R W D | rt_gauge's `EERIE_LEAP_UI_FONT_MAX_SIZE` (256 KiB) | never | rt_gauge `UiController` (and its three built-in fonts, read-only, from flash) |
 
 The kind numbers go over the wire: append only. Widgets find their images, animations and fonts through the
 registry by kind (`FILE_PATH` is a path relative to the kind's directory, a bare name for a file a

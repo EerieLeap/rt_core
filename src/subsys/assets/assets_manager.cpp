@@ -32,6 +32,24 @@ bool AssetsManager::Register(AssetProvider provider) {
         return false;
     }
 
+    // A built-in is served under a name the kind could store, once.
+    for(size_t i = 0; i < provider.built_ins.size(); i++) {
+        const std::string_view built_in_name = provider.built_ins[i].name;
+
+        if(!AssetStore::IsValidName(built_in_name, provider.extensions)) {
+            LOG_ERR("Asset kind %d has a built-in with an invalid name.", static_cast<int>(index));
+
+            return false;
+        }
+
+        // The first of the equal names is the one that is found; a second is a mistake.
+        if(FindBuiltIn(provider, built_in_name) != &provider.built_ins[i]) {
+            LOG_ERR("Asset kind %d has a built-in name twice.", static_cast<int>(index));
+
+            return false;
+        }
+    }
+
     // Allocated before the lock is taken.
     std::shared_ptr<const AssetProvider> shared = std::make_shared<AssetProvider>(std::move(provider));
 

@@ -58,11 +58,12 @@ constexpr size_t MAX_UINT64_SIZE = 9;
 
 // Room an entry of a list needs besides its name: the map, the `name` and `size` keys, the name's
 // head, a 32-bit size, the `end_ms` key with a 64-bit value and the end of the map. That is 35 bytes
-// at most.
+// at most. A built-in's entry has the `builtin` key and a bool instead of `end_ms`: 28 bytes.
 constexpr size_t LIST_ENTRY_OVERHEAD = 40;
 static_assert(
     LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(6) + MAX_UINT64_SIZE + MAP_END_SIZE
 );
+static_assert(LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(7) + 1 + MAP_END_SIZE);
 
 // Room kept behind the last entry that is listed: the end of the list, `next` and the end of the
 // response map. That is 12 bytes at most.
@@ -365,21 +366,63 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
     if(provider == nullptr)
         return Fail(ctxt, Error::UNKNOWN_KIND);
 
+    // The positions: the built-ins are 0 to built_in_count - 1, the stored file at directory position
+    // p is built_in_count + p. A page of built-ins keeps room for one stored entry, so the stored
+    // files are always reached.
+    const size_t built_in_count = provider->built_ins.size();
+    const size_t first_built_in = std::min<size_t>(offset, built_in_count);
+    const size_t stored_offset = offset > built_in_count ? offset - built_in_count : 0;
+    const size_t built_in_page = std::min(built_in_count - first_built_in, MAX_PAGE_ENTRIES - 1);
+
     std::vector<AssetEntry> entries;
     size_t scanned = 0;
     size_t count = 0;
 
-    const int rc = provider->store->List(offset, MAX_PAGE_ENTRIES, provider->extensions, entries, scanned, count);
+    const int rc = provider->store->List(
+        stored_offset, MAX_PAGE_ENTRIES - built_in_page, provider->extensions, entries, scanned, count
+    );
     if(rc == -ENODEV)
         return Fail(ctxt, Error::UNAVAILABLE);
     if(rc != 0)
         return Fail(ctxt, rc == -ENOMEM ? Error::NO_MEMORY : Error::IO_ERROR);
 
+    // A built-in wins over a stored file of its name; the file keeps its place in the directory, so
+    // the positions of the others do not move.
+    if(built_in_count > 0) {
+        std::erase_if(entries, [&provider](const AssetEntry& entry) {
+            return FindBuiltIn(*provider, entry.name) != nullptr;
+        });
+    }
+
     zcbor_state_t* zse = ctxt->writer->zs;
-    bool ok = zcbor_tstr_put_lit(zse, "entries") && zcbor_list_start_encode(zse, entries.size());
+    const size_t candidates = built_in_page + entries.size();
+    bool ok = zcbor_tstr_put_lit(zse, "entries") && zcbor_list_start_encode(zse, candidates);
+
+    size_t listed_built_in = 0;
+    while(ok && listed_built_in < built_in_page) {
+        const BuiltInAsset& built_in = provider->built_ins[first_built_in + listed_built_in];
+        if(Remaining(zse) < LIST_ENTRY_OVERHEAD + built_in.name.size() + LIST_TAIL_SIZE)
+            break;
+
+        const auto size = static_cast<uint32_t>(std::min<size_t>(built_in.data.size(), UINT32_MAX));
+
+        ok = zcbor_map_start_encode(zse, 3)
+            && zcbor_tstr_put_lit(zse, "name")
+            && zcbor_tstr_encode_ptr(zse, built_in.name.data(), built_in.name.size())
+            && zcbor_tstr_put_lit(zse, "size")
+            && zcbor_uint32_put(zse, size)
+            && zcbor_tstr_put_lit(zse, "builtin")
+            && zcbor_bool_put(zse, true)
+            && zcbor_map_end_encode(zse, 3);
+        listed_built_in++;
+    }
+
+    // The stored files follow once every built-in has been listed.
+    const size_t next_built_in = first_built_in + listed_built_in;
+    const bool are_built_ins_done = next_built_in == built_in_count;
 
     size_t listed = 0;
-    while(ok && listed < entries.size()) {
+    while(ok && are_built_ins_done && listed < entries.size()) {
         const AssetEntry& entry = entries[listed];
         if(Remaining(zse) < LIST_ENTRY_OVERHEAD + entry.name.size() + LIST_TAIL_SIZE)
             break;
@@ -404,19 +447,24 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
         listed++;
     }
 
-    ok = ok && zcbor_list_end_encode(zse, entries.size());
+    ok = ok && zcbor_list_end_encode(zse, candidates);
 
-    // The directory position to ask for next: the first entry that did not fit, else the end of what
-    // was read, unless that is the end of the directory.
+    // The position to ask for next: the first built-in or stored entry that did not fit, else the end
+    // of what was read, unless that is the end of the directory.
     std::optional<uint32_t> next;
-    if(listed < entries.size()) {
+    if(!are_built_ins_done) {
         // An entry that does not fit even alone would send the client round in circles.
-        if(listed == 0)
+        if(listed_built_in == 0)
             return MGMT_ERR_EMSGSIZE;
 
-        next = static_cast<uint32_t>(entries[listed].index);
-    } else if(scanned > 0 && offset + scanned < count) {
-        next = static_cast<uint32_t>(offset + scanned);
+        next = static_cast<uint32_t>(next_built_in);
+    } else if(listed < entries.size()) {
+        if(listed == 0 && listed_built_in == 0)
+            return MGMT_ERR_EMSGSIZE;
+
+        next = static_cast<uint32_t>(built_in_count + entries[listed].index);
+    } else if(scanned > 0 && stored_offset + scanned < count) {
+        next = static_cast<uint32_t>(built_in_count + stored_offset + scanned);
     }
 
     if(ok && next.has_value())
@@ -449,6 +497,10 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
 
     if(error != Error::OK)
         return Fail(ctxt, error);
+
+    // A built-in is read in place from flash: no volume, no session, no checkpoint.
+    if(const BuiltInAsset* built_in = FindBuiltIn(*provider, asset_name); built_in != nullptr)
+        return ReadBuiltIn(ctxt, *built_in, offset);
 
     if(offset == 0 || !IsReadSessionOf(provider, asset_name)) {
         // A download that starts over is not continued from what an earlier one knew of the file: it
@@ -521,6 +573,50 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     return MGMT_RETURN_CHECK(ok);
 }
 
+int AssetsMgmtGroup::ReadBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in, size_t offset) {
+    const size_t size = built_in.data.size();
+
+    if(offset > size)
+        return Fail(ctxt, Error::BAD_OFFSET, "len", static_cast<uint32_t>(size));
+
+    zcbor_state_t* zse = ctxt->writer->zs;
+    const size_t available = Remaining(zse);
+    const size_t room = available > READ_RESPONSE_OVERHEAD ? available - READ_RESPONSE_OVERHEAD : 0;
+    // The chunk is as long as a stored file's would be, so that a client's windows line up; the bytes
+    // themselves are encoded from the span, not through the transfer buffer.
+    const size_t chunk = std::min({ size - offset, room, transfer_buffer_.size() });
+
+    if(chunk == 0 && size > offset)
+        return MGMT_ERR_EMSGSIZE;
+
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the chunk is raw file bytes, zcbor takes char*
+    const char* chunk_data = chunk > 0 ? reinterpret_cast<const char*>(built_in.data.data() + offset) : "";
+
+    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, static_cast<uint32_t>(offset));
+
+    if(ok && offset == 0)
+        ok = zcbor_tstr_put_lit(zse, "len") && zcbor_uint32_put(zse, static_cast<uint32_t>(size));
+
+    ok = ok && zcbor_tstr_put_lit(zse, "data") && zcbor_bstr_encode_ptr(zse, chunk_data, chunk);
+
+    if(ok && offset + chunk == size)
+        ok = zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, crc32_ieee(built_in.data.data(), size));
+
+    return MGMT_RETURN_CHECK(ok);
+}
+
+int AssetsMgmtGroup::StatBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in) {
+    zcbor_state_t* zse = ctxt->writer->zs;
+    const size_t size = built_in.data.size();
+
+    return MGMT_RETURN_CHECK(
+        zcbor_tstr_put_lit(zse, "len")
+        && zcbor_uint32_put(zse, static_cast<uint32_t>(size))
+        && zcbor_tstr_put_lit(zse, "crc")
+        && zcbor_uint32_put(zse, crc32_ieee(built_in.data.data(), size))
+    );
+}
+
 int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
     uint32_t kind = 0;
     zcbor_string name{};
@@ -538,6 +634,9 @@ int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
     const Error error = CheckTarget(kind, asset_name, AssetAccess::READ, provider);
     if(error != Error::OK)
         return Fail(ctxt, error);
+
+    if(const BuiltInAsset* built_in = FindBuiltIn(*provider, asset_name); built_in != nullptr)
+        return StatBuiltIn(ctxt, *built_in);
 
     const AssetStore& store = *provider->store;
 
@@ -997,6 +1096,10 @@ int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
     if(EqualsIgnoreCase(asset_name, to_name))
         return Fail(ctxt, Error::BAD_NAME);
 
+    // A built-in can be neither taken away nor replaced.
+    if(FindBuiltIn(*provider, asset_name) != nullptr || FindBuiltIn(*provider, to_name) != nullptr)
+        return Fail(ctxt, Error::BUILT_IN);
+
     AssetStore& store = *provider->store;
 
     if(!store.IsAvailable())
@@ -1116,6 +1219,10 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::CheckTarget(
 
     if(!AssetStore::IsValidName(name, provider->extensions))
         return Error::BAD_NAME;
+
+    // A built-in is in flash: it can be read without the volume, and nothing else is done to it.
+    if(FindBuiltIn(*provider, name) != nullptr)
+        return access == AssetAccess::READ ? Error::OK : Error::BUILT_IN;
 
     if(!provider->store->IsAvailable())
         return Error::UNAVAILABLE;
@@ -1429,6 +1536,7 @@ int AssetsMgmtGroup::TranslateError(uint16_t error) {
         case Error::TOO_LARGE:
             return MGMT_ERR_EINVAL;
         case Error::DENIED:
+        case Error::BUILT_IN:
             return MGMT_ERR_EACCESSDENIED;
         case Error::IN_USE:
         case Error::BUSY:

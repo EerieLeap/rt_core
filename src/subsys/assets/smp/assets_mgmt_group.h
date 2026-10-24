@@ -38,7 +38,8 @@ using eerie_leap::subsys::threading::WorkQueueThread;
  * only by jobs and the idle task, which run on that queue.
  *
  * The kinds come from the AssetsManager registry, each with its own store, extensions, access
- * mask, size cap and in-use check; a kind that is not registered is UNKNOWN_KIND. A name must pass
+ * mask, size cap and in-use check; a kind that is not registered is UNKNOWN_KIND. A kind may have
+ * built-in files (AssetProvider::built_ins) that the group serves from flash, read-only. A name must pass
  * AssetStore::IsValidName() for the kind. File I/O fails with UNAVAILABLE while the kind's volume is
  * not mounted.
  *
@@ -76,23 +77,32 @@ public:
         /// kind's volume) are sent only while `avail` is true; `free` is the number WRITE checks `len`
         /// against, and only a hint: files take whole blocks, so a `len` below it can still be NO_SPACE.
         KINDS = 0,
-        /// Read `{kind, off?}`: `{entries: [{name, size}], next?}`. The files of the kind with a valid
-        /// name from directory position `off` (0 when absent), as many as fit into the response.
+        /// Read `{kind, off?}`: `{entries: [{name, size, end_ms?, builtin?}], next?}`. The files of the
+        /// kind with a valid name from position `off` (0 when absent), as many as fit into the response.
         /// Request the rest from `next` until it is absent: a page can be empty, and `next` present,
         /// when the entries around it are no assets. Needs no access bit.
+        ///
+        /// The positions are the kind's built-in files first (AssetProvider::built_ins: position n is
+        /// the n-th, listed with `builtin: true`), then the stored files, at the number of built-ins
+        /// plus their directory position. A stored file whose name is a built-in's (ASCII case ignored)
+        /// is not listed: the built-in wins. A kind without built-ins lists from the directory alone.
         LIST = 1,
         /// Read `{kind, name, off}`: `{off, data}`, plus `len` (the size of the file) at `off = 0`,
         /// and `crc` (CRC32/IEEE of the whole file) in the chunk that ends at `len`. A request at
         /// `off = len` answers empty data and `crc`. Every chunk but the last has the same length,
         /// whatever its offset, so a client can request several at multiples of the first one's.
+        /// Checked in this order: the kind, its READ bit, the name (BAD_NAME), then, for a file that
+        /// is not a built-in, the volume (UNAVAILABLE), NOT_FOUND and IN_USE. A built-in is read in
+        /// place from flash (a name matches ignoring ASCII case): it needs no volume, is never in use
+        /// and opens no session; its `crc` is summed from the span in the last chunk.
         READ = 2,
         /// Write `{kind, name, off, data}`, plus `len` (the size of the file) and `crc` (CRC32/IEEE of
         /// the whole file) at `off = 0`, `tok` after: `{off, tok}`, the offset to send next (`len` once
         /// the file is stored), and the session's token in the answer to `off = 0` only. A chunk must
         /// start where the last one ended: otherwise the error carries `off`, where to go on.
         ///
-        /// The first chunk is checked in this order: the kind, its WRITE bit, the name, the volume,
-        /// the size (TOO_LARGE), whether the file is in use, whether an upload is open (BUSY, unless it
+        /// The first chunk is checked in this order: the kind, its WRITE bit, the name, whether it is
+        /// a built-in's (BUILT_IN), the volume, the size (TOO_LARGE), whether the file is in use, whether an upload is open (BUSY, unless it
         /// is this chunk sent again, or the owner's token starts it over) and the room on the volume
         /// (NO_SPACE). The owner's restart aborts its old upload before the room is looked at, so the
         /// room its staged file held counts. A staged file left on the volume with no upload open is
@@ -101,12 +111,15 @@ public:
         /// The last chunk can answer IN_USE as well: the file is asked again whether it is in use just
         /// before it is replaced, and the upload ends if it is.
         WRITE = 3,
-        /// Write `{kind, name}`: `{}`.
+        /// Write `{kind, name}`: `{}`. Checked in this order: the kind, its DELETE bit, the name
+        /// (BAD_NAME), whether it is a built-in's (BUILT_IN), the volume, NOT_FOUND, IN_USE.
         DELETE = 4,
         /// Read `{kind, name}`: `{len, crc?}`. The size of the file and, unless it is above
         /// CONFIG_EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE and no current checkpoint covers it, the
         /// CRC32/IEEE of the whole file, the one READ sends. Checked as READ is (the kind, its READ
-        /// bit, the name, the volume, NOT_FOUND, IN_USE). The CRC comes from the checkpoint when it is
+        /// bit, the name, the volume, NOT_FOUND, IN_USE; a built-in needs no volume and is never in use).
+        /// A built-in answers its size and the CRC of its bytes, summed from flash (it is never above
+        /// the cap that a stored file's CRC is). The CRC comes from the checkpoint when it is
         /// current (the file system was not remounted and no write went through the store since it was
         /// taken) and covers the whole file, otherwise the unit reads the file, and keeps the result as
         /// the checkpoint. An open download is left as it is.
@@ -114,7 +127,7 @@ public:
         /// Write `{kind, name, to}`: `{}`. Renames a file of the kind, replacing `to` as a WRITE would.
         /// Checked in this order: the kind, then its WRITE and DELETE bits (DENIED), both names
         /// (BAD_NAME), two names that differ only in ASCII case (BAD_NAME: FAT would delete the file),
-        /// the volume, whether `name` exists (NOT_FOUND), whether `name` is in use for DELETE and `to`
+        /// whether either name is a built-in's (BUILT_IN), the volume, whether `name` exists (NOT_FOUND), whether `name` is in use for DELETE and `to`
         /// for WRITE (IN_USE), and whether an upload of either name is open (BUSY). A download of
         /// either name is closed first. The checkpoint of `name` goes on as one of `to`.
         RENAME = 6,
@@ -138,6 +151,9 @@ public:
         CRC_MISMATCH = 13,
         IO_ERROR = 14,
         NO_MEMORY = 15,
+        /// The asset is built into the firmware (AssetProvider::built_ins): it can't be replaced,
+        /// renamed or deleted.
+        BUILT_IN = 16,
     };
 
     /// Directory entries read for one LIST request: more than one response holds.
@@ -252,6 +268,11 @@ private:
     int ExecuteStat(smp_streamer* ctxt);
     int ExecuteRename(smp_streamer* ctxt);
 
+    /** @brief Answers a READ chunk of a built-in from its bytes in flash: no session, no copy. */
+    int ReadBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in, size_t offset);
+    /** @brief Answers a STAT of a built-in. */
+    static int StatBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in);
+
     int WriteFirstChunk(
         smp_streamer* ctxt,
         uint32_t kind,
@@ -300,8 +321,9 @@ private:
     std::shared_ptr<const AssetProvider> FindProvider(uint32_t kind) const;
     /**
      * @brief Resolves the provider of @p kind and checks that it allows @p access on @p name.
-     * @return OK, or UNKNOWN_KIND, DENIED, BAD_NAME or UNAVAILABLE, in that order. @p provider is
-     *         set whenever the kind is known.
+     * @return OK, or UNKNOWN_KIND, DENIED, BAD_NAME, BUILT_IN or UNAVAILABLE, in that order. A
+     *         built-in's name is OK for READ without the volume and BUILT_IN for any other access.
+     *         @p provider is set whenever the kind is known.
      */
     Error CheckTarget(
         uint32_t kind,

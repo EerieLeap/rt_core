@@ -37,6 +37,7 @@ using eerie_leap::subsys::assets::AssetReader;
 using eerie_leap::subsys::assets::AssetsManager;
 using eerie_leap::subsys::assets::AssetStore;
 using eerie_leap::subsys::assets::AssetWriter;
+using eerie_leap::subsys::assets::BuiltInAsset;
 using eerie_leap::subsys::assets::ToMask;
 using eerie_leap::subsys::assets::smp::AssetsMgmtGroup;
 using eerie_leap::subsys::threading::WorkQueueThread;
@@ -102,6 +103,7 @@ constexpr uint32_t ANIMATIONS = std::to_underlying(AssetKind::ANIMATIONS);
 constexpr uint32_t SENSOR_SCRIPTS = std::to_underlying(AssetKind::SENSOR_SCRIPTS);
 constexpr uint32_t CAN_SCRIPTS = std::to_underlying(AssetKind::CAN_SCRIPTS);
 constexpr uint32_t LOGS = std::to_underlying(AssetKind::LOGS);
+constexpr uint32_t FONTS = std::to_underlying(AssetKind::FONTS);
 
 constexpr uint8_t READ_ONLY = ToMask(AssetAccess::READ);
 constexpr uint8_t WRITE_ONLY = ToMask(AssetAccess::WRITE);
@@ -115,6 +117,8 @@ constexpr std::array<std::string_view, 2> IMAGE_EXTENSIONS = { ".png", ".bin" };
 constexpr std::array<std::string_view, 1> ANIMATION_EXTENSIONS = { ".json" };
 constexpr std::array<std::string_view, 1> SCRIPT_EXTENSIONS = { ".lua" };
 constexpr std::array<std::string_view, 1> LOG_EXTENSIONS = { ".mdf" };
+constexpr std::array<std::string_view, 1> FONT_EXTENSIONS = { ".ttf" };
+constexpr uint32_t FONTS_MAX_SIZE = 3000;
 // The kind on the root of the volume lists a staged file too, if one were there under its own name.
 constexpr std::array<std::string_view, 2> ROOT_EXTENSIONS = { ".lua", ".part" };
 
@@ -261,6 +265,23 @@ public:
             AssetKind::CAN_SCRIPTS, "can_scripts", std::make_shared<AssetStore>(volume, ""), ROOT_EXTENSIONS,
             ALL_ACCESS, SCRIPTS_MAX_SIZE
         );
+    }
+
+    // Registers the fonts kind (on the volume that can go away) with built-in files, as rt_gauge does.
+    // The files stay in static storage, as a unit's flash does.
+    void RegisterFonts(std::span<const BuiltInAsset> built_ins, uint8_t access = ALL_ACCESS) {
+        registry->Unregister(AssetKind::FONTS);
+        zassert_true(registry->Register(
+            {
+                .kind = AssetKind::FONTS,
+                .name = "fonts",
+                .store = std::make_shared<AssetStore>(images_volume, "fonts"),
+                .extensions = FONT_EXTENSIONS,
+                .access = access,
+                .max_size = FONTS_MAX_SIZE,
+                .built_ins = built_ins,
+            }
+        ));
     }
 
     // Serves the group on a new instance, as after a restart of the unit.
@@ -3156,6 +3177,364 @@ ZTEST_F(smp_assets_group, test_rename_while_an_upload_of_either_name_is_open_is_
 
     zassert_true(harness.SendRest(IMAGES, "b.bin", data, token, UPLOAD_CHUNK_SIZE).IsOk());
     zassert_true(harness.FileContent("images/b.bin") == data);
+}
+
+// ======== Built-in files ========
+
+namespace {
+
+// The built-ins of the fonts kind, as a unit's flash holds them: the first is larger than two chunks.
+const Bytes& HeavyFont() {
+    static const Bytes DATA = Pattern(2 * CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE + 77, 11);
+
+    return DATA;
+}
+
+const Bytes& LightFont() {
+    static const Bytes DATA = Pattern(300, 23);
+
+    return DATA;
+}
+
+std::span<const BuiltInAsset> TwoBuiltIns() {
+    static const std::array<BuiltInAsset, 2> BUILT_INS = { {
+        { .name = "Heavy-Bold.ttf", .data = HeavyFont() },
+        { .name = "light-medium.ttf", .data = LightFont() },
+    } };
+
+    return BUILT_INS;
+}
+
+bool IsBuiltInEntry(const Response& response, size_t index) {
+    const auto& flags = response.entry_flags[index];
+
+    return flags.contains("builtin") && flags.at("builtin");
+}
+
+} // namespace
+
+ZTEST_F(smp_assets_group, test_list_puts_the_built_ins_first_and_hides_the_stored_file_of_their_name) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    harness.Put("fonts/heavy-bold.ttf", Pattern(5, 1));
+    harness.Put("fonts/mine.ttf", Pattern(20, 2));
+    harness.Put("fonts/LIGHT-MEDIUM.TTF", Pattern(7, 3));
+
+    const auto response = harness.List(FONTS);
+
+    zassert_true(response.IsOk());
+    zassert_false(response.Has("next"));
+    zassert_equal(response.entries.size(), 3, "Two built-ins and the one stored file that is no built-in's");
+
+    zassert_str_equal(response.entry_texts[0].at("name").c_str(), "Heavy-Bold.ttf");
+    zassert_equal(response.entries[0].at("size"), HeavyFont().size());
+    zassert_true(IsBuiltInEntry(response, 0));
+
+    zassert_str_equal(response.entry_texts[1].at("name").c_str(), "light-medium.ttf");
+    zassert_equal(response.entries[1].at("size"), LightFont().size());
+    zassert_true(IsBuiltInEntry(response, 1));
+
+    zassert_str_equal(response.entry_texts[2].at("name").c_str(), "mine.ttf");
+    zassert_equal(response.entries[2].at("size"), 20);
+    zassert_false(IsBuiltInEntry(response, 2), "A stored file carries no builtin key");
+    zassert_false(response.entry_flags[2].contains("builtin"));
+}
+
+ZTEST_F(smp_assets_group, test_list_of_a_kind_with_built_ins_and_no_stored_files_lists_the_built_ins) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const auto response = harness.List(FONTS);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 2);
+    zassert_false(response.Has("next"));
+}
+
+ZTEST_F(smp_assets_group, test_list_pages_from_the_built_ins_into_the_stored_files) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    constexpr size_t STORED = 3 * AssetsMgmtGroup::MAX_PAGE_ENTRIES;
+    std::set<std::string> expected = { "Heavy-Bold.ttf", "light-medium.ttf" };
+
+    for(size_t i = 0; i < STORED; i++) {
+        const std::string name = "f" + std::to_string(i) + ".ttf";
+        harness.Put("fonts/" + name, Pattern(4, 1));
+        expected.insert(name);
+    }
+
+    // Names that are no assets and the shadowed file take places in the directory too.
+    harness.Put("fonts/note.txt", Pattern(4, 1));
+    harness.Put("fonts/HEAVY-bold.ttf", Pattern(4, 1));
+
+    const auto listing = harness.ListAll(FONTS);
+
+    zassert_true(listing.pages >= 3, "The stored files need several pages");
+    zassert_equal(listing.files.size(), expected.size(), "No entry twice, none missing");
+    zassert_str_equal(listing.files[0].first.c_str(), "Heavy-Bold.ttf", "The built-ins come first");
+    zassert_str_equal(listing.files[1].first.c_str(), "light-medium.ttf");
+
+    const std::set<std::string> listed = [&listing] {
+        std::set<std::string> names;
+        for(const auto& file : listing.files)
+            names.insert(file.first);
+
+        return names;
+    }();
+    zassert_true(listed == expected);
+}
+
+ZTEST_F(smp_assets_group, test_list_from_a_position_in_the_built_ins_resumes_there) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+    harness.Put("fonts/mine.ttf", Pattern(20, 2));
+
+    const auto response = harness.List(FONTS, 1);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 2);
+    zassert_str_equal(response.entry_texts[0].at("name").c_str(), "light-medium.ttf");
+    zassert_true(IsBuiltInEntry(response, 0));
+    zassert_str_equal(response.entry_texts[1].at("name").c_str(), "mine.ttf");
+
+    // Past the built-ins the position is the directory's, shifted by their number.
+    const auto stored = harness.List(FONTS, 2);
+    zassert_true(stored.IsOk());
+    zassert_equal(stored.entries.size(), 1);
+    zassert_str_equal(stored.entry_texts[0].at("name").c_str(), "mine.ttf");
+
+    zassert_equal(harness.List(FONTS, 3).entries.size(), 0, "Nothing is left past the one stored file");
+}
+
+ZTEST_F(smp_assets_group, test_list_of_a_kind_without_built_ins_is_unchanged) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/a.png", Pattern(10, 1));
+
+    const auto response = harness.List(IMAGES);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 1);
+    zassert_false(response.entry_flags[0].contains("builtin"));
+}
+
+ZTEST_F(smp_assets_group, test_list_of_built_ins_while_the_volume_is_unmounted_is_unavailable) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+    harness.images_volume->available = false;
+
+    AssertError(harness.List(FONTS), Error::UNAVAILABLE);
+}
+
+ZTEST_F(smp_assets_group, test_read_of_a_built_in_gives_the_bytes_and_the_crc_without_touching_a_file) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const atomic_val_t read_before = atomic_get(&bytes_read_from_files);
+    const atomic_val_t closed_before = atomic_get(&files_closed);
+
+    const auto download = harness.DownloadAll(FONTS, "Heavy-Bold.ttf", HeavyFont().size());
+
+    zassert_true(download.data == HeavyFont());
+    zassert_equal(download.crc, Crc(HeavyFont()));
+    zassert_true(download.chunks >= 3);
+    zassert_true(download.chunk_size < CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE);
+
+    // A built-in of one chunk: `len` and `crc` at once.
+    const auto small = harness.Read(FONTS, "light-medium.ttf", 0);
+    zassert_true(small.IsOk());
+    zassert_equal(small.Value("len"), LightFont().size());
+    zassert_equal(small.Value("crc"), Crc(LightFont()));
+    zassert_true(Harness::DataOf(small) == LightFont());
+
+    zassert_equal(atomic_get(&bytes_read_from_files), read_before, "A built-in is read in place, not from a file");
+    zassert_equal(atomic_get(&files_closed), closed_before, "No file was opened for it");
+}
+
+ZTEST_F(smp_assets_group, test_read_of_a_built_in_matches_its_name_ignoring_case_and_wins_over_a_stored_file) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+    harness.Put("fonts/light-medium.ttf", Pattern(9, 5));
+
+    const auto response = harness.Read(FONTS, "LIGHT-Medium.TTF", 0);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), LightFont().size());
+    zassert_true(Harness::DataOf(response) == LightFont(), "The built-in, not the stored file");
+}
+
+ZTEST_F(smp_assets_group, test_read_of_a_built_in_needs_no_volume) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+    harness.images_volume->available = false;
+
+    const auto response = harness.Read(FONTS, "light-medium.ttf", 0);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("crc"), Crc(LightFont()));
+}
+
+ZTEST_F(smp_assets_group, test_read_of_a_built_in_resumes_and_checks_the_offset) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const size_t size = HeavyFont().size();
+    const auto first = harness.Read(FONTS, "Heavy-Bold.ttf", 0);
+    const size_t chunk = Harness::DataOf(first).size();
+
+    // A resume far into the file, as after a reboot of the client: the last chunk carries the CRC of all.
+    const auto last = harness.DownloadFrom(FONTS, "Heavy-Bold.ttf", static_cast<uint32_t>(chunk), size);
+    zassert_equal(last.crc, Crc(HeavyFont()));
+
+    const auto end = harness.Read(FONTS, "Heavy-Bold.ttf", size);
+    zassert_true(end.IsOk());
+    zassert_true(Harness::DataOf(end).empty());
+    zassert_equal(end.Value("crc"), Crc(HeavyFont()));
+
+    const auto past = harness.Read(FONTS, "Heavy-Bold.ttf", size + 1);
+    AssertError(past, Error::BAD_OFFSET);
+    zassert_equal(past.Value("len"), size);
+}
+
+ZTEST_F(smp_assets_group, test_read_of_a_built_in_leaves_an_open_download_alone) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const Bytes data = Pattern(3 * CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE, 4);
+    harness.Put("images/big.bin", data);
+
+    const auto first = harness.Read(IMAGES, "big.bin", 0);
+    const size_t chunk = Harness::DataOf(first).size();
+
+    zassert_true(harness.Read(FONTS, "light-medium.ttf", 0).IsOk());
+
+    const auto second = harness.Read(IMAGES, "big.bin", static_cast<uint32_t>(chunk));
+    zassert_true(second.IsOk());
+    zassert_true(
+        Harness::DataOf(second) == Bytes(data.begin() + chunk, data.begin() + chunk + Harness::DataOf(second).size())
+    );
+}
+
+ZTEST_F(smp_assets_group, test_stat_of_a_built_in_answers_the_size_and_the_crc) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const atomic_val_t read_before = atomic_get(&bytes_read_from_files);
+
+    const auto response = harness.Stat(FONTS, "heavy-BOLD.ttf");
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), HeavyFont().size());
+    zassert_equal(response.Value("crc"), Crc(HeavyFont()));
+    zassert_equal(atomic_get(&bytes_read_from_files), read_before, "The span is summed, no file is read");
+
+    harness.images_volume->available = false;
+    zassert_true(harness.Stat(FONTS, "light-medium.ttf").IsOk(), "No volume needed");
+}
+
+ZTEST_F(smp_assets_group, test_a_built_in_cannot_be_written_deleted_or_renamed) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+    harness.Put("fonts/mine.ttf", Pattern(20, 2));
+
+    const Bytes other = Pattern(50, 9);
+
+    AssertError(harness.UploadAll(FONTS, "Heavy-Bold.ttf", other), Error::BUILT_IN);
+    AssertError(harness.UploadAll(FONTS, "HEAVY-BOLD.TTF", other), Error::BUILT_IN);
+    AssertError(harness.Delete(FONTS, "light-medium.ttf"), Error::BUILT_IN);
+    AssertError(harness.Delete(FONTS, "Light-Medium.ttf"), Error::BUILT_IN);
+    AssertError(harness.Rename(FONTS, "Heavy-Bold.ttf", "copy.ttf"), Error::BUILT_IN);
+    AssertError(harness.Rename(FONTS, "mine.ttf", "Heavy-Bold.ttf"), Error::BUILT_IN);
+    AssertError(harness.Rename(FONTS, "mine.ttf", "light-MEDIUM.ttf"), Error::BUILT_IN);
+
+    zassert_false(harness.IsStaged(), "Nothing was staged");
+    zassert_true(harness.volume->Exists("fonts/mine.ttf"), "The stored file is as it was");
+    zassert_false(harness.volume->Exists("fonts/Heavy-Bold.ttf"));
+    zassert_false(harness.volume->Exists("fonts/copy.ttf"));
+
+    // The built-in is as it was, and so is the group: another upload goes through.
+    zassert_equal(harness.Read(FONTS, "Heavy-Bold.ttf", 0).Value("len"), HeavyFont().size());
+    zassert_true(harness.UploadAll(FONTS, "other.ttf", other).IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_a_built_in_is_refused_after_the_name_check_and_before_the_volume) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    // The volume is gone: the built-in is refused all the same, before the volume is asked.
+    harness.images_volume->available = false;
+    AssertError(harness.UploadAll(FONTS, "Heavy-Bold.ttf", Pattern(10, 1)), Error::BUILT_IN);
+    AssertError(harness.Delete(FONTS, "Heavy-Bold.ttf"), Error::BUILT_IN);
+    AssertError(harness.Rename(FONTS, "Heavy-Bold.ttf", "x.ttf"), Error::BUILT_IN);
+    AssertError(harness.Rename(FONTS, "x.ttf", "Heavy-Bold.ttf"), Error::BUILT_IN);
+
+    // A name that is no name is BAD_NAME first.
+    AssertError(harness.Delete(FONTS, "bad name.ttf"), Error::BAD_NAME);
+    AssertError(harness.Rename(FONTS, "Heavy-Bold.ttf", "bad name.ttf"), Error::BAD_NAME);
+    AssertError(harness.Rename(FONTS, "Heavy-Bold.ttf", "HEAVY-BOLD.ttf"), Error::BAD_NAME);
+
+    // And the kind's access comes before the built-in.
+    harness.RegisterFonts(TwoBuiltIns(), READ_ONLY);
+    AssertError(harness.UploadAll(FONTS, "Heavy-Bold.ttf", Pattern(10, 1)), Error::DENIED);
+    AssertError(harness.Delete(FONTS, "Heavy-Bold.ttf"), Error::DENIED);
+    AssertError(harness.Rename(FONTS, "Heavy-Bold.ttf", "x.ttf"), Error::DENIED);
+}
+
+ZTEST_F(smp_assets_group, test_the_registry_refuses_built_ins_with_bad_or_repeated_names) {
+    Harness& harness = *fixture->harness;
+
+    static const Bytes DATA = Pattern(4, 1);
+    static const std::array<BuiltInAsset, 1> BAD_NAMES = { { { .name = "no-extension", .data = DATA } } };
+    static const std::array<BuiltInAsset, 2> REPEATED_NAMES = { {
+        { .name = "A.ttf", .data = DATA },
+        { .name = "a.TTF", .data = DATA },
+    } };
+
+    harness.registry->Unregister(AssetKind::FONTS);
+
+    for(const std::span<const BuiltInAsset> built_ins :
+        { std::span<const BuiltInAsset>(BAD_NAMES), std::span<const BuiltInAsset>(REPEATED_NAMES) }) {
+        zassert_false(harness.registry->Register(
+            {
+                .kind = AssetKind::FONTS,
+                .name = "fonts",
+                .store = std::make_shared<AssetStore>(harness.volume, "fonts"),
+                .extensions = FONT_EXTENSIONS,
+                .access = ALL_ACCESS,
+                .max_size = FONTS_MAX_SIZE,
+                .built_ins = built_ins,
+            }
+        ));
+    }
+
+    zassert_equal(harness.registry->Find(AssetKind::FONTS), nullptr, "Nothing was registered");
+}
+
+ZTEST_F(smp_assets_group, test_kinds_reports_the_volumes_space_for_a_kind_with_built_ins) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const auto before = harness.Kinds();
+    zassert_true(before.IsOk());
+
+    size_t fonts = before.entries.size();
+    for(size_t i = 0; i < before.entries.size(); i++) {
+        if(before.entries[i].at("kind") == FONTS)
+            fonts = i;
+    }
+    zassert_true(fonts < before.entries.size());
+    zassert_equal(before.entries[fonts].at("max"), FONTS_MAX_SIZE);
+
+    // The same volume as the images kind, so the same numbers: a built-in takes none of it.
+    size_t images = before.entries.size();
+    for(size_t i = 0; i < before.entries.size(); i++) {
+        if(before.entries[i].at("kind") == IMAGES)
+            images = i;
+    }
+    zassert_true(images < before.entries.size());
+    zassert_equal(before.entries[fonts].at("used"), before.entries[images].at("used"));
+    zassert_equal(before.entries[fonts].at("free"), before.entries[images].at("free"));
 }
 
 // ======== Dispatch ========

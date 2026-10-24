@@ -149,7 +149,7 @@ so a unit serves the kinds it has the services for, and `KINDS` says which.
 | Command | Request | Response |
 | --- | --- | --- |
 | `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail, free?, used?}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) whether the volume is mounted now and, only while it is, `free` and `used` (bytes on the kind's volume). `free` is the number `WRITE` checks `len` against, and only a hint: files take whole blocks, so a `len` below it can still end in `NO_SPACE`. A unit without kinds answers an empty list. |
-| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size, end_ms?}], next?}` |
+| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size, end_ms?, builtin?}], next?}`; `builtin: true` marks a built-in file (absent for a stored one) |
 | `READ` (read) | `{kind, name, off}` | `{off, data}`; at `off = 0` also `len`, the size of the file; the chunk that ends at `len` also `crc`, the CRC32 of the whole file |
 | `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |
 | `DELETE` (write) | `{kind, name}` | `{}` |
@@ -163,17 +163,31 @@ directory, access and size cap. A name is 1 to `EERIE_LEAP_ASSETS_MAX_NAME_LENGT
 `A-Z a-z 0-9 . _ -`, not starting with a dot, ending in one of the kind's extensions (compared
 ignoring ASCII case) with at least one character before it; any other name is `BAD_NAME`. `READ`,
 `DELETE` and the first chunk of `WRITE` check, before anything else and in this order, the kind
-(`UNKNOWN_KIND`), its `access` (`DENIED`), the name (`BAD_NAME`) and the volume (`UNAVAILABLE`). `LIST`
+(`UNKNOWN_KIND`), its `access` (`DENIED`), the name (`BAD_NAME`), whether the name is a built-in's
+(`BUILT_IN`, for `DELETE` and `WRITE`; see below) and the volume (`UNAVAILABLE`). `LIST`
 checks the kind and the volume only: it needs no access bit and takes no name. A later chunk of
 `WRITE` is matched to the open upload instead, and checks neither access nor name (see below).
+
+**Built-in files.** A kind may have files that are part of the firmware (`AssetProvider::built_ins`,
+the rt_gauge's three fonts): a name, and bytes in flash that the group reads in place, with no copy and
+no volume. A client sees them as files of the kind that it can only read: `LIST` lists them first, each
+entry with `builtin: true`; `READ` and `STAT` answer as for a stored file, with the CRC32 of the whole
+file (`STAT` always gives it); `WRITE`, `DELETE` and `RENAME` (as `name` or as `to`) of a built-in's name
+are refused with `BUILT_IN`, so a built-in is never replaced, taken away or overwritten by a rename.
+Names compare ignoring ASCII case, as on FAT. A stored file of a built-in's name (a client uploaded it
+before the firmware had the built-in) is not listed and not served: the built-in wins. `KINDS` is
+unchanged: `free` and `used` are the volume's, and a built-in counts in neither. A kind with no
+built-ins behaves as it always did.
 
 **`LIST`.** `end_ms` is the end of the file in milliseconds since the Unix epoch (UTC), given for the
 `logs` kind only and only for a file this unit's writer recorded when it finalized it (a normal stop
 or a rotation; not a file left unfinalized, a log from before the index, or one copied onto the card);
 the duration is `end_ms` less the start in the name.
 
-The entries come from directory position `off` (0 when absent), at most 48 directory
-entries per request, in the file system's order, not sorted. Only files whose names are valid for the
+The entries come from position `off` (0 when absent), at most 48 per request: the built-ins first, in
+the firmware's order, at positions 0 to n - 1 for n built-ins, then the stored files in the file
+system's order, not sorted, at n plus their directory position (without built-ins, the directory
+position itself). Only files whose names are valid for the
 kind are listed: directories, dot files and other extensions are skipped but counted. `next` is the
 position to ask for next, absent once the directory is done; a page can be empty while `next` is
 present, so a client asks until `next` is absent. A directory that does not exist yet lists nothing.
@@ -213,7 +227,7 @@ empty data. The data goes to a staged file, `.assets_tmp/upload.part` at the roo
 volume, which no kind lists (the `files` group lists directories as they are, so it shows
 `.assets_tmp/` at the root of the card, and `upload.part` in it while an upload is staged). With the
 last chunk the unit checks the CRC32 of everything it received and renames the staged file onto the
-asset, replacing it (the kind's directory is created when missing). The first chunk is checked after the kind, access, name and volume, in this order:
+asset, replacing it (the kind's directory is created when missing). The first chunk is checked after the kind, access, name, built-in and volume, in this order:
 the size (`TOO_LARGE`: `len` above `max`, or more data than `len`), whether the file is in use
 (`IN_USE`), whether an upload is open (`BUSY`) and the room (`NO_SPACE`: `len` above the free space
 of the volume, checked once; the old file counts as used until it is replaced, so replacing a file
@@ -243,7 +257,8 @@ needs room for both).
 
 **`STAT`.** Lets a client compare a file with a local one without downloading it. Checked as `READ` is,
 in this order: the kind (`UNKNOWN_KIND`), its read access (`DENIED`), the name (`BAD_NAME`), the volume
-(`UNAVAILABLE`), the file (`NOT_FOUND`) and whether it is in use (`IN_USE`). The CRC comes from the
+(`UNAVAILABLE`), the file (`NOT_FOUND`) and whether it is in use (`IN_USE`); a built-in is answered
+right after the name, with no volume and never in use. The CRC comes from the
 running CRC of an open download that has read the whole file, or from the checkpoint when it is
 current ([filesystem.md](filesystem.md#assets-eerie_leap_assets)); otherwise the unit reads the file
 on the configuration work queue while the client waits, up to `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE`,
@@ -254,11 +269,12 @@ as it is.
 takes a name away and makes one, so the kind needs both the upload and the delete bit. Checked in this
 order: the kind (`UNKNOWN_KIND`), its access (`DENIED`), both names (`BAD_NAME`), two names that differ
 only in ASCII case (`BAD_NAME`: FAT would delete the file; a case change needs a copy and a delete),
-the volume (`UNAVAILABLE`), whether `name` exists (`NOT_FOUND`), whether the kind uses `name` (as for
+whether either name is a built-in's (`BUILT_IN`), the volume (`UNAVAILABLE`), whether `name` exists (`NOT_FOUND`), whether the kind uses `name` (as for
 `DELETE`) or `to` (as for `WRITE`) (`IN_USE`), and whether an upload of either name is open (`BUSY`). A
 download of either name is closed first.
 
-**`DELETE`.** A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
+**`DELETE`.** Checked in this order: the kind, its delete access, the name, whether it is a built-in's
+(`BUILT_IN`), the volume, `NOT_FOUND`, `IN_USE`. A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
 and so is the log the writer is writing, which cannot be downloaded either. A download of the file is
 closed first.
 
@@ -289,10 +305,11 @@ buffer (`MCUMGR_TRANSPORT_NETBUF_SIZE` bytes of external RAM) is left out and th
 | `CRC_MISMATCH` | 13 | The received data does not match the `crc` of the first chunk. |
 | `IO_ERROR` | 14 | The file system failed to read, write, delete or rename. |
 | `NO_MEMORY` | 15 | No memory, or no free file slot. |
+| `BUILT_IN` | 16 | The asset is built into the firmware: it can't be replaced, renamed or deleted. |
 
 SMP v1 clients get `rc` instead: `ENOENT` for `UNKNOWN_KIND` and `NOT_FOUND`, `EBADSTATE` for
 `UNAVAILABLE`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
-for `DENIED`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`, `ECORRUPT`
+for `DENIED` and `BUILT_IN`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`, `ECORRUPT`
 for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
 
 ### `logging`: status, start and stop

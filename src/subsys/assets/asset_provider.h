@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -11,6 +12,17 @@
 #include "asset_store.h"
 
 namespace eerie_leap::subsys::assets {
+
+/**
+ * @brief A file of a kind that is part of the firmware: read in place from flash, never stored on the
+ *        volume, never replaced, renamed or deleted.
+ */
+struct BuiltInAsset {
+    /// A valid name for the kind (AssetStore::IsValidName()); a string literal.
+    std::string_view name;
+    /// The file's bytes, in static storage (flash): the group reads them in place and keeps no copy.
+    std::span<const uint8_t> data;
+};
 
 /** @brief What a unit serves of one asset kind. */
 struct AssetProvider {
@@ -37,6 +49,32 @@ struct AssetProvider {
      * without the registry's lock: no file I/O, no waiting. Must not take the LVGL lock.
      */
     std::function<std::optional<int64_t>(std::string_view name)> get_end_ms;
+    /**
+     * The kind's built-in files, in static storage: the provider keeps only the span. The group
+     * lists them before the stored files (each entry with `builtin: true`), serves READ and STAT of
+     * them from the span and refuses WRITE, DELETE and RENAME of their names with BUILT_IN. A built-in
+     * wins over a stored file of the same name (ASCII case ignored): the stored one is not listed and
+     * not served. Empty: the kind has none.
+     */
+    std::span<const BuiltInAsset> built_ins;
 };
+
+/** @return The built-in of @p provider that @p name names, ASCII case ignored as names compare on FAT; null when none. */
+[[nodiscard]] inline const BuiltInAsset* FindBuiltIn(const AssetProvider& provider, std::string_view name) {
+    for(const BuiltInAsset& built_in : provider.built_ins) {
+        if(built_in.name.size() == name.size() && std::ranges::equal(built_in.name, name, [](char a, char b) {
+               const auto lower = [](char c) {
+                   return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+               };
+
+               return lower(a) == lower(b);
+           })) {
+
+            return &built_in;
+        }
+    }
+
+    return nullptr;
+}
 
 } // namespace eerie_leap::subsys::assets
