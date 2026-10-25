@@ -3481,7 +3481,7 @@ ZTEST_F(smp_assets_group, test_a_built_in_is_refused_after_the_name_check_and_be
     AssertError(harness.Rename(FONTS, "Heavy-Bold.ttf", "x.ttf"), Error::DENIED);
 }
 
-ZTEST_F(smp_assets_group, test_the_registry_refuses_built_ins_with_bad_or_repeated_names) {
+ZTEST_F(smp_assets_group, test_the_registry_refuses_built_ins_with_bad_or_repeated_names_or_of_a_bad_size) {
     Harness& harness = *fixture->harness;
 
     static const Bytes DATA = Pattern(4, 1);
@@ -3490,11 +3490,15 @@ ZTEST_F(smp_assets_group, test_the_registry_refuses_built_ins_with_bad_or_repeat
         { .name = "A.ttf", .data = DATA },
         { .name = "a.TTF", .data = DATA },
     } };
+    static const Bytes TOO_BIG_DATA = Pattern(FONTS_MAX_SIZE + 1, 1);
+    static const std::array<BuiltInAsset, 1> EMPTY_FILE = { { { .name = "empty.ttf", .data = {} } } };
+    static const std::array<BuiltInAsset, 1> OVERSIZED_FILE = { { { .name = "big.ttf", .data = TOO_BIG_DATA } } };
 
     harness.registry->Unregister(AssetKind::FONTS);
 
     for(const std::span<const BuiltInAsset> built_ins :
-        { std::span<const BuiltInAsset>(BAD_NAMES), std::span<const BuiltInAsset>(REPEATED_NAMES) }) {
+        { std::span<const BuiltInAsset>(BAD_NAMES), std::span<const BuiltInAsset>(REPEATED_NAMES),
+            std::span<const BuiltInAsset>(EMPTY_FILE), std::span<const BuiltInAsset>(OVERSIZED_FILE) }) {
         zassert_false(harness.registry->Register(
             {
                 .kind = AssetKind::FONTS,
@@ -3535,6 +3539,140 @@ ZTEST_F(smp_assets_group, test_kinds_reports_the_volumes_space_for_a_kind_with_b
     zassert_true(images < before.entries.size());
     zassert_equal(before.entries[fonts].at("used"), before.entries[images].at("used"));
     zassert_equal(before.entries[fonts].at("free"), before.entries[images].at("free"));
+}
+
+// ======== Stored files that a built-in shadows ========
+
+namespace {
+
+// The sizes of the files the listing of the fonts kind gives, by name.
+std::map<std::string, uint32_t> ListedFonts(Harness& harness) {
+    std::map<std::string, uint32_t> files;
+    for(const auto& file : harness.ListAll(FONTS).files)
+        files.emplace(file);
+
+    return files;
+}
+
+} // namespace
+
+ZTEST_F(smp_assets_group, test_a_file_uploaded_under_a_built_ins_name_is_moved_aside_when_the_group_starts) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const Bytes heavy = Pattern(200, 5);
+    const Bytes light = Pattern(300, 6);
+    harness.Put("fonts/Heavy-Bold.ttf", heavy);
+    harness.Put("fonts/LIGHT-medium.TTF", light);
+    harness.Put("fonts/mine.ttf", Pattern(20, 2));
+
+    harness.StartGroup();
+
+    const auto files = ListedFonts(harness);
+    zassert_equal(files.size(), 5U, "Two built-ins and three stored files");
+    zassert_true(files.contains("Heavy-Bold-uploaded.ttf"));
+    zassert_true(files.contains("LIGHT-medium-uploaded.TTF"), "The extension keeps its spelling");
+    zassert_true(files.contains("mine.ttf"));
+    zassert_equal(files.at("Heavy-Bold-uploaded.ttf"), heavy.size());
+
+    zassert_false(harness.volume->Exists("fonts/Heavy-Bold.ttf"));
+    zassert_true(harness.FileContent("fonts/Heavy-Bold-uploaded.ttf") == heavy, "Nothing of the file is lost");
+    zassert_true(harness.FileContent("fonts/LIGHT-medium-uploaded.TTF") == light);
+
+    // The moved file is an ordinary one: it can be read, and deleted.
+    zassert_true(Harness::DataOf(harness.Read(FONTS, "Heavy-Bold-uploaded.ttf", 0)) == heavy);
+    zassert_true(harness.Delete(FONTS, "Heavy-Bold-uploaded.ttf").IsOk());
+
+    // And the built-in is the one that is served under the name.
+    zassert_equal(harness.Read(FONTS, "Heavy-Bold.ttf", 0).Value("len"), HeavyFont().size());
+}
+
+ZTEST_F(smp_assets_group, test_a_shadowed_file_takes_the_next_free_name) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    harness.Put("fonts/Heavy-Bold.ttf", Pattern(10, 1));
+    harness.Put("fonts/Heavy-Bold-uploaded.ttf", Pattern(11, 2));
+    harness.Put("fonts/Heavy-Bold-uploaded-2.ttf", Pattern(12, 3));
+
+    harness.StartGroup();
+
+    const auto files = ListedFonts(harness);
+    zassert_equal(files.at("Heavy-Bold-uploaded.ttf"), 11U, "A file that was there is not replaced");
+    zassert_equal(files.at("Heavy-Bold-uploaded-2.ttf"), 12U);
+    zassert_equal(files.at("Heavy-Bold-uploaded-3.ttf"), 10U);
+    zassert_false(harness.volume->Exists("fonts/Heavy-Bold.ttf"));
+}
+
+ZTEST_F(smp_assets_group, test_a_shadowed_file_that_finds_no_free_name_stays_where_it_is) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const Bytes stuck = Pattern(10, 1);
+    harness.Put("fonts/Heavy-Bold.ttf", stuck);
+    harness.Put("fonts/Heavy-Bold-uploaded.ttf", Pattern(11, 2));
+    for(size_t number = 2; number <= AssetsMgmtGroup::MAX_SHADOWED_RENAMES; number++)
+        harness.Put("fonts/Heavy-Bold-uploaded-" + std::to_string(number) + ".ttf", Pattern(11, 2));
+
+    harness.StartGroup();
+
+    zassert_true(harness.FileContent("fonts/Heavy-Bold.ttf") == stuck, "Nothing is deleted or overwritten");
+    zassert_equal(ListedFonts(harness).size(), AssetsMgmtGroup::MAX_SHADOWED_RENAMES + 2, "It stays hidden");
+}
+
+ZTEST_F(smp_assets_group, test_a_shadowed_file_with_a_long_name_is_moved_to_a_name_that_fits) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    // A built-in with the longest name there is, and a stored file of that name.
+    static const Bytes DATA = Pattern(64, 1);
+    static const std::string NAME = std::string(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH - 4, 'x') + ".ttf";
+    static const std::array<BuiltInAsset, 1> BUILT_INS = { { { .name = NAME, .data = DATA } } };
+    harness.RegisterFonts(BUILT_INS);
+    harness.Put("fonts/" + NAME, Pattern(30, 9));
+
+    harness.StartGroup();
+
+    const auto files = ListedFonts(harness);
+    zassert_equal(files.size(), 2U, "The built-in and the moved file");
+    for(const auto& file : files) {
+        zassert_true(file.first.size() <= CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH);
+        if(file.first != NAME) {
+            zassert_true(file.first.contains("-uploaded.ttf"), "%s", file.first.c_str());
+            zassert_equal(file.second, 30U);
+        }
+    }
+}
+
+ZTEST_F(smp_assets_group, test_a_kind_without_built_ins_keeps_its_files_when_the_group_starts) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/a.png", Pattern(10, 1));
+    harness.Put("images/a-uploaded.png", Pattern(11, 1));
+
+    harness.StartGroup();
+
+    const auto listing = harness.ListAll(IMAGES);
+    zassert_equal(listing.files.size(), 2U);
+    zassert_true(harness.volume->Exists("images/a.png"));
+}
+
+ZTEST_F(smp_assets_group, test_a_write_of_a_built_in_name_leaves_the_upload_of_another_client_alone) {
+    Harness& harness = *fixture->harness;
+    harness.RegisterFonts(TwoBuiltIns());
+
+    const Bytes other = Pattern(UPLOAD_CHUNK_SIZE + 100, 7);
+    const auto first = harness.WriteFirst(
+        FONTS, "other.ttf", std::span<const uint8_t>(other).first(UPLOAD_CHUNK_SIZE), other.size(), Crc(other)
+    );
+    zassert_true(first.IsOk());
+    zassert_true(first.Has("tok"));
+
+    // Another client: no token, so it would be BUSY if the name were an ordinary one.
+    AssertError(harness.WriteFirst(FONTS, "Heavy-Bold.ttf", Pattern(10, 1), 10, Crc(Pattern(10, 1))), Error::BUILT_IN);
+
+    zassert_true(harness.SendRest(FONTS, "other.ttf", other, first.Value("tok"), UPLOAD_CHUNK_SIZE).IsOk());
+    zassert_true(harness.FileContent("fonts/other.ttf") == other, "The open upload went on to its end");
+    zassert_false(harness.IsStaged());
 }
 
 // ======== Dispatch ========

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 #include <zephyr/logging/log.h>
@@ -32,12 +33,25 @@ bool AssetsManager::Register(AssetProvider provider) {
         return false;
     }
 
-    // A built-in is served under a name the kind could store, once.
+    // A built-in is served under a name the kind could store, once, and has a size the protocol can say (a 32-bit
+    // number) that the kind could take as an upload, if it takes any.
     for(size_t i = 0; i < provider.built_ins.size(); i++) {
-        const std::string_view built_in_name = provider.built_ins[i].name;
+        const BuiltInAsset& built_in = provider.built_ins[i];
+        const std::string_view built_in_name = built_in.name;
 
         if(!AssetStore::IsValidName(built_in_name, provider.extensions)) {
             LOG_ERR("Asset kind %d has a built-in with an invalid name.", static_cast<int>(index));
+
+            return false;
+        }
+
+        if(built_in.data.empty()
+            || built_in.data.size() > UINT32_MAX
+            || (provider.max_size != 0 && built_in.data.size() > provider.max_size)) {
+
+            LOG_ERR(
+                "Asset kind %d has a built-in that is empty or larger than the kind allows.", static_cast<int>(index)
+            );
 
             return false;
         }

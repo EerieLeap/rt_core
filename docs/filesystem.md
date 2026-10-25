@@ -125,15 +125,17 @@ runs on the configuration work queue without the registry's lock and must not ta
 
 A **built-in** (`BuiltInAsset{name, data}`) is a file of the kind that is part of the firmware: bytes in
 static storage (flash) that the `assets` group serves as a read-only file, in place, with no copy and no
-volume (rt_gauge's three fonts). Its name must be valid for the kind and unique ignoring ASCII case, or
-`Register()` refuses the provider; a stored file of the same name is hidden by it. The group lists a
+volume (rt_gauge's three fonts). Its name must be valid for the kind and unique ignoring ASCII case, and
+its size within what the kind takes, or `Register()` refuses the provider; a stored file of the same name is
+hidden by it, and the `assets` group moves such a file aside when it starts (see smp.md). The group lists a
 built-in with `builtin: true` and answers `BUILT_IN` to a `WRITE`, `DELETE` or `RENAME` of its name (see
 [smp.md](smp.md#assets-asset-kinds)). `FindBuiltIn(provider, name)` finds one by name.
 
 **`AssetsManager`** is the registry: at most one provider per kind. `Register()` refuses a kind that
-is registered already, a provider without a store and one whose built-in names are invalid or repeat;
-`Unregister()` never throws, so destructors call it; `Find()` and `GetProviders()` (ordered by kind) hand out shared pointers, so a caller keeps
-the provider it found while another thread unregisters it. It is thread-safe: widgets call `Find()`
+is registered already, a provider without a store and one whose built-ins have invalid or repeated names or
+are empty or larger than the kind's `max_size` (when it has one) or 4 GiB;
+`Unregister()` never throws, so destructors call it; `Find()` and `GetProviders()` (ordered by kind) hand out
+shared pointers, so a caller keeps the provider it found while another thread unregisters it. It is thread-safe: widgets call `Find()`
 under the LVGL lock and the SMP group from the configuration work queue, and its mutex is never held
 while a provider's callback or a referrer runs. It holds a kernel mutex, so create it with
 `std::make_shared`. The composition root creates one after the file systems and passes it to every

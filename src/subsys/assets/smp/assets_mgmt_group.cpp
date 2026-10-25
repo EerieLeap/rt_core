@@ -5,13 +5,16 @@
 #include <exception>
 #include <new>
 #include <span>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/crc.h>
 
 #include "subsys/random/rng.h"
 #include "utilities/memory/memory_resource_manager.h"
+#include "utilities/string/ascii_case.h"
 
 #include "assets_mgmt_group.h"
 
@@ -70,14 +73,80 @@ static_assert(LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_
 constexpr size_t LIST_TAIL_SIZE = 16;
 static_assert(LIST_TAIL_SIZE >= 1 + KeySize(4) + MAX_UINT_SIZE + MAP_END_SIZE);
 
-constexpr char ToLowerAscii(char c) {
-    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+using eerie_leap::utilities::string::EqualsIgnoreAsciiCase;
+
+// The name that a stored file shadowed by a built-in moves to: the stem, "-uploaded" (then "-uploaded-2", "-uploaded-3"
+// and so on) and the extension, the stem cut short where the name would be too long. Empty when nothing is left of the
+// stem. @p number 1 is the first.
+std::string ShadowedFileName(std::string_view name, std::string_view extension, size_t number) {
+    std::string suffix = "-uploaded";
+    if(number > 1)
+        suffix += "-" + std::to_string(number);
+
+    const size_t stem_size = name.size() - extension.size();
+    const size_t room = static_cast<size_t>(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH) - suffix.size()
+        - extension.size();
+
+    std::string moved(name.substr(0, std::min(stem_size, room)));
+    if(moved.empty())
+        return {};
+
+    moved += suffix;
+    moved += name.substr(stem_size);
+
+    return moved;
 }
 
-bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
-    return std::ranges::equal(a, b, [](char x, char y) {
-        return ToLowerAscii(x) == ToLowerAscii(y);
-    });
+// Moves the stored files that a built-in of @p provider shadows, which a client uploaded before the firmware had the
+// built-in, out of the way: a shadowed file is neither listed nor served, so its owner could neither see nor delete
+// it. It becomes "<stem>-uploaded.<ext>", or the first of "-uploaded-2", "-uploaded-3"... that is free. A file that
+// finds no free name stays, hidden, and is logged. May throw std::bad_alloc.
+void RenameShadowedFiles(const AssetProvider& provider) {
+    AssetStore& store = *provider.store;
+    if(provider.built_ins.empty() || !store.IsAvailable())
+        return;
+
+    std::vector<std::string> shadowed;
+    std::vector<AssetEntry> entries;
+    size_t first = 0;
+    size_t scanned = 0;
+    size_t count = 0;
+
+    do {
+        if(store.List(first, AssetsMgmtGroup::MAX_PAGE_ENTRIES, provider.extensions, entries, scanned, count) != 0)
+            break;
+
+        for(const AssetEntry& entry : entries) {
+            if(FindBuiltIn(provider, entry.name) != nullptr)
+                shadowed.push_back(entry.name);
+        }
+
+        first += scanned;
+    } while(scanned > 0 && first < count);
+
+    for(const std::string& name : shadowed) {
+        std::string_view extension;
+        for(const std::string_view candidate : provider.extensions) {
+            if(name.size() > candidate.size()
+                && EqualsIgnoreAsciiCase(std::string_view(name).substr(name.size() - candidate.size()), candidate))
+                extension = candidate;
+        }
+
+        bool is_moved = false;
+        for(size_t number = 1; number <= AssetsMgmtGroup::MAX_SHADOWED_RENAMES && !is_moved; number++) {
+            const std::string moved = ShadowedFileName(name, extension, number);
+
+            if(moved.empty() || FindBuiltIn(provider, moved) != nullptr || store.GetSize(moved).has_value())
+                continue;
+
+            is_moved = store.Rename(name, moved) == 0;
+            if(is_moved)
+                LOG_WRN("Renamed the stored asset %s, which a built-in shadows, to %s.", name.c_str(), moved.c_str());
+        }
+
+        if(!is_moved)
+            LOG_ERR("The stored asset %s is shadowed by a built-in and found no free name to move to.", name.c_str());
+    }
 }
 
 std::string_view ToView(const zcbor_string& text) {
@@ -170,6 +239,16 @@ bool AssetsMgmtGroup::Initialize() {
                 LOG_WRN(
                     "Failed to delete the staged upload of asset kind %u.",
                     static_cast<unsigned>(std::to_underlying(provider->kind))
+                );
+            }
+
+            // A file a client uploaded under a built-in's name before the firmware had it is shadowed now.
+            try {
+                RenameShadowedFiles(*provider);
+            } catch(const std::exception& e) {
+                LOG_ERR(
+                    "Failed to move the stored assets of kind %u that a built-in shadows: %s",
+                    static_cast<unsigned>(std::to_underlying(provider->kind)), e.what()
                 );
             }
         }
@@ -524,13 +603,11 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
         return Fail(ctxt, error);
     }
 
-    zcbor_state_t* zse = ctxt->writer->zs;
-    const size_t available = Remaining(zse);
-    const size_t room = available > READ_RESPONSE_OVERHEAD ? available - READ_RESPONSE_OVERHEAD : 0;
-    const size_t chunk = std::min({ size - offset, room, transfer_buffer_.size() });
-
-    if(chunk == 0 && size > offset)
+    const std::optional<size_t> chunk_size = GetReadChunkLength(ctxt, size, offset);
+    if(!chunk_size.has_value())
         return MGMT_ERR_EMSGSIZE;
+
+    const size_t chunk = *chunk_size;
 
     if(chunk > 0) {
         const ssize_t read = read_session_.reader.Read(offset, std::span(transfer_buffer_).first(chunk));
@@ -550,18 +627,10 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     }
 
     const bool is_last = offset + chunk == size;
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the chunk is raw file bytes, zcbor takes char*
-    const char* chunk_data = chunk > 0 ? reinterpret_cast<const char*>(transfer_buffer_.data()) : "";
-
-    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, offset);
-
-    if(ok && offset == 0)
-        ok = zcbor_tstr_put_lit(zse, "len") && zcbor_uint32_put(zse, static_cast<uint32_t>(size));
-
-    ok = ok && zcbor_tstr_put_lit(zse, "data") && zcbor_bstr_encode_ptr(zse, chunk_data, chunk);
-
-    if(ok && is_last)
-        ok = zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, read_session_.crc);
+    const int rc = EncodeReadChunk(
+        ctxt, offset, size, std::span<const uint8_t>(transfer_buffer_).first(chunk),
+        is_last ? std::optional(read_session_.crc) : std::nullopt
+    );
 
     if(is_last) {
         CloseReadSession();
@@ -569,6 +638,42 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
         read_session_.last_activity_ms = k_uptime_get();
         OnActivity();
     }
+
+    return rc;
+}
+
+std::optional<size_t> AssetsMgmtGroup::GetReadChunkLength(smp_streamer* ctxt, size_t size, size_t offset) const {
+    const size_t available = Remaining(ctxt->writer->zs);
+    const size_t room = available > READ_RESPONSE_OVERHEAD ? available - READ_RESPONSE_OVERHEAD : 0;
+    const size_t chunk = std::min({ size - offset, room, transfer_buffer_.size() });
+
+    // Not even a byte fits, and one is left: the client would ask again for ever.
+    if(chunk == 0 && size > offset)
+        return std::nullopt;
+
+    return chunk;
+}
+
+int AssetsMgmtGroup::EncodeReadChunk(
+    smp_streamer* ctxt,
+    size_t offset,
+    size_t size,
+    std::span<const uint8_t> chunk,
+    std::optional<uint32_t> crc
+) {
+    zcbor_state_t* zse = ctxt->writer->zs;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the chunk is raw file bytes, zcbor takes char*
+    const char* chunk_data = chunk.empty() ? "" : reinterpret_cast<const char*>(chunk.data());
+
+    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, static_cast<uint32_t>(offset));
+
+    if(ok && offset == 0)
+        ok = zcbor_tstr_put_lit(zse, "len") && zcbor_uint32_put(zse, static_cast<uint32_t>(size));
+
+    ok = ok && zcbor_tstr_put_lit(zse, "data") && zcbor_bstr_encode_ptr(zse, chunk_data, chunk.size());
+
+    if(ok && crc.has_value())
+        ok = zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, *crc);
 
     return MGMT_RETURN_CHECK(ok);
 }
@@ -579,30 +684,18 @@ int AssetsMgmtGroup::ReadBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_i
     if(offset > size)
         return Fail(ctxt, Error::BAD_OFFSET, "len", static_cast<uint32_t>(size));
 
-    zcbor_state_t* zse = ctxt->writer->zs;
-    const size_t available = Remaining(zse);
-    const size_t room = available > READ_RESPONSE_OVERHEAD ? available - READ_RESPONSE_OVERHEAD : 0;
-    // The chunk is as long as a stored file's would be, so that a client's windows line up; the bytes
-    // themselves are encoded from the span, not through the transfer buffer.
-    const size_t chunk = std::min({ size - offset, room, transfer_buffer_.size() });
-
-    if(chunk == 0 && size > offset)
+    // A chunk as long as a stored file's would be, so that a client's windows line up; its bytes are encoded from the
+    // span in flash, not through the transfer buffer.
+    const std::optional<size_t> chunk = GetReadChunkLength(ctxt, size, offset);
+    if(!chunk.has_value())
         return MGMT_ERR_EMSGSIZE;
 
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the chunk is raw file bytes, zcbor takes char*
-    const char* chunk_data = chunk > 0 ? reinterpret_cast<const char*>(built_in.data.data() + offset) : "";
+    const bool is_last = offset + *chunk == size;
 
-    bool ok = zcbor_tstr_put_lit(zse, "off") && zcbor_uint32_put(zse, static_cast<uint32_t>(offset));
-
-    if(ok && offset == 0)
-        ok = zcbor_tstr_put_lit(zse, "len") && zcbor_uint32_put(zse, static_cast<uint32_t>(size));
-
-    ok = ok && zcbor_tstr_put_lit(zse, "data") && zcbor_bstr_encode_ptr(zse, chunk_data, chunk);
-
-    if(ok && offset + chunk == size)
-        ok = zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, crc32_ieee(built_in.data.data(), size));
-
-    return MGMT_RETURN_CHECK(ok);
+    return EncodeReadChunk(
+        ctxt, offset, size, built_in.data.subspan(offset, *chunk),
+        is_last ? std::optional(crc32_ieee(built_in.data.data(), size)) : std::nullopt
+    );
 }
 
 int AssetsMgmtGroup::StatBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in) {
@@ -1093,7 +1186,7 @@ int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
     }
 
     // IFsService::Rename() refuses these, because FAT would delete the file.
-    if(EqualsIgnoreCase(asset_name, to_name))
+    if(EqualsIgnoreAsciiCase(asset_name, to_name))
         return Fail(ctxt, Error::BAD_NAME);
 
     // A built-in can be neither taken away nor replaced.
@@ -1119,7 +1212,7 @@ int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
     // takes the name away or replaces it.
     if(upload_.writer.IsOpen()
         && upload_.kind == provider->kind
-        && (EqualsIgnoreCase(upload_.name, asset_name) || EqualsIgnoreCase(upload_.name, to_name))) {
+        && (EqualsIgnoreAsciiCase(upload_.name, asset_name) || EqualsIgnoreAsciiCase(upload_.name, to_name))) {
 
         return Fail(ctxt, Error::BUSY);
     }
@@ -1238,7 +1331,9 @@ bool AssetsMgmtGroup::IsReadSessionOf(
 }
 
 bool AssetsMgmtGroup::MayBeReadSessionOf(AssetKind kind, std::string_view name) const {
-    return read_session_.reader.IsOpen() && read_session_.kind == kind && EqualsIgnoreCase(read_session_.name, name);
+    return read_session_.reader.IsOpen()
+        && read_session_.kind == kind
+        && EqualsIgnoreAsciiCase(read_session_.name, name);
 }
 
 AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
@@ -1375,7 +1470,7 @@ void AssetsMgmtGroup::ResetReadSession() {
 }
 
 void AssetsMgmtGroup::InvalidateCheckpoint(AssetKind kind, std::string_view name) {
-    if(checkpoint_.is_valid && checkpoint_.kind == kind && EqualsIgnoreCase(checkpoint_.name, name))
+    if(checkpoint_.is_valid && checkpoint_.kind == kind && EqualsIgnoreAsciiCase(checkpoint_.name, name))
         checkpoint_.is_valid = false;
 }
 
@@ -1456,7 +1551,7 @@ bool AssetsMgmtGroup::IsLastChunkRepeat(
 }
 
 void AssetsMgmtGroup::InvalidateLastCommit(AssetKind kind, std::string_view name) {
-    if(last_commit_.token != 0 && last_commit_.kind == kind && EqualsIgnoreCase(last_commit_.name, name))
+    if(last_commit_.token != 0 && last_commit_.kind == kind && EqualsIgnoreAsciiCase(last_commit_.name, name))
         last_commit_.token = 0;
 }
 

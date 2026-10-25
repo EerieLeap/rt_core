@@ -165,7 +165,9 @@ ignoring ASCII case) with at least one character before it; any other name is `B
 `DELETE` and the first chunk of `WRITE` check, before anything else and in this order, the kind
 (`UNKNOWN_KIND`), its `access` (`DENIED`), the name (`BAD_NAME`), whether the name is a built-in's
 (`BUILT_IN`, for `DELETE` and `WRITE`; see below) and the volume (`UNAVAILABLE`). `LIST`
-checks the kind and the volume only: it needs no access bit and takes no name. A later chunk of
+checks the kind and the volume only: it needs no access bit and takes no name, and it answers `UNAVAILABLE`
+while the volume is not mounted even for a kind with built-ins, where `READ` and `STAT` of a built-in
+still work. A later chunk of
 `WRITE` is matched to the open upload instead, and checks neither access nor name (see below).
 
 **Built-in files.** A kind may have files that are part of the firmware (`AssetProvider::built_ins`,
@@ -175,7 +177,10 @@ entry with `builtin: true`; `READ` and `STAT` answer as for a stored file, with 
 file (`STAT` always gives it); `WRITE`, `DELETE` and `RENAME` (as `name` or as `to`) of a built-in's name
 are refused with `BUILT_IN`, so a built-in is never replaced, taken away or overwritten by a rename.
 Names compare ignoring ASCII case, as on FAT. A stored file of a built-in's name (a client uploaded it
-before the firmware had the built-in) is not listed and not served: the built-in wins. `KINDS` is
+before the firmware had the built-in) is not listed and not served: the built-in wins. So that no upload is
+stranded, the group moves such a file when it starts, to `<stem>-uploaded.<ext>` or the first free of
+`<stem>-uploaded-2.<ext>` ... `<stem>-uploaded-8.<ext>` (the stem cut where the name would be too long) and
+logs a warning; a file that finds no free name stays, hidden, and is logged as an error. `KINDS` is
 unchanged: `free` and `used` are the volume's, and a built-in counts in neither. A kind with no
 built-ins behaves as it always did.
 
@@ -227,8 +232,8 @@ empty data. The data goes to a staged file, `.assets_tmp/upload.part` at the roo
 volume, which no kind lists (the `files` group lists directories as they are, so it shows
 `.assets_tmp/` at the root of the card, and `upload.part` in it while an upload is staged). With the
 last chunk the unit checks the CRC32 of everything it received and renames the staged file onto the
-asset, replacing it (the kind's directory is created when missing). The first chunk is checked after the kind, access, name, built-in and volume, in this order:
-the size (`TOO_LARGE`: `len` above `max`, or more data than `len`), whether the file is in use
+asset, replacing it (the kind's directory is created when missing). The first chunk is checked after the
+kind, access, name, built-in and volume, in this order: the size (`TOO_LARGE`: `len` above `max`, or more data than `len`), whether the file is in use
 (`IN_USE`), whether an upload is open (`BUSY`) and the room (`NO_SPACE`: `len` above the free space
 of the volume, checked once; the old file counts as used until it is replaced, so replacing a file
 needs room for both).
@@ -269,9 +274,9 @@ as it is.
 takes a name away and makes one, so the kind needs both the upload and the delete bit. Checked in this
 order: the kind (`UNKNOWN_KIND`), its access (`DENIED`), both names (`BAD_NAME`), two names that differ
 only in ASCII case (`BAD_NAME`: FAT would delete the file; a case change needs a copy and a delete),
-whether either name is a built-in's (`BUILT_IN`), the volume (`UNAVAILABLE`), whether `name` exists (`NOT_FOUND`), whether the kind uses `name` (as for
-`DELETE`) or `to` (as for `WRITE`) (`IN_USE`), and whether an upload of either name is open (`BUSY`). A
-download of either name is closed first.
+whether either name is a built-in's (`BUILT_IN`), the volume (`UNAVAILABLE`), whether `name` exists
+(`NOT_FOUND`), whether the kind uses `name` (as for `DELETE`) or `to` (as for `WRITE`) (`IN_USE`), and
+whether an upload of either name is open (`BUSY`). A download of either name is closed first.
 
 **`DELETE`.** Checked in this order: the kind, its delete access, the name, whether it is a built-in's
 (`BUILT_IN`), the volume, `NOT_FOUND`, `IN_USE`. A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
@@ -309,8 +314,8 @@ buffer (`MCUMGR_TRANSPORT_NETBUF_SIZE` bytes of external RAM) is left out and th
 
 SMP v1 clients get `rc` instead: `ENOENT` for `UNKNOWN_KIND` and `NOT_FOUND`, `EBADSTATE` for
 `UNAVAILABLE`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
-for `DENIED` and `BUILT_IN`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`, `ECORRUPT`
-for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
+for `DENIED` and `BUILT_IN`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`,
+`ECORRUPT` for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
 
 ### `logging`: status, start and stop
 

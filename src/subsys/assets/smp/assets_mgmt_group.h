@@ -86,6 +86,8 @@ public:
         /// the n-th, listed with `builtin: true`), then the stored files, at the number of built-ins
         /// plus their directory position. A stored file whose name is a built-in's (ASCII case ignored)
         /// is not listed: the built-in wins. A kind without built-ins lists from the directory alone.
+        /// LIST needs the kind's volume, built-ins or not: it answers UNAVAILABLE while the volume is
+        /// not mounted, where READ and STAT of a built-in still work.
         LIST = 1,
         /// Read `{kind, name, off}`: `{off, data}`, plus `len` (the size of the file) at `off = 0`,
         /// and `crc` (CRC32/IEEE of the whole file) in the chunk that ends at `len`. A request at
@@ -102,9 +104,9 @@ public:
         /// start where the last one ended: otherwise the error carries `off`, where to go on.
         ///
         /// The first chunk is checked in this order: the kind, its WRITE bit, the name, whether it is
-        /// a built-in's (BUILT_IN), the volume, the size (TOO_LARGE), whether the file is in use, whether an upload is open (BUSY, unless it
-        /// is this chunk sent again, or the owner's token starts it over) and the room on the volume
-        /// (NO_SPACE). The owner's restart aborts its old upload before the room is looked at, so the
+        /// a built-in's (BUILT_IN), the volume, the size (TOO_LARGE), whether the file is in use,
+        /// whether an upload is open (BUSY, unless it is this chunk sent again, or the owner's token
+        /// starts it over) and the room on the volume (NO_SPACE). The owner's restart aborts its old upload before the room is looked at, so the
         /// room its staged file held counts. A staged file left on the volume with no upload open is
         /// stale and deleted before the room is looked at.
         ///
@@ -127,9 +129,9 @@ public:
         /// Write `{kind, name, to}`: `{}`. Renames a file of the kind, replacing `to` as a WRITE would.
         /// Checked in this order: the kind, then its WRITE and DELETE bits (DENIED), both names
         /// (BAD_NAME), two names that differ only in ASCII case (BAD_NAME: FAT would delete the file),
-        /// whether either name is a built-in's (BUILT_IN), the volume, whether `name` exists (NOT_FOUND), whether `name` is in use for DELETE and `to`
-        /// for WRITE (IN_USE), and whether an upload of either name is open (BUSY). A download of
-        /// either name is closed first. The checkpoint of `name` goes on as one of `to`.
+        /// whether either name is a built-in's (BUILT_IN), the volume, whether `name` exists
+        /// (NOT_FOUND), whether `name` is in use for DELETE and `to` for WRITE (IN_USE), and whether
+        /// an upload of either name is open (BUSY). A download of either name is closed first. The checkpoint of `name` goes on as one of `to`.
         RENAME = 6,
     };
 
@@ -158,6 +160,9 @@ public:
 
     /// Directory entries read for one LIST request: more than one response holds.
     static constexpr size_t MAX_PAGE_ENTRIES = 48;
+
+    /// Names tried for a stored file that a built-in shadows when the group starts: "-uploaded", "-uploaded-2" ...
+    static constexpr size_t MAX_SHADOWED_RENAMES = 8;
 
 private:
     struct Job {
@@ -270,6 +275,20 @@ private:
 
     /** @brief Answers a READ chunk of a built-in from its bytes in flash: no session, no copy. */
     int ReadBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in, size_t offset);
+    /**
+     * @brief The length of the READ chunk at @p offset of a file of @p size bytes: what the response and the
+     *        transfer buffer have room for, so that every chunk but the last has the same length.
+     * @return nullopt when not even one byte fits and some are left.
+     */
+    std::optional<size_t> GetReadChunkLength(smp_streamer* ctxt, size_t size, size_t offset) const;
+    /** @brief Encodes a READ response: `off`, `len` at offset 0, the chunk, and `crc` when @p crc is given. */
+    static int EncodeReadChunk(
+        smp_streamer* ctxt,
+        size_t offset,
+        size_t size,
+        std::span<const uint8_t> chunk,
+        std::optional<uint32_t> crc
+    );
     /** @brief Answers a STAT of a built-in. */
     static int StatBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in);
 

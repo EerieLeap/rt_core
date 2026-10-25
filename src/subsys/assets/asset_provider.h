@@ -1,12 +1,13 @@
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
+
+#include "utilities/string/ascii_case.h"
 
 #include "asset_kind.h"
 #include "asset_store.h"
@@ -62,16 +63,8 @@ struct AssetProvider {
 /** @return The built-in of @p provider that @p name names, ASCII case ignored as names compare on FAT; null when none. */
 [[nodiscard]] inline const BuiltInAsset* FindBuiltIn(const AssetProvider& provider, std::string_view name) {
     for(const BuiltInAsset& built_in : provider.built_ins) {
-        if(built_in.name.size() == name.size() && std::ranges::equal(built_in.name, name, [](char a, char b) {
-               const auto lower = [](char c) {
-                   return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-               };
-
-               return lower(a) == lower(b);
-           })) {
-
+        if(eerie_leap::utilities::string::EqualsIgnoreAsciiCase(built_in.name, name))
             return &built_in;
-        }
     }
 
     return nullptr;
