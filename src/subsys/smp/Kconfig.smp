@@ -113,7 +113,7 @@ menu "EerieLeap SMP over BLE config"
 
     config EERIE_LEAP_SMP_BLE_REQUESTS_IN_FLIGHT
         int "Requests a client should keep in flight"
-        default 2
+        default 3
         range 1 16
         help
           Reported by the info characteristic. The SMP buffer pool is shared
