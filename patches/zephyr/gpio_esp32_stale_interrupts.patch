@@ -1,0 +1,33 @@
+diff --git a/drivers/gpio/gpio_esp32.c b/drivers/gpio/gpio_esp32.c
+index f33e639c680..ffe9f51b5e4 100644
+--- a/drivers/gpio/gpio_esp32.c
++++ b/drivers/gpio/gpio_esp32.c
+@@ -606,6 +606,28 @@ static int gpio_esp32_init(const struct device *dev)
+ 	if (!isr_connected) {
+ 		int ret;
+ 
++#if !defined(CONFIG_SOC_ESP32_APPCPU) && !defined(CONFIG_SOC_ESP32S3_APPCPU)
++		/*
++		 * A software reset (sys_reboot) resets the CPU but not the GPIO peripheral, so pin
++		 * interrupts the previous image enabled are still enabled. A level interrupt whose
++		 * source still drives its line, such as an external controller that kept running,
++		 * re-enters the ISR before any driver has registered a callback for it, and the boot
++		 * never gets past it. Start from no pin interrupts; drivers enable theirs when they
++		 * configure them.
++		 */
++		for (uint32_t pin = 0; pin < SOC_GPIO_PIN_COUNT; pin++) {
++			if (!GPIO_IS_VALID_GPIO(pin)) {
++				continue;
++			}
++			gpio_ll_intr_disable(&GPIO, pin);
++			gpio_ll_set_intr_type(&GPIO, pin, GPIO_INTR_DISABLE);
++		}
++		gpio_ll_clear_intr_status(&GPIO, UINT32_MAX);
++#if SOC_GPIO_PIN_COUNT > 32
++		gpio_ll_clear_intr_status_high(&GPIO, UINT32_MAX);
++#endif
++#endif
++
+ #if defined(CONFIG_SOC_SERIES_ESP32H2) && defined(CONFIG_COMPARATOR_ESP32_ANA_CMPR)
+ 		/*
+ 		 * On ESP32-H2, the analog comparator (ana_cmpr) unit shares this
