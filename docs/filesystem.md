@@ -151,7 +151,7 @@ destroyed.
 
 | Kind | Name | Store (volume, directory) | Extensions | Access | Max | In use | Registered by |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | `images` | internal, `ui_assets/images` | `.bin` | R W D | rt_gauge's `EERIE_LEAP_UI_IMAGE_MAX_SIZE` (4 MiB) | never | rt_gauge `UiController` |
+| 0 | `images` | internal, `ui_assets/images` | `.bin`, `.svg` | R W D | rt_gauge's `EERIE_LEAP_UI_IMAGE_MAX_SIZE` (4 MiB) | never | rt_gauge `UiController` |
 | 1 | `animations` | internal, `ui_assets/animations` | `.json` | R W D | rt_gauge's `EERIE_LEAP_UI_ANIMATION_MAX_SIZE` (512 KiB) | never | rt_gauge `UiController` |
 | 2 | `sensor_scripts` | SD, `scripts/sensors` | `.lua` | R W D | `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `SensorsController` |
 | 3 | `can_scripts` | SD, `scripts/can` | `.lua` | R W D | `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `CanbusController` |
@@ -209,7 +209,7 @@ leave its directory. The writer's log names (`EERIE_LEAP_LOG_DATA_FILE_PREFIX` p
 | Path | Filesystem | Written by |
 | --- | --- | --- |
 | `config/<type>_config.cbor` | internal | Configuration managers |
-| `ui_assets/images/*.bin`, `ui_assets/animations/*.json`, `ui_assets/fonts/*.ttf` | internal | Clients, as the `images`, `animations` and `fonts` kinds; rt_gauge's test setup writes its demo files there |
+| `ui_assets/images/*.bin` and `*.svg`, `ui_assets/animations/*.json`, `ui_assets/fonts/*.ttf` | internal | Clients, as the `images`, `animations` and `fonts` kinds; rt_gauge's test setup writes its demo files there |
 | `scripts/sensors/*.lua`, `scripts/can/*.lua` | SD | Clients, as the `sensor_scripts` and `can_scripts` kinds; referenced by sensors and CAN messages through `script_path`. A `script_path` may name any file on the card, and a script outside these directories still runs but is not listed. |
 | `logs/log_data_<YYYYMMDD>T<HHMMSS>Z_<rand4>.mf4` | SD | Log writer (`LogFileNaming::LOGS_DIR`, `EERIE_LEAP_LOG_DATA_FILE_PREFIX`); UTC start time; the `logs` kind. Logs written before the directory was fixed stay in `data_logs/` and are not listed. |
 | `logs/end_times.txt` | SD | Log writer (`LogEndTimes`): the end time of each finalized log, a line `<end_ms> <name>` per file; not a log, so the `logs` kind never serves it (see [logging.md](logging.md#log-files-as-assets)). |
