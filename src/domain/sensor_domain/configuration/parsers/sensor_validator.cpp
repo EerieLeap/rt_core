@@ -237,7 +237,7 @@ void SensorValidator::ValidateSamplingRateMs(
 
     if(!traits.allows_sampling_rate && has_sampling_rate)
         InvalidSensorConfiguration(
-            sensor_id, "CAN bus sensors are updated by received frames and do not support a sampling rate."
+            sensor_id, "CAN bus and control sensors are updated by their source and do not support a sampling rate."
         );
 
     if(traits.requires_sampling_rate && !has_sampling_rate)

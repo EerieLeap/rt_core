@@ -45,8 +45,8 @@ SensorsProcessingService::SensorsProcessingService(
         sensor_readings_frame_, reading_processors_, time_service, work_queue_thread_
     );
 
-    switch_state_work_.service = this;
-    k_work_init(&switch_state_work_.work, SwitchStateWorkHandler);
+    start_values_work_.service = this;
+    k_work_init(&start_values_work_.work, StartValuesWorkHandler);
 
     if(isr_sensor_reader_factory != nullptr || canbus_service != nullptr) {
         isr_service_ = std::make_shared<ProcessingIsrService>(
@@ -102,9 +102,10 @@ bool SensorsProcessingService::DoStart() {
     // Nothing may keep running on a generation that is being dropped. The child that threw has
     // cleaned up after itself; DoStop() stops the ones that started before it.
     try {
-        // A switch is known before its input: the frame, the log and the publisher see it at once.
-        // On the processing work queue, ahead of every source started below.
-        CommitSwitchStates();
+        // A switch is known before its input, and a control indicator starts released: the frame, the
+        // log and the publisher see them at once. On the processing work queue, ahead of every source
+        // started below.
+        CommitStartValues();
 
         for(const auto& processing_service : processing_services_)
             processing_service->Start();
@@ -177,29 +178,29 @@ bool SensorsProcessingService::DoResume() {
     return true;
 }
 
-void SensorsProcessingService::CommitSwitchStates() {
-    if(!generation_->HasSwitches())
+void SensorsProcessingService::CommitStartValues() {
+    if(!generation_->HasStartValues())
         return;
 
     // The starting thread waits; it is never the processing work queue, and nothing that queue
     // runs takes the transition lock the starter holds.
-    if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &switch_state_work_.work) < 0)
-        throw std::runtime_error("The processing work queue refused the indicator switches.");
+    if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &start_values_work_.work) < 0)
+        throw std::runtime_error("The processing work queue refused the start values.");
 
-    k_work_flush(&switch_state_work_.work, &switch_state_sync_);
+    k_work_flush(&start_values_work_.work, &start_values_sync_);
 }
 
 // Exceptions must not unwind into the work queue's C dispatch.
-void SensorsProcessingService::SwitchStateWorkHandler(k_work* work) {
-    const auto* switch_state_work = CONTAINER_OF(work, SwitchStateWork, work);
-    const auto* service = switch_state_work->service;
+void SensorsProcessingService::StartValuesWorkHandler(k_work* work) {
+    const auto* start_values_work = CONTAINER_OF(work, StartValuesWork, work);
+    const auto* service = start_values_work->service;
 
     try {
-        service->pipeline_->CommitSwitchStates(*service->generation_);
+        service->pipeline_->CommitStartValues(*service->generation_);
     } catch(const std::exception& e) {
-        LOG_ERR("Failed to commit the indicator switches: %s", e.what());
+        LOG_ERR("Failed to commit the start values: %s", e.what());
     } catch(...) {
-        LOG_ERR("Failed to commit the indicator switches.");
+        LOG_ERR("Failed to commit the start values.");
     }
 }
 

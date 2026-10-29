@@ -29,8 +29,8 @@ using eerie_leap::subsys::threading::ServiceState;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
-// Runs the event-driven sensors of a generation: CAN sensors through one router, GPIO sensors
-// through one reader each.
+// Runs the event-driven sensors of a generation: CAN sensors through one router, GPIO and control
+// sensors through one reader each.
 class ProcessingIsrService final : public ServiceBase<> {
 private:
     std::shared_ptr<ITimeService> time_service_;

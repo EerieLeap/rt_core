@@ -66,17 +66,17 @@ private:
     // A failed start keeps them; a reboot loses them.
     std::vector<IndicatorSwitchState> switch_states_;
 
-    struct SwitchStateWork {
+    struct StartValuesWork {
         k_work work;
         SensorsProcessingService* service;
     };
 
-    // Commits the generation's switches on the processing work queue, where their conditioners run.
-    SwitchStateWork switch_state_work_{};
-    k_work_sync switch_state_sync_{};
+    // Commits the generation's start values on the processing work queue, where their conditioners run.
+    StartValuesWork start_values_work_{};
+    k_work_sync start_values_sync_{};
 
-    static void SwitchStateWorkHandler(k_work* work);
-    void CommitSwitchStates();
+    static void StartValuesWorkHandler(k_work* work);
+    void CommitStartValues();
 
     bool DoInitialize() override;
     bool DoStart() override;

@@ -330,9 +330,11 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         list(FILTER SRC EXCLUDE REGEX "/subsys/fs/services/sdmmc_service\\.cpp$")
     endif()
 
-    # The sensor events publisher publishes on the event bus, which a unit may leave out.
+    # The sensor events publisher publishes on the event bus, which a unit may leave out, and the
+    # control sensor reader subscribes to it.
     if(NOT CONFIG_EERIE_LEAP_EVENT_BUS)
         list(FILTER SRC EXCLUDE REGEX "/domain/sensor_domain/services/sensor_events_publisher\\.cpp$")
+        list(FILTER SRC EXCLUDE REGEX "/domain/sensor_domain/isr_sensor_readers/control_sensor_reader\\.cpp$")
     endif()
 
     # The logging domain's glob also finds control/, which needs the CDMP domain; it is built only

@@ -200,6 +200,33 @@ ZTEST(sensor_validator, test_every_type_validates_with_its_update_method) {
     zassert_true(Validates(SensorType::CANBUS_RAW, std::nullopt));
     zassert_true(Validates(SensorType::CANBUS_ANALOG, std::nullopt));
     zassert_true(Validates(SensorType::CANBUS_INDICATOR, std::nullopt));
+    zassert_true(Validates(SensorType::CONTROL_INDICATOR, std::nullopt), "A control's value needs no sampling rate");
+    zassert_true(Validates(SensorType::CONTROL_ANALOG, std::nullopt));
+}
+
+ZTEST(sensor_validator, test_control_sensors_take_no_sampling_rate_channel_or_connection_string) {
+    for(const auto type : { SensorType::CONTROL_INDICATOR, SensorType::CONTROL_ANALOG }) {
+        AssertRejection(
+            Validate({ MakeSensor("control_1", type, 100) }),
+            Rejected(
+                "control_1",
+                "CAN bus and control sensors are updated by their source and do not support a sampling rate."
+            )
+        );
+
+        const auto with_channel = MakeSensor("control_1", type, std::nullopt);
+        with_channel->configuration.channel = 0;
+        AssertRejection(
+            Validate({ with_channel }), Rejected("control_1", "Channel value is not supported for this sensor type.")
+        );
+
+        const auto with_connection_string = MakeSensor("control_1", type, std::nullopt);
+        with_connection_string->configuration.connection_string = "0/100/rpm";
+        AssertRejection(
+            Validate({ with_connection_string }),
+            Rejected("control_1", "Connection string is not supported for this sensor type.")
+        );
+    }
 }
 
 ZTEST(sensor_validator, test_sensor_that_would_never_update_is_rejected) {
@@ -411,7 +438,8 @@ ZTEST(sensor_validator, test_expression_of_a_sensor_without_an_input_cannot_use_
     }
 
     for(const auto type : { SensorType::PHYSICAL_ANALOG, SensorType::PHYSICAL_INDICATOR, SensorType::CANBUS_ANALOG,
-            SensorType::CANBUS_INDICATOR, SensorType::USER_ANALOG, SensorType::USER_INDICATOR }) {
+            SensorType::CANBUS_INDICATOR, SensorType::USER_ANALOG, SensorType::USER_INDICATOR,
+            SensorType::CONTROL_INDICATOR, SensorType::CONTROL_ANALOG }) {
         const auto sampling_rate_ms = SensorTypeTraits::Of(type).allows_sampling_rate ? std::optional<int>(100)
                                                                                       : std::nullopt;
         const auto sensor = MakeSensor("sensor_1", type, sampling_rate_ms);
@@ -705,7 +733,7 @@ Conditioned(std::shared_ptr<Sensor> sensor, uint32_t debounce_ms, IndicatorInput
 
 ZTEST(sensor_validator, test_conditioning_is_accepted_on_every_indicator_type) {
     for(const auto type : { SensorType::PHYSICAL_INDICATOR, SensorType::VIRTUAL_INDICATOR, SensorType::CANBUS_INDICATOR,
-            SensorType::USER_INDICATOR }) {
+            SensorType::USER_INDICATOR, SensorType::CONTROL_INDICATOR }) {
         const auto error = Validate({ Conditioned(MakeValidSensor(type), 30, IndicatorInputMode::Toggle) });
         zassert_false(error.has_value(), "Type %u: %s", static_cast<unsigned>(type), error.value_or("").c_str());
     }
@@ -713,7 +741,7 @@ ZTEST(sensor_validator, test_conditioning_is_accepted_on_every_indicator_type) {
 
 ZTEST(sensor_validator, test_conditioning_on_a_type_that_is_not_an_indicator_is_rejected) {
     for(const auto type : { SensorType::PHYSICAL_ANALOG, SensorType::VIRTUAL_ANALOG, SensorType::CANBUS_RAW,
-            SensorType::CANBUS_ANALOG, SensorType::USER_ANALOG }) {
+            SensorType::CANBUS_ANALOG, SensorType::USER_ANALOG, SensorType::CONTROL_ANALOG }) {
         const auto debounced = Conditioned(MakeValidSensor(type), 1, IndicatorInputMode::Level);
         AssertRejection(
             Validate({ debounced }), Rejected("sensor_1", "Debounce is only supported for indicator sensors.")

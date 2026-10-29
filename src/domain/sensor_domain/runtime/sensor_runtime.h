@@ -23,6 +23,8 @@ using eerie_leap::domain::adc_domain::models::AdcConfiguration;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::sensor_domain::models::SensorReadingUpdateMethod;
 using eerie_leap::domain::sensor_domain::models::SensorSlot;
+using eerie_leap::domain::sensor_domain::models::SensorSourceKind;
+using eerie_leap::domain::sensor_domain::models::SensorValueKind;
 using eerie_leap::domain::sensor_domain::processors::IndicatorConditioner;
 using eerie_leap::domain::sensor_domain::processors::IndicatorSwitchState;
 using eerie_leap::subsys::expression_engine::ExpressionEvaluator;
@@ -60,6 +62,17 @@ struct SensorRuntime {
     [[nodiscard]] const Sensor& GetSensor() const {
         return *sensor;
     }
+
+    // A control indicator the generation runs, not a disabled one: it has no input until its control
+    // publishes, so the start gives it a released one.
+    [[nodiscard]] bool IsControlIndicator() const {
+        if(update_method != SensorReadingUpdateMethod::ISR)
+            return false;
+
+        const auto traits = sensor->configuration.GetTraits();
+
+        return traits.source == SensorSourceKind::CONTROL && traits.value_kind == SensorValueKind::INDICATOR;
+    }
 };
 
 // One sensors configuration turned into a running pipeline: runtimes in processing order over
@@ -83,10 +96,10 @@ struct SensorGeneration {
         return nullptr;
     }
 
-    /** @return Whether any indicator is a Toggle switch. */
-    [[nodiscard]] bool HasSwitches() const {
+    /** @return Whether the start has a value to commit: a Toggle switch, or a control indicator's released input. */
+    [[nodiscard]] bool HasStartValues() const {
         return std::ranges::any_of(runtimes, [](const SensorRuntime& runtime) {
-            return runtime.conditioner != nullptr && runtime.conditioner->IsSwitch();
+            return (runtime.conditioner != nullptr && runtime.conditioner->IsSwitch()) || runtime.IsControlIndicator();
         });
     }
 

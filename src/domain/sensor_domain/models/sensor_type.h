@@ -16,6 +16,8 @@ enum class SensorType : std::uint32_t {
     CANBUS_INDICATOR,
     USER_ANALOG,
     USER_INDICATOR,
+    CONTROL_INDICATOR,
+    CONTROL_ANALOG,
     COUNT // Sentinel, not a sensor type
 };
 

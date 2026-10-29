@@ -170,7 +170,7 @@ ZTEST(blank_user_sensors, test_a_carried_value_bypasses_the_conditioner) {
     auto fixture = MakeFixture();
     zassert_not_null(fixture.Runtime("blank_switch").conditioner.get());
 
-    fixture.pipeline->CommitSwitchStates(*fixture.generation);
+    fixture.pipeline->CommitStartValues(*fixture.generation);
     zassert_equal(fixture.frame->TryGetReadingValue("blank_switch").value(), 0.0F, "The switch starts off");
 
     zassert_true(fixture.Write("blank_switch", 1.0F));

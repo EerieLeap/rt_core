@@ -3,6 +3,10 @@
 #include "domain/sensor_domain/isr_sensor_readers/gpio_sensor_reader.h"
 #include "domain/sensor_domain/models/sensor_type_traits.h"
 
+#ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+    #include "domain/sensor_domain/isr_sensor_readers/control_sensor_reader.h"
+#endif
+
 #include "isr_sensor_reader_factory.h"
 
 namespace eerie_leap::domain::sensor_domain::isr_sensor_readers {
@@ -35,6 +39,14 @@ std::unique_ptr<IIsrSensorReader> IsrSensorReaderFactory::Create(
                 time_service_, runtime, std::move(process_sensor_callback), std::move(work_queue_thread), gpio_
             );
         }
+
+#ifdef CONFIG_EERIE_LEAP_EVENT_BUS
+        if(traits.source == SensorSourceKind::CONTROL) {
+            return std::make_unique<ControlSensorReader>(
+                time_service_, runtime, std::move(process_sensor_callback), std::move(work_queue_thread)
+            );
+        }
+#endif
 
         return nullptr;
     } catch(const std::runtime_error& e) {

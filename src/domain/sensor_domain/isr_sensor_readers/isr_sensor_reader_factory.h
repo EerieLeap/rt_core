@@ -15,7 +15,8 @@ using eerie_leap::subsys::gpio::IGpio;
 using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
-// Creates the event-driven reader for a sensor's source kind; null when the unit lacks that source.
+// Creates the event-driven reader for a sensor's source kind (GPIO or control); null when the unit
+// lacks that source: no GPIO, or no event bus for a control sensor.
 // CAN sensors are fed by CanFrameRouter, not by a reader per sensor.
 class IsrSensorReaderFactory {
 protected:

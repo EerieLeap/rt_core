@@ -310,8 +310,8 @@ ZTEST(indicator_conditioning, test_only_an_indicator_with_conditioning_gets_a_co
     zassert_true(toggle_conditioner->IsSwitch());
     zassert_false(toggle_conditioner->IsSwitchOn(), "A switch without a state to take over starts off");
 
-    zassert_true(generation->HasSwitches());
-    zassert_false(Build({ plain, debounced })->HasSwitches());
+    zassert_true(generation->HasStartValues());
+    zassert_false(Build({ plain, debounced })->HasStartValues());
 }
 
 ZTEST(indicator_conditioning, test_a_switch_takes_over_its_state_only_when_id_type_and_conditioning_are_unchanged) {

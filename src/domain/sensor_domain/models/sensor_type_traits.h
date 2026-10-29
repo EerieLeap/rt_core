@@ -14,6 +14,7 @@ enum class SensorSourceKind : uint8_t {
     CAN_FRAME,  ///< A whole CAN frame.
     EXPRESSION, ///< Computed from other sensors.
     SCRIPT,     ///< Produced by a Lua function.
+    CONTROL,    ///< A value a control publishes on sensor_events.
 };
 
 enum class SensorValueKind : uint8_t {
@@ -112,6 +113,23 @@ struct SensorTypeTraits {
                 traits.value_kind = SensorValueKind::INDICATOR;
                 traits.requires_sampling_rate = true;
                 traits.has_input = true;
+                break;
+
+            // As a physical sensor, with a control's value on sensor_events for its input.
+            case SensorType::CONTROL_INDICATOR:
+                traits.source = SensorSourceKind::CONTROL;
+                traits.value_kind = SensorValueKind::INDICATOR;
+                traits.allows_sampling_rate = false;
+                traits.has_input = true;
+                traits.is_isr_driven = true;
+                break;
+
+            case SensorType::CONTROL_ANALOG:
+                traits.source = SensorSourceKind::CONTROL;
+                traits.value_kind = SensorValueKind::ANALOG;
+                traits.allows_sampling_rate = false;
+                traits.has_input = true;
+                traits.is_isr_driven = true;
                 break;
 
             default:

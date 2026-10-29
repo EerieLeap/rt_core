@@ -529,3 +529,89 @@ ZTEST(sensors_parser, test_Deserialize_refuses_an_unknown_input_mode) {
         error == "Invalid Sensor configuration. Sensor ID: button. Invalid indicator input mode.", "%s", error.c_str()
     );
 }
+
+namespace {
+
+// A debounced control switch, a control indicator that follows its control, and a control analog with
+// an expression on x.
+std::vector<std::shared_ptr<Sensor>> SensorsParserGetControlSensors() {
+    auto sensors = SensorsParserGetTestSensors();
+
+    auto screen_button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "screen_button");
+    screen_button->configuration.type = SensorType::CONTROL_INDICATOR;
+    screen_button->configuration.debounce_ms = 30;
+    screen_button->configuration.input_mode = IndicatorInputMode::Toggle;
+
+    auto hold_button = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "hold_button");
+    hold_button->configuration.type = SensorType::CONTROL_INDICATOR;
+
+    auto dimmer = std::make_shared<Sensor>(std::allocator_arg, Mrm::GetDefaultPmr(), "dimmer");
+    dimmer->configuration.type = SensorType::CONTROL_ANALOG;
+    dimmer->configuration.expression = "x * 2";
+
+    sensors.push_back(std::move(screen_button));
+    sensors.push_back(std::move(hold_button));
+    sensors.push_back(std::move(dimmer));
+
+    return sensors;
+}
+
+} // namespace
+
+ZTEST(sensors_parser, test_control_sensors_survive_Serialize_and_Deserialize) {
+    SensorsCborParser parser(nullptr);
+    auto sensors = SensorsParserGetControlSensors();
+
+    const auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    zassert_equal(FindSensorConfig(*serialized_sensors, "screen_button").configuration.type, 10);
+    zassert_equal(FindSensorConfig(*serialized_sensors, "hold_button").configuration.type, 10);
+    zassert_equal(FindSensorConfig(*serialized_sensors, "dimmer").configuration.type, 11);
+
+    auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *serialized_sensors, 16, 16);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
+
+    const auto dimmer = std::ranges::find_if(deserialized_sensors, [](const auto& sensor) {
+        return sensor->id == "dimmer";
+    });
+    zassert_true(dimmer != deserialized_sensors.end());
+    zassert_equal((*dimmer)->configuration.type, SensorType::CONTROL_ANALOG);
+    zassert_false((*dimmer)->configuration.sampling_rate_ms.has_value());
+    zassert_false((*dimmer)->configuration.channel.has_value());
+}
+
+ZTEST(sensors_parser, test_control_sensors_survive_a_round_trip_through_cbor_bytes) {
+    SensorsCborParser parser(nullptr);
+    CborSerializer<CborSensorsConfig> serializer;
+    auto sensors = SensorsParserGetControlSensors();
+
+    const auto bytes = serializer.Serialize(*parser.Serialize(sensors, 16, 16));
+    zassert_false(bytes.empty());
+
+    const auto decoded = serializer.Deserialize(bytes);
+    zassert_not_null(decoded.get());
+
+    auto deserialized_sensors = parser.Deserialize(Mrm::GetDefaultPmr(), *decoded, 16, 16);
+    SensorsParserCompareSensors(sensors, deserialized_sensors);
+}
+
+ZTEST(sensors_parser, test_Deserialize_refuses_a_control_sensor_with_a_sampling_rate) {
+    SensorsCborParser parser(nullptr);
+    // The CBOR strings point into the sensors.
+    const auto sensors = SensorsParserGetControlSensors();
+    auto serialized_sensors = parser.Serialize(sensors, 16, 16);
+
+    for(auto& sensor_config : serialized_sensors->CborSensorConfig_m) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
+        if(std::string_view(reinterpret_cast<const char*>(sensor_config.id.value), sensor_config.id.len) == "dimmer")
+            sensor_config.configuration.sampling_rate_ms = 100;
+    }
+
+    const auto error = DeserializeRejection(parser, *serialized_sensors);
+    zassert_true(
+        error
+            == "Invalid Sensor configuration. Sensor ID: dimmer. CAN bus and control sensors are updated by their "
+               "source and do not support a sampling rate.",
+        "%s", error.c_str()
+    );
+}

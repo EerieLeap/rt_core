@@ -24,8 +24,8 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
 // Takes a reading from its source to the frame: the stages, the indicator conditioning, one
-// commit, and the sensors that are derived from it. Every source (CAN route, GPIO edge, rate
-// group) ends in Process().
+// commit, and the sensors that are derived from it. Every source (CAN route, GPIO edge, control
+// input, rate group) ends in Process().
 class ReadingPipeline {
 private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
@@ -112,10 +112,13 @@ public:
             EvaluateDependents(runtime, reading);
     }
 
-    // Commits the switch of every Toggle indicator, with its dependents, before its input has a
-    // reading. Not through the conditioner, whose first reading still sets its input. Processing
-    // work queue, before the sources start.
-    void CommitSwitchStates(const SensorGeneration& generation) {
+    // Commits what a sensor reads before its source has produced anything, with its dependents.
+    // Processing work queue, before the sources start. First the switch of every Toggle indicator,
+    // not through the conditioner, whose first reading still sets its input. Then a released input,
+    // 0, for every control indicator, through the whole pipeline: a Level one starts at 0, and a
+    // Toggle one takes it as its first input and keeps its switch, so its first press flips it. A
+    // control analog gets none, as no position is a slider's before it moves.
+    void CommitStartValues(const SensorGeneration& generation) {
         const auto timestamp = time_service_->GetCurrentTime();
 
         for(const auto& runtime : generation.runtimes) {
@@ -129,6 +132,20 @@ public:
             reading.value = runtime.conditioner->IsSwitchOn() ? 1.0F : 0.0F;
 
             Commit(runtime, reading);
+        }
+
+        for(const auto& runtime : generation.runtimes) {
+            if(!runtime.IsControlIndicator())
+                continue;
+
+            SensorReading reading(runtime.sensor.get());
+            reading.source = ReadingSource::PROCESSING;
+            reading.status = ReadingStatus::RAW;
+            reading.timestamp = timestamp;
+            reading.value = 0.0F;
+            reading.raw_value = 0.0F;
+
+            Process(runtime, reading);
         }
     }
 
