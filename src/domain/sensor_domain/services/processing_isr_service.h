@@ -30,9 +30,18 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 using eerie_leap::subsys::time::ITimeService;
 
 // Runs the event-driven sensors of a generation: CAN sensors through one router, GPIO and control
-// sensors through one reader each.
+// sensors through one reader each. A pause tears down the router and the readers that cannot hold what
+// happens meanwhile; a resume builds them again, so a GPIO input is read again then, and the readers
+// that kept listening go on (IIsrSensorReader::Pause()).
 class ProcessingIsrService final : public ServiceBase<> {
 private:
+    // A reader with the sensor it feeds, so that a resume builds again only the sensors whose reader the
+    // pause dropped.
+    struct SensorReader {
+        const SensorRuntime* runtime;
+        std::unique_ptr<IIsrSensorReader> reader;
+    };
+
     std::shared_ptr<ITimeService> time_service_;
     std::shared_ptr<IsrSensorReaderFactory> isr_sensor_reader_factory_;
     std::shared_ptr<CanbusService> canbus_service_;
@@ -41,9 +50,10 @@ private:
 
     std::shared_ptr<const SensorGeneration> generation_;
     std::unique_ptr<CanFrameRouter> can_frame_router_;
-    std::vector<std::unique_ptr<IIsrSensorReader>> readers_;
+    std::vector<SensorReader> readers_;
 
     void ProcessSensor(const SensorRuntime& runtime, SensorReading& reading);
+    bool BuildSources();
     void TearDown();
 
     bool DoStart() override;

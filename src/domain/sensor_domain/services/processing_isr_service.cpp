@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "domain/sensor_domain/models/sensor_type_traits.h"
 
 #include "processing_isr_service.h"
@@ -40,6 +42,12 @@ bool ProcessingIsrService::DoStart() {
 
     TearDown();
 
+    return BuildSources();
+}
+
+// Attaches the CAN router and builds a reader for every event-driven sensor that has none: all of
+// them after TearDown(), and at a resume the ones the pause dropped.
+bool ProcessingIsrService::BuildSources() {
     const auto callback = [this](const SensorRuntime& runtime, SensorReading& reading) {
         ProcessSensor(runtime, reading);
     };
@@ -61,11 +69,17 @@ bool ProcessingIsrService::DoStart() {
                 || runtime.GetSensor().configuration.GetTraits().uses_canbus)
                 continue;
 
+            const bool is_kept = std::ranges::any_of(readers_, [&runtime](const SensorReader& entry) {
+                return entry.runtime == &runtime;
+            });
+            if(is_kept)
+                continue;
+
             auto reader = isr_sensor_reader_factory_->Create(runtime, work_queue_thread_, callback);
             if(reader == nullptr)
                 continue;
 
-            readers_.push_back(std::move(reader));
+            readers_.push_back({ &runtime, std::move(reader) });
 
             LOG_INF("Created ISR reader for sensor: %s", runtime.GetSensor().id.c_str());
         }
@@ -92,13 +106,24 @@ bool ProcessingIsrService::DoStop() {
 }
 
 bool ProcessingIsrService::DoPause() {
-    TearDown();
+    can_frame_router_.reset();
+
+    // The readers that keep listening stay; the others are built again at Resume().
+    std::erase_if(readers_, [](const SensorReader& entry) {
+        return !entry.reader->Pause();
+    });
 
     return true;
 }
 
 bool ProcessingIsrService::DoResume() {
-    return DoStart();
+    if(generation_ == nullptr)
+        return false;
+
+    for(const auto& entry : readers_)
+        entry.reader->Resume();
+
+    return BuildSources();
 }
 
 } // namespace eerie_leap::domain::sensor_domain::services

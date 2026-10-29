@@ -121,10 +121,14 @@ void ControlSensorReader::OnInput(const EventData& value) {
 
 void ControlSensorReader::QueueInput(float value) {
     bool is_dropped = false;
+    bool is_paused = false;
 
     K_SPINLOCK(&lock_) {
-        if(count_ > 0 && !is_indicator_) {
-            // The newest value of an analog sensor replaces the one still waiting.
+        is_paused = is_paused_;
+
+        if(count_ > 0 && (is_paused || !is_indicator_)) {
+            // The newest value replaces the one still waiting: an analog sensor's always, and an
+            // indicator's during a pause, when only the level at the resume counts.
             queue_[(head_ + count_ - 1) % queue_.size()] = value;
         } else if(count_ == queue_.size()) {
             is_dropped = true;
@@ -144,13 +148,50 @@ void ControlSensorReader::QueueInput(float value) {
         return;
     }
 
-    // Returns 0 while already queued; a stopping queue rejects the submission, and the value waits.
+    // Held until Resume().
+    if(is_paused)
+        return;
+
+    SubmitWork();
+}
+
+// Returns 0 while already queued; a stopping queue rejects the submission, and the value waits.
+void ControlSensorReader::SubmitWork() {
     try {
         if(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &pending_work_.work) < 0)
             LOG_DBG("Control sensor %s input not processed: work queue unavailable.", GetSensor().id.c_str());
     } catch(const std::exception& e) {
         LOG_DBG("Control sensor %s input not processed: %s", GetSensor().id.c_str(), e.what());
     }
+}
+
+bool ControlSensorReader::Pause() {
+    K_SPINLOCK(&lock_) {
+        is_paused_ = true;
+
+        // The newest value goes to the front.
+        if(count_ > 1) {
+            queue_[head_] = queue_[(head_ + count_ - 1) % queue_.size()];
+            count_ = 1;
+        }
+    }
+
+    // A work item that was submitted before the pause finds it marked and processes nothing.
+    k_work_cancel_sync(&pending_work_.work, &work_sync_);
+
+    return true;
+}
+
+void ControlSensorReader::Resume() {
+    bool has_value = false;
+
+    K_SPINLOCK(&lock_) {
+        is_paused_ = false;
+        has_value = count_ > 0;
+    }
+
+    if(has_value)
+        SubmitWork();
 }
 
 void ControlSensorReader::WorkHandler(k_work* work) {
@@ -165,7 +206,7 @@ void ControlSensorReader::ProcessPendingInputs() noexcept {
         bool has_value = false;
 
         K_SPINLOCK(&lock_) {
-            has_value = count_ > 0;
+            has_value = count_ > 0 && !is_paused_;
             if(has_value) {
                 value = queue_[head_];
                 head_ = (head_ + 1) % queue_.size();

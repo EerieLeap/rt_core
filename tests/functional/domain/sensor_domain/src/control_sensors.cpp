@@ -395,14 +395,28 @@ Built Build(const std::vector<std::shared_ptr<Sensor>>& sensors) {
 // so never destroys it, leaves no subscription pointing into a dead stack frame.
 class GatedReader {
 private:
+    // A work item that holds the reader's work queue, so that the reader's own item waits behind it.
+    struct Blocker {
+        k_work work;
+        k_sem released;
+    };
+
     mutable k_mutex lock_{};
     k_sem entered_{};
     k_sem gate_{};
+    Blocker blocker_{};
     std::vector<float> received_;
 
     Built built_;
     std::shared_ptr<WorkQueueThread> work_queue_thread_;
     std::unique_ptr<ControlSensorReader> reader_;
+
+    static void BlockerHandler(k_work* work) {
+        auto* blocker = CONTAINER_OF(work, Blocker, work);
+
+        // Bounded, as the gate.
+        k_sem_take(&blocker->released, K_SECONDS(5));
+    }
 
     void Receive(float value) {
         size_t position = 0;
@@ -427,6 +441,8 @@ public:
         k_mutex_init(&lock_);
         k_sem_init(&entered_, 0, K_SEM_MAX_LIMIT);
         k_sem_init(&gate_, 0, K_SEM_MAX_LIMIT);
+        k_sem_init(&blocker_.released, 0, K_SEM_MAX_LIMIT);
+        k_work_init(&blocker_.work, BlockerHandler);
 
         built_ = Build({ sensor });
 
@@ -443,6 +459,7 @@ public:
     }
 
     ~GatedReader() {
+        k_sem_give(&blocker_.released);
         k_sem_give(&gate_);
         reader_.reset();
     }
@@ -459,6 +476,24 @@ public:
 
     void Release() {
         k_sem_give(&gate_);
+    }
+
+    // Holds the work queue until UnblockQueue(): what is published meanwhile queues the reader's work
+    // item behind it, which has not started.
+    void BlockQueue() {
+        zassert_true(k_work_submit_to_queue(work_queue_thread_->GetWorkQueue(), &blocker_.work) >= 0);
+    }
+
+    void UnblockQueue() {
+        k_sem_give(&blocker_.released);
+    }
+
+    [[nodiscard]] bool Pause() {
+        return reader_->Pause();
+    }
+
+    void Resume() {
+        reader_->Resume();
     }
 
     [[nodiscard]] std::vector<float> Received() const {
@@ -860,7 +895,7 @@ ZTEST(control_sensors, test_a_restart_keeps_the_switch_of_a_toggle_and_its_next_
     zassert_true(rig.processing_service->Stop());
 }
 
-ZTEST(control_sensors, test_a_value_survives_Pause_and_Resume_and_an_input_during_the_pause_is_ignored) {
+ZTEST(control_sensors, test_a_value_survives_Pause_and_Resume) {
     auto rig = MakeRig(
         { MakeControlIndicator("ctl_pause_level"),
             MakeControlIndicator("ctl_pause_toggle", 0, IndicatorInputMode::Toggle),
@@ -876,23 +911,124 @@ ZTEST(control_sensors, test_a_value_survives_Pause_and_Resume_and_an_input_durin
     zassert_equal(rig.Value("ctl_pause_toggle"), 1.0F);
 
     zassert_true(rig.processing_service->Pause());
-
-    // No reader listens now. Published on this thread, so a reader that did would have taken it.
-    Publish("ctl_pause_level", EventData(0.0F));
-    Publish("ctl_pause_analog", EventData(7.0F));
-
     zassert_true(rig.processing_service->Resume());
     k_msleep(50);
 
-    zassert_equal(rig.Value("ctl_pause_level"), 1.0F, "Resume() commits no released input, nor the paused input");
+    zassert_equal(rig.Value("ctl_pause_level"), 1.0F, "Resume() commits no released input");
+    zassert_equal(rig.recorder->CountOf("ctl_pause_level"), 2, "The start's input and the press, nothing since");
     zassert_equal(rig.Value("ctl_pause_analog"), 42.0F);
     zassert_equal(rig.Value("ctl_pause_toggle"), 1.0F, "A switch keeps its value");
 
-    // The readers built again listen.
+    // The readers go on.
     Publish("ctl_pause_level", EventData(0.0F));
     zassert_true(rig.WaitForValue("ctl_pause_level", 0.0F));
     Press(rig, "ctl_pause_toggle");
     zassert_equal(rig.Value("ctl_pause_toggle"), 0.0F, "Its next press flips it");
+
+    zassert_true(rig.processing_service->Stop());
+}
+
+// A control has no level to read again at Resume(), so its reader stays through a pause and the newest
+// value it was given counts then, as a GPIO pin's level does.
+ZTEST(control_sensors, test_a_press_released_during_a_pause_is_applied_at_Resume) {
+    auto rig = MakeRig(
+        { MakeControlIndicator("ctl_lost_level"),
+            MakeControlIndicator("ctl_lost_toggle", 0, IndicatorInputMode::Toggle) }
+    );
+    zassert_true(rig.processing_service->Start());
+
+    // Pressed before the pause.
+    Publish("ctl_lost_level", EventData(1.0F));
+    Publish("ctl_lost_toggle", EventData(1.0F));
+    zassert_true(rig.WaitForValue("ctl_lost_level", 1.0F));
+    zassert_true(rig.WaitForValue("ctl_lost_toggle", 1.0F), "The press flipped the switch");
+
+    zassert_true(rig.processing_service->Pause());
+
+    // Released during it: the reader holds the release, and nothing is processed meanwhile.
+    Publish("ctl_lost_level", EventData(0.0F));
+    Publish("ctl_lost_toggle", EventData(0.0F));
+    k_msleep(50);
+
+    zassert_equal(rig.recorder->CountOf("ctl_lost_level"), 2, "The start's input and the press, nothing since");
+    zassert_equal(rig.recorder->CountOf("ctl_lost_toggle"), 2);
+    zassert_equal(rig.Value("ctl_lost_level"), 1.0F);
+
+    zassert_true(rig.processing_service->Resume());
+
+    zassert_true(rig.WaitForValue("ctl_lost_level", 0.0F), "The release is applied at Resume()");
+    zassert_true(rig.WaitForReadings("ctl_lost_toggle", 3));
+    zassert_equal(rig.Value("ctl_lost_toggle"), 1.0F, "A release leaves the switch as it is");
+
+    // The conditioner has seen the release, so the next press is a rising edge and flips the switch.
+    Press(rig, "ctl_lost_toggle");
+    zassert_equal(rig.Value("ctl_lost_toggle"), 0.0F);
+
+    zassert_true(rig.processing_service->Stop());
+}
+
+ZTEST(control_sensors, test_a_press_and_its_release_during_a_pause_change_nothing) {
+    auto rig = MakeRig(
+        { MakeControlIndicator("ctl_tap_level"), MakeControlIndicator("ctl_tap_toggle", 0, IndicatorInputMode::Toggle) }
+    );
+    zassert_true(rig.processing_service->Start());
+
+    zassert_true(rig.processing_service->Pause());
+
+    for(const float level : { 1.0F, 0.0F }) {
+        Publish("ctl_tap_level", EventData(level));
+        Publish("ctl_tap_toggle", EventData(level));
+    }
+
+    k_msleep(50);
+    zassert_equal(rig.recorder->CountOf("ctl_tap_level"), 1, "Only the start's input");
+    zassert_equal(rig.recorder->CountOf("ctl_tap_toggle"), 1);
+
+    zassert_true(rig.processing_service->Resume());
+
+    // The newest value of each is all that is processed: the release, which changes nothing.
+    zassert_true(rig.WaitForReadings("ctl_tap_level", 2));
+    zassert_true(rig.WaitForReadings("ctl_tap_toggle", 2));
+    k_msleep(50);
+
+    const std::vector<float> released{ 0.0F, 0.0F };
+    zassert_true(rig.recorder->Of("ctl_tap_level") == released);
+    zassert_true(rig.recorder->Of("ctl_tap_toggle") == released);
+    zassert_equal(rig.Value("ctl_tap_level"), 0.0F);
+    zassert_equal(rig.Value("ctl_tap_toggle"), 0.0F);
+
+    // The press never reached the conditioner, so the next one flips the switch.
+    Press(rig, "ctl_tap_toggle");
+    zassert_equal(rig.Value("ctl_tap_toggle"), 1.0F);
+
+    zassert_true(rig.processing_service->Stop());
+}
+
+ZTEST(control_sensors, test_a_press_published_during_a_pause_and_held_is_processed_at_Resume) {
+    auto rig = MakeRig(
+        { MakeControlIndicator("ctl_held_level"),
+            MakeControlIndicator("ctl_held_toggle", 0, IndicatorInputMode::Toggle),
+            MakeControlAnalog("ctl_held_analog") }
+    );
+    zassert_true(rig.processing_service->Start());
+
+    zassert_true(rig.processing_service->Pause());
+
+    Publish("ctl_held_level", EventData(1.0F));
+    Publish("ctl_held_toggle", EventData(1.0F));
+    Publish("ctl_held_analog", EventData(3.0F));
+    Publish("ctl_held_analog", EventData(7.0F));
+
+    k_msleep(50);
+    zassert_equal(rig.Value("ctl_held_level"), 0.0F, "Nothing is processed during the pause");
+    zassert_equal(rig.Value("ctl_held_toggle"), 0.0F);
+    zassert_false(rig.frame->TryGetReadingValue("ctl_held_analog").has_value());
+
+    zassert_true(rig.processing_service->Resume());
+
+    zassert_true(rig.WaitForValue("ctl_held_level", 1.0F), "A press still held acts at Resume()");
+    zassert_true(rig.WaitForValue("ctl_held_toggle", 1.0F), "and flips a switch");
+    zassert_true(rig.WaitForValue("ctl_held_analog", 7.0F), "and the newest position counts");
 
     zassert_true(rig.processing_service->Stop());
 }
@@ -1008,6 +1144,51 @@ ZTEST(control_sensors, test_a_full_indicator_queue_drops_a_level_and_logs_it) {
         zassert_equal(received[1 + i], i % 2 == 0 ? 0.0F : 1.0F, "queued level %zu", i);
 }
 
+ZTEST(control_sensors, test_a_paused_reader_holds_only_the_newest_value_until_Resume) {
+    const auto gated = std::make_unique<GatedReader>(MakeControlIndicator("ctl_gated_paused"));
+
+    zassert_true(gated->Pause(), "A control reader keeps listening through a pause");
+
+    // Four levels, which an indicator would otherwise keep all of.
+    for(const float level : { 1.0F, 0.0F, 1.0F, 0.0F })
+        Publish("ctl_gated_paused", EventData(level));
+
+    k_msleep(50);
+    zassert_true(gated->Received().empty(), "Nothing is processed during the pause");
+    zassert_equal(gated->GetDroppedCount(), 0, "Replacing is no drop");
+
+    gated->Resume();
+    zassert_true(gated->WaitForFirstReading(), "The newest value is processed at Resume()");
+    gated->Release();
+    k_msleep(50);
+
+    const std::vector<float> expected{ 0.0F };
+    zassert_true(gated->Received() == expected);
+}
+
+ZTEST(control_sensors, test_Pause_reduces_what_is_queued_to_its_newest_value) {
+    const auto gated = std::make_unique<GatedReader>(MakeControlIndicator("ctl_gated_reduced"));
+
+    // The reader's work item waits behind the blocker, with four levels queued for it.
+    gated->BlockQueue();
+    for(const float level : { 1.0F, 0.0F, 1.0F, 0.0F })
+        Publish("ctl_gated_reduced", EventData(level));
+
+    zassert_true(gated->Pause());
+    gated->UnblockQueue();
+
+    k_msleep(50);
+    zassert_true(gated->Received().empty(), "The work item was cancelled, nothing is processed");
+
+    gated->Resume();
+    zassert_true(gated->WaitForFirstReading(), "The newest value is processed at Resume()");
+    gated->Release();
+    k_msleep(50);
+
+    const std::vector<float> expected{ 0.0F };
+    zassert_true(gated->Received() == expected, "Of the four queued levels only the newest was kept");
+}
+
 // ======== Stopping under a publisher ========
 
 ZTEST(control_sensors, test_processing_stops_while_another_thread_keeps_publishing_input) {
@@ -1027,11 +1208,15 @@ ZTEST(control_sensors, test_processing_stops_while_another_thread_keeps_publishi
         "The sensor reads what is published"
     );
 
-    // The readers go and come back under the publisher: a handler in flight is waited for, and one
-    // that was already taken by the channel is a no-op.
+    // The readers pause and resume under the publisher, which goes on handing them values: a work item
+    // in flight is waited for, and nothing is processed in between.
     for(int i = 0; i < 8; i++) {
         zassert_true(rig.processing_service->Pause());
+
+        const size_t paused = rig.recorder->Count();
         k_msleep(3);
+        zassert_equal(rig.recorder->Count(), paused, "Nothing is processed during a pause");
+
         zassert_true(rig.processing_service->Resume());
         k_msleep(3);
     }

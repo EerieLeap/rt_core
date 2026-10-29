@@ -31,6 +31,10 @@ using eerie_leap::subsys::threading::WorkQueueThread;
 // release; one that finds the queue full is dropped and logged. An analog sensor keeps only its
 // newest value, as GpioSensorReader keeps a pin's newest level. Seeds nothing: the start step gives
 // an indicator its released input (ReadingPipeline::CommitStartValues()).
+//
+// A processing pause does not tear it down, as it has no level to read again afterwards: it keeps
+// listening and holds the newest value it is given, which Resume() processes, so the level at the
+// resume counts as it does for a GPIO pin. A release that came during the pause is not lost.
 class ControlSensorReader : public IsrSensorReaderBase {
 public:
     // The levels an indicator keeps waiting for the work queue, 8 presses with their releases. A
@@ -54,6 +58,7 @@ private:
     std::array<float, QUEUE_CAPACITY> queue_{};
     size_t head_ = 0;
     size_t count_ = 0;
+    bool is_paused_ = false; // At most one value waits, the newest.
     atomic_t dropped_count_ = ATOMIC_INIT(0);
 
     PendingWork pending_work_{};
@@ -63,6 +68,7 @@ private:
 
     void OnInput(const EventData& value);
     void QueueInput(float value);
+    void SubmitWork();
     void ProcessPendingInputs() noexcept;
 
 public:
@@ -86,6 +92,13 @@ public:
     ControlSensorReader& operator=(const ControlSensorReader&) = delete;
     ControlSensorReader(ControlSensorReader&&) = delete;
     ControlSensorReader& operator=(ControlSensorReader&&) = delete;
+
+    // Reduces what is queued to its newest value and waits for a work item that is running, so that
+    // nothing is processed until Resume(). Always keeps listening: returns true.
+    bool Pause() override;
+
+    // Processes the value that waited through the pause, if any.
+    void Resume() override;
 
     /** @return The levels dropped for want of room in the queue since the reader was built. */
     [[nodiscard]] uint32_t GetDroppedCount() const {

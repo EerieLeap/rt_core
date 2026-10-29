@@ -16,6 +16,16 @@ using ProcessSensorCallback = std::function<void(const SensorRuntime&, SensorRea
 class IIsrSensorReader {
 public:
     virtual ~IIsrSensorReader() = default;
+
+    // Processing pauses. Never from the processing work queue. A reader that returns true keeps
+    // listening and processes nothing until Resume(); one that returns false is torn down and built
+    // again when processing resumes, which is how a source reads its level again then.
+    virtual bool Pause() {
+        return false;
+    }
+
+    // Processing resumes, for a reader whose Pause() returned true.
+    virtual void Resume() {}
 };
 
 } // namespace eerie_leap::domain::sensor_domain::isr_sensor_readers
