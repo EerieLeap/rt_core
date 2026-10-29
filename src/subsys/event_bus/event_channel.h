@@ -56,7 +56,8 @@ private:
     std::pmr::vector<EventMessage> event_queue_;
     size_t queue_head_ = 0;
     size_t queue_count_ = 0;
-    k_mutex queue_mutex_{};
+    // Mutable for GetQueuedCount().
+    mutable k_mutex queue_mutex_{};
     size_t dropped_events_ = 0;
     uint32_t last_dropped_source_id_ = 0;
 
@@ -148,6 +149,9 @@ public:
 
     void Publish(const EventMessage& event);
     void PublishAsync(const EventMessage& event);
+
+    // How many events wait in the queue; the one being dispatched has left it.
+    size_t GetQueuedCount() const;
 };
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>

@@ -120,9 +120,18 @@ void SensorEventsPublisher::PublishProcessedReadings() {
     auto& channel = SensorEventsChannel::GetInstance();
 
     // Taken in one step: a separate clear would drop readings processed in between. Readings that
-    // do not fit the buffer stay pending, so the loop drains them in the same tick.
+    // do not fit the buffer stay pending for the next take, which comes in this tick if the channel
+    // is empty by then.
     size_t count = 0;
     do {
+        // Before each take, never after one, which clears the readings' marks. While the channel holds
+        // events (a subscriber is stalled, say a widget waiting for the LVGL lock) the readings stay
+        // marked in the frame, and the first tick to find the channel empty publishes each sensor's
+        // newest value, a pending Replay() included. Queued behind an event, readings would push it
+        // out once the queue is full.
+        if(channel.GetQueuedCount() != 0)
+            return;
+
         count = sensor_readings_frame_->TakeProcessedReadings(readings_);
 
         // Read after each take, never before: whoever subscribed and then committed or replayed

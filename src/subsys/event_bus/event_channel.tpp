@@ -206,6 +206,13 @@ void EventChannel<TEventType, TPayloadType>::PublishAsync(const EventMessage& ev
 }
 
 template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
+size_t EventChannel<TEventType, TPayloadType>::GetQueuedCount() const {
+    ScopedMutex guard(queue_mutex_);
+
+    return queue_count_;
+}
+
+template<concepts::EnumClassUint32 TEventType, concepts::EnumClassUint32 TPayloadType>
 bool EventChannel<TEventType, TPayloadType>::DrainOne() {
     std::optional<EventMessage> event;
     size_t dropped = 0;

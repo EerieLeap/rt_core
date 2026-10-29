@@ -33,7 +33,10 @@ using threading::WorkQueueThread;
 // EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS. A tick takes every reading processed since
 // the last one, so a unit runs one publisher, and publishes those with a value that a subscriber
 // accepts. Acceptance is asked once per sensor and subscription change; a reading nobody accepts
-// is taken and dropped. Built with EERIE_LEAP_EVENT_BUS.
+// is taken and dropped. A tick takes nothing while the channel still holds events: the readings
+// stay in the frame and a later tick publishes each sensor's newest value. Readings are state, so
+// a skipped tick loses nothing the next one does not carry, and a sparse event queued on the
+// channel is never pushed out by readings. Built with EERIE_LEAP_EVENT_BUS.
 class SensorEventsPublisher final : public ServiceBase<> {
 private:
     std::shared_ptr<SensorReadingsFrame> sensor_readings_frame_;
@@ -76,9 +79,10 @@ public:
         return true;
     }
 
-    // The next tick publishes the latest processed value of every accepted sensor once more, so a
-    // subscriber that has just subscribed sees the current state. Safe from any thread; paused or
-    // stopped, it takes effect once the publisher runs again.
+    // The next tick that takes readings publishes the latest processed value of every accepted sensor
+    // once more, so a subscriber that has just subscribed sees the current state. Safe from any
+    // thread; paused or stopped, it takes effect once the publisher runs again, and while
+    // sensor_events holds events, once they have drained.
     void Replay();
 };
 
