@@ -54,7 +54,10 @@ menu "EerieLeap Sensor Domain config"
           the readings processed since the previous one on sensor_events; a
           sensor committed several times within one period is published once,
           with its latest value, so a pulse shorter than the period can be
-          missed.
+          missed. A tick publishes nothing while sensor_events still holds
+          events, as when a subscriber is stalled: the readings wait in the
+          frame, and the first tick to find the channel empty publishes the
+          newest value of each sensor.
 
     config EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE
         int "Sensor events publisher stack size"

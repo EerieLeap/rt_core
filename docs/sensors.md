@@ -1,9 +1,10 @@
 # Sensors
 
 The sensor domain (`src/domain/sensor_domain/`) turns a list of sensor definitions into
-readings: it samples ADC and GPIO channels, decodes CAN frames, evaluates expressions, runs
-scripts, and keeps the latest value of every sensor in a frame that logging, CAN sending, BLE
-live data, expressions and the sensor events publisher read from.
+readings: it samples ADC and GPIO channels, decodes CAN frames, takes the values controls
+publish, evaluates expressions, runs scripts, and keeps the latest value of every sensor in a
+frame that logging, CAN sending, BLE live data, expressions and the sensor events publisher read
+from.
 
 ## Sensor model
 
@@ -38,8 +39,12 @@ A sensor is an `id`, an `is_enabled` flag, metadata and a configuration:
 | `CANBUS_INDICATOR` | 7 | CAN signal | no | `bus/frame/signal` | no | optional | not allowed | on every frame; value 0/1 |
 | `USER_ANALOG` | 8 | Lua `create_sensor_value` | no | no | no | optional, `x` = script value | required | polled |
 | `USER_INDICATOR` | 9 | Lua | no | no | no | optional | required | polled; value 0/1 |
+| `CONTROL_INDICATOR` | 10 | control, `InputRequested` | no | no | no | optional, `x` = 0/1 | not allowed | on every input; value 0/1 |
+| `CONTROL_ANALOG` | 11 | control, `InputRequested` | no | no | no | optional, `x` = the control's number | not allowed | on every input |
 
-Only the indicator types take a `debounce_ms` other than 0 or the `Toggle` mode.
+Only the indicator types (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_INDICATOR`,
+`USER_INDICATOR` and `CONTROL_INDICATOR`) take a `debounce_ms` other than 0 or the `Toggle` mode.
+A control sensor takes its input from the event bus; see [Control sensors](#control-sensors).
 
 A virtual sensor without a sampling rate must reference at least one sensor, otherwise it would
 never update; its expression cannot use `x`, which it does not have. An enabled sensor's
@@ -69,7 +74,7 @@ client's configuration.
 Every reading, whatever its source, goes through the same `ReadingPipeline`:
 
 ```
-reader / CAN route / GPIO edge
+reader / CAN route / GPIO edge / control input
    └─► ExpressionProcessor ─► ScriptProcessor ─► IndicatorConditioner ─► commit to SensorReadingsFrame ─► dependents
 ```
 
@@ -97,9 +102,10 @@ configuration is parsed (`SensorsOrderResolver`); a cycle is a validation error.
 ### Indicator conditioning
 
 An indicator of any source (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_INDICATOR`,
-`USER_INDICATOR`) can be debounced and can act as a switch. `IndicatorConditioner`
-(`processors/indicator_conditioner.h`) does both. The builder gives one only to an indicator whose
-`debounce_ms` or `input_mode` is not the default, so the defaults cost nothing.
+`USER_INDICATOR`, `CONTROL_INDICATOR`) can be debounced and can act as a switch.
+`IndicatorConditioner` (`processors/indicator_conditioner.h`) does both. The builder gives one
+only to an indicator whose `debounce_ms` or `input_mode` is not the default, so the defaults cost
+nothing.
 
 - **Input.** The processed value: 0 is off, any other number is on, a `post_process_sensor_value`
   result included. The committed value is 0 or 1; `raw_value` keeps what the source read.
@@ -128,7 +134,9 @@ An indicator of any source (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_I
   `PHYSICAL_INDICATOR` that has an expression (see [logging.md](logging.md)). The frame, the log,
   the publisher, widgets and expressions all see the switch.
 - **A switch across restarts.** When processing starts, the value of every `Toggle` sensor is
-  committed before its input has a reading, with its dependents. A restart (a sensors, ADC or CAN
+  committed before its input has a reading, with its dependents. Each enabled control indicator
+  then gets a released input, 0, through the pipeline: a `Level` one starts at 0 and a `Toggle`
+  one keeps its switch (see [Control sensors](#control-sensors)). A restart (a sensors, ADC or CAN
   apply) keeps the switch of a sensor whose id, type, `debounce_ms` and `input_mode` are
   unchanged. A change to any of these four starts it off. A change to the channel, connection
   string, sampling rate, expression or script keeps it. The switch comes from the last generation
@@ -138,9 +146,10 @@ An indicator of any source (`PHYSICAL_INDICATOR`, `VIRTUAL_INDICATOR`, `CANBUS_I
 - **Pause.** A pause (ADC calibration, BLE pairing) stops the window of a held change with the
   sources, since none can confirm or cancel it until `Resume()`, and `Resume()` runs what was left
   of it. The first reading after `Resume()` confirms or cancels the change as any reading does: a
-  GPIO input is read again at `Resume()`, so a press released during the pause is ignored, and a
-  polled sensor has its next sample. A source that sends nothing more, such as a CAN signal,
-  settles at the end of the window. A switch keeps its value.
+  GPIO input is read again at `Resume()` and a control gives the newest value it was given during
+  the pause, so a press released during the pause is ignored, and a polled sensor has its next
+  sample. A source that sends nothing more, such as a CAN signal or a control that was given
+  nothing, settles at the end of the window. A switch keeps its value.
 - **Lua.** `update_sensor_value()` writes the frame directly (`UpdateReadingValue`), past the
   debounce and the switch; the sensor's next commit replaces what it wrote, except a blank
   `USER_*` sensor's, which carries it.
@@ -179,6 +188,7 @@ so the trigger itself has no mode:
 | Example | Sensor | Trigger |
 | --- | --- | --- |
 | The gauge's button | `PHYSICAL_INDICATOR` on GPIO 0, `debounce_ms` 30, `Toggle` | `Sensors` / `DataUpdated` / `Value`, selector `logging_button` |
+| The gauge's on-screen button (see [Control sensors](#control-sensors)) | `CONTROL_INDICATOR`, `Toggle` | the same, selector `screen_logging_button` |
 | A switch on a DAQ | `PHYSICAL_INDICATOR` on GPIO 1, `debounce_ms` 30, `Level` | the same, selector `logging_switch` |
 | Log while the ignition is on | `CANBUS_INDICATOR`, no debounce | the same, selector `ignition` |
 | Log while moving, ignoring a dip shorter than 2 s | `VIRTUAL_INDICATOR`, expression `speed > 5`, `debounce_ms` 2000 | the same, selector `moving` |
@@ -218,6 +228,10 @@ that does not exist does nothing and is logged when the triggers are built.
 - **GPIO.** One `GpioSensorReader` per sensor subscribes to both edges, coalesces to the newest
   level, and seeds the frame with the current level at start. No time window drops edges, so the
   sensor always ends on the real level, and its `debounce_ms` settles a bouncing contact.
+- **Control.** One `ControlSensorReader` per `CONTROL_INDICATOR` or `CONTROL_ANALOG` sensor
+  subscribes to the sensor's `InputRequested` on `sensor_events` and queues each value for one
+  work item of the processing work queue, which makes it a reading. Seeds nothing; see
+  [Control sensors](#control-sensors).
 
 ### Readings frame
 
@@ -242,7 +256,8 @@ configuration and a snapshot of the ADC configuration: the frame's slots, one `S
 sensor (interpolator, compiled expression bound to the frame, loaded script, dependents; none of
 them, and update method `NONE`, for a disabled sensor), then the rate groups and event sources.
 Everything a sample needs is allocated here, once. The switches of the `Toggle` indicators are
-committed before the sources start.
+committed before the sources start, and a released input for each control indicator after them
+(see [Control sensors](#control-sensors)).
 `Stop()` tears the sources down, cancels held indicator changes, keeps every switch for the next
 `Start()`, clears the frame and drops the generation.
 
@@ -251,8 +266,8 @@ registers update handlers on both managers that queue `Stop(); Start();` on the 
 work queue. A restart that fails (a script that no longer loads, a channel that disappeared)
 leaves the service stopped and logged; the next valid configuration starts it again. The service
 is pausable: the calibration service and BLE pairing pause it and resume it. A pause tears the
-sources down and stops the windows of held indicator changes until `Resume()`; the generation and
-its switches stay.
+CAN and GPIO sources down, keeps the control readers, which hold their newest value, and stops the
+windows of held indicator changes until `Resume()`; the generation and its switches stay.
 
 Services that read the frame or the sensors of the running generation register with
 `SensorsController::RegisterDependentService()` before `Start()`. A restart stops the registered
@@ -270,16 +285,32 @@ and opens the next one for the new sensors (see [logging.md](logging.md#restarts
 `SensorEventsPublisher` (`services/sensor_events_publisher.h`, built with `EERIE_LEAP_EVENT_BUS`)
 turns the frame into events. Every `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS`, on a work
 queue thread of its own, it takes the readings processed since its last tick
-(`TakeProcessedReadings`) and publishes `SensorEventType::DataUpdated` on `sensor_events` for each
-one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`float`).
+(`TakeProcessedReadings`, unless the channel is backed up: see Back-pressure below) and publishes
+`SensorEventType::DataUpdated` (0) on `sensor_events` for each one with a value: `SensorId` is the
+id hash (`uint32_t`), `Value` the value (`float`). The channel's other event type,
+`InputRequested` (1), goes the other way, from a control to a control sensor, and the publisher
+never sends it (see [Control sensors](#control-sensors)). Widget bindings and logging triggers
+store the event type as a number, so new types are appended.
 
 - **One per unit.** Taking clears the marks, so a second publisher would split the readings. Each
   application constructs one with the shared frame and starts it before `SensorsController::Start()`.
   A subscriber that comes later calls `Replay()` to see the current state, as `LoggingController`
   does.
 - **The latest value per tick.** A sensor committed several times within one period is published
-  once, with its latest value; changes across ticks arrive in order. A pulse shorter than the
-  period can be missed; a switch (a held value) cannot.
+  once, with its latest value; changes across ticks arrive in order, except across ticks that
+  back-pressure skips, which merge into the next one. A pulse shorter than the period can be
+  missed; a switch (a held value) cannot.
+- **Back-pressure.** A tick takes and publishes nothing while `sensor_events` still holds queued
+  events, checked before each take (`EventChannel::GetQueuedCount()`; the event a subscriber is
+  handling has left the queue). Without it, a subscriber that stalls (a widget waiting for the
+  LVGL lock during a screen change, say) would have each tick's readings queue behind the events
+  it has not handled yet, and once the channel's 128 slots were full the channel would drop the
+  oldest event, which may be a control's `InputRequested`. The readings stay in the frame
+  instead, and the first tick to find the channel empty publishes each sensor's newest value.
+  Readings are state, so a skipped tick loses nothing the next one does not carry; a sensor that
+  goes up and back down during a stall shows its subscribers only where it ended. A
+  `static_assert` keeps the channel deeper than one take (`SensorLimits::MAX_COUNT` readings), so
+  a tick's readings, queued into an empty channel, cannot push out an event queued before them.
 - **Only what someone listens to.** A reading is published only if a subscriber accepts it
   (`EventChannel::Accepts(event)`, see [infrastructure.md](infrastructure.md#event-bus-eerie_leap_event_bus));
   others are taken and dropped. On a unit without widgets (rt_daq) that leaves only the sensors its
@@ -295,19 +326,74 @@ one with a value: `SensorId` is the id hash (`uint32_t`), `Value` the value (`fl
   at every dispatch. The publisher catches the throw only if its stack can unwind it (the 4 KiB
   default overflowed on qemu_cortex_a53).
 - **Replay.** `Replay()` marks every processed reading as updated (`MarkProcessedReadingsUpdated()`),
-  so the next tick publishes the latest value of every accepted sensor once. Safe from any thread;
-  a consumer that has just subscribed calls it to see the current state rather than wait for the
-  next change. `LoggingController` calls it after it builds its triggers, at `Initialize()` and
-  after each rebuild, when at least one trigger subscribed, so a trigger sees a switch that is
-  already on. Every subscriber receives the replay, widgets included, which re-apply their values.
-  It is reliable because a tick reads the
-  subscription generation after each take: a subscription made before the call to `Replay()` has
-  moved the generation by then, so a sensor cached as rejected is asked again.
+  so the next tick that takes readings publishes the latest value of every accepted sensor once;
+  while `sensor_events` holds events, that is the first tick after they have drained. Safe from
+  any thread; a consumer that has just subscribed calls it to see the current state rather than
+  wait for the next change. `LoggingController` calls it after it builds its triggers, at
+  `Initialize()` and after each rebuild, when at least one trigger subscribed, so a trigger sees a
+  switch that is already on. Every subscriber receives the replay, widgets included, which
+  re-apply their values. It is reliable because a tick reads the subscription generation after
+  each take: a subscription made before the call to `Replay()` has moved the generation by then,
+  so a sensor cached as rejected is asked again.
 - **Lifecycle.** A `ServiceBase`: `Initialize()` creates the thread, `Start()` the ticks; it is
   pausable, and `Stop()` (also run by the destructor) waits for a tick in progress.
 - **Memory.** The readings buffer (`MAX_COUNT` readings) and the acceptance cache (`MAX_COUNT`
   answers, 8 bytes each) are part of the object, so they come with its owner's allocation.
   `Initialize()` allocates the thread's stack. A tick never allocates.
+
+## Control sensors
+
+A control sensor is a physical one with the event bus for its input. A `CONTROL_INDICATOR` takes a
+level as a `PHYSICAL_INDICATOR` takes its pin, with `debounce_ms` and `input_mode` acting on it the
+same way, and a `CONTROL_ANALOG` takes a number. A control (rt_gauge's buttons and sliders, through
+an outbound binding) gives it the value as `SensorEventType::InputRequested {SensorId, Value}` on
+`sensor_events`, and the sensor's pipeline makes the fact of it: the committed value goes out as
+`DataUpdated`, so widgets, logging triggers, expressions, CAN sending and BLE live data see it as
+any other sensor's. Only the pipeline asserts `DataUpdated`, and an `InputRequested` for a sensor of
+another type reaches no sensor.
+
+`ControlSensorReader` (`isr_sensor_readers/control_sensor_reader.{h,cpp}`, built with
+`EERIE_LEAP_EVENT_BUS`) feeds each enabled control sensor:
+
+- **Input.** It subscribes to `Sensors` / `InputRequested` / `Value` with its own id as the
+  `SensorId` selector, so another sensor's input never wakes it. It reads a number (`true` and
+  `false` as 1 and 0); text and NaN are ignored, the first with a warning. An indicator takes the
+  number as a level: anything other than 0 is on.
+- **Queue.** The bus thread queues the value and submits one work item, which makes each queued
+  value a reading with `status = RAW` on the processing work queue. An indicator keeps every level,
+  in order, 16 at most (`ControlSensorReader::QUEUE_CAPACITY`), since a `Toggle` needs a press and
+  its release; a level that finds the queue full is dropped and logged. An analog sensor keeps
+  only its newest value, which replaces one still waiting: a drag sends a position per tick and
+  only the last one matters. Teardown waits for a handler in flight and for a running work item,
+  and drops what is still queued.
+- **Start.** Each enabled control indicator gets a released input, 0, through the whole pipeline,
+  after the `Toggle` switches are committed: a `Level` one starts at 0, and a `Toggle` one takes
+  the 0 as its first input and keeps its switch. Without it the first press after a start or a
+  sensors apply would only set a baseline, since a `Toggle` takes its first reading as its input
+  without a flip and a logging trigger reads its first value after an apply as its baseline (see
+  [Indicators as logging triggers](#indicators-as-logging-triggers)). A restart gives it again; a
+  `Resume()` does not, so a pause keeps the value. A control analog gets none: it has no value
+  until its control first publishes, as a CAN signal has none before its first frame.
+- **Pause.** The readers stay through a processing pause: a control has no level to read again at
+  `Resume()`, as a GPIO pin has. A paused reader processes nothing and holds only the newest value
+  it is given, which `Resume()` processes, so the level at the resume counts. A press and its
+  release within a pause do nothing, the release of a press that began before it is applied at the
+  resume, and a press still held at the resume acts then. A restart tears the readers down, and an
+  input published meanwhile reaches no sensor; the start gives an indicator a released input.
+- **No event bus.** A unit built without `EERIE_LEAP_EVENT_BUS` builds no reader, so nothing feeds
+  a control sensor: an indicator stays at the start's 0 and an analog sensor never has a value.
+
+What a screen button makes of a control indicator is up to its conditioning. The button publishes 1
+when pressed and 0 when released, and:
+
+- `Level` follows it: 1 while the button is held, a momentary input.
+- `Toggle` flips a switch with each press, which the sensor keeps, as the GPIO button's does.
+- `debounce_ms` makes a press count once it has held that long, so a tap does nothing and a hold
+  acts; with `Toggle`, a hold flips the switch.
+
+A slider publishes its position on every drag tick, and a `CONTROL_ANALOG` takes it as a number; an
+expression on `x` maps it to the sensor's units. A sensor publishes no range, so the slider keeps
+its own.
 
 ## Stored configuration
 
@@ -373,7 +459,7 @@ sensors_configuration_manager->Update({sensor_1, sensor_5, sensor_6, sensor_7});
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_SERVICE_PRIORITY` | 6 | Its priority. rt_daq uses 5, above the display and CAN scheduler threads. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS` | n | Periodic rate group statistics log; a measurement aid, off in production. |
 | `EERIE_LEAP_DOMAIN_SENSOR_PROCESSING_STATS_LOG_PERIOD_S` | 1..3600, 10 | Seconds between statistics lines. |
-| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS` | 1..10000, 30 | Delay between two publisher ticks. This and the next two need `EERIE_LEAP_EVENT_BUS`. |
+| `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS` | 1..10000, 30 | Delay between two publisher ticks; a tick publishes nothing while `sensor_events` holds events (see [Sensor events](#sensor-events)). This and the next two need `EERIE_LEAP_EVENT_BUS`. |
 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_STACK_SIZE` | 4096 | Stack of its work queue, where the subscribers' filters also run. A filter that throws is caught, but with one the thread peaked at 1.5 to 7.8 KiB on the QEMU test boards. rt_gauge's ESP32-S3 board uses 2560. |
 | `EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PRIORITY` | 6 | Its priority. |
 | `EERIE_LEAP_DOMAIN_SENSOR_MAX_COUNT` | 1..65535, 64 | Most sensors a configuration may hold; sizes every snapshot buffer. |

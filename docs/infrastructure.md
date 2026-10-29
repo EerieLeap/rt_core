@@ -63,6 +63,9 @@ Code: `src/subsys/event_bus/`. A typed publish/subscribe transport:
   id hash) and forgets them all when the generation moves, or when it is full and a new key
   arrives. Read the generation after taking the events to judge, never before, so a change that
   happened before they were taken is seen (see `SensorEventsPublisher`).
+- `GetQueuedCount()` is how many events wait in the queue, read under the queue lock.
+  `SensorEventsPublisher` takes no readings while it is not 0, so readings never push out an event
+  queued before them (see [sensors.md](sensors.md#sensor-events)).
 
 **Bindings.** Stored configuration names an event by value: a channel id and the raw values of
 the channel's enums, so it resolves without the code knowing those enums. Widget bindings
@@ -126,11 +129,12 @@ the channel's enums, so it resolves without the code knowing those enums. Widget
 `EventBinding`, `IsSelectorValue()` and `IsValidEventChannelId()` are header only, so
 configuration parsers and validators use them in builds without `EERIE_LEAP_EVENT_BUS`.
 
-Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated`, payload `SensorId`,
-`Value`; 128 queued events, on the bus the composition root registers it with: rt_core's
+Channels in the tree: `sensor_events` (`SensorEventType::DataUpdated` and `InputRequested`, payload
+`SensorId`, `Value`; 128 queued events, on the bus the composition root registers it with: rt_core's
 `SensorEventBus` (4 KiB stack, this channel only) on rt_gauge, the application bus that also
-carries `logging_events` on rt_daq, see [logging.md](logging.md#wiring); published by
-`SensorEventsPublisher`, see [sensors.md](sensors.md#sensor-events)) and `logging_events`
+carries `logging_events` on rt_daq, see [logging.md](logging.md#wiring); `DataUpdated` published by
+`SensorEventsPublisher`, see [sensors.md](sensors.md#sensor-events), `InputRequested` by the controls
+that feed control sensors, see [sensors.md](sensors.md#control-sensors)) and `logging_events`
 (`LoggingEventType::StatusUpdated`, payload `IsActive` and, when inactive, `Reason`; 8 queued
 events, on the bus the composition root registers it with; see
 [logging.md](logging.md#status-events-and-failures), and
