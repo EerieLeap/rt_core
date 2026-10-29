@@ -634,7 +634,7 @@ ZTEST(sensor_events_publisher, test_a_frame_larger_than_a_take_is_drained_within
         // show as a whole period; QEMU's clock also runs while a tick works.
         if(IS_ENABLED(CONFIG_ARCH_POSIX)) {
             zassert_true(
-                elapsed_ms < 2 * CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS,
+                elapsed_ms < int64_t{ 2 } * CONFIG_EERIE_LEAP_DOMAIN_SENSOR_EVENTS_PUBLISHER_PERIOD_MS,
                 "%lld ms from Resume() to the sentinel, round %d", static_cast<long long>(elapsed_ms), round
             );
         }
