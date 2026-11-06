@@ -135,3 +135,52 @@ ZTEST(time_service, test_service_is_usable_through_the_interface) {
     zassert_true(service->GetCurrentTime() > service->GetTimeSinceBoot());
     zassert_true(TimeHelpers::ToMilliseconds(service->GetTimeSinceBoot()) >= 0ms);
 }
+
+ZTEST(time_service, test_the_wall_clock_is_unset_until_it_is_set) {
+    const auto fixture = MakeFixture();
+
+    zassert_false(fixture.service->GetWallClockOffset().has_value());
+}
+
+ZTEST(time_service, test_SetWallClock_keeps_the_clock_and_stores_the_difference) {
+    const auto fixture = MakeFixture(1000000ms);
+
+    fixture.service->SetWallClock(TimeHelpers::FromMilliseconds(1700000000000ms));
+
+    zassert_equal(TimeHelpers::ToMilliseconds(fixture.service->GetCurrentTime()).count(), 1000000);
+    const auto offset = fixture.service->GetWallClockOffset();
+    zassert_true(offset.has_value());
+    zassert_equal(duration_cast<milliseconds>(*offset).count(), 1700000000000 - 1000000);
+}
+
+ZTEST(time_service, test_the_offset_is_negative_when_real_time_is_behind_the_clock) {
+    const auto fixture = MakeFixture(5000ms);
+
+    fixture.service->SetWallClock(TimeHelpers::FromMilliseconds(2000ms));
+
+    const auto offset = fixture.service->GetWallClockOffset();
+    zassert_true(offset.has_value());
+    zassert_equal(duration_cast<milliseconds>(*offset).count(), -3000);
+}
+
+ZTEST(time_service, test_a_second_SetWallClock_replaces_the_first) {
+    const auto fixture = MakeFixture(1000ms);
+
+    fixture.service->SetWallClock(TimeHelpers::FromMilliseconds(4000ms));
+    fixture.service->SetWallClock(TimeHelpers::FromMilliseconds(9000ms));
+
+    const auto offset = fixture.service->GetWallClockOffset();
+    zassert_true(offset.has_value());
+    zassert_equal(duration_cast<milliseconds>(*offset).count(), 8000);
+}
+
+ZTEST(time_service, test_the_wall_clock_is_reachable_through_the_interface) {
+    const auto provider = std::make_shared<StubTimeProvider>(100ms);
+    const std::shared_ptr<ITimeService> service = std::make_shared<TimeService>(provider, provider);
+
+    service->SetWallClock(TimeHelpers::FromMilliseconds(600ms));
+
+    const auto offset = service->GetWallClockOffset();
+    zassert_true(offset.has_value());
+    zassert_equal(duration_cast<milliseconds>(*offset).count(), 500);
+}

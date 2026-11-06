@@ -1,4 +1,5 @@
 #include <array>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -13,6 +14,10 @@
 #include "subsys/event_bus/event_channel.h"
 #include "subsys/event_bus/event_channel_id.h"
 #include "subsys/event_bus/event_channel_registry.h"
+#include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/boot_id.h"
+#include "subsys/time/rtc_provider.h"
+#include "subsys/time/time_service.h"
 
 #include "cdmp_test_features.h"
 #include "smp_groups_test_support.h"
@@ -27,6 +32,9 @@ using eerie_leap::domain::system_domain::models::SensorCapabilities;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::domain::system_domain::smp::DeviceMgmtGroup;
 using eerie_leap::subsys::cdmp::utilities::CdmpDeviceStatus;
+using eerie_leap::subsys::time::BootElapsedTimeProvider;
+using eerie_leap::subsys::time::RtcProvider;
+using eerie_leap::subsys::time::TimeService;
 
 namespace {
 
@@ -152,6 +160,143 @@ ZTEST(smp_device_group, test_info_lists_no_settings_by_default) {
     zassert_true(response.IsOk());
     zassert_equal(response.list_sizes.at("settings"), 0, "The key is there, empty");
     zassert_true(response.list_sizes.contains("event_channels"), "Always present, whatever is registered");
+}
+
+namespace {
+
+constexpr uint64_t WALL_2027_MS = 1800000000000ULL;
+constexpr uint64_t WALL_2020_MS = 1577836800000ULL;
+
+std::shared_ptr<TimeService> MakeTimeService() {
+    return std::make_shared<TimeService>(std::make_shared<RtcProvider>(), std::make_shared<BootElapsedTimeProvider>());
+}
+
+} // namespace
+
+ZTEST(smp_device_group, test_time_reports_the_clocks_without_wall_time_until_it_is_set) {
+    DeviceMgmtGroup group(nullptr, std::nullopt, {}, MakeTimeService());
+    group.Register();
+    SmpTestClient client;
+
+    const auto response = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::TIME));
+
+    zassert_true(response.IsOk());
+    zassert_true(response.WideValue("now_ms") >= 1761106217000ULL, "The unit's clock: a fixed date plus the uptime");
+    zassert_true(response.Has("uptime_ms"));
+    zassert_equal(response.Value("boot_id"), eerie_leap::subsys::time::GetBootId());
+    zassert_not_equal(response.Value("boot_id"), 0);
+    zassert_false(response.Has("wall_ms"), "Unset at power-on");
+}
+
+ZTEST(smp_device_group, test_set_time_answers_as_time_with_the_wall_time_just_set) {
+    DeviceMgmtGroup group(nullptr, std::nullopt, {}, MakeTimeService());
+    group.Register();
+    SmpTestClient client;
+
+    const auto set = client.Write(
+        SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::SET_TIME),
+        CborMap().PutWide("wall_ms", WALL_2027_MS).Build()
+    );
+
+    zassert_true(set.IsOk());
+    zassert_true(set.Has("now_ms"));
+    zassert_true(set.Has("uptime_ms"));
+    zassert_equal(set.Value("boot_id"), eerie_leap::subsys::time::GetBootId());
+    const uint64_t answered = set.WideValue("wall_ms");
+    zassert_true(answered >= WALL_2027_MS && answered - WALL_2027_MS < 50, "The answer follows the set");
+
+    const auto read = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::TIME));
+
+    zassert_true(read.IsOk());
+    const uint64_t wall_ms = read.WideValue("wall_ms");
+    zassert_true(wall_ms >= answered && wall_ms - answered < 50, "Real time keeps running with the clock");
+    zassert_equal(wall_ms - read.WideValue("now_ms"), answered - set.WideValue("now_ms"), "A fixed offset");
+}
+
+ZTEST(smp_device_group, test_set_time_does_not_step_the_unit_clock) {
+    DeviceMgmtGroup group(nullptr, std::nullopt, {}, MakeTimeService());
+    group.Register();
+    SmpTestClient client;
+    const auto before = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::TIME));
+
+    zassert_true(client
+            .Write(
+                SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::SET_TIME),
+                CborMap().PutWide("wall_ms", WALL_2027_MS).Build()
+            )
+            .IsOk());
+    const auto after = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::TIME));
+
+    const uint64_t clock_gap = after.WideValue("now_ms") - before.WideValue("now_ms");
+    zassert_true(clock_gap < 1000, "now_ms moved only by the time that passed");
+    const int64_t boot_before = static_cast<int64_t>(before.WideValue("now_ms") - before.WideValue("uptime_ms"));
+    const int64_t boot_after = static_cast<int64_t>(after.WideValue("now_ms") - after.WideValue("uptime_ms"));
+    zassert_true(std::abs(boot_after - boot_before) <= 5, "now_ms minus uptime_ms stays the clock at power-on");
+}
+
+ZTEST(smp_device_group, test_a_second_set_time_replaces_the_first) {
+    DeviceMgmtGroup group(nullptr, std::nullopt, {}, MakeTimeService());
+    group.Register();
+    SmpTestClient client;
+
+    zassert_true(client
+            .Write(
+                SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::SET_TIME),
+                CborMap().PutWide("wall_ms", WALL_2027_MS).Build()
+            )
+            .IsOk());
+    const auto second = client.Write(
+        SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::SET_TIME),
+        CborMap().PutWide("wall_ms", WALL_2027_MS + 3600000ULL).Build()
+    );
+
+    zassert_true(second.IsOk());
+    const uint64_t wall_ms = second.WideValue("wall_ms");
+    zassert_true(wall_ms >= WALL_2027_MS + 3600000ULL && wall_ms - (WALL_2027_MS + 3600000ULL) < 50);
+}
+
+ZTEST(smp_device_group, test_set_time_refuses_a_missing_or_early_wall_time) {
+    const auto time_service = MakeTimeService();
+    DeviceMgmtGroup group(nullptr, std::nullopt, {}, time_service);
+    group.Register();
+    SmpTestClient client;
+    const auto command = std::to_underlying(DeviceMgmtGroup::Command::SET_TIME);
+
+    const auto missing = client.Write(SmpGroupId::DEVICE, command, CborMap().Build());
+    zassert_equal(missing.Value("rc"), MGMT_ERR_EINVAL);
+
+    const auto zero = client.Write(SmpGroupId::DEVICE, command, CborMap().PutWide("wall_ms", 0).Build());
+    zassert_equal(zero.Value("rc"), MGMT_ERR_EINVAL);
+
+    const auto early = client.Write(
+        SmpGroupId::DEVICE, command, CborMap().PutWide("wall_ms", WALL_2020_MS - 1).Build()
+    );
+    zassert_equal(early.Value("rc"), MGMT_ERR_EINVAL);
+    zassert_false(time_service->GetWallClockOffset().has_value(), "A refused set changes nothing");
+
+    const auto late = client.Write(SmpGroupId::DEVICE, command, CborMap().PutWide("wall_ms", 4102444800001ULL).Build());
+    zassert_equal(late.Value("rc"), MGMT_ERR_EINVAL, "Above 2100-01-01T00:00:00Z");
+
+    const auto last = client.Write(SmpGroupId::DEVICE, command, CborMap().PutWide("wall_ms", 4102444800000ULL).Build());
+    zassert_true(last.IsOk(), "2100-01-01T00:00:00Z itself is accepted");
+
+    const auto boundary = client.Write(SmpGroupId::DEVICE, command, CborMap().PutWide("wall_ms", WALL_2020_MS).Build());
+    zassert_true(boundary.IsOk(), "2020-01-01T00:00:00Z itself is accepted");
+}
+
+ZTEST(smp_device_group, test_time_commands_are_not_supported_without_a_time_service) {
+    DeviceMgmtGroup group(nullptr);
+    group.Register();
+    SmpTestClient client;
+
+    const auto time = client.Read(SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::TIME));
+    zassert_equal(time.Value("rc"), MGMT_ERR_ENOTSUP);
+
+    const auto set = client.Write(
+        SmpGroupId::DEVICE, std::to_underlying(DeviceMgmtGroup::Command::SET_TIME),
+        CborMap().PutWide("wall_ms", WALL_2027_MS).Build()
+    );
+    zassert_equal(set.Value("rc"), MGMT_ERR_ENOTSUP);
 }
 
 ZTEST(smp_device_group, test_only_one_instance_is_registered) {

@@ -76,6 +76,33 @@ with CDMP `{cdmp_id, uid, status}`, and on a unit with sensors
 `ManagementController` from `SensorsController::GetCapabilities()`. Served by the
 `ManagementController`; see [smp.md](smp.md).
 
+Command `TIME` (read) returns `{now_ms, uptime_ms, boot_id}` and `wall_ms` once the clock is set; `SET_TIME` (write,
+`{wall_ms}`) sets real time and answers as `TIME`. Both need the time service that the application passes to the
+`ManagementController` as its last argument; without one they answer `ENOTSUP`. See [Clock](#clock).
+
+## Clock
+
+A unit has two readings of time, and the time service (`ITimeService`, `EERIE_LEAP_TIME`) keeps them apart:
+
+- The unit's clock, `GetCurrentTime()`: a fixed date (1761106217000 ms, October 2025) plus the uptime. It
+  never steps. The readings, the schedulers and the log writer's ticks are all stamped with it, and they rely on
+  it only ever increasing.
+- Real time, as an offset: real time minus the unit's clock, kept once a client has set it. `GetWallClockOffset()`
+  returns it, and nothing until then. `SetWallClock(wall_now)` stores `wall_now - GetCurrentTime()`; a later call
+  replaces the earlier one. Real time is the unit's clock plus this offset.
+
+Setting the clock therefore moves no timestamp that was or will be taken: it only lets a reader turn the unit's clock
+into real time. The offset sits under a spinlock, so any thread may set or read it, the MCUmgr work queue included.
+
+Nothing keeps the offset across a power loss, and the boards have no battery-backed clock: each power-on starts
+unset, and the unit's clock starts at its fixed date. A client sets the clock after each power-on, with the `device`
+group's `SET_TIME`, and reads it back with `TIME`. `boot_id` in the answer tells a client that the unit has restarted
+since it last set the clock.
+
+To line a live value up with the unit's clock, `now_ms - uptime_ms` of one `TIME` answer is the unit's clock at
+power-on, the same for the whole power-on. With `wall_ms`, `wall_ms - uptime_ms` is real time at power-on, as long
+as the clock has not been set again.
+
 ## Wiring
 
 `SystemController` (`EERIE_LEAP_CONTROLLER_SYSTEM`, depends on `EERIE_LEAP_DOMAIN_SYSTEM` and

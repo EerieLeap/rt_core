@@ -9,6 +9,7 @@
 #include "subsys/cdmp/services/i_cdmp_network_info.h"
 #include "subsys/fs/services/i_fs_service.h"
 #include "subsys/threading/work_queue_thread.h"
+#include "subsys/time/i_time_service.h"
 
 #include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/configuration_domain/smp/config_mgmt_group.h"
@@ -30,6 +31,7 @@ namespace eerie_leap::controllers {
 using eerie_leap::subsys::cdmp::services::ICdmpNetworkInfo;
 using eerie_leap::subsys::fs::services::IFsService;
 using eerie_leap::subsys::threading::WorkQueueThread;
+using eerie_leap::subsys::time::ITimeService;
 
 using eerie_leap::domain::configuration_domain::services::ConfigurationService;
 using eerie_leap::domain::configuration_domain::smp::ConfigMgmtGroup;
@@ -50,6 +52,7 @@ private:
     std::optional<SensorCapabilities> sensor_capabilities_;
     std::shared_ptr<const IFsService> sd_fs_service_;
     std::span<const std::string_view> setting_ids_;
+    std::shared_ptr<ITimeService> time_service_;
 #ifdef CONFIG_EERIE_LEAP_SMP_ASSETS
     std::shared_ptr<AssetsManager> assets_manager_;
 #endif
@@ -71,6 +74,8 @@ public:
      * @param assets_manager The asset kinds the `assets` group serves; nullptr on a unit without
      *        any, which then lists no kinds. Ignored without CONFIG_EERIE_LEAP_SMP_ASSETS.
      * @param setting_ids The ids of the settings the device INFO lists; must outlive the controller.
+     * @param time_service The clock the device group's TIME and SET_TIME read and set; nullptr on a unit
+     *        without one, which then answers both with ENOTSUP.
      */
     ManagementController(
         std::shared_ptr<ConfigurationService> configuration_service,
@@ -79,7 +84,8 @@ public:
         std::optional<SensorCapabilities> sensor_capabilities = std::nullopt,
         std::shared_ptr<const IFsService> sd_fs_service = nullptr,
         const std::shared_ptr<AssetsManager>& assets_manager = nullptr,
-        std::span<const std::string_view> setting_ids = {}
+        std::span<const std::string_view> setting_ids = {},
+        std::shared_ptr<ITimeService> time_service = nullptr
     );
 
     int Initialize();

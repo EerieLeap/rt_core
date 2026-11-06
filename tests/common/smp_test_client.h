@@ -48,6 +48,11 @@ public:
         return *this;
     }
 
+    CborMap& PutWide(std::string_view key, uint64_t value) {
+        zassert_true(zcbor_tstr_encode_ptr(states_, key.data(), key.size()) && zcbor_uint64_put(states_, value));
+        return *this;
+    }
+
     CborMap& Put(std::string_view key, std::span<const uint8_t> value) {
         zassert_true(
             zcbor_tstr_encode_ptr(states_, key.data(), key.size())

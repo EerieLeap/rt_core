@@ -24,7 +24,7 @@ packet (it parses the 8-byte header only). See [dfu.md](dfu.md).
 | `os` | 0 | MCUmgr (`EERIE_LEAP_SMP`) | `ECHO` 0, `MCUMGR_PARAMS` 6, `RESET` 5, `BOOTLOADER_INFO` 8 (with `EERIE_LEAP_DFU` under MCUboot) |
 | `img_mgmt` | 1 | MCUmgr (`EERIE_LEAP_DFU`) | `STATE` 0 (read: list; write: test, confirm), `UPLOAD` 1, `ERASE` 5 |
 | `config` | 64 | `ManagementController` | `LIST` 0, `STORED_CRC` 1, `READ` 2, `WRITE` 3 |
-| `device` | 65 | `ManagementController` | `INFO` 0 |
+| `device` | 65 | `ManagementController` | `INFO` 0, `TIME` 1, `SET_TIME` 2 |
 | `network` | 66 | `CanbusController` | `DEVICES` 0 |
 | `live` | 67 | `BleService` | `SUBSCRIBE` 0, `UNSUBSCRIBE` 1 |
 | `calibration` | 68 | `AdcController` | `START` 0, `STOP` 1, `READ` 2 |
@@ -76,6 +76,18 @@ can read, each numbered from 0, and the most sensors a configuration holds, whic
 configuration is validated against. Always present: `event_channels: [uint]`, the `EventChannelId` of
 each channel the unit registered (empty without the event bus), and `settings: [tstr]`, the ids of the
 settings it carries (the application passes them to `ManagementController`; none by default). See [system.md](system.md) and [sensors.md](sensors.md).
+
+`TIME` (read) returns `{now_ms, uptime_ms, boot_id}` and, once the clock has been set, `wall_ms`. The values are
+read together. `now_ms` is the unit's clock as Unix milliseconds, `uptime_ms` is `k_uptime_get()` (its low 32 bits
+are the `t_ms` of the live notifications), `boot_id` is a random number drawn at power-on that tells two
+power-ons apart, and `wall_ms` is real time as Unix milliseconds. `now_ms`, `uptime_ms` and `wall_ms` are 64-bit
+unsigned values.
+
+`SET_TIME` (write) takes `{wall_ms: uint}`, real time as Unix milliseconds, as the time the request arrives; a
+client adds half the round trip it measured. The response is the one of `TIME`, read after the set. `wall_ms`
+missing, before 2020-01-01T00:00:00Z (1577836800000) or after 2100-01-01T00:00:00Z (4102444800000), is refused with `EINVAL` and changes nothing. Setting the
+clock does not move `now_ms`: the unit keeps real time as an offset on top of it. See [system.md](system.md).
+Both commands answer `ENOTSUP` on a unit whose application passes no time service to `ManagementController`.
 
 ### `network`: other units
 

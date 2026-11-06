@@ -15,6 +15,9 @@
 #include "domain/configuration_domain/services/configuration_service.h"
 #include "domain/system_domain/models/system_configuration.h"
 #include "subsys/threading/work_queue_thread.h"
+#include "subsys/time/boot_elapsed_time_provider.h"
+#include "subsys/time/rtc_provider.h"
+#include "subsys/time/time_service.h"
 
 #include "controllers/management_controller.h"
 
@@ -70,6 +73,51 @@ ZTEST(management_controller, test_serves_the_config_and_device_groups) {
     zassert_true(types.IsOk());
     zassert_equal(types.entries.size(), 1);
     zassert_equal(types.entries[0].at("type"), std::to_underlying(ConfigurationService::Type::Ui));
+}
+
+ZTEST(management_controller, test_the_device_group_serves_the_time_service) {
+    const auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_time_wq", 4096, 5);
+    zassert_true(work_queue->Initialize());
+
+    const auto configuration_service = std::make_shared<ConfigurationService>();
+    configuration_service->RegisterCborConfigurationManager(
+        ConfigurationService::Type::Ui, std::make_shared<FakeConfigurationManager>()
+    );
+    const auto time_service = std::make_shared<eerie_leap::subsys::time::TimeService>(
+        std::make_shared<eerie_leap::subsys::time::RtcProvider>(),
+        std::make_shared<eerie_leap::subsys::time::BootElapsedTimeProvider>()
+    );
+
+    ManagementController controller(
+        configuration_service, work_queue, nullptr, std::nullopt, nullptr, nullptr, {}, time_service
+    );
+    zassert_equal(controller.Initialize(), 0);
+
+    SmpTestClient client;
+    const auto before = client.Read(SmpGroupId::DEVICE, 1);
+    zassert_true(before.IsOk());
+    zassert_false(before.Has("wall_ms"));
+
+    const auto set = client.Write(SmpGroupId::DEVICE, 2, CborMap().PutWide("wall_ms", 1800000000000ULL).Build());
+    zassert_true(set.IsOk());
+    zassert_true(set.Has("wall_ms"));
+    zassert_true(time_service->GetWallClockOffset().has_value(), "The controller handed the group its time service");
+}
+
+ZTEST(management_controller, test_the_time_commands_are_not_supported_without_a_time_service) {
+    const auto work_queue = std::make_shared<WorkQueueThread>("mgmt_test_notime_wq", 4096, 5);
+    zassert_true(work_queue->Initialize());
+
+    const auto configuration_service = std::make_shared<ConfigurationService>();
+    configuration_service->RegisterCborConfigurationManager(
+        ConfigurationService::Type::Ui, std::make_shared<FakeConfigurationManager>()
+    );
+
+    ManagementController controller(configuration_service, work_queue, nullptr);
+    zassert_equal(controller.Initialize(), 0);
+
+    SmpTestClient client;
+    zassert_equal(client.Read(SmpGroupId::DEVICE, 1).Value("rc"), MGMT_ERR_ENOTSUP);
 }
 
 ZTEST(management_controller, test_serves_the_files_group) {
