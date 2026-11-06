@@ -27,6 +27,7 @@
 #include "domain/sensor_domain/models/sources/canbus_source.h"
 #include "subsys/canbus/can_frame.h"
 #include "utilities/memory/memory_resource_manager.h"
+#include "utilities/voltage_interpolator/interpolation_method.h"
 
 #include "allocation_counter.h"
 #include "memory_stream_buf.h"
@@ -34,6 +35,7 @@
 using namespace eerie_memory;
 using namespace eerie_leap::utilities::memory;
 using namespace eerie_leap::subsys::canbus;
+using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::domain::sensor_domain::models::sources;
 using namespace eerie_leap::domain::logging_domain::models;
@@ -198,6 +200,111 @@ bool AnyContains(const std::vector<std::string>& texts, std::string_view fragmen
     return std::ranges::any_of(texts, [fragment](const std::string& text) {
         return text.contains(fragment);
     });
+}
+
+constexpr size_t LINK_SIZE = 8;
+constexpr size_t BLOCK_LINKS_OFFSET = 24;
+constexpr size_t CN_LINK_NAME = 2;
+constexpr size_t CN_LINK_SOURCE = 3;
+constexpr size_t CN_DATA_OFFSET = BLOCK_LINKS_OFFSET + 8 * LINK_SIZE;
+constexpr size_t CN_FLAGS_OFFSET = CN_DATA_OFFSET + 12;
+constexpr size_t CN_LIMIT_MIN_OFFSET = CN_DATA_OFFSET + 40;
+constexpr size_t CN_LIMIT_MAX_OFFSET = CN_DATA_OFFSET + 48;
+constexpr uint32_t CN_FLAG_LIMIT_VALID = 0x10;
+constexpr uint32_t CN_FLAG_INVALID_VALID = 0x02;
+
+std::string TextAt(std::string_view file, uint64_t address) {
+    const auto length = static_cast<size_t>(ReadAt<uint64_t>(file, address + BLOCK_LENGTH_OFFSET));
+    const auto text = file.substr(address + BLOCK_HEADER_SIZE, length - BLOCK_HEADER_SIZE);
+
+    return std::string(text.substr(0, text.find('\0')));
+}
+
+// The CN block named @p channel_name: its file offset, or 0 when there is none.
+size_t FindChannel(std::string_view file, std::string_view channel_name) {
+    size_t offset = ID_BLOCK_SIZE;
+
+    while(offset + BLOCK_HEADER_SIZE <= file.size()) {
+        const auto length = static_cast<size_t>(ReadAt<uint64_t>(file, offset + BLOCK_LENGTH_OFFSET));
+        zassert_true(length >= BLOCK_HEADER_SIZE, "block at %zu has an invalid length", offset);
+
+        const auto id = file.substr(offset, 4);
+        if(id == "##DT")
+            break;
+
+        if(id == "##CN") {
+            const auto name = ReadAt<uint64_t>(file, offset + BLOCK_LINKS_OFFSET + CN_LINK_NAME * LINK_SIZE);
+            if(name != 0 && TextAt(file, name) == channel_name)
+                return offset;
+        }
+
+        offset += length;
+    }
+
+    return 0;
+}
+
+struct ChannelSource {
+    bool found = false;
+    uint64_t address = 0;
+    std::string name;
+    uint8_t source_type = 0;
+    uint8_t bus_type = 0;
+};
+
+// What the channel's cn_si_source link leads to; found is false without a link.
+ChannelSource FindChannelSource(std::string_view file, std::string_view channel_name) {
+    const size_t channel = FindChannel(file, channel_name);
+    zassert_true(channel != 0, "channel %s must exist", std::string(channel_name).c_str());
+
+    ChannelSource source;
+    source.address = ReadAt<uint64_t>(file, channel + BLOCK_LINKS_OFFSET + CN_LINK_SOURCE * LINK_SIZE);
+    if(source.address == 0)
+        return source;
+
+    zassert_equal(file.substr(source.address, 4), "##SI", "cn_si_source must lead to an SI block");
+    source.found = true;
+    source.name = TextAt(file, ReadAt<uint64_t>(file, source.address + BLOCK_LINKS_OFFSET));
+    source.source_type = ReadAt<uint8_t>(file, source.address + BLOCK_LINKS_OFFSET + 3 * LINK_SIZE);
+    source.bus_type = ReadAt<uint8_t>(file, source.address + BLOCK_LINKS_OFFSET + 3 * LINK_SIZE + 1);
+
+    return source;
+}
+
+struct ChannelLimits {
+    bool valid = false;
+    double min = 0;
+    double max = 0;
+};
+
+ChannelLimits FindChannelLimits(std::string_view file, std::string_view channel_name) {
+    const size_t channel = FindChannel(file, channel_name);
+    zassert_true(channel != 0, "channel %s must exist", std::string(channel_name).c_str());
+
+    zassert_true(
+        (ReadAt<uint32_t>(file, channel + CN_FLAGS_OFFSET) & CN_FLAG_INVALID_VALID) != 0,
+        "the limit flag must not replace the invalidation flag"
+    );
+
+    return { (ReadAt<uint32_t>(file, channel + CN_FLAGS_OFFSET) & CN_FLAG_LIMIT_VALID) != 0,
+        ReadAt<double>(file, channel + CN_LIMIT_MIN_OFFSET), ReadAt<double>(file, channel + CN_LIMIT_MAX_OFFSET) };
+}
+
+std::shared_ptr<Sensor> MakeTypedSensor(std::string_view id, SensorType type) {
+    auto sensor = MakeValueSensor(id);
+    sensor->configuration.type = type;
+
+    return sensor;
+}
+
+std::string StartAndGetFile(Mdf4LoggerSensorReading& logger) {
+    auto stream = MakeStream();
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
+
+    return stream.Str();
 }
 
 // native_sim links the host libc, so the file can be handed to asammdf on the host.
@@ -916,6 +1023,185 @@ ZTEST(mdf4_logger, test_ChannelAndGroupNames) {
     zassert_true(AnyContains(comments, "<CGcomment><TX>Raw frames</TX>"), "the CAN group comment is the sensor name");
 }
 
+ZTEST(mdf4_logger, test_ValueChannelsHaveASourceByKind) {
+    const auto adc = MakeTypedSensor("adc_sensor", SensorType::PHYSICAL_ANALOG);
+    adc->configuration.expression = "x * 2"; // So that it has a raw channel.
+    adc->configuration.channel = 3;
+
+    const auto gpio = MakeTypedSensor("gpio_sensor", SensorType::PHYSICAL_INDICATOR);
+    gpio->configuration.channel = 2;
+
+    const auto can = MakeTypedSensor("can_sensor", SensorType::CANBUS_ANALOG);
+    can->configuration.canbus_source = make_unique_pmr<CanbusSource>(Mrm::GetDefaultPmr(), 1, 0x18fef100, "rpm");
+    can->configuration.UpdateConnectionString();
+
+    const auto expression = MakeTypedSensor("expression_sensor", SensorType::VIRTUAL_ANALOG);
+    expression->configuration.expression = "1";
+
+    const auto script = MakeTypedSensor("script_sensor", SensorType::USER_ANALOG);
+    const auto control = MakeTypedSensor("control_sensor", SensorType::CONTROL_INDICATOR);
+    const auto raw = MakeCanRawSensor("can_raw", 0);
+
+    const std::vector<std::shared_ptr<Sensor>> sensors{ adc, gpio, can, expression, script, control, raw };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
+    const auto file = StartAndGetFile(logger);
+
+    const auto adc_source = FindChannelSource(file, "adc_sensor");
+    zassert_true(adc_source.found, "an ADC value channel has a source");
+    zassert_equal(
+        adc_source.name, "ADC 3", "the ADC source is named after the channel (got %s)", adc_source.name.c_str()
+    );
+    zassert_equal(adc_source.source_type, 3, "an ADC is an I/O device");
+    zassert_equal(adc_source.bus_type, 0, "an I/O device has no bus type");
+
+    const auto gpio_source = FindChannelSource(file, "gpio_sensor");
+    zassert_equal(
+        gpio_source.name, "DI 2", "the GPIO source is named after the channel (got %s)", gpio_source.name.c_str()
+    );
+    zassert_equal(gpio_source.source_type, 3, "a GPIO is an I/O device");
+
+    const auto can_source = FindChannelSource(file, "can_sensor");
+    zassert_equal(
+        can_source.name, "CAN 2 \xC2\xB7 0x18FEF100 \xC2\xB7 rpm",
+        "the CAN source names the bus (interface + 1), the frame in upper-case hex and the signal (got %s)",
+        can_source.name.c_str()
+    );
+    zassert_equal(can_source.source_type, 2, "a CAN signal comes from a bus");
+    zassert_equal(can_source.bus_type, 2, "the bus is a CAN bus");
+
+    const auto expression_source = FindChannelSource(file, "expression_sensor");
+    zassert_equal(expression_source.name, "virtual", "an expression sensor is virtual");
+    zassert_equal(expression_source.source_type, 4, "a virtual sensor comes from a tool");
+
+    const auto script_source = FindChannelSource(file, "script_sensor");
+    zassert_equal(script_source.name, "script", "a script sensor is named script");
+    zassert_equal(script_source.source_type, 4, "a script comes from a tool");
+
+    const auto control_source = FindChannelSource(file, "control_sensor");
+    zassert_equal(control_source.name, "control", "a control sensor is named control");
+    zassert_equal(control_source.source_type, 5, "a control is a user");
+
+    zassert_false(FindChannelSource(file, "adc_sensor.raw").found, "a raw channel has no source of its own");
+}
+
+ZTEST(mdf4_logger, test_SensorsOfOneSourceShareTheSourceBlock) {
+    const auto first = MakeTypedSensor("virtual_1", SensorType::VIRTUAL_ANALOG);
+    first->configuration.expression = "1";
+    const auto second = MakeTypedSensor("virtual_2", SensorType::VIRTUAL_INDICATOR);
+    second->configuration.expression = "2";
+    const auto adc = MakeTypedSensor("adc_sensor", SensorType::PHYSICAL_ANALOG);
+
+    const std::vector<std::shared_ptr<Sensor>> sensors{ first, second, adc };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+    const auto file = StartAndGetFile(logger);
+
+    const auto first_source = FindChannelSource(file, "virtual_1");
+    const auto second_source = FindChannelSource(file, "virtual_2");
+    zassert_true(first_source.found && second_source.found, "both virtual channels have a source");
+    zassert_equal(first_source.address, second_source.address, "two virtual sensors share one SI block");
+    zassert_not_equal(
+        first_source.address, FindChannelSource(file, "adc_sensor").address, "another source is another block"
+    );
+    zassert_equal(std::ranges::count(CollectBlockTexts(file, "##TX"), "virtual"), 1, "the name is written once");
+}
+
+ZTEST(mdf4_logger, test_LimitsOnlyWhereTheConfigurationBoundsTheValue) {
+    const auto indicator = MakeTypedSensor("indicator", SensorType::PHYSICAL_INDICATOR);
+
+    const auto linear = MakeTypedSensor("linear", SensorType::PHYSICAL_ANALOG);
+    linear->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    linear->configuration.calibration_table.push_back({ 0.5F, 10.0F });
+    linear->configuration.calibration_table.push_back({ 1.5F, -2.5F });
+    linear->configuration.calibration_table.push_back({ 2.5F, 40.0F });
+
+    const auto with_expression = MakeTypedSensor("with_expression", SensorType::PHYSICAL_ANALOG);
+    with_expression->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    with_expression->configuration.calibration_table.push_back({ 0.5F, 10.0F });
+    with_expression->configuration.calibration_table.push_back({ 2.5F, 40.0F });
+    with_expression->configuration.expression = "x * 2";
+
+    const auto with_script = MakeTypedSensor("with_script", SensorType::PHYSICAL_ANALOG);
+    with_script->configuration.interpolation_method = InterpolationMethod::LINEAR;
+    with_script->configuration.calibration_table.push_back({ 0.5F, 10.0F });
+    with_script->configuration.calibration_table.push_back({ 2.5F, 40.0F });
+    with_script->configuration.script_path = "script.lua";
+
+    const auto cubic = MakeTypedSensor("cubic", SensorType::PHYSICAL_ANALOG);
+    cubic->configuration.interpolation_method = InterpolationMethod::CUBIC_SPLINE;
+    cubic->configuration.calibration_table.push_back({ 0.5F, 10.0F });
+    cubic->configuration.calibration_table.push_back({ 2.5F, 40.0F });
+
+    const auto unbounded = MakeTypedSensor("unbounded", SensorType::VIRTUAL_ANALOG);
+    unbounded->configuration.expression = "1";
+
+    const auto scripted_indicator = MakeTypedSensor("scripted_indicator", SensorType::PHYSICAL_INDICATOR);
+    scripted_indicator->configuration.script_path = "script.lua";
+
+    const auto user_indicator = MakeTypedSensor("user_indicator", SensorType::USER_INDICATOR);
+
+    const std::vector<std::shared_ptr<Sensor>> sensors{ indicator, linear, with_expression, with_script, cubic,
+        unbounded, scripted_indicator, user_indicator };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+    const auto file = StartAndGetFile(logger);
+
+    const auto indicator_limits = FindChannelLimits(file, "indicator");
+    zassert_true(indicator_limits.valid, "an indicator value is bounded");
+    zassert_equal(indicator_limits.min, 0.0, "an indicator is at least 0");
+    zassert_equal(indicator_limits.max, 1.0, "an indicator is at most 1");
+
+    const auto linear_limits = FindChannelLimits(file, "linear");
+    zassert_true(linear_limits.valid, "a linear table bounds the value");
+    zassert_equal(linear_limits.min, -2.5, "the lowest value of the table");
+    zassert_equal(linear_limits.max, 40.0, "the highest value of the table");
+
+    zassert_false(FindChannelLimits(file, "with_expression").valid, "an expression can map anywhere");
+    zassert_false(FindChannelLimits(file, "with_script").valid, "a script can map anywhere");
+    zassert_false(FindChannelLimits(file, "cubic").valid, "a cubic spline can overshoot");
+    zassert_false(FindChannelLimits(file, "unbounded").valid, "a virtual sensor is unbounded");
+    zassert_false(FindChannelLimits(file, "scripted_indicator").valid, "a script can write any value to an indicator");
+    zassert_false(FindChannelLimits(file, "user_indicator").valid, "a script sensor carries what the script wrote");
+}
+
+ZTEST(mdf4_logger, test_RawChannelHasNoLimits) {
+    const auto sensor = MakeTypedSensor("indicator", SensorType::PHYSICAL_INDICATOR);
+    sensor->configuration.expression = "x";
+
+    const std::vector<std::shared_ptr<Sensor>> sensors{ sensor };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
+    const auto file = StartAndGetFile(logger);
+
+    zassert_true(FindChannelLimits(file, "indicator").valid, "the value channel is bounded");
+    zassert_false(FindChannelLimits(file, "indicator.raw").valid, "the raw channel is not");
+}
+
+ZTEST(mdf4_logger, test_ChannelCommentCarriesSamplingRateAndLogOnlyNewData) {
+    const auto sampled = MakeTypedSensor("sampled", SensorType::PHYSICAL_ANALOG);
+    sampled->configuration.sampling_rate_ms = 250;
+    const auto event_driven = MakeTypedSensor("event_driven", SensorType::PHYSICAL_INDICATOR);
+
+    const std::vector<std::shared_ptr<Sensor>> sensors{ sampled, event_driven };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, true), sensors, MakeMetadata());
+    const auto file = StartAndGetFile(logger);
+
+    const auto comments = CollectBlockTexts(file, "##MD");
+    zassert_true(
+        AnyContains(
+            comments,
+            "<e name=\"sensor_description\">Description of sampled</e><e name=\"sampling_rate_ms\">250</e>"
+            "<e name=\"log_only_new_data\">true</e></common_properties></CNcomment>"
+        ),
+        "the facts follow the sensor properties"
+    );
+    zassert_true(
+        AnyContains(
+            comments,
+            "<e name=\"sensor_description\">Description of event_driven</e>"
+            "<e name=\"log_only_new_data\">true</e></common_properties></CNcomment>"
+        ),
+        "a sensor without a sampling rate has no sampling_rate_ms"
+    );
+}
+
 // Every value channel says what kind of sensor it is, and the name and description apart; a CAN group
 // does too. The text stays "name: description".
 ZTEST(mdf4_logger, test_ChannelCommentsCarryTheSensorProperties) {
@@ -935,7 +1221,8 @@ ZTEST(mdf4_logger, test_ChannelCommentsCarryTheSensorProperties) {
             comments,
             "<CNcomment><TX>Name of oil_pressure: Description of oil_pressure</TX><common_properties>"
             "<e name=\"sensor_type\">PHYSICAL_ANALOG</e><e name=\"sensor_name\">Name of oil_pressure</e>"
-            "<e name=\"sensor_description\">Description of oil_pressure</e></common_properties></CNcomment>"
+            "<e name=\"sensor_description\">Description of oil_pressure</e><e name=\"log_only_new_data\">false</e>"
+            "</common_properties></CNcomment>"
         ),
         "the value channel names its type, name and description"
     );
@@ -970,7 +1257,7 @@ ZTEST(mdf4_logger, test_AChannelWithoutNameOrDescriptionKeepsOnlyItsType) {
         AnyContains(
             comments,
             "<CNcomment><TX></TX><common_properties><e name=\"sensor_type\">VIRTUAL_INDICATOR</e>"
-            "</common_properties></CNcomment>"
+            "<e name=\"log_only_new_data\">false</e></common_properties></CNcomment>"
         ),
         "a sensor without a name or description still has its type"
     );

@@ -111,6 +111,16 @@ void ChannelBlock::SetComment(std::shared_ptr<MetadataBlock> comment) {
     links_.SetLink(LinkType::MetadataComment, std::move(comment));
 }
 
+void ChannelBlock::SetSourceInformation(std::shared_ptr<SourceInformationBlock> source_information) {
+    links_.SetLink(LinkType::SourceInformation, std::move(source_information));
+}
+
+void ChannelBlock::SetLimits(double min, double max) {
+    limit_min_ = min;
+    limit_max_ = max;
+    flags_ |= std::to_underlying(Flag::LimitValid);
+}
+
 uint64_t ChannelBlock::GetBlockSize() const {
     return GetBaseSize() + 1 + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1 + 1 + 2 + 8 + 8 + 8 + 8 + 8 + 8;
 }

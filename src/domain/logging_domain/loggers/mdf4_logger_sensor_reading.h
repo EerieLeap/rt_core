@@ -85,6 +85,7 @@ private:
     std::shared_ptr<LogSession> session_;
     std::unordered_map<uint32_t, LogTarget> targets_;
     std::vector<TargetChannelGroup> target_channel_groups_;
+    std::unordered_map<std::string, std::shared_ptr<mdf4::SourceInformationBlock>> channel_sources_;
     std::streambuf* stream_{ nullptr };
     std::chrono::system_clock::time_point start_time_;
 
@@ -96,6 +97,8 @@ private:
         const SensorLoggingConfiguration& sensor_configuration,
         const std::shared_ptr<mdf4::SourceInformationBlock>& source_information
     );
+    // The SI block of a value channel by the sensor's source, shared by name; null for a source without one.
+    std::shared_ptr<mdf4::SourceInformationBlock> GetOrCreateChannelSource(const Sensor& sensor);
     void AddCanFrameTarget(const Sensor& sensor);
     void SetFileMetadata(const LoggingConfiguration& configuration, const LoggerMetadata& metadata);
 

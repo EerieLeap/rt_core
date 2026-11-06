@@ -2,6 +2,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <span>
 #include <string>
 #include <vector>
@@ -15,10 +16,12 @@
 namespace eerie_leap::domain::logging_domain::loggers {
 
 using namespace eerie_leap::domain::sensor_domain::models;
-using namespace eerie_leap::subsys::mdf;
 using eerie_leap::domain::logging_domain::models::GetStartCauseName;
 using eerie_leap::domain::logging_domain::models::LoggingStartCause;
+using namespace eerie_leap::subsys::mdf;
 using namespace eerie_leap::subsys::mdf::mdf4;
+using eerie_leap::utilities::voltage_interpolator::CalibrationData;
+using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
 
 namespace {
 
@@ -363,7 +366,37 @@ void Mdf4LoggerSensorReading::AddValueTarget(
         channel_group, MdfDataType::Float32, sensor_id, std::string(sensor.metadata.unit), true
     );
 
-    mdf4_file_->SetChannelComment(value_channel, GetSensorComment(sensor), GetSensorProperties(sensor));
+    auto properties = GetSensorProperties(sensor);
+    if(sensor.configuration.sampling_rate_ms.has_value())
+        properties.push_back({ "sampling_rate_ms", std::to_string(sensor.configuration.sampling_rate_ms.value()) });
+    properties.push_back({ "log_only_new_data", sensor_configuration.log_only_new_data ? "true" : "false" });
+
+    mdf4_file_->SetChannelComment(value_channel, GetSensorComment(sensor), properties);
+
+    if(const auto channel_source = GetOrCreateChannelSource(sensor); channel_source != nullptr)
+        value_channel->SetSourceInformation(channel_source);
+
+    // Limits only where the configuration bounds the value: an indicator is 0 or 1, and a linear table
+    // is clamped to its ends by the reader. A cubic spline can overshoot, an expression or a script
+    // can map to anything.
+    const auto traits = sensor.configuration.GetTraits();
+    if(traits.value_kind == SensorValueKind::INDICATOR
+        && !sensor.configuration.HasScript()
+        && traits.source != SensorSourceKind::SCRIPT) {
+        value_channel->SetLimits(0.0, 1.0);
+    } else if(sensor.configuration.type == SensorType::PHYSICAL_ANALOG
+        && sensor.configuration.interpolation_method == InterpolationMethod::LINEAR
+        && !sensor.configuration.HasExpression()
+        && !sensor.configuration.HasScript()
+        && !sensor.configuration.calibration_table.empty()) {
+
+        const auto [lowest, highest] = std::ranges::minmax_element(
+            sensor.configuration.calibration_table, [](const CalibrationData& a, const CalibrationData& b) {
+                return a.value < b.value;
+            }
+        );
+        value_channel->SetLimits(static_cast<double>(lowest->value), static_cast<double>(highest->value));
+    }
 
     const bool has_raw_value_channel = sensor.configuration.HasExpression()
         && sensor_configuration.log_raw_value
@@ -391,6 +424,64 @@ void Mdf4LoggerSensorReading::AddValueTarget(
 
     targets_.emplace(sensor.id_hash, target);
     target_channel_groups_.push_back(TargetChannelGroup{ sensor.id_hash, channel_group });
+}
+
+std::shared_ptr<mdf4::SourceInformationBlock> Mdf4LoggerSensorReading::GetOrCreateChannelSource(const Sensor& sensor) {
+    using SourceType = mdf4::SourceInformationBlock::SourceType;
+    using BusType = mdf4::SourceInformationBlock::BusType;
+
+    const auto& configuration = sensor.configuration;
+    std::string name;
+    auto source_type = SourceType::Other;
+    auto bus_type = BusType::None;
+
+    switch(configuration.GetTraits().source) {
+        case SensorSourceKind::ADC:
+            name = "ADC " + std::to_string(configuration.channel.value_or(0));
+            source_type = SourceType::IoDevice;
+            break;
+        case SensorSourceKind::GPIO:
+            name = "DI " + std::to_string(configuration.channel.value_or(0));
+            source_type = SourceType::IoDevice;
+            break;
+        case SensorSourceKind::CAN_SIGNAL: {
+            const auto& canbus_source = configuration.canbus_source;
+            if(canbus_source == nullptr)
+                return nullptr;
+
+            // The bus is numbered as the raw groups' BusChannel; \xC2\xB7 is the UTF-8 middle dot.
+            const int bus = canbus_source->bus_channel < UINT8_MAX ? canbus_source->bus_channel + 1 : 0;
+            std::array<char, 16> frame_id{};
+            std::snprintf(frame_id.data(), frame_id.size(), "%X", canbus_source->frame_id);
+            name = "CAN " + std::to_string(bus) + " \xC2\xB7 0x" + frame_id.data() + " \xC2\xB7 "
+                + std::string(canbus_source->signal_name);
+            source_type = SourceType::Bus;
+            bus_type = BusType::Can;
+            break;
+        }
+        case SensorSourceKind::EXPRESSION:
+            name = "virtual";
+            source_type = SourceType::Tool;
+            break;
+        case SensorSourceKind::SCRIPT:
+            name = "script";
+            source_type = SourceType::Tool;
+            break;
+        case SensorSourceKind::CONTROL:
+            name = "control";
+            source_type = SourceType::User;
+            break;
+        default:
+            return nullptr;
+    }
+
+    auto& source_information = channel_sources_[name];
+    if(source_information == nullptr) {
+        source_information = std::make_shared<mdf4::SourceInformationBlock>(source_type, bus_type);
+        source_information->SetName(mdf4_file_->GetOrCreateTextBlock(name));
+    }
+
+    return source_information;
 }
 
 void Mdf4LoggerSensorReading::AddCanFrameTarget(const Sensor& sensor) {

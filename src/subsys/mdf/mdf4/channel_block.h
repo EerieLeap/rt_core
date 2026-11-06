@@ -8,6 +8,7 @@
 #include "block_base.h"
 #include "channel_conversion_block.h"
 #include "metadata_block.h"
+#include "source_information_block.h"
 #include "subsys/mdf/utilities/block_links.h"
 #include "text_block.h"
 
@@ -156,6 +157,10 @@ public:
     void SetBitCount(uint32_t bit_count);
     void SetSignalDataBlock(std::shared_ptr<IBlock> block);
     void SetComment(std::shared_ptr<MetadataBlock> comment);
+    /** The source of this channel (cn_si_source); blocks may be shared between channels. */
+    void SetSourceInformation(std::shared_ptr<SourceInformationBlock> source_information);
+    /** Lower and upper limit (cn_limit_min/max); sets LimitValid and keeps the other flags. */
+    void SetLimits(double min, double max);
 };
 
 } // namespace eerie_leap::subsys::mdf::mdf4

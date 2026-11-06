@@ -566,6 +566,35 @@ ZTEST(mdf_blocks, test_ChannelBlockLayout) {
         zassert_equal(data[i], 0, "unset REAL byte %zu", i);
 }
 
+ZTEST(mdf_blocks, test_ChannelBlockLimitsAndSourceInformation) {
+    ChannelBlock channel(
+        ChannelBlock::Type::FixedLength, ChannelBlock::SyncType::NoSync, ChannelBlock::DataType::FloatLe, 32
+    );
+    channel.SetFlags(std::to_underlying(ChannelBlock::Flag::BusEvent));
+    channel.SetInvalidationBit(2);
+
+    const auto source = std::make_shared<SourceInformationBlock>(
+        SourceInformationBlock::SourceType::Tool, SourceInformationBlock::BusType::None
+    );
+    channel.SetSourceInformation(source);
+    channel.SetLimits(-2.5, 40.0);
+
+    const auto base = BaseSizeForLinks(8);
+    const auto data = ResolveAndSerialize(channel);
+
+    constexpr uint32_t expected_flags = std::to_underlying(ChannelBlock::Flag::BusEvent)
+        | std::to_underlying(ChannelBlock::Flag::InvalidValid) | std::to_underlying(ChannelBlock::Flag::LimitValid);
+    zassert_equal(Read<uint32_t>(data, base + 12), expected_flags, "LimitValid joins the flags set before");
+    zassert_equal(Read<double>(data, base + 40), -2.5, "cn_limit_min");
+    zassert_equal(Read<double>(data, base + 48), 40.0, "cn_limit_max");
+    zassert_equal(Read<double>(data, base + 24), 0.0, "cn_val_range_min stays unset");
+    zassert_equal(Read<double>(data, base + 56), 0.0, "cn_limit_ext_min stays unset");
+
+    // cn_si_source is the fourth link.
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINKS_OFFSET + 3 * LINK_SIZE), source->GetAddress());
+    zassert_not_equal(source->GetAddress(), 0U, "the source block is resolved with the channel");
+}
+
 ZTEST(mdf_blocks, test_ChannelBlockRoundsBitCountUpToWholeBytes) {
     const struct {
         uint32_t bit_count;

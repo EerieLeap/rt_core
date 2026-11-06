@@ -836,11 +836,26 @@ sensor count.
   backed by a VLSD group for the payloads; asammdf's bus extraction reads it. Each frame's
   payload record is written before its frame record, so a file cut between the two ends in a
   payload no frame points at, which readers skip, rather than in a frame pointing past the end.
+- **Sources and limits.** Each value channel links a source information block (`cn_si_source`),
+  shared by the channels with the same name (the raw channel has none, and the CAN raw groups keep their own; the
+  value groups keep their shared acquisition source, `Eerie Leap Sensor`). By source kind: ADC `ADC <channel>`
+  (I/O device); GPIO `DI <channel>` (I/O device); CAN signal `CAN <bus> · 0x<frame id> · <signal>`
+  (bus, CAN; the bus is numbered as the raw groups' `BusChannel`, interface + 1, the frame ID in
+  upper-case hex); expression `virtual` (tool); script `script` (tool); control `control` (user). The
+  names are for people reading the file. The value channel alone has limits (`cn_limit_min/max`,
+  `LimitValid`), when the configuration bounds the value: 0 and 1 for an indicator without a script, and the lowest
+  and highest value of the calibration table for a `PHYSICAL_ANALOG` sensor with linear
+  interpolation and neither an expression nor a script (the reader clamps to the table's ends). A
+  cubic spline can overshoot between points, so it has none. Limits describe the sensor's own
+  configuration: a script that writes a sensor with `update_sensor_value` can go past them, so a
+  sensor with a script, or of a script source, has none.
 - **Comments.** The text of a value channel's comment (the CAN group's, for a raw sensor) is the
   sensor name, followed by `: ` and the description when there is one. Every value channel has a
   comment, and the CAN group's carries the same common properties: `sensor_type`, the sensor type's
   enumerator name (`PHYSICAL_ANALOG`, ..., `CANBUS_RAW`; `GetSensorTypeName()`), then `sensor_name`
-  and `sensor_description`, each left out when empty. The names are persisted in logs: they are
+  and `sensor_description`, each left out when empty. A value channel's comment goes on with two
+  facts: `sampling_rate_ms` (only when the sensor has one) and `log_only_new_data` (`true` or
+  `false`). The names are persisted in logs: they are
   never renamed, and a new type is named when it is added. The raw channel `<id>.raw` has only its
   `expression:` comment, when it needs one. The header comment is `Eerie Leap sensor log` with the
   common properties `device_name`, `product_id`, `device_id`, `hw_version`, `sw_version`,
