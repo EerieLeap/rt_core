@@ -812,7 +812,7 @@ ZTEST(logging_controller_writer, test_TheLogsAreRegisteredOnceTheControllerIsIni
     zassert_equal(provider->max_size, 0U, "A log is not uploaded");
     zassert_not_null(provider->store.get());
     zassert_true(provider->store->GetDirectory() == LogFileNaming::LOGS_DIR, "The directory the writer logs to");
-    zassert_true(static_cast<bool>(provider->is_in_use), "The file being written is not read or deleted");
+    zassert_true(static_cast<bool>(provider->is_in_use), "The file being written is not deleted");
 
     zassert_true(
         F().rig->fs_service->Exists(LogFileNaming::LOGS_DIR), "The store creates its directory on a mounted volume"
@@ -828,7 +828,7 @@ ZTEST(logging_controller_writer, test_TheLogsAreRegisteredOnceTheControllerIsIni
     zassert_true(provider->store->IsAvailable());
 }
 
-ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
+ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsGrowingAndInUseForDeleteOnly) {
     F().Open(false);
     StatusLog log;
     const auto assets = StartWithAssets();
@@ -836,7 +836,8 @@ ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
     const auto provider = assets->Find(AssetKind::LOGS);
     zassert_not_null(provider.get());
 
-    zassert_false(provider->is_in_use(AssetAccess::READ, OTHER_LOG_NAME), "No file is open before the first start");
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, OTHER_LOG_NAME), "No file is open before the first start");
+    zassert_false(provider->get_growing_size(OTHER_LOG_NAME).has_value(), "and none is growing");
 
     PublishSensorValue("switch", 1.0F);
     auto entry = log.WaitForEntry();
@@ -848,9 +849,11 @@ ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
     const std::string name = TheLogFileName(*F().rig->fs_service);
     zassert_false(name.empty(), "The writer has one file open");
 
-    zassert_true(provider->is_in_use(AssetAccess::READ, name), "The file being written is not read");
-    zassert_true(provider->is_in_use(AssetAccess::DELETE, name), "and not deleted");
+    zassert_false(provider->is_in_use(AssetAccess::READ, name), "Reading the file being written is the group's call");
+    zassert_true(provider->is_in_use(AssetAccess::DELETE, name), "but it is not deleted");
     zassert_false(provider->is_in_use(AssetAccess::WRITE, name), "Nothing writes a log but the writer");
+    zassert_true(provider->get_growing_size(name).has_value(), "The file being written is growing");
+    zassert_false(provider->get_growing_size(OTHER_LOG_NAME).has_value(), "Another log is not");
     zassert_false(provider->is_in_use(AssetAccess::READ, OTHER_LOG_NAME), "Another log is free to read");
     zassert_false(provider->is_in_use(AssetAccess::DELETE, OTHER_LOG_NAME), "and to delete");
 
@@ -861,8 +864,8 @@ ZTEST(logging_controller_writer, test_TheLogBeingWrittenIsInUseAndNoOtherIs) {
         return writer->IsStopped();
     }));
 
-    zassert_false(provider->is_in_use(AssetAccess::READ, name), "Once the writer stopped, nothing is in use");
-    zassert_false(provider->is_in_use(AssetAccess::DELETE, name));
+    zassert_false(provider->is_in_use(AssetAccess::DELETE, name), "Once the writer stopped, nothing is in use");
+    zassert_false(provider->get_growing_size(name).has_value(), "and nothing grows");
 }
 
 ZTEST(logging_controller_writer, test_DestroyingTheControllerUnregistersTheLogs) {

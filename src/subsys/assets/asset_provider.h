@@ -51,6 +51,15 @@ struct AssetProvider {
      */
     std::function<std::optional<int64_t>(std::string_view name)> get_end_ms;
     /**
+     * The size of the asset @p name that another writer has on the volume, in bytes, for a file that
+     * grows while it is open (the log being written): the size as of the writer's last sync, which is
+     * what a second handle of the file reads. Null when the asset does not grow now. Called on the
+     * configuration work queue without the registry's lock, for every request about the asset: no
+     * file I/O, no waiting. Must not take the LVGL lock. Empty for a kind whose files are written
+     * only through its store.
+     */
+    std::function<std::optional<uint64_t>(std::string_view name)> get_growing_size;
+    /**
      * The kind's built-in files, in static storage: the provider keeps only the span. The group
      * lists them before the stored files (each entry with `builtin: true`), serves READ and STAT of
      * them from the span and refuses WRITE, DELETE and RENAME of their names with BUILT_IN. A built-in

@@ -319,6 +319,46 @@ ZTEST(log_writer_service, test_IsOpenFileTellsTheFileTheWriterHasOpen) {
     zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
 }
 
+// What the assets group asks before it serves the log being written: the size as of the last sync,
+// from the moment the file is named, and nothing for any other file or once it is closed.
+ZTEST(log_writer_service, test_GetGrowingSizeIsTheSizeAtTheLastSync) {
+    const auto rig = MakeLogWriterRig();
+    const std::string other_path = std::string(LogFileNaming::LOGS_DIR) + "/log_data_20000101T000000Z_0000.mf4";
+
+    zassert_false(rig.log_writer_service->GetGrowingSize(other_path).has_value(), "a writer that never started");
+    zassert_false(rig.log_writer_service->GetGrowingSize("").has_value(), "no path is the open file");
+
+    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
+    zassert_equal(files.size(), 1, "Start opens one file (found %zu)", files.size());
+    const std::string path = std::string(LogFileNaming::LOGS_DIR) + "/" + files[0];
+
+    // Start() synced the header: the synced size is the header's.
+    const auto header_size = rig.log_writer_service->GetGrowingSize(path);
+    zassert_true(header_size.has_value(), "the open file is growing");
+    zassert_true(header_size.value() > 0, "the header is synced when Start returns");
+    zassert_equal(rig.fs_service->GetFileSize(path).value_or(0), header_size.value(), "the volume shows the header");
+
+    std::string upper_case = path;
+    std::ranges::transform(upper_case, upper_case.begin(), [](unsigned char c) {
+        return static_cast<char>(std::toupper(c));
+    });
+    zassert_true(rig.log_writer_service->GetGrowingSize(upper_case).has_value(), "compared as IsOpenFile() does");
+    zassert_false(rig.log_writer_service->GetGrowingSize(other_path).has_value(), "another file does not grow");
+
+    // Syncs follow; the synced size never goes back.
+    k_sleep(K_MSEC(1000));
+
+    const auto synced = rig.log_writer_service->GetGrowingSize(path);
+    zassert_true(synced.has_value());
+    zassert_true(synced.value() >= header_size.value(), "the synced size does not shrink");
+
+    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+    zassert_false(rig.log_writer_service->GetGrowingSize(path).has_value(), "a stopped writer has no file open");
+    zassert_false(rig.log_writer_service->GetGrowingSize(upper_case).has_value(), "a stopped writer has no file open");
+}
+
 // The header is synced at Start(), so a volume that refuses writes fails the Start instead of
 // a tick an interval later, and no empty file is left behind.
 ZTEST(log_writer_service, test_StartFailsWhenTheHeaderCannotReachTheVolume) {

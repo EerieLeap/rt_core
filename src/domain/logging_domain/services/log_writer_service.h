@@ -78,6 +78,9 @@ private:
     bool is_session_active_ = false;
     int64_t session_since_ms_ = 0;
     uint64_t open_file_bytes_ = 0;
+    // The open file's size as of the last successful sync, which is what a second handle sees; 0
+    // until the header has synced. Under the same lock.
+    uint64_t open_file_synced_bytes_ = 0;
 
     // Where a finalized file's end is recorded; null records nothing. Set before Start().
     std::shared_ptr<LogEndTimes> end_times_;
@@ -107,6 +110,7 @@ private:
     void SetOpenFile(std::string_view path);
     void SetSession(bool is_active, int64_t since_ms = 0);
     void SetOpenFileBytes(uint64_t bytes);
+    void SetOpenFileSyncedBytes(uint64_t bytes);
     // Records the end of the file just finalized; an index failure never fails the close.
     void RecordEndTime(const LogWriterTask& task);
     void ClearOpenFile();
@@ -153,6 +157,15 @@ public:
      * thread; takes a lock that is never held across file I/O.
      */
     [[nodiscard]] bool IsOpenFile(std::string_view path) const;
+
+    /**
+     * The size of @p path, relative to the volume, as of the writer's last sync, when @p path is the
+     * file the writer has open (compared as IsOpenFile() compares); nothing for any other path. A
+     * second handle of the file sees that many bytes, and the bytes below them never change until the
+     * writer finalizes the file (a stop or a rotation), which rewrites bytes of its header. 0 before the header has synced, so the file counts as growing from the moment it
+     * is named. Any thread; takes a lock that is never held across file I/O.
+     */
+    [[nodiscard]] std::optional<uint64_t> GetGrowingSize(std::string_view path) const;
 
     /**
      * Where the end of every file this writer finalizes is recorded (normal stop and rotation; not a

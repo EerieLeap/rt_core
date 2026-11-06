@@ -620,16 +620,27 @@ void LoggingController::RegisterAssets() {
         // The logs are the writer's: no uploads.
         provider.max_size = 0;
 
-        // The file being written is neither read nor deleted. The writer can outlive the controller, as
-        // the dependent service SensorsController keeps holds it, so it is held weakly.
+        // The file being written is not deleted. The writer can outlive the controller, as the dependent
+        // service SensorsController keeps holds it, so it is held weakly.
         provider.is_in_use = [weak_writer = std::weak_ptr<LogWriterService>(log_writer_service_),
                                  store = provider.store](AssetAccess operation, std::string_view name) {
-            if(operation != AssetAccess::READ && operation != AssetAccess::DELETE)
+            if(operation != AssetAccess::DELETE)
                 return false;
 
             const auto writer = weak_writer.lock();
 
             return writer != nullptr && writer->IsOpenFile(store->GetPath(name));
+        };
+
+        // Reading the file being written is the group's call: a client that asks for it by saying so
+        // reads up to the writer's last sync.
+        provider.get_growing_size = [weak_writer = std::weak_ptr<LogWriterService>(log_writer_service_),
+                                        store = provider.store](std::string_view name) -> std::optional<uint64_t> {
+            const auto writer = weak_writer.lock();
+            if(writer == nullptr)
+                return std::nullopt;
+
+            return writer->GetGrowingSize(store->GetPath(name));
         };
 
         // A finalized file's end, from memory (the index never does I/O on a lookup).

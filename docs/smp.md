@@ -199,7 +199,9 @@ built-ins behaves as it always did.
 **`LIST`.** `end_ms` is the end of the file in milliseconds since the Unix epoch (UTC), given for the
 `logs` kind only and only for a file this unit's writer recorded when it finalized it (a normal stop
 or a rotation; not a file left unfinalized, a log from before the index, or one copied onto the card);
-the duration is `end_ms` less the start in the name.
+the duration is `end_ms` less the start in the name. A file the writer has open
+([growing](#reading-a-growing-file)) is listed with its size as of the writer's last sync, `growing:
+true` and no `end_ms`.
 
 The entries come from position `off` (0 when absent), at most 48 per request: the built-ins first, in
 the firmware's order, at positions 0 to n - 1 for n built-ins, then the stored files in the file
@@ -216,18 +218,21 @@ request at `off = len` answers empty data and `crc`; `off` past `len` is `BAD_OF
 answer carries `len`. Every chunk but the last has the same length whatever its offset, a little
 under `MCUMGR_TRANSPORT_NETBUF_SIZE`, so a client learns it from the first answer and may keep
 several requests in flight at multiples of it (see [Transports](#transports)). `IN_USE` is asked
-when a session opens.
+when a session opens. `growing: true` in the request reads a file that is being written, see
+[Reading a growing file](#reading-a-growing-file); without it such a file is `IN_USE`.
 
 - A request at `off = 0` or for another file replaces the session; a request at `off > 0` for the
   open file continues it.
 - A request past the bytes the CRC covers (a request lost in a pipeline, a resume) makes the unit read
   the gap first, so it takes as long as that read. A chunk below the CRC (a repeat after a lost
   answer) leaves it alone.
-- The session closes after the last chunk, on a failure to read the file or to extend the CRC
-  (`IO_ERROR`), when a request replaces it (also when that request then fails, `NOT_FOUND` or `IN_USE`),
-  when the file is deleted or replaced, when a `READ` of its kind finds the volume unavailable and
-  after `EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS` without a request. A refused request (`BAD_OFFSET`,
-  `UNKNOWN_KIND`, `DENIED`, `BAD_NAME`) leaves it open.
+- The session closes after the last chunk (not that of a growing file, whose session stays), on a
+  failure to read the file or to extend the CRC (`IO_ERROR`), when a request replaces it (also when
+  that request then fails, `NOT_FOUND` or the kind's `IN_USE`), when the file is deleted or replaced,
+  when a `READ` of its kind finds the volume unavailable and after
+  `EERIE_LEAP_SMP_ASSETS_SESSION_TIMEOUT_MS` without a request. A refused request (`BAD_OFFSET`,
+  `UNKNOWN_KIND`, `DENIED`, `BAD_NAME`, and `IN_USE` for a growing file asked for without
+  `growing: true`) leaves it open.
 - A closing session leaves a checkpoint of its CRC, for one file and its size, the last one closed: a
   client that resumes at `off > 0` on that file continues without the unit reading it again. After a
   reboot there is none, and the unit reads the file up to `off` before it answers. A download from
@@ -280,7 +285,50 @@ running CRC of an open download that has read the whole file, or from the checkp
 current ([filesystem.md](filesystem.md#assets-eerie_leap_assets)); otherwise the unit reads the file
 on the configuration work queue while the client waits, up to `EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE`,
 and keeps the result as the checkpoint. A larger file answers its size alone. An open download is left
-as it is.
+as it is. A checkpoint taken while the file was growing never supplies the CRC of a file that is not
+growing now. For a growing file `STAT` takes `growing: true` too, see below.
+
+#### Reading a growing file
+
+A file is growing while its kind's provider says so: in the `logs` kind, the file the log writer has
+open. FatFs lets a second handle open it, and the handle sees the size at the writer's last sync
+(`EERIE_LEAP_LOG_SYNC_INTERVAL_MS`); the bytes below that size never change until the writer finalizes
+the file (a stop or a rotation), whatever the writer's buffers hold. Reading it is opt-in, so that a client which does not know of
+growing files cannot keep the synced part as the whole log:
+
+```
+READ   {kind, name, off, growing?: bool} -> {off, data, len?, crc?, growing?}
+STAT   {kind, name, growing?: bool}      -> {len, crc?, growing?}
+LIST   entries                           -> {name, size, end_ms?, builtin?, growing?}
+```
+
+- Without `growing: true`, `READ` and `STAT` of a growing file answer `IN_USE`, and leave an open
+  session alone. Firmware without this skips the unknown key and answers `IN_USE` as well.
+- With it, `len` at `off = 0` is the size the writer has synced, and `READ` serves up to it. The
+  chunk that reaches it carries the `crc` of everything up to it, `off = len` answers empty data and
+  `crc`, and a request past it is `BAD_OFFSET` with `len`, the size synced by then. Every successful answer
+  about a growing file carries `growing: true`. The `LIST` entry says so too, with or without the key.
+- The session follows the file: a request at or past the size the session had opened gets the bytes
+  the writer has synced since, and the CRC goes on. The last chunk does not close the session; a
+  replacement, the timeout, a delete or the loss of the volume does. The session timeout leaves a
+  checkpoint that continues a later request at any offset whose CRC end is within the size now synced,
+  whatever size the file had, so a follower polling every few seconds does not make the unit read the
+  prefix again.
+- `STAT` answers `len`, the synced size, and `crc` only when the open session or the checkpoint of the
+  file covers exactly that much. It never reads a growing file.
+- Once the writer has closed the file (a stop or a rotation finalized it) it is not growing. The close
+  rewrites bytes of the header (the identifier block, the data block's length and the groups' cycle
+  counts), so a CRC continued across it would mix old and new. A request at `off > 0` that would
+  continue a session or checkpoint taken while the file grew answers `CHANGED` if it said `growing:
+  true`, and the session ends without a checkpoint; `off = 0` starts over. A request without the key
+  drops them silently and reads the closed file as it is now.
+- A follower sends `growing: true` with every request. In a growing file the bytes from the end of
+  the header to `len` never change until the close; on `CHANGED` it reads the blocks the close rewrites again from
+  `off = 0` and asks on from its own length. To produce the final CRC the unit reads the rest of the
+  file once.
+- `DELETE`, `RENAME` (either name) and `WRITE` of a growing file are `IN_USE` whatever the kind's own
+  check says, asked where that check is. For the `logs` kind `RENAME` and `WRITE` are `DENIED` before
+  that: it has no upload bit.
 
 **`RENAME`.** Moves a file within its kind and replaces `to` if it exists, as a `WRITE` would. It
 takes a name away and makes one, so the kind needs both the upload and the delete bit. Checked in this
@@ -292,8 +340,8 @@ whether an upload of either name is open (`BUSY`). A download of either name is 
 
 **`DELETE`.** Checked in this order: the kind, its delete access, the name, whether it is a built-in's
 (`BUILT_IN`), the volume, `NOT_FOUND`, `IN_USE`. A kind may refuse (`IN_USE`): a script that a stored configuration refers to is kept,
-and so is the log the writer is writing, which cannot be downloaded either. A download of the file is
-closed first.
+and so is the log the writer is writing (which can be read only as a [growing file](#reading-a-growing-file)).
+A download of the file is closed first.
 
 **File system.** Every command runs on the configuration work queue while the handler waits, as
 `config` and `files` do, so the MCUmgr stack stays small and the group needs no lock. Its file I/O
@@ -323,9 +371,10 @@ buffer (`MCUMGR_TRANSPORT_NETBUF_SIZE` bytes of external RAM) is left out and th
 | `IO_ERROR` | 14 | The file system failed to read, write, delete or rename. |
 | `NO_MEMORY` | 15 | No memory, or no free file slot. |
 | `BUILT_IN` | 16 | The asset is built into the firmware: it can't be replaced, renamed or deleted. |
+| `CHANGED` | 17 | `READ` with `growing: true`: the writer closed the file since the session or checkpoint the request would continue was taken. Read it again from `off = 0`. |
 
 SMP v1 clients get `rc` instead: `ENOENT` for `UNKNOWN_KIND` and `NOT_FOUND`, `EBADSTATE` for
-`UNAVAILABLE`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
+`UNAVAILABLE` and `CHANGED`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
 for `DENIED` and `BUILT_IN`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`,
 `ECORRUPT` for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
 

@@ -10,6 +10,9 @@ project(functional_subsys_assets_fat)
 # depend on the volume and run there only.
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../assets/src/asset_store.cpp)
 
+# FatFs only: a reader of a file that another handle is writing (the log being written).
+target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../assets/src/growing_file.cpp)
+
 # The block tests in that file record the calls the store makes into the file system through wrappers
 # of these.
 zephyr_link_libraries(-Wl,--wrap=fs_read,--wrap=fs_write,--wrap=fs_seek)

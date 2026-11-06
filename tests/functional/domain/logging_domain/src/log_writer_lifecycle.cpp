@@ -369,6 +369,92 @@ ZTEST(log_writer_lifecycle, test_IsOpenFileFollowsARotation) {
     zassert_false(rig.log_writer_service->IsOpenFile(second_path), "a stopped writer has no file open");
 }
 
+// The file a rotation opens counts as growing from the moment it is named, with its header synced; the
+// full one does not any more.
+ZTEST(log_writer_lifecycle, test_GetGrowingSizeFollowsARotation) {
+    const auto sensors = MakeLoggedSensors();
+    auto rig = MakeLogWriterRig(sensors);
+    const std::string directory = LogFileNaming::LOGS_DIR;
+
+    rig.log_writer_service->SetSizeLimitsForTesting(GetHeaderSize(rig) + 1024, 0);
+
+    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+
+    const auto first_files = rig.fs_service->ListFiles(directory);
+    zassert_equal(first_files.size(), 1, "Start opens one file (found %zu)", first_files.size());
+    const std::string first_path = directory + "/" + first_files[0];
+    zassert_true(rig.log_writer_service->GetGrowingSize(first_path).has_value(), "the first file grows");
+
+    zassert_true(
+        PublishFramesUntil(
+            rig, *sensors[1],
+            [&] {
+                return rig.log_writer_service->GetStats().rotations >= 1;
+            },
+            5000
+        ),
+        "the frames must reach the size limit"
+    );
+
+    std::string second_path;
+    for(const auto& name : rig.fs_service->ListFiles(directory)) {
+        std::string path = directory;
+        path += '/';
+        path += name;
+        if(path != first_path)
+            second_path = std::move(path);
+    }
+    zassert_false(second_path.empty(), "the rotation opened another file");
+
+    zassert_false(rig.log_writer_service->GetGrowingSize(first_path).has_value(), "the full file is closed");
+
+    const auto second_size = rig.log_writer_service->GetGrowingSize(second_path);
+    zassert_true(second_size.has_value(), "the next file grows");
+    zassert_true(second_size.value() >= GetHeaderSize(rig), "its header is synced");
+
+    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+    zassert_false(rig.log_writer_service->GetGrowingSize(second_path).has_value(), "a stopped writer has no file open");
+}
+
+// Each successful sync moves the synced size to the bytes written by then: a reader that opens now sees
+// them, and the volume shows at least that much.
+ZTEST(log_writer_lifecycle, test_GetGrowingSizeAdvancesWithTheSyncs) {
+    const auto sensors = MakeLoggedSensors();
+    auto rig = MakeLogWriterRig(sensors);
+
+    zassert_true(rig.log_writer_service->Start(), "Start must succeed on a formatted volume with a logger");
+
+    const auto files = rig.fs_service->ListFiles(LogFileNaming::LOGS_DIR);
+    zassert_equal(files.size(), 1, "Start opens one file (found %zu)", files.size());
+    const std::string path = std::string(LogFileNaming::LOGS_DIR) + "/" + files[0];
+
+    const uint64_t header_size = rig.log_writer_service->GetGrowingSize(path).value_or(0);
+    zassert_true(header_size > 0, "the header is synced when Start returns");
+
+    // Readings reach the file, and a few syncs follow them.
+    zassert_true(
+        PublishFramesUntil(
+            rig, *sensors[1],
+            [&] {
+                return rig.log_writer_service->GetStats().syncs >= 3;
+            },
+            5000
+        ),
+        "the writer must sync while frames arrive"
+    );
+
+    const uint64_t synced = rig.log_writer_service->GetGrowingSize(path).value_or(0);
+    zassert_true(synced > header_size, "a sync after the readings moved the size (%llu)", (unsigned long long)synced);
+
+    const uint64_t on_volume = rig.fs_service->GetFileSize(path).value_or(0);
+    zassert_true(
+        synced <= on_volume, "the volume shows what was synced (%llu of %llu)", (unsigned long long)synced,
+        (unsigned long long)on_volume
+    );
+
+    zassert_true(rig.log_writer_service->Stop(), "Stop must finalize and close the file");
+}
+
 // The free-space minimum is checked again before each rotation: without it the session ends with
 // NoSpace, and the stop that follows finalizes the full file in the room that is left.
 ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSpace) {

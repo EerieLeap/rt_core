@@ -155,7 +155,7 @@ destroyed.
 | 1 | `animations` | internal, `ui_assets/animations` | `.json` | R W D | rt_gauge's `EERIE_LEAP_UI_ANIMATION_MAX_SIZE` (512 KiB) | never | rt_gauge `UiController` |
 | 2 | `sensor_scripts` | SD, `scripts/sensors` | `.lua` | R W D | `EERIE_LEAP_SENSOR_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `SensorsController` |
 | 3 | `can_scripts` | SD, `scripts/can` | `.lua` | R W D | `EERIE_LEAP_CAN_SCRIPT_MAX_SIZE` | `DELETE` of a script a stored configuration refers to | `CanbusController` |
-| 4 | `logs` | SD, `logs` | `.mf4` | R D | 0 | `READ` and `DELETE` of the file being written | `LoggingController`, writer role |
+| 4 | `logs` | SD, `logs` | `.mf4` | R D | 0 | `DELETE` of the file being written; it is read only as a growing file (`growing: true`) | `LoggingController`, writer role |
 | 5 | `fonts` | internal, `ui_assets/fonts` | `.ttf` | R W D | rt_gauge's `EERIE_LEAP_UI_FONT_MAX_SIZE` (256 KiB) | never | rt_gauge `UiController` (and its three built-in fonts, read-only, from flash) |
 
 The kind numbers go over the wire: append only. Widgets find their images, animations and fonts through the
@@ -170,7 +170,12 @@ the lower 32 a write counter that `Save()`, `Delete()` and `AssetWriter::Commit(
 not they succeed. The SMP `STAT` keeps the CRC of a file as a checkpoint taken at a generation; it is
 current only while the generation is the same, and a same-size overwrite through the store ends it. A
 commit of an upload seeds the checkpoint with the CRC it verified, so a `STAT` after an upload reads
-nothing. This assumes that assets are written only through their store.
+nothing. This assumes that assets are written only through their store. The one exception is a file the
+provider reports as growing (`AssetProvider::get_growing_size`: the log being written, whose writer
+holds its own handle). Its checkpoint is marked as taken while the file grew; it continues a later
+`READ` of the same file at any offset whose CRC end is within the size now synced, and it is never
+used once the file is not growing (the close rewrites bytes of its header) nor for the CRC of a file
+that is not growing. See [smp.md](smp.md#reading-a-growing-file).
 
 **Rename.** The SMP `RENAME` moves a file within its kind (`AssetStore::Rename()`, which increases the
 generation also when it fails: FAT deletes the target before it renames). The checkpoint of the source

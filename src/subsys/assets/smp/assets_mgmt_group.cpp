@@ -46,11 +46,12 @@ constexpr size_t MAX_STRING_HEAD_SIZE = 5;
 constexpr size_t MAP_END_SIZE = 1;
 
 // Room kept in a read response for everything around the data: `off`, `len` and `crc` (each a key
-// and an unsigned integer), the key and head of `data`, and the end of the map. That is 38 bytes
-// at most; the rest is margin, as in the config group.
+// and an unsigned integer), the key and head of `data`, `growing` with its bool, and the end of the
+// map. That is 47 bytes at most; the rest is margin, as in the config group.
 constexpr size_t READ_RESPONSE_OVERHEAD = 48;
 static_assert(
-    READ_RESPONSE_OVERHEAD >= 3 * (KeySize(3) + MAX_UINT_SIZE) + KeySize(4) + MAX_STRING_HEAD_SIZE + MAP_END_SIZE
+    READ_RESPONSE_OVERHEAD
+    >= 3 * (KeySize(3) + MAX_UINT_SIZE) + KeySize(4) + MAX_STRING_HEAD_SIZE + KeySize(7) + 1 + MAP_END_SIZE
 );
 
 // Names are shorter than 256 bytes, so their head is two bytes at most.
@@ -61,7 +62,8 @@ constexpr size_t MAX_UINT64_SIZE = 9;
 
 // Room an entry of a list needs besides its name: the map, the `name` and `size` keys, the name's
 // head, a 32-bit size, the `end_ms` key with a 64-bit value and the end of the map. That is 35 bytes
-// at most. A built-in's entry has the `builtin` key and a bool instead of `end_ms`: 28 bytes.
+// at most. A built-in's entry has the `builtin` key and a bool instead of `end_ms`: 28 bytes, and so
+// has an entry that is growing (`growing` and a bool; it has no end).
 constexpr size_t LIST_ENTRY_OVERHEAD = 40;
 static_assert(
     LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(6) + MAX_UINT64_SIZE + MAP_END_SIZE
@@ -74,6 +76,11 @@ constexpr size_t LIST_TAIL_SIZE = 16;
 static_assert(LIST_TAIL_SIZE >= 1 + KeySize(4) + MAX_UINT_SIZE + MAP_END_SIZE);
 
 using eerie_leap::utilities::string::EqualsIgnoreAsciiCase;
+
+// Whether the provider says that @p name is a file that grows now. May throw what the provider's callback throws.
+bool IsGrowing(const AssetProvider& provider, std::string_view name) {
+    return provider.get_growing_size && provider.get_growing_size(name).has_value();
+}
 
 // The name that a stored file shadowed by a built-in moves to: the stem, "-uploaded" (then "-uploaded-2", "-uploaded-3"
 // and so on) and the extension, the stem cut short where the name would be too long. Empty when nothing is left of the
@@ -473,6 +480,14 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
         });
     }
 
+    // Asked before anything is encoded: the provider's callback may throw, and an error must not be
+    // appended to a half-written list.
+    std::vector<std::optional<uint64_t>> growing_sizes(entries.size());
+    if(provider->get_growing_size) {
+        for(size_t i = 0; i < entries.size(); i++)
+            growing_sizes[i] = provider->get_growing_size(entries[i].name);
+    }
+
     zcbor_state_t* zse = ctxt->writer->zs;
     const size_t candidates = built_in_page + entries.size();
     bool ok = zcbor_tstr_put_lit(zse, "entries") && zcbor_list_start_encode(zse, candidates);
@@ -506,14 +521,21 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
         if(Remaining(zse) < LIST_ENTRY_OVERHEAD + entry.name.size() + LIST_TAIL_SIZE)
             break;
 
-        const auto size = static_cast<uint32_t>(std::min<size_t>(entry.size, UINT32_MAX));
+        // A file that is growing has the size its writer has synced, which is what a read serves, and no
+        // end yet.
+        const std::optional<uint64_t>& growing_size = growing_sizes[listed];
+        const bool is_growing = growing_size.has_value();
+
+        const auto size = static_cast<uint32_t>(
+            std::min<uint64_t>(is_growing ? *growing_size : entry.size, UINT32_MAX)
+        );
 
         // Only an end that is known and not before the epoch.
         std::optional<int64_t> end_ms;
-        if(provider->get_end_ms)
+        if(provider->get_end_ms && !is_growing)
             end_ms = provider->get_end_ms(entry.name);
         const bool has_end = end_ms.has_value() && *end_ms >= 0;
-        const uint32_t pairs = has_end ? 3 : 2;
+        const uint32_t pairs = (has_end || is_growing) ? 3 : 2;
 
         ok = zcbor_map_start_encode(zse, pairs)
             && zcbor_tstr_put_lit(zse, "name")
@@ -522,6 +544,7 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
             && zcbor_uint32_put(zse, size)
             && (!has_end
                 || (zcbor_tstr_put_lit(zse, "end_ms") && zcbor_uint64_put(zse, static_cast<uint64_t>(*end_ms))))
+            && (!is_growing || (zcbor_tstr_put_lit(zse, "growing") && zcbor_bool_put(zse, true)))
             && zcbor_map_end_encode(zse, pairs);
         listed++;
     }
@@ -556,10 +579,12 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     uint32_t kind = 0;
     uint32_t offset = 0;
     zcbor_string name{};
+    bool wants_growing = false;
     std::array keys = {
         SmpMapKey("kind", zcbor_uint32_decode, &kind),
         SmpMapKey("name", zcbor_tstr_decode, &name),
         SmpMapKey("off", zcbor_uint32_decode, &offset),
+        SmpMapKey("growing", zcbor_bool_decode, &wants_growing),
     };
 
     if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found || !keys[1].found || !keys[2].found)
@@ -581,15 +606,68 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     if(const BuiltInAsset* built_in = FindBuiltIn(*provider, asset_name); built_in != nullptr)
         return ReadBuiltIn(ctxt, *built_in, offset);
 
-    if(offset == 0 || !IsReadSessionOf(provider, asset_name)) {
+    // May throw; no reader is open for this request yet.
+    std::optional<uint64_t> growing_size;
+    if(provider->get_growing_size)
+        growing_size = provider->get_growing_size(asset_name);
+    const bool is_growing = growing_size.has_value();
+
+    if(is_growing) {
+        // The session in progress, if any, is left alone: the client may still need it.
+        if(!wants_growing)
+            return Fail(ctxt, Error::IN_USE);
+    } else if(offset > 0) {
+        // The writer closed the file, which rewrote bytes of its header: what a session or a checkpoint
+        // of it knew is not continued.
+        bool is_stale = false;
+
+        if(IsReadSessionOf(provider, asset_name)) {
+            if(read_session_.is_growing) {
+                DropReadSession();
+                is_stale = true;
+            }
+        } else if(checkpoint_.is_valid
+            && checkpoint_.is_growing
+            && checkpoint_.kind == provider->kind
+            && checkpoint_.name == asset_name) {
+
+            checkpoint_.is_valid = false;
+            is_stale = true;
+        }
+
+        if(is_stale && wants_growing)
+            return Fail(ctxt, Error::CHANGED);
+    }
+
+    if(offset == 0 || !IsReadSessionOf(provider, asset_name) || read_session_.is_growing != is_growing) {
         // A download that starts over is not continued from what an earlier one knew of the file: it
         // may have changed since, at the same size, and a CRC that is never recomputed would stay.
-        error = OpenReadSession(provider, asset_name, offset > 0);
+        error = OpenReadSession(provider, asset_name, offset > 0, growing_size);
         if(error != Error::OK)
             return Fail(ctxt, error);
     }
 
-    const size_t size = read_session_.reader.GetSize();
+    size_t size = read_session_.reader.GetSize();
+
+    if(is_growing) {
+        // What the writer has synced; the file system may show more than the writer has published, never less.
+        const auto synced = static_cast<size_t>(std::min<uint64_t>(*growing_size, UINT32_MAX));
+
+        // The reader knows the size of the file when it was opened. A request at or past that size is
+        // the follower asking for what came after it.
+        if(synced > size && offset >= size) {
+            error = ReopenReader();
+            if(error != Error::OK) {
+                CloseReadSession();
+
+                return Fail(ctxt, error);
+            }
+
+            size = read_session_.reader.GetSize();
+        }
+
+        size = std::min(size, synced);
+    }
 
     // The session stays: the client may be asking for a chunk it has not got yet.
     if(offset > size)
@@ -629,10 +707,11 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
     const bool is_last = offset + chunk == size;
     const int rc = EncodeReadChunk(
         ctxt, offset, size, std::span<const uint8_t>(transfer_buffer_).first(chunk),
-        is_last ? std::optional(read_session_.crc) : std::nullopt
+        is_last ? std::optional(read_session_.crc) : std::nullopt, is_growing
     );
 
-    if(is_last) {
+    // A session of a growing file stays: the file has more to give once the writer syncs.
+    if(is_last && !is_growing) {
         CloseReadSession();
     } else {
         read_session_.last_activity_ms = k_uptime_get();
@@ -659,7 +738,8 @@ int AssetsMgmtGroup::EncodeReadChunk(
     size_t offset,
     size_t size,
     std::span<const uint8_t> chunk,
-    std::optional<uint32_t> crc
+    std::optional<uint32_t> crc,
+    bool is_growing
 ) {
     zcbor_state_t* zse = ctxt->writer->zs;
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the chunk is raw file bytes, zcbor takes char*
@@ -674,6 +754,9 @@ int AssetsMgmtGroup::EncodeReadChunk(
 
     if(ok && crc.has_value())
         ok = zcbor_tstr_put_lit(zse, "crc") && zcbor_uint32_put(zse, *crc);
+
+    if(ok && is_growing)
+        ok = zcbor_tstr_put_lit(zse, "growing") && zcbor_bool_put(zse, true);
 
     return MGMT_RETURN_CHECK(ok);
 }
@@ -694,7 +777,7 @@ int AssetsMgmtGroup::ReadBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_i
 
     return EncodeReadChunk(
         ctxt, offset, size, built_in.data.subspan(offset, *chunk),
-        is_last ? std::optional(crc32_ieee(built_in.data.data(), size)) : std::nullopt
+        is_last ? std::optional(crc32_ieee(built_in.data.data(), size)) : std::nullopt, false
     );
 }
 
@@ -713,9 +796,11 @@ int AssetsMgmtGroup::StatBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_i
 int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
     uint32_t kind = 0;
     zcbor_string name{};
+    bool wants_growing = false;
     std::array keys = {
         SmpMapKey("kind", zcbor_uint32_decode, &kind),
         SmpMapKey("name", zcbor_tstr_decode, &name),
+        SmpMapKey("growing", zcbor_bool_decode, &wants_growing),
     };
 
     if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found || !keys[1].found)
@@ -744,10 +829,54 @@ int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
     if(provider->is_in_use && provider->is_in_use(AssetAccess::READ, asset_name))
         return Fail(ctxt, Error::IN_USE);
 
+    std::optional<uint64_t> growing_size;
+    if(provider->get_growing_size)
+        growing_size = provider->get_growing_size(asset_name);
+
+    if(growing_size.has_value()) {
+        if(!wants_growing)
+            return Fail(ctxt, Error::IN_USE);
+
+        // The size the writer has synced; the file is never read, so the CRC is only what a session or
+        // a checkpoint of this file already covers, exactly.
+        const auto synced = static_cast<size_t>(std::min<uint64_t>(*growing_size, UINT32_MAX));
+        std::optional<uint32_t> growing_crc;
+
+        if(IsReadSessionOf(provider, asset_name)
+            && read_session_.is_growing
+            && read_session_.generation == generation
+            && read_session_.crc_end == synced) {
+
+            growing_crc = read_session_.crc;
+        } else if(checkpoint_.is_valid
+            && checkpoint_.is_growing
+            && checkpoint_.kind == provider->kind
+            && checkpoint_.name == asset_name
+            && checkpoint_.generation == generation
+            && checkpoint_.crc_end == synced) {
+
+            growing_crc = checkpoint_.crc;
+        }
+
+        zcbor_state_t* growing_zse = ctxt->writer->zs;
+        bool growing_ok = zcbor_tstr_put_lit(growing_zse, "len")
+            && zcbor_uint32_put(growing_zse, static_cast<uint32_t>(synced));
+
+        if(growing_ok && growing_crc.has_value())
+            growing_ok = zcbor_tstr_put_lit(growing_zse, "crc") && zcbor_uint32_put(growing_zse, *growing_crc);
+
+        growing_ok = growing_ok && zcbor_tstr_put_lit(growing_zse, "growing") && zcbor_bool_put(growing_zse, true);
+
+        return MGMT_RETURN_CHECK(growing_ok);
+    }
+
     size_t size = *stored_size;
     std::optional<uint32_t> crc;
 
+    // A session or checkpoint taken while the file grew is not good for it now: the close rewrote bytes
+    // of its header.
     if(IsReadSessionOf(provider, asset_name)
+        && !read_session_.is_growing
         && read_session_.generation == generation
         && read_session_.crc_end == size
         && read_session_.reader.GetSize() == size) {
@@ -755,6 +884,7 @@ int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
         // The open download has read all of it.
         crc = read_session_.crc;
     } else if(checkpoint_.is_valid
+        && !checkpoint_.is_growing
         && checkpoint_.kind == provider->kind
         && checkpoint_.size == size
         && checkpoint_.crc_end == size
@@ -802,6 +932,7 @@ int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
                 checkpoint_.generation = generation;
                 checkpoint_.crc = sum;
                 checkpoint_.crc_end = size;
+                checkpoint_.is_growing = false;
                 checkpoint_.is_valid = true;
             } catch(const std::bad_alloc&) {
                 LOG_WRN("Out of memory recording the STAT checkpoint.");
@@ -887,7 +1018,7 @@ int AssetsMgmtGroup::WriteFirstChunk(
 
     // Asked before an upload that is open is looked at: what this check throws or refuses is no
     // reason to touch another client's upload.
-    if(provider->is_in_use && provider->is_in_use(AssetAccess::WRITE, name))
+    if((provider->is_in_use && provider->is_in_use(AssetAccess::WRITE, name)) || IsGrowing(*provider, name))
         return Fail(ctxt, Error::IN_USE);
 
     if(upload_.writer.IsOpen()) {
@@ -1038,7 +1169,8 @@ int AssetsMgmtGroup::FinishUpload(
     }
 
     // The file may have gone into use since the first chunk, and the rename replaces it.
-    if(provider.is_in_use && provider.is_in_use(AssetAccess::WRITE, upload_.name)) {
+    if((provider.is_in_use && provider.is_in_use(AssetAccess::WRITE, upload_.name))
+        || IsGrowing(provider, upload_.name)) {
         AbortUpload();
 
         return Fail(ctxt, Error::IN_USE);
@@ -1075,6 +1207,7 @@ int AssetsMgmtGroup::FinishUpload(
         checkpoint_.generation = provider.store->GetGeneration();
         checkpoint_.crc = upload_.declared_crc;
         checkpoint_.crc_end = length;
+        checkpoint_.is_growing = false;
         checkpoint_.is_valid = true;
     } catch(const std::bad_alloc&) {
         LOG_WRN("Out of memory recording the upload's checkpoint, a STAT will read the file.");
@@ -1135,8 +1268,10 @@ int AssetsMgmtGroup::ExecuteDelete(smp_streamer* ctxt) {
     if(!store.GetSize(asset_name).has_value())
         return Fail(ctxt, Error::NOT_FOUND);
 
-    if(provider->is_in_use && provider->is_in_use(AssetAccess::DELETE, asset_name))
+    if((provider->is_in_use && provider->is_in_use(AssetAccess::DELETE, asset_name))
+        || IsGrowing(*provider, asset_name)) {
         return Fail(ctxt, Error::IN_USE);
+    }
 
     // FatFs has no open-file locking: deleting an open file corrupts the volume.
     // The names of a FAT volume do not tell upper and lower case apart, and the kind may have been
@@ -1202,8 +1337,11 @@ int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
     if(!size.has_value())
         return Fail(ctxt, Error::NOT_FOUND);
 
-    if(provider->is_in_use
-        && (provider->is_in_use(AssetAccess::DELETE, asset_name) || provider->is_in_use(AssetAccess::WRITE, to_name))) {
+    if((provider->is_in_use
+           && (provider->is_in_use(AssetAccess::DELETE, asset_name)
+               || provider->is_in_use(AssetAccess::WRITE, to_name)))
+        || IsGrowing(*provider, asset_name)
+        || IsGrowing(*provider, to_name)) {
 
         return Fail(ctxt, Error::IN_USE);
     }
@@ -1339,7 +1477,8 @@ bool AssetsMgmtGroup::MayBeReadSessionOf(AssetKind kind, std::string_view name) 
 AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
     const std::shared_ptr<const AssetProvider>& provider,
     std::string_view name,
-    bool use_checkpoint
+    bool use_checkpoint,
+    std::optional<uint64_t> growing_size
 ) {
 
     CloseReadSession();
@@ -1392,16 +1531,28 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
     }
 
     read_session_.provider = provider;
+    read_session_.is_growing = growing_size.has_value();
 
     // The checkpoint of a session that was closed on this very file (not one that is spelled in
     // another case, which may be another file) continues where it ended.
-    if(use_checkpoint
+    bool follows = use_checkpoint
         && checkpoint_.is_valid
         && checkpoint_.kind == provider->kind
-        && checkpoint_.size == size
         && checkpoint_.generation == read_session_.generation
-        && checkpoint_.name == name) {
+        && checkpoint_.name == name;
 
+    if(follows) {
+        if(growing_size.has_value()) {
+            // The file only grew since, below the bytes the CRC ends at nothing changed: the size need
+            // not match, the CRC must end within what is readable now.
+            const uint64_t readable = std::min<uint64_t>(size, *growing_size);
+            follows = checkpoint_.is_growing && checkpoint_.crc_end <= readable;
+        } else {
+            follows = !checkpoint_.is_growing && checkpoint_.size == size;
+        }
+    }
+
+    if(follows) {
         read_session_.crc = checkpoint_.crc;
         read_session_.crc_end = checkpoint_.crc_end;
     }
@@ -1410,6 +1561,38 @@ AssetsMgmtGroup::Error AssetsMgmtGroup::OpenReadSession(
     OnActivity();
 
     return Error::OK;
+}
+
+AssetsMgmtGroup::Error AssetsMgmtGroup::ReopenReader() {
+    // The old reader goes first, so that a unit short of file slots or memory does not need two at once.
+    // A failure leaves no session: the CRC is not kept, the next request starts over.
+    read_session_.reader.Close();
+
+    const int rc = read_session_.provider->store->OpenRead(read_session_.name, read_session_.reader);
+    if(rc < 0) {
+        ResetReadSession();
+
+        return ToError(rc);
+    }
+
+    if(read_session_.reader.GetSize() > UINT32_MAX) {
+        read_session_.reader.Close();
+        ResetReadSession();
+
+        return Error::IO_ERROR;
+    }
+
+    return Error::OK;
+}
+
+void AssetsMgmtGroup::DropReadSession() {
+    if(!read_session_.reader.IsOpen())
+        return;
+
+    // What a session of the file knew is stale along with what an earlier one left.
+    InvalidateCheckpoint(read_session_.kind, read_session_.name);
+    read_session_.reader.Close();
+    ResetReadSession();
 }
 
 AssetsMgmtGroup::Error AssetsMgmtGroup::ExtendReadCrc(size_t offset) {
@@ -1448,6 +1631,7 @@ void AssetsMgmtGroup::CloseReadSession() {
             checkpoint_.generation = read_session_.generation;
             checkpoint_.crc = read_session_.crc;
             checkpoint_.crc_end = read_session_.crc_end;
+            checkpoint_.is_growing = read_session_.is_growing;
             checkpoint_.is_valid = true;
         } catch(const std::bad_alloc&) {
             // Without a checkpoint a resume reads the file again, which only costs time.
@@ -1466,6 +1650,7 @@ void AssetsMgmtGroup::ResetReadSession() {
     read_session_.generation = 0;
     read_session_.crc = 0;
     read_session_.crc_end = 0;
+    read_session_.is_growing = false;
     read_session_.last_activity_ms = 0;
 }
 
@@ -1624,6 +1809,7 @@ int AssetsMgmtGroup::TranslateError(uint16_t error) {
         case Error::NOT_FOUND:
             return MGMT_ERR_ENOENT;
         case Error::UNAVAILABLE:
+        case Error::CHANGED:
             return MGMT_ERR_EBADSTATE;
         case Error::BAD_NAME:
         case Error::BAD_OFFSET:

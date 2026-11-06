@@ -50,6 +50,18 @@ using eerie_leap::subsys::threading::WorkQueueThread;
  * a client which comes back to the file at an offset past its start continues without the unit
  * reading it again. A download from the start never uses a checkpoint: the file may have changed.
  *
+ * A file that another writer appends to while it is open (AssetProvider::get_growing_size, the log
+ * being written) is growing. WRITE, DELETE and RENAME refuse it with IN_USE whatever the kind's
+ * is_in_use says, and READ and STAT refuse it unless the request says
+ * `growing: true`; with it they serve the file up to the size the provider reports, which is what the
+ * writer has synced. The read session of a growing file follows it: a request at or past what the
+ * session had opened gets the bytes the writer has synced since, and the CRC goes on. The session is
+ * not closed by its last chunk, and a checkpoint it leaves continues a later request at any offset
+ * up to the size now synced (the file need not be the size it was). Once the writer has closed the
+ * file, what a session or checkpoint of it knew is not continued: the close rewrites bytes of the
+ * header. A request at `off > 0` that would continue it answers CHANGED when it said `growing: true`
+ * (the session ends without a checkpoint), and reads the closed file afresh when it did not.
+ *
  * One upload is open at a time (the upload session), with a token, as in the `config` group. Its
  * data goes to a staged file on the kind's volume (AssetStore::BeginWrite()), which no listing
  * shows; the last chunk checks the CRC32 and renames it onto the asset. A failure of the file
@@ -77,10 +89,11 @@ public:
         /// kind's volume) are sent only while `avail` is true; `free` is the number WRITE checks `len`
         /// against, and only a hint: files take whole blocks, so a `len` below it can still be NO_SPACE.
         KINDS = 0,
-        /// Read `{kind, off?}`: `{entries: [{name, size, end_ms?, builtin?}], next?}`. The files of the
+        /// Read `{kind, off?}`: `{entries: [{name, size, end_ms?, builtin?, growing?}], next?}`. The files of the
         /// kind with a valid name from position `off` (0 when absent), as many as fit into the response.
         /// Request the rest from `next` until it is absent: a page can be empty, and `next` present,
-        /// when the entries around it are no assets. Needs no access bit.
+        /// when the entries around it are no assets. Needs no access bit. An entry the provider reports
+        /// as growing has the size it reports and `growing: true`, and no `end_ms`.
         ///
         /// The positions are the kind's built-in files first (AssetProvider::built_ins: position n is
         /// the n-th, listed with `builtin: true`), then the stored files, at the number of built-ins
@@ -89,14 +102,23 @@ public:
         /// LIST needs the kind's volume, built-ins or not: it answers UNAVAILABLE while the volume is
         /// not mounted, where READ and STAT of a built-in still work.
         LIST = 1,
-        /// Read `{kind, name, off}`: `{off, data}`, plus `len` (the size of the file) at `off = 0`,
-        /// and `crc` (CRC32/IEEE of the whole file) in the chunk that ends at `len`. A request at
+        /// Read `{kind, name, off, growing?}`: `{off, data, growing?}`, plus `len` (the size of the file) at
+        /// `off = 0`, and `crc` (CRC32/IEEE of the whole file) in the chunk that ends at `len`. A request at
         /// `off = len` answers empty data and `crc`. Every chunk but the last has the same length,
         /// whatever its offset, so a client can request several at multiples of the first one's.
         /// Checked in this order: the kind, its READ bit, the name (BAD_NAME), then, for a file that
         /// is not a built-in, the volume (UNAVAILABLE), NOT_FOUND and IN_USE. A built-in is read in
         /// place from flash (a name matches ignoring ASCII case): it needs no volume, is never in use
         /// and opens no session; its `crc` is summed from the span in the last chunk.
+        ///
+        /// A growing file (AssetProvider::get_growing_size) is IN_USE unless the request says
+        /// `growing: true`. With it, `len` and the file end at the size the provider reports (the
+        /// writer's last sync), `crc` covers everything up to it, `off = len` answers empty data and
+        /// `crc`, and a request past it is BAD_OFFSET with `len`, the size by then. Every successful
+        /// answer carries `growing: true`. The session is kept after the last chunk, and a request at or past
+        /// the size the session had opened gets the file's new bytes. A request at `off > 0` that
+        /// would continue a session or checkpoint of the file from before it was closed answers
+        /// CHANGED if it said `growing: true`; `off = 0` starts over.
         READ = 2,
         /// Write `{kind, name, off, data}`, plus `len` (the size of the file) and `crc` (CRC32/IEEE of
         /// the whole file) at `off = 0`, `tok` after: `{off, tok}`, the offset to send next (`len` once
@@ -116,12 +138,16 @@ public:
         /// Write `{kind, name}`: `{}`. Checked in this order: the kind, its DELETE bit, the name
         /// (BAD_NAME), whether it is a built-in's (BUILT_IN), the volume, NOT_FOUND, IN_USE.
         DELETE = 4,
-        /// Read `{kind, name}`: `{len, crc?}`. The size of the file and, unless it is above
+        /// Read `{kind, name, growing?}`: `{len, crc?, growing?}`. The size of the file and, unless it is above
         /// CONFIG_EERIE_LEAP_SMP_ASSETS_STAT_CRC_MAX_SIZE and no current checkpoint covers it, the
         /// CRC32/IEEE of the whole file, the one READ sends. Checked as READ is (the kind, its READ
         /// bit, the name, the volume, NOT_FOUND, IN_USE; a built-in needs no volume and is never in use).
         /// A built-in answers its size and the CRC of its bytes, summed from flash (it is never above
-        /// the cap that a stored file's CRC is). The CRC comes from the checkpoint when it is
+        /// the cap that a stored file's CRC is). A growing file is IN_USE without `growing: true`; with it
+        /// the answer is the size the provider reports, `crc` only when the open session or the
+        /// checkpoint of the file covers exactly that much, and `growing: true`; the file is never
+        /// read. A checkpoint taken while a file grew never supplies the CRC of a file that does not
+        /// grow now. The CRC comes from the checkpoint when it is
         /// current (the file system was not remounted and no write went through the store since it was
         /// taken) and covers the whole file, otherwise the unit reads the file, and keeps the result as
         /// the checkpoint. An open download is left as it is.
@@ -144,18 +170,22 @@ public:
         NOT_FOUND = 4,    ///< No such asset.
         BAD_NAME = 5,     ///< Fails AssetStore::IsValidName() for the kind.
         DENIED = 6,       ///< The kind does not allow the operation.
-        IN_USE = 7,       ///< The provider's is_in_use refuses the operation.
-        TOO_LARGE = 8,    ///< `len` above the kind's max, or data beyond `len`.
-        NO_SPACE = 9,     ///< The volume has no room for `len`, or filled up.
-        BAD_OFFSET = 10,  ///< Not the next offset (the error carries `off`), or past the end (it carries `len`).
-        BAD_TOKEN = 11,   ///< The token, kind or name does not match the open upload.
-        BUSY = 12,        ///< Another client has an upload open.
+        IN_USE =
+            7, ///< The provider's is_in_use refuses the operation, or the file is growing (WRITE, DELETE, RENAME; READ and STAT without `growing`).
+        TOO_LARGE = 8,   ///< `len` above the kind's max, or data beyond `len`.
+        NO_SPACE = 9,    ///< The volume has no room for `len`, or filled up.
+        BAD_OFFSET = 10, ///< Not the next offset (the error carries `off`), or past the end (it carries `len`).
+        BAD_TOKEN = 11,  ///< The token, kind or name does not match the open upload.
+        BUSY = 12,       ///< Another client has an upload open.
         CRC_MISMATCH = 13,
         IO_ERROR = 14,
         NO_MEMORY = 15,
         /// The asset is built into the firmware (AssetProvider::built_ins): it can't be replaced,
         /// renamed or deleted.
         BUILT_IN = 16,
+        /// The file was closed by its writer after the session or checkpoint a `growing: true` READ
+        /// would continue was taken: the close rewrote bytes of its header. Read it again from `off = 0`.
+        CHANGED = 17,
     };
 
     /// Directory entries read for one LIST request: more than one response holds.
@@ -183,6 +213,8 @@ private:
         // CRC32 of the file's bytes [0, crc_end).
         uint32_t crc = 0;
         size_t crc_end = 0;
+        // The file was growing when the session opened (and so served up to the provider's size).
+        bool is_growing = false;
         int64_t last_activity_ms = 0;
     };
 
@@ -230,6 +262,9 @@ private:
         uint64_t generation = 0;
         uint32_t crc = 0;
         size_t crc_end = 0;
+        // Taken from a session of a growing file: it continues a request up to the size synced by
+        // then, whatever size it had, and nothing once the file is closed.
+        bool is_growing = false;
     };
 
     static const mgmt_handler HANDLERS[];
@@ -281,13 +316,17 @@ private:
      * @return nullopt when not even one byte fits and some are left.
      */
     std::optional<size_t> GetReadChunkLength(smp_streamer* ctxt, size_t size, size_t offset) const;
-    /** @brief Encodes a READ response: `off`, `len` at offset 0, the chunk, and `crc` when @p crc is given. */
+    /**
+     * @brief Encodes a READ response: `off`, `len` at offset 0, the chunk, `crc` when @p crc is given
+     *        and `growing: true` when @p is_growing.
+     */
     static int EncodeReadChunk(
         smp_streamer* ctxt,
         size_t offset,
         size_t size,
         std::span<const uint8_t> chunk,
-        std::optional<uint32_t> crc
+        std::optional<uint32_t> crc,
+        bool is_growing
     );
     /** @brief Answers a STAT of a built-in. */
     static int StatBuiltIn(smp_streamer* ctxt, const BuiltInAsset& built_in);
@@ -366,10 +405,24 @@ private:
     /**
      * @brief Opens the read session on @p name, closing the one that is open.
      * @param use_checkpoint Start the CRC from the checkpoint of this file, when there is one.
+     * @param growing_size The provider's size of the file when it is growing, else nothing. A growing
+     *        session takes a growing checkpoint whose CRC ends within the readable size (the smaller
+     *        of the file's size and this); a session that is not growing never takes one.
      * @throws Whatever the provider's is_in_use throws, with no session open.
      */
-    Error
-    OpenReadSession(const std::shared_ptr<const AssetProvider>& provider, std::string_view name, bool use_checkpoint);
+    Error OpenReadSession(
+        const std::shared_ptr<const AssetProvider>& provider,
+        std::string_view name,
+        bool use_checkpoint,
+        std::optional<uint64_t> growing_size
+    );
+    /**
+     * @brief Opens the file of the read session again, so that the reader sees the size the file has
+     *        now. The CRC and its end are kept.
+     */
+    Error ReopenReader();
+    /** @brief Closes the read session, if open, and keeps no checkpoint of it nor of the file. */
+    void DropReadSession();
     /** @brief Reads [crc_end, @p offset) of the open file into the running CRC. */
     Error ExtendReadCrc(size_t offset);
     /** @brief Closes the read session, if open, and keeps its CRC as the checkpoint. Never throws. */

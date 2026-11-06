@@ -165,6 +165,16 @@ struct InUse {
     bool throws_bad_alloc = false;
 };
 
+// A file of the logs kind that its writer appends to while it is open: the writer's synced size is
+// what the provider reports (nothing once the file is closed), and the test writes the file itself,
+// outside the store, as the log writer does.
+struct Growing {
+    std::string name = "run.mdf";
+    std::optional<uint64_t> size;
+    // The provider's questions; one per request about a file of this name, or per listed entry.
+    size_t queries = 0;
+};
+
 struct Download {
     Bytes data;
     uint32_t crc = 0;
@@ -257,6 +267,37 @@ public:
         ));
     }
 
+    // Registers the logs kind anew with a file that grows, as the logging controller does: reading it is
+    // the group's call, deleting it is refused as in use.
+    void ReregisterLogsGrowing(Growing& growing, bool is_delete_refused = true) {
+        registry->Unregister(AssetKind::LOGS);
+        zassert_true(registry->Register(
+            {
+                .kind = AssetKind::LOGS,
+                .name = "logs",
+                .store = std::make_shared<AssetStore>(volume, "logs"),
+                .extensions = LOG_EXTENSIONS,
+                .access = READ_ONLY | ToMask(AssetAccess::DELETE),
+                .max_size = 0,
+                .is_in_use =
+                    [&growing, is_delete_refused](AssetAccess operation, std::string_view name) {
+                        return is_delete_refused
+                            && operation == AssetAccess::DELETE
+                            && name == growing.name
+                            && growing.size.has_value();
+                    },
+                .get_growing_size = [&growing](std::string_view name) -> std::optional<uint64_t> {
+                    if(name != growing.name)
+                        return std::nullopt;
+
+                    growing.queries++;
+
+                    return growing.size;
+                },
+            }
+        ));
+    }
+
     // Registers the can scripts kind anew on the root of the volume, where the directory of the staged
     // files is too.
     void ReregisterCanScriptsAtRoot() {
@@ -332,6 +373,60 @@ public:
             SmpGroupId::ASSETS, std::to_underlying(Command::READ),
             CborMap().Put("kind", kind).PutText("name", name).Put("off", offset).Build()
         );
+    }
+
+    Response ReadGrowing(uint32_t kind, std::string_view name, uint32_t offset) {
+        return client.Read(
+            SmpGroupId::ASSETS, std::to_underlying(Command::READ),
+            CborMap().Put("kind", kind).PutText("name", name).Put("off", offset).PutBool("growing", true).Build()
+        );
+    }
+
+    Response StatGrowing(uint32_t kind, std::string_view name) {
+        return client.Read(
+            SmpGroupId::ASSETS, std::to_underlying(Command::STAT),
+            CborMap().Put("kind", kind).PutText("name", name).PutBool("growing", true).Build()
+        );
+    }
+
+    // Reads a growing file from @p offset up to @p synced with `growing: true`, as a follower does, and
+    // checks that every answer says so, `len` comes at offset 0 only and is the synced size, and `crc`
+    // comes with the chunk that reaches it.
+    Download DownloadGrowing(uint32_t kind, std::string_view name, uint32_t offset, uint32_t synced) {
+        Download download;
+
+        for(size_t requests = 0; requests < 1000; requests++) {
+            const auto response = ReadGrowing(kind, name, offset);
+            const Bytes& chunk = DataOf(response);
+
+            zassert_equal(response.Value("off"), offset);
+            zassert_true(response.Flag("growing"), "Every answer about a growing file says so");
+
+            if(offset == 0)
+                zassert_equal(response.Value("len"), synced);
+            else
+                zassert_false(response.Has("len"), "`len` answers the first chunk only");
+
+            download.chunks++;
+            download.data.insert(download.data.end(), chunk.begin(), chunk.end());
+            offset += chunk.size();
+
+            zassert_true(offset <= synced, "A chunk does not reach past the synced size");
+
+            if(offset == synced) {
+                zassert_true(response.Has("crc"), "The chunk that reaches the synced size carries the CRC");
+                download.crc = response.Value("crc");
+
+                return download;
+            }
+
+            zassert_false(response.Has("crc"), "Only the last chunk carries the CRC");
+            zassert_true(!chunk.empty(), "A chunk before the end holds data");
+        }
+
+        zassert_true(false, "The download does not end");
+
+        return download;
     }
 
     Response Delete(uint32_t kind, std::string_view name) {
@@ -3673,6 +3768,406 @@ ZTEST_F(smp_assets_group, test_a_write_of_a_built_in_name_leaves_the_upload_of_a
     zassert_true(harness.SendRest(FONTS, "other.ttf", other, first.Value("tok"), UPLOAD_CHUNK_SIZE).IsOk());
     zassert_true(harness.FileContent("fonts/other.ttf") == other, "The open upload went on to its end");
     zassert_false(harness.IsStaged());
+}
+
+// ======== Growing files (the log being written) ========
+
+namespace {
+
+// The file as its writer has it with @p synced bytes on the card: a prefix of the full pattern.
+Bytes GrowingPrefix(size_t synced) {
+    return Pattern(synced, 77);
+}
+
+// The file once its writer closed it: finalizing rewrote bytes of the header.
+Bytes ClosedFile(size_t size) {
+    Bytes data = Pattern(size, 77);
+    for(size_t i = 0; i < 64; i++)
+        data[i] = static_cast<uint8_t>(~data[i]);
+
+    return data;
+}
+
+} // namespace
+
+ZTEST_F(smp_assets_group, test_growing_file_is_in_use_without_the_key) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    AssertError(harness.Read(LOGS, "run.mdf", 0), Error::IN_USE);
+    AssertError(harness.Read(LOGS, "run.mdf", 100), Error::IN_USE);
+    AssertError(harness.Stat(LOGS, "run.mdf"), Error::IN_USE);
+
+    // A file that is not growing reads as ever, with the key or without it.
+    harness.Put("logs/old.mdf", Pattern(900, 1));
+    zassert_equal(harness.DownloadAll(LOGS, "old.mdf", 900).crc, Crc(Pattern(900, 1)));
+
+    const auto response = harness.ReadGrowing(LOGS, "old.mdf", 0);
+    zassert_true(response.IsOk());
+    zassert_false(response.Has("growing"), "Only a growing file says so");
+}
+
+ZTEST_F(smp_assets_group, test_growing_read_serves_the_synced_part_with_its_crc) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    const atomic_val_t closed_before = atomic_get(&files_closed);
+    const auto download = harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000);
+
+    zassert_true(download.data == GrowingPrefix(3000));
+    zassert_equal(download.crc, Crc(GrowingPrefix(3000)));
+
+    // The session is not closed by its last chunk.
+    zassert_equal(atomic_get(&files_closed), closed_before, "A growing file's session stays open");
+
+    // At the synced size: empty data and the CRC again.
+    const auto at_end = harness.ReadGrowing(LOGS, "run.mdf", 3000);
+    zassert_true(at_end.IsOk());
+    zassert_equal(Harness::DataOf(at_end).size(), 0);
+    zassert_equal(at_end.Value("crc"), Crc(GrowingPrefix(3000)));
+    zassert_true(at_end.Flag("growing"));
+}
+
+ZTEST_F(smp_assets_group, test_growing_read_stops_at_the_synced_size_not_at_the_file_system_size) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+
+    // The directory already shows more than the writer has published.
+    harness.Put("logs/run.mdf", GrowingPrefix(9000));
+
+    const auto download = harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000);
+    zassert_equal(download.crc, Crc(GrowingPrefix(3000)));
+
+    // Past the synced size: BAD_OFFSET with it, and the session still serves.
+    const auto past = harness.ReadGrowing(LOGS, "run.mdf", 3001);
+    AssertError(past, Error::BAD_OFFSET);
+    zassert_equal(past.Value("len"), 3000);
+
+    const auto again = harness.ReadGrowing(LOGS, "run.mdf", 3000);
+    zassert_true(again.IsOk());
+    zassert_equal(again.Value("crc"), Crc(GrowingPrefix(3000)));
+}
+
+ZTEST_F(smp_assets_group, test_growing_read_follows_the_file_on_the_same_session_with_one_crc) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    Bytes received = harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).data;
+
+    // A request without the key leaves the session alone.
+    AssertError(harness.Read(LOGS, "run.mdf", 3000), Error::IN_USE);
+
+    // The writer syncs more.
+    harness.Put("logs/run.mdf", GrowingPrefix(9000));
+    growing.size = 9000;
+
+    const auto grown = harness.DownloadGrowing(LOGS, "run.mdf", 3000, 9000);
+    received.insert(received.end(), grown.data.begin(), grown.data.end());
+
+    zassert_true(received == GrowingPrefix(9000));
+    zassert_equal(grown.crc, Crc(GrowingPrefix(9000)), "The CRC goes on over the whole file");
+
+    // And once more, a little.
+    harness.Put("logs/run.mdf", GrowingPrefix(9100));
+    growing.size = 9100;
+
+    const auto more = harness.DownloadGrowing(LOGS, "run.mdf", 9000, 9100);
+    zassert_equal(more.crc, Crc(GrowingPrefix(9100)));
+}
+
+ZTEST_F(smp_assets_group, test_growing_read_from_the_checkpoint_does_not_read_the_prefix_again) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 12000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(12000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 12000).crc, Crc(GrowingPrefix(12000)));
+
+    // The follower's poll comes after the session timed out, and the file is longer by then.
+    const atomic_val_t closed_before = atomic_get(&files_closed);
+    k_msleep(PAST_TIMEOUT_MS);
+    zassert_true(atomic_get(&files_closed) > closed_before, "The idle session closes its file");
+
+    harness.Put("logs/run.mdf", GrowingPrefix(20000));
+    growing.size = 20000;
+    atomic_set(&bytes_read_from_files, 0);
+
+    const auto grown = harness.DownloadGrowing(LOGS, "run.mdf", 12000, 20000);
+
+    zassert_equal(grown.crc, Crc(GrowingPrefix(20000)));
+    const Bytes full = GrowingPrefix(20000);
+    zassert_true(grown.data == Bytes(full.begin() + 12000, full.end()));
+
+    // Reading the prefix again would take at least 12000 more bytes than the new part.
+    const size_t read = static_cast<size_t>(atomic_get(&bytes_read_from_files));
+    zassert_true(read <= 20000 - AssetReader::BUFFER_SIZE, "The resume read %u bytes", static_cast<unsigned>(read));
+}
+
+ZTEST_F(smp_assets_group, test_growing_checkpoint_continues_at_any_offset_up_to_the_synced_size) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 12000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(12000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 12000).crc, Crc(GrowingPrefix(12000)));
+    k_msleep(PAST_TIMEOUT_MS);
+
+    // The follower asks for an offset below what the CRC covers, then past it.
+    harness.Put("logs/run.mdf", GrowingPrefix(15000));
+    growing.size = 15000;
+
+    const auto below = harness.DownloadGrowing(LOGS, "run.mdf", 8000, 15000);
+    zassert_equal(below.crc, Crc(GrowingPrefix(15000)));
+}
+
+ZTEST_F(smp_assets_group, test_growing_read_of_a_closed_file_is_changed_and_ends_the_session) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+
+    // The writer finalizes the file: the header changes, and the file is not growing any more.
+    const Bytes closed = ClosedFile(8000);
+    harness.Put("logs/run.mdf", closed);
+    growing.size.reset();
+
+    AssertError(harness.ReadGrowing(LOGS, "run.mdf", 3000), Error::CHANGED);
+
+    // The session ended without a checkpoint, so a request again does not continue the old CRC.
+    const atomic_val_t before = atomic_get(&bytes_read_from_files);
+    const auto again = harness.DownloadFrom(LOGS, "run.mdf", 3000, closed.size());
+    zassert_equal(again.crc, Crc(closed), "The closed file's CRC covers its new header");
+    zassert_true(BytesReadSince(before) >= 3000, "The prefix was read for the CRC");
+
+    // From the start it is a new session: the closed file, no `growing` in the answers.
+    const auto first = harness.ReadGrowing(LOGS, "run.mdf", 0);
+    zassert_true(first.IsOk());
+    zassert_false(first.Has("growing"));
+    zassert_equal(harness.DownloadAll(LOGS, "run.mdf", closed.size()).crc, Crc(closed));
+}
+
+ZTEST_F(smp_assets_group, test_growing_read_of_a_closed_file_through_a_checkpoint_is_changed) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+    k_msleep(PAST_TIMEOUT_MS);
+
+    const Bytes closed = ClosedFile(8000);
+    harness.Put("logs/run.mdf", closed);
+    growing.size.reset();
+
+    AssertError(harness.ReadGrowing(LOGS, "run.mdf", 3000), Error::CHANGED);
+
+    // The checkpoint is gone: the same request again reads the closed file for the CRC.
+    zassert_equal(harness.DownloadFrom(LOGS, "run.mdf", 3000, closed.size()).crc, Crc(closed));
+}
+
+ZTEST_F(smp_assets_group, test_read_without_the_key_of_a_closed_file_drops_what_a_growing_session_knew) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+
+    const Bytes closed = ClosedFile(8000);
+    harness.Put("logs/run.mdf", closed);
+    growing.size.reset();
+
+    // Only a client that opted in sees CHANGED.
+    zassert_equal(harness.DownloadFrom(LOGS, "run.mdf", 3000, closed.size()).crc, Crc(closed));
+}
+
+ZTEST_F(smp_assets_group, test_read_without_the_key_of_a_closed_file_drops_a_growing_checkpoint) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+    k_msleep(PAST_TIMEOUT_MS);
+
+    const Bytes closed = ClosedFile(8000);
+    harness.Put("logs/run.mdf", closed);
+    growing.size.reset();
+
+    zassert_equal(harness.DownloadFrom(LOGS, "run.mdf", 3000, closed.size()).crc, Crc(closed));
+}
+
+ZTEST_F(smp_assets_group, test_growing_session_from_the_start_replaces_the_one_of_a_closed_file) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+
+    const Bytes closed = ClosedFile(8000);
+    harness.Put("logs/run.mdf", closed);
+    growing.size.reset();
+
+    // `off = 0` starts over without a word about the change.
+    zassert_equal(harness.DownloadAll(LOGS, "run.mdf", closed.size()).crc, Crc(closed));
+}
+
+ZTEST_F(smp_assets_group, test_stat_of_a_growing_file_gives_the_synced_size_and_a_crc_only_when_one_is_known) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 5000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(5000));
+
+    atomic_set(&bytes_read_from_files, 0);
+
+    const auto cold = harness.StatGrowing(LOGS, "run.mdf");
+    zassert_true(cold.IsOk());
+    zassert_equal(cold.Value("len"), 5000);
+    zassert_false(cold.Has("crc"), "A growing file is never read for its CRC");
+    zassert_true(cold.Flag("growing"));
+    zassert_equal(atomic_get(&bytes_read_from_files), 0);
+
+    // The open session covers exactly the synced size.
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 5000).crc, Crc(GrowingPrefix(5000)));
+
+    const auto covered = harness.StatGrowing(LOGS, "run.mdf");
+    zassert_equal(covered.Value("len"), 5000);
+    zassert_equal(covered.Value("crc"), Crc(GrowingPrefix(5000)));
+    zassert_true(covered.Flag("growing"));
+
+    // So does the checkpoint of a session that timed out.
+    k_msleep(PAST_TIMEOUT_MS);
+    zassert_equal(harness.StatGrowing(LOGS, "run.mdf").Value("crc"), Crc(GrowingPrefix(5000)));
+
+    // The file grew: no CRC covers its new size.
+    harness.Put("logs/run.mdf", GrowingPrefix(6000));
+    growing.size = 6000;
+
+    const auto grown = harness.StatGrowing(LOGS, "run.mdf");
+    zassert_equal(grown.Value("len"), 6000);
+    zassert_false(grown.Has("crc"));
+}
+
+ZTEST_F(smp_assets_group, test_stat_of_a_closed_file_does_not_take_its_crc_from_a_growing_checkpoint) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+
+    // The close rewrote the header and left the size what the session had read, or any other.
+    const Bytes closed = ClosedFile(3000);
+    harness.Put("logs/run.mdf", closed);
+    growing.size.reset();
+
+    // The open growing session does not supply the CRC either.
+    const auto response = harness.Stat(LOGS, "run.mdf");
+    zassert_true(response.IsOk());
+    zassert_equal(response.Value("len"), 3000);
+    zassert_equal(response.Value("crc"), Crc(closed));
+    zassert_false(response.Has("growing"));
+
+    k_msleep(PAST_TIMEOUT_MS);
+    zassert_equal(harness.Stat(LOGS, "run.mdf").Value("crc"), Crc(closed));
+}
+
+ZTEST_F(smp_assets_group, test_list_gives_a_growing_file_its_synced_size_and_says_so) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+
+    // The file system shows more than the writer has synced.
+    harness.Put("logs/run.mdf", GrowingPrefix(9000));
+    harness.Put("logs/old.mdf", Pattern(40, 1));
+
+    const auto response = harness.List(LOGS);
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 2);
+
+    size_t growing_entries = 0;
+    for(size_t i = 0; i < response.entries.size(); i++) {
+        const std::string& name = response.entry_texts[i].at("name");
+
+        if(name == "run.mdf") {
+            growing_entries++;
+            zassert_equal(response.entries[i].at("size"), 3000);
+            zassert_true(response.entry_flags[i].at("growing"));
+        } else {
+            zassert_equal(response.entries[i].at("size"), 40);
+            zassert_false(response.entry_flags[i].contains("growing"));
+        }
+    }
+
+    zassert_equal(growing_entries, 1);
+}
+
+ZTEST_F(smp_assets_group, test_delete_of_the_file_being_written_is_in_use) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    AssertError(harness.Delete(LOGS, "run.mdf"), Error::IN_USE);
+    zassert_true(harness.volume->Exists("logs/run.mdf"));
+
+    growing.size.reset();
+    zassert_true(harness.Delete(LOGS, "run.mdf").IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_the_group_refuses_to_delete_a_growing_file_whatever_the_kind_says) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing, false);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    AssertError(harness.Delete(LOGS, "run.mdf"), Error::IN_USE);
+    zassert_true(harness.volume->Exists("logs/run.mdf"));
+
+    growing.size.reset();
+    zassert_true(harness.Delete(LOGS, "run.mdf").IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_changed_is_a_bad_state_for_the_client) {
+    Harness& harness = *fixture->harness;
+    Growing growing;
+    growing.size = 3000;
+    harness.ReregisterLogsGrowing(growing);
+    harness.Put("logs/run.mdf", GrowingPrefix(3000));
+
+    zassert_equal(harness.DownloadGrowing(LOGS, "run.mdf", 0, 3000).crc, Crc(GrowingPrefix(3000)));
+    harness.Put("logs/run.mdf", ClosedFile(8000));
+    growing.size.reset();
+
+    const auto response = harness.ReadGrowing(LOGS, "run.mdf", 3000);
+    zassert_false(response.IsOk());
+    zassert_equal(response.error.value_or(0), 17);
 }
 
 // ======== Dispatch ========

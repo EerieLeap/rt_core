@@ -329,6 +329,8 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
     }
 
     SetOpenFileBytes(logger_->GetBytesWritten());
+    // StartLogging() synced the header, so everything written is on the card.
+    SetOpenFileSyncedBytes(logger_->GetBytesWritten());
 
     return true;
 }
@@ -400,6 +402,12 @@ void LogWriterService::SetOpenFileBytes(uint64_t bytes) {
     open_file_bytes_ = bytes;
 }
 
+void LogWriterService::SetOpenFileSyncedBytes(uint64_t bytes) {
+    ScopedMutex lock(open_file_mutex_);
+
+    open_file_synced_bytes_ = bytes;
+}
+
 std::optional<LogSessionInfo> LogWriterService::GetSessionInfo() const {
     ScopedMutex lock(open_file_mutex_);
 
@@ -433,12 +441,22 @@ void LogWriterService::ClearOpenFile() {
 
     open_file_path_.Clear();
     open_file_bytes_ = 0;
+    open_file_synced_bytes_ = 0;
 }
 
 bool LogWriterService::IsOpenFile(std::string_view path) const {
     ScopedMutex lock(open_file_mutex_);
 
     return PathHelpers::IsSameEntryIgnoringCase(path, open_file_path_.ToString());
+}
+
+std::optional<uint64_t> LogWriterService::GetGrowingSize(std::string_view path) const {
+    ScopedMutex lock(open_file_mutex_);
+
+    if(!PathHelpers::IsSameEntryIgnoringCase(path, open_file_path_.ToString()))
+        return std::nullopt;
+
+    return open_file_synced_bytes_;
 }
 
 std::optional<LoggingStatusReason> LogWriterService::RotateFile(LogWriterTask& task) {
@@ -534,6 +552,7 @@ WorkQueueTaskResult LogWriterService::ProcessTick(LogWriterTask& task) {
                 }
 
                 task.stats.syncs++;
+                SetOpenFileSyncedBytes(task.logger->GetBytesWritten());
             }
         }
 

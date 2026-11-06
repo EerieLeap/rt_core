@@ -95,10 +95,15 @@ name that `LogFileNaming` builds is `EERIE_LEAP_LOG_DATA_FILE_PREFIX` plus 26 ch
 refuses a prefix that makes the longest name exceed `EERIE_LEAP_ASSETS_MAX_NAME_LENGTH`, holds a
 character outside `A-Z a-z 0-9 . _ -` or starts with a dot.
 
-The file the writer has open is in use: it can be neither downloaded nor deleted (`IN_USE`), where
-every other log can. `LogWriterService::IsOpenFile(path)` says which that is, for a path relative to
-the volume, compared ignoring ASCII case, from any thread; it takes a lock of its own that is never
-held across file I/O. The writer sets the path before the file exists and clears it where the file is
+The file the writer has open is in use and growing: it cannot be deleted (`IN_USE`), where every other
+log can, and it can be read only by a client that says `growing: true`, up to the size the writer has
+synced (see [Reading a growing file](smp.md#reading-a-growing-file)); without the key a read is `IN_USE`.
+`LogWriterService::IsOpenFile(path)` says which file that is, for a path relative to
+the volume, compared ignoring ASCII case, from any thread, and `GetGrowingSize(path)` gives its size as of
+the last sync (the header's at the start, 0 only while the file is named and the header not yet synced,
+then the writer's byte count at each successful sync) and nothing for any other path; both take a lock of
+their own that is never held across file I/O. The writer sets the path before the file exists and clears it
+(and the synced size) where the file is
 closed and final (after the finalize), on every failure path and on a stop, so a stopped writer has no
 open file and the log of the last session can be fetched, and a rotation has none between its two
 files. Only a unit with a log writer registers the kind: `LoggingController` in the writer role, with
