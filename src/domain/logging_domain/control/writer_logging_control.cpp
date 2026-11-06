@@ -22,21 +22,21 @@ WriterLoggingControl::WriterLoggingControl(
         throw std::invalid_argument("The writer logging control needs the unit's writer.");
 }
 
-void WriterLoggingControl::RequestStart(uint32_t target_uid) {
-    Route(target_uid, true);
+void WriterLoggingControl::RequestStart(uint32_t target_uid, LoggingStartCause cause) {
+    Route(target_uid, true, cause);
 }
 
 void WriterLoggingControl::RequestStop(uint32_t target_uid) {
     Route(target_uid, false);
 }
 
-void WriterLoggingControl::Route(uint32_t target_uid, bool is_start) {
+void WriterLoggingControl::Route(uint32_t target_uid, bool is_start, LoggingStartCause cause) {
     const bool is_all = target_uid == ALL_UNITS;
     const bool is_own = !is_all && target_uid == own_uid_;
 
     if(is_all || is_own) {
         if(is_start)
-            local_->RequestStart(ALL_UNITS);
+            local_->RequestStart(ALL_UNITS, cause);
         else
             local_->RequestStop(ALL_UNITS);
     }
@@ -55,7 +55,7 @@ void WriterLoggingControl::Route(uint32_t target_uid, bool is_start) {
     }
 
     if(is_start)
-        network_->RequestStart(target_uid);
+        network_->RequestStart(target_uid, cause);
     else
         network_->RequestStop(target_uid);
 }

@@ -1081,6 +1081,34 @@ ZTEST(mdf4_logger, test_HeaderPropertiesAreWritten) {
     );
 }
 
+ZTEST(mdf4_logger, test_TheStartCauseIsWrittenFromTheSession) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+
+    {
+        Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+        auto stream = MakeStream();
+        zassert_true(
+            logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }), "StartLogging must succeed"
+        );
+        zassert_true(
+            AnyContains(CollectBlockTexts(stream.Str(), "##MD"), "<e name=\"start_cause\">unknown</e>"),
+            "without a session the start cause is unknown"
+        );
+    }
+
+    auto metadata = MakeMetadata();
+    metadata.session = std::make_shared<LogSession>();
+    metadata.session->id = 9;
+    metadata.session->cause = LoggingStartCause::Trigger;
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, metadata);
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }), "StartLogging must succeed");
+    zassert_true(
+        AnyContains(CollectBlockTexts(stream.Str(), "##MD"), "<e name=\"start_cause\">trigger</e>"),
+        "the session's cause is written by name"
+    );
+}
+
 ZTEST(mdf4_logger, test_TheSessionIsWrittenAndNumbersTheFiles) {
     const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
     auto metadata = MakeMetadata();

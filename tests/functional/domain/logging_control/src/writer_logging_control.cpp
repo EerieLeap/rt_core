@@ -40,6 +40,22 @@ ZTEST(writer_logging_control, test_AllUnitsAreThisWriterAndABroadcast) {
     zassert_true(f.network->Targets() == Targets({ ALL_UNITS, ALL_UNITS }), "as one request for all");
 }
 
+ZTEST(writer_logging_control, test_AStartCauseReachesBothHalves) {
+    Fixture f;
+
+    f.control->RequestStart(ALL_UNITS, LoggingStartCause::Smp);
+    f.control->RequestStart(ALL_UNITS);
+
+    const auto local = f.local->Requests();
+    const auto network = f.network->Requests();
+    zassert_equal(local.size(), 2U);
+    zassert_equal(network.size(), 2U);
+    zassert_true(local[0].cause == LoggingStartCause::Smp, "The writer gets the cause");
+    zassert_true(network[0].cause == LoggingStartCause::Smp, "and so does the network half");
+    zassert_true(local[1].cause == LoggingStartCause::Unknown, "The shorthand says unknown");
+    zassert_true(network[1].cause == LoggingStartCause::Unknown, "to both");
+}
+
 ZTEST(writer_logging_control, test_ThisUnitsOwnUidIsTheWriterOnly) {
     Fixture f;
 

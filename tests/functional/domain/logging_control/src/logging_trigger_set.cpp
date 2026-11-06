@@ -114,6 +114,16 @@ ZTEST(logging_trigger_set, test_AFirstValueOfOneStarts) {
     zassert_true(F().control->Kinds() == Kinds({ Kind::Start }), "A switch that is already on starts logging");
 }
 
+ZTEST(logging_trigger_set, test_ATriggersStartIsAskedAsATrigger) {
+    F().BuildOnSensor("switch");
+
+    PublishSensorValue("switch", 1.0F);
+
+    const auto requests = F().control->Requests();
+    zassert_equal(requests.size(), 1U);
+    zassert_true(requests[0].cause == LoggingStartCause::Trigger, "A trigger's start says trigger");
+}
+
 ZTEST(logging_trigger_set, test_AFirstValueOfZeroDoesNothing) {
     F().BuildOnSensor("switch");
 

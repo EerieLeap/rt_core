@@ -17,6 +17,7 @@ using namespace smp_groups_test;
 
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using eerie_leap::domain::logging_domain::models::LogSessionInfo;
 using eerie_leap::domain::logging_domain::models::LogSessionProvider;
 using eerie_leap::domain::logging_domain::smp::LoggingMgmtGroup;
@@ -44,11 +45,14 @@ struct Request {
 class FakeControl final : public ILoggingControl {
 public:
     std::vector<Request> requests;
+    std::vector<LoggingStartCause> start_causes;
     bool is_active = false;
     LoggingStatusReason reason = LoggingStatusReason::Stopped;
 
-    void RequestStart(uint32_t target_uid) override {
+    using ILoggingControl::RequestStart;
+    void RequestStart(uint32_t target_uid, LoggingStartCause cause) override {
         requests.push_back({ true, target_uid });
+        start_causes.push_back(cause);
     }
     void RequestStop(uint32_t target_uid) override {
         requests.push_back({ false, target_uid });
@@ -191,6 +195,17 @@ ZTEST(smp_logging_group, test_start_and_stop_take_the_uid_and_default_to_all_uni
         { false, 77 },
     };
     zassert_true(harness.control->requests == expected, "The requests reach the control as sent");
+}
+
+ZTEST(smp_logging_group, test_a_start_passes_the_smp_cause_to_the_control) {
+    Harness harness(false);
+
+    zassert_true(harness.Start(CborMap().Build()).IsOk());
+    zassert_true(harness.Start(CborMap().Put("uid", 77).Build()).IsOk());
+
+    zassert_equal(harness.control->start_causes.size(), 2U, "Both starts reach the control");
+    for(const auto cause : harness.control->start_causes)
+        zassert_true(cause == LoggingStartCause::Smp, "The logging group asks as smp");
 }
 
 ZTEST(smp_logging_group, test_a_uid_of_the_wrong_type_is_a_bad_request) {

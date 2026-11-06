@@ -16,6 +16,8 @@ namespace eerie_leap::domain::logging_domain::loggers {
 
 using namespace eerie_leap::domain::sensor_domain::models;
 using namespace eerie_leap::subsys::mdf;
+using eerie_leap::domain::logging_domain::models::GetStartCauseName;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using namespace eerie_leap::subsys::mdf::mdf4;
 
 namespace {
@@ -332,14 +334,16 @@ void Mdf4LoggerSensorReading::SetFileMetadata(
     mdf4_file_->SetFileHistory(metadata.tool_id, TOOL_VENDOR, metadata.tool_version);
     session_ = metadata.session;
 
-    const std::array<MdfProperty, 10> properties{ { { "device_name", metadata.device_name },
+    const std::array<MdfProperty, 11> properties{ { { "device_name", metadata.device_name },
         { "product_id", std::to_string(metadata.product_id) },
         { "device_id", std::to_string(static_cast<uint32_t>(metadata.device_id)) },
         { "hw_version", std::to_string(metadata.hw_version) }, { "sw_version", std::to_string(metadata.sw_version) },
         { "sensors_configuration_hash", std::to_string(metadata.sensors_configuration_hash) },
         { "logging_interval_ms", std::to_string(configuration.logging_interval_ms) },
         { "unit_uid", std::to_string(metadata.unit_uid) }, { "boot_id", std::to_string(metadata.boot_id) },
-        { "session_id", std::to_string(session_ != nullptr ? session_->id : 0U) } } };
+        { "session_id", std::to_string(session_ != nullptr ? session_->id : 0U) },
+        { "start_cause",
+            std::string(GetStartCauseName(session_ != nullptr ? session_->cause : LoggingStartCause::Unknown)) } } };
 
     mdf4_file_->SetHeaderComment(HEADER_COMMENT, properties);
 }

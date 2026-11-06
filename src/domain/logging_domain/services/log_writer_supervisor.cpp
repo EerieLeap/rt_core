@@ -25,6 +25,7 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
 using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
 using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using eerie_leap::domain::logging_domain::models::LogSession;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
@@ -61,9 +62,10 @@ public:
         return session;
     }
 
-    // A new session with an ID drawn at random, never 0 (0 in a header means no session).
-    void StartNew() {
+    // A new session with its start cause and an ID drawn at random, never 0 (0 in a header means no session).
+    void StartNew(LoggingStartCause cause) {
         auto session = std::make_shared<LogSession>();
+        session->cause = cause;
         while(session->id == 0)
             session->id = Rng::Get<uint32_t>();
 
@@ -84,6 +86,8 @@ struct LogWriterSupervisor::State {
     std::atomic<Request> pending_request = Request::None;
     // What the pending stop publishes as its reason; written before the request, taken by the task.
     std::atomic<LoggingStatusReason> stop_reason = LoggingStatusReason::Stopped;
+    // What the latest start was asked by; written before the request, read when a session opens.
+    std::atomic<LoggingStartCause> start_cause = LoggingStartCause::Unknown;
     // Whether the task is running, for WaitUntilIdle().
     std::atomic<bool> is_processing = false;
     // Set by a successful start, cleared by a stop or a failure: whether a sensors restart brings the
@@ -335,12 +339,14 @@ bool LogWriterSupervisor::Initialize() {
     return true;
 }
 
-void LogWriterSupervisor::RequestStart(uint32_t /*target_uid*/) {
+void LogWriterSupervisor::RequestStart(uint32_t /*target_uid*/, LoggingStartCause cause) {
     if(!is_initialized_) {
         LOG_ERR("Logging start requested before the supervisor was initialized.");
         return;
     }
 
+    // Before the request, so a run that takes the start takes its cause too.
+    state_->start_cause = cause;
     state_->pending_request = Request::Start;
     if(task_.has_value())
         task_->Reschedule(K_NO_WAIT);
@@ -380,7 +386,7 @@ bool LogWriterSupervisor::WaitUntilIdle(int32_t timeout_ms) const {
 
 bool LogWriterSupervisor::HandleLoggingCommand(bool is_start) {
     if(is_start)
-        RequestStart(ALL_UNITS);
+        RequestStart(ALL_UNITS, LoggingStartCause::Command);
     else
         RequestStop(ALL_UNITS);
 
@@ -488,7 +494,9 @@ bool LogWriterSupervisor::ApplyStart() {
     }
 
     // The writer is not running here, so this start opens a session of its own.
-    state_->session->StartNew();
+    // Loaded, not taken: every pending start was stored after its own cause, so this is never older than
+    // the request served, and a start that arrived meanwhile and fails still has its own cause.
+    state_->session->StartNew(state_->start_cause.load());
 
     const bool is_started = state_->StartWriter();
     state_->is_logging_requested = is_started;

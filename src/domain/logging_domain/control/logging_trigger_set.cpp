@@ -95,7 +95,7 @@ struct LoggingTriggerSet::Trigger {
             return;
 
         if(*state)
-            logging_control->RequestStart(target_uid);
+            logging_control->RequestStart(target_uid, LoggingStartCause::Trigger);
         else
             logging_control->RequestStop(target_uid);
     }

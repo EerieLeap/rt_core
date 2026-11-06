@@ -171,7 +171,7 @@ bool RemoteLoggingControl::Initialize() {
     return true;
 }
 
-void RemoteLoggingControl::RequestStart(uint32_t target_uid) {
+void RemoteLoggingControl::RequestStart(uint32_t target_uid, LoggingStartCause /*cause*/) {
     Submit(target_uid, Request::Start);
 }
 

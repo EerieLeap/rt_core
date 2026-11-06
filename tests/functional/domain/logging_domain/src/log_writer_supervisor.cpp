@@ -26,6 +26,7 @@
 using namespace logging_test_support;
 
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::subsys::threading::ServiceState;
 
@@ -1109,6 +1110,36 @@ ZTEST(log_writer_supervisor, test_AStartOpensANewSession) {
     zassert_false(PropertyValue(files[0].content, "boot_id").empty(), "the files name the boot");
 }
 
+// The session takes the cause of the start that opened it, and the header says so by name; a start
+// that does not say is unknown, and the CDMP command of another unit is a command.
+ZTEST(log_writer_supervisor, test_AStartCauseIsWrittenIntoTheHeader) {
+    auto rig = MakeLogWriterRig();
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSessionSupervisor(rig);
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS, LoggingStartCause::Trigger);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
+
+    zassert_true(supervisor.HandleLoggingCommand(true), "a command is accepted");
+    zassert_true(recorder.WaitForEventCount(3), "the command's start must publish its status");
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(4), "the stop must publish its status");
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(5), "the start must publish its status");
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(6), "the stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+
+    const auto files = ReadLogFiles(*rig.fs_service);
+    zassert_equal(files.size(), 3, "one file per start (found %zu)", files.size());
+    zassert_equal(PropertyValue(files[0].content, "start_cause"), "trigger", "a trigger's start");
+    zassert_equal(PropertyValue(files[1].content, "start_cause"), "command", "the CDMP command's start");
+    zassert_equal(PropertyValue(files[2].content, "start_cause"), "unknown", "a start that does not say");
+}
+
 // A logging configuration stored while the writer runs restarts it: the new file continues the
 // session, and is its file 1.
 ZTEST(log_writer_supervisor, test_ARestartForAStoredConfigurationKeepsTheSession) {
@@ -1116,7 +1147,7 @@ ZTEST(log_writer_supervisor, test_ARestartForAStoredConfigurationKeepsTheSession
     const StatusRecorder recorder;
     auto& supervisor = AttachSessionSupervisor(rig);
 
-    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS, LoggingStartCause::Trigger);
     zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
 
     StoreLoggingConfiguration(rig, 50);
@@ -1148,6 +1179,8 @@ ZTEST(log_writer_supervisor, test_ARestartForAStoredConfigurationKeepsTheSession
     const auto session = PropertyValue(files[0].content, "session_id");
     zassert_false(session.empty() || session == "0", "the session has an ID");
     zassert_equal(PropertyValue(files[1].content, "session_id"), session, "a restart keeps the session");
+    zassert_equal(PropertyValue(files[0].content, "start_cause"), "trigger", "the start's cause");
+    zassert_equal(PropertyValue(files[1].content, "start_cause"), "trigger", "and the restart keeps it");
     zassert_equal(PropertyValue(files[0].content, "file_index"), "0", "the start's file");
     zassert_equal(PropertyValue(files[1].content, "file_index"), "1", "the restart's file");
 }

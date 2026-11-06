@@ -3,10 +3,12 @@
 #include <cstdint>
 
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "domain/logging_domain/models/logging_start_cause.h"
 
 namespace eerie_leap::domain::logging_domain::control {
 
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 
 // Starts and stops logging, on this unit or on the units that log, and tells whether it runs.
 class ILoggingControl {
@@ -22,7 +24,14 @@ public:
     // A unit with a log writer acts on its own state for ALL_UNITS or its own UID (WriterLoggingControl
     // routes the rest to the network); the control of a unit without a writer sends everything out.
     static constexpr uint32_t ALL_UNITS = 0;
-    virtual void RequestStart(uint32_t target_uid) = 0;
+    //
+    // @p cause is what asked for the start; the log writer puts it in the header of the session's
+    // files. The one-argument form says nothing (Unknown); implementations add `using
+    // ILoggingControl::RequestStart;` so their own callers can use it.
+    virtual void RequestStart(uint32_t target_uid, LoggingStartCause cause) = 0;
+    void RequestStart(uint32_t target_uid) {
+        RequestStart(target_uid, LoggingStartCause::Unknown);
+    }
     virtual void RequestStop(uint32_t target_uid) = 0;
 
     // The CDMP LOGGING command another unit sent (LoggingCommandHandler, on the CDMP work queue):

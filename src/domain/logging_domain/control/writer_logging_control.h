@@ -33,7 +33,8 @@ public:
         uint32_t own_uid
     );
 
-    void RequestStart(uint32_t target_uid) override;
+    using ILoggingControl::RequestStart;
+    void RequestStart(uint32_t target_uid, LoggingStartCause cause) override;
     void RequestStop(uint32_t target_uid) override;
     // Returns the writer's answer.
     bool HandleLoggingCommand(bool is_start) override;
@@ -45,7 +46,7 @@ private:
     std::shared_ptr<ILoggingControl> network_;
     uint32_t own_uid_;
 
-    void Route(uint32_t target_uid, bool is_start);
+    void Route(uint32_t target_uid, bool is_start, LoggingStartCause cause = LoggingStartCause::Unknown);
 };
 
 } // namespace eerie_leap::domain::logging_domain::control

@@ -8,6 +8,7 @@
 
 namespace eerie_leap::domain::logging_domain::smp {
 
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using eerie_leap::subsys::smp::SmpDecodeRequest;
 using eerie_leap::subsys::smp::SmpGroupId;
 using eerie_leap::subsys::smp::SmpMapKey;
@@ -74,7 +75,7 @@ int LoggingMgmtGroup::HandleStart(smp_streamer* ctxt) {
     if(!DecodeUid(ctxt, uid))
         return MGMT_ERR_EINVAL;
 
-    control_->RequestStart(uid);
+    control_->RequestStart(uid, LoggingStartCause::Smp);
 
     return MGMT_ERR_EOK;
 }

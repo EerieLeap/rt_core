@@ -404,7 +404,7 @@ when `EERIE_LEAP_SMP` is on.
   being written cannot be read as an asset. A unit without a writer never sends the three.
 - `uid` is the CDMP UID of the unit to start or stop; absent or 0 is every unit that can log, as in the
   `LOGGING` command. The request is the control's `RequestStart()` or `RequestStop()`, the same as a
-  trigger makes: the answer `{}` means the request was taken, not that logging changed, and a start
+  trigger makes (the log header tells them apart: `start_cause` is `smp` here, `trigger` there): the answer `{}` means the request was taken, not that logging changed, and a start
   that fails or a stop while stopped publishes nothing. A client reads `STATUS` again to see the effect.
   A unit with a writer acts on 0 and its own UID itself and sends the rest to the network; the gauge
   sends the `LOGGING` command.

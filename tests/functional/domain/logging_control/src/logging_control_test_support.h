@@ -62,6 +62,7 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventsChannel;
 using eerie_leap::domain::sensor_domain::event_bus::SensorEventType;
 using eerie_leap::domain::sensor_domain::event_bus::SensorPayloadType;
@@ -232,6 +233,8 @@ public:
         std::string thread_name;
         // What the request named; ALL_UNITS for a received command.
         uint32_t target_uid = ALL_UNITS;
+        // What a start was asked by; Unknown for a stop and for a received command.
+        LoggingStartCause cause = LoggingStartCause::Unknown;
 
         bool operator==(const Request& other) const {
             return kind == other.kind;
@@ -260,10 +263,10 @@ private:
 
     std::shared_ptr<Context> context_ = std::make_shared<Context>();
 
-    void Record(Kind kind, uint32_t target_uid = ALL_UNITS) {
+    void Record(Kind kind, uint32_t target_uid = ALL_UNITS, LoggingStartCause cause = LoggingStartCause::Unknown) {
         {
             ScopedMutex guard(context_->lock);
-            context_->requests.push_back({ kind, k_current_get(), CurrentThreadName(), target_uid });
+            context_->requests.push_back({ kind, k_current_get(), CurrentThreadName(), target_uid, cause });
         }
         k_sem_give(&context_->requested);
 
@@ -280,8 +283,9 @@ private:
     }
 
 public:
-    void RequestStart(uint32_t target_uid) override {
-        Record(Kind::Start, target_uid);
+    using ILoggingControl::RequestStart;
+    void RequestStart(uint32_t target_uid, LoggingStartCause cause) override {
+        Record(Kind::Start, target_uid, cause);
     }
     void RequestStop(uint32_t target_uid) override {
         Record(Kind::Stop, target_uid);

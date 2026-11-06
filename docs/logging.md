@@ -239,7 +239,7 @@ The rules:
 
 | Code | Thread |
 | --- | --- |
-| `RequestStart(target_uid)`, `RequestStop(target_uid)`, `RequestStopWithReason(reason)`, `IsActive()` | Any; no lock. |
+| `RequestStart(target_uid, cause)`, `RequestStop(target_uid)`, `RequestStopWithReason(reason)`, `IsActive()` | Any; no lock. |
 | `WaitUntilIdle(timeout_ms)` | Any thread but the configuration work queue; blocks at most `timeout_ms`. |
 | Status handler | The bus thread that carries `logging_events`. Records the status; on a failure it reschedules the task. |
 | Updated handler | The thread that stored the logging configuration (the configuration work queue for an SMP apply). Reschedules the task. |
@@ -296,7 +296,7 @@ the destructor: whoever requests keeps the supervisor alive or goes first.
 
 | Method | Meaning |
 | --- | --- |
-| `RequestStart(target_uid)`, `RequestStop(target_uid)` | Record the wanted state and return, from any thread. The latest request wins. `target_uid` is the CDMP UID of the unit to start or stop; `ILoggingControl::ALL_UNITS` (0) is every unit that can log, this one included in the writer role. The supervisor ignores it: routing is `WriterLoggingControl`'s. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
+| `RequestStart(target_uid, cause)`, `RequestStop(target_uid)` | Record the wanted state and return, from any thread. The latest request wins. `cause` (`LoggingStartCause`, `models/logging_start_cause.h`, persisted by name, append only) says what asked for the start: `trigger` (`LoggingTriggerSet`), `command` (the CDMP `LOGGING` command of another unit, taken by the supervisor), `smp` (the `logging` group's `START`), `shell` and `autostart` (a shell or an autostart of the application), `unknown`. `RequestStart(target_uid)` is the non-virtual shorthand for `unknown`, so implementations add `using ILoggingControl::RequestStart;`. The supervisor keeps the cause of the start that opens a session and the log header writes it; `RemoteLoggingControl` ignores it, as the CDMP command has no field for it, so a start from another unit's trigger reads `command` on the unit that logs. `target_uid` is the CDMP UID of the unit to start or stop; `ILoggingControl::ALL_UNITS` (0) is every unit that can log, this one included in the writer role. The supervisor ignores it: routing is `WriterLoggingControl`'s. A change of state arrives as `StatusUpdated` on `logging_events`; a request that changes nothing publishes nothing, such as a stop while stopped or a start that fails, so a requester cannot tell a refusal from a request not yet served. |
 | `HandleLoggingCommand(is_start)` | The CDMP `LOGGING` command another unit sent (see [The `LOGGING` command](#the-logging-command)). Whether this unit accepts it: the answer is `SUCCESS` if so, else `FAILURE`. A unit that logs takes it as a request; a unit without a writer serves only a stop. |
 | `IsActive()`, `GetReason()` | `IsActive` and the `Reason` (`Stopped` while active) of the last `StatusUpdated` on `logging_events`; false and `Stopped` until the first. For a shell's status, the SMP `logging` group's `STATUS` and tests: a trigger never reads them. |
 
@@ -844,10 +844,12 @@ sensor count.
   never renamed, and a new type is named when it is added. The raw channel `<id>.raw` has only its
   `expression:` comment, when it needs one. The header comment is `Eerie Leap sensor log` with the
   common properties `device_name`, `product_id`, `device_id`, `hw_version`, `sw_version`,
-  `sensors_configuration_hash`, `logging_interval_ms`, `unit_uid`, `boot_id`, `session_id` and
-  `file_index`, in decimal. `unit_uid` is the CDMP UID, which stays when the network address
+  `sensors_configuration_hash`, `logging_interval_ms`, `unit_uid`, `boot_id`, `session_id`,
+  `start_cause` and `file_index`, in decimal (`start_cause` is text). `unit_uid` is the CDMP UID, which stays when the network address
   `device_id` changes. `boot_id` tells the files of two power-ons apart. `session_id` is the
-  session's ID, 0 without a session. `file_index` is 0 for a session's first file and counts on
+  session's ID, 0 without a session. `start_cause` is the name of what started the session (`trigger`,
+  `command`, `smp`, `shell`, `autostart`), `unknown` without a session or when the request did not say;
+  every file of the session carries it, a restart's too. `file_index` is 0 for a session's first file and counts on
   with each file the session writes, a rotation's or a restart's: the logger reads the session's
   next index when it writes the header and moves it on only once the header has synced, so a start
   that fails takes no index. It is the one property that differs from file to file of one logger,

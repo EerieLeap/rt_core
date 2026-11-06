@@ -243,6 +243,7 @@ ZTEST(logging_controller_writer, test_ACdmpStartIsAcceptedAndShared) {
         ContainsText(content, Property("device_id", std::to_string(OWN_ID))),
         "The log header carries the CDMP device ID of this unit"
     );
+    zassert_true(ContainsText(content, Property("start_cause", "command")), "and the start came from the CDMP command");
     zassert_true(
         ContainsText(content, std::string("<tool_id>") + CONTROLLER_TOOL_ID + "</tool_id>"), "and the tool ID"
     );

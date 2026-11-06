@@ -3,6 +3,8 @@
 #include <atomic>
 #include <cstdint>
 
+#include "logging_start_cause.h"
+
 namespace eerie_leap::domain::logging_domain::models {
 
 /**
@@ -13,6 +15,9 @@ namespace eerie_leap::domain::logging_domain::models {
  */
 struct LogSession {
     uint32_t id = 0; // Never 0 for a supervisor's session; 0 in a header means no session.
+
+    // What asked for the start (F-9); fixed before the session is shared.
+    LoggingStartCause cause = LoggingStartCause::Unknown;
 
     // The index the next file of the session takes. A logger moves it on once its header has synced;
     // loggers of one session run one at a time, and the atomic keeps a reader off a torn value.

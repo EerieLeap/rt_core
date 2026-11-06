@@ -146,7 +146,9 @@ public:
     // false and nothing is sent again on the status until one carries it.
     bool Initialize();
 
-    void RequestStart(uint32_t target_uid) override;
+    using ILoggingControl::RequestStart;
+    // The cause is ignored: the CDMP command has no field for it.
+    void RequestStart(uint32_t target_uid, LoggingStartCause cause) override;
     void RequestStop(uint32_t target_uid) override;
 
     // A LOGGING command from another unit (LoggingCommandHandler, CDMP work queue). A stop drops every

@@ -11,6 +11,7 @@
 #include "domain/logging_domain/control/i_logging_control.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "domain/logging_domain/models/logging_start_cause.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "subsys/event_bus/dispatch_guard.h"
 #include "subsys/event_bus/i_scoped_subscription.h"
@@ -25,6 +26,7 @@ namespace eerie_leap::domain::logging_domain::services {
 using eerie_leap::domain::logging_domain::control::ILoggingControl;
 using eerie_leap::domain::logging_domain::event_bus::LoggingEventsChannel;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using eerie_leap::domain::sensor_domain::configuration::SensorsConfigurationManager;
 using eerie_leap::subsys::event_bus::AnySubscription;
 using eerie_leap::subsys::event_bus::DispatchGuard;
@@ -95,7 +97,8 @@ public:
 
     // The target is ignored: this is the writer of this unit. Which requests reach it is
     // WriterLoggingControl's routing.
-    void RequestStart(uint32_t target_uid) override;
+    using ILoggingControl::RequestStart;
+    void RequestStart(uint32_t target_uid, LoggingStartCause cause) override;
     void RequestStop(uint32_t target_uid) override;
     // The CDMP LOGGING command is a request; SUCCESS means accepted, whether or not the supervisor can
     // act on it now (a request before Initialize() is refused and logged, as for any caller).
