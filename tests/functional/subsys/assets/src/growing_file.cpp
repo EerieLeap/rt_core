@@ -1,15 +1,15 @@
 // The littlefs `assets` suite compiles this file empty; assets_fat runs it.
 #ifdef CONFIG_FAT_FILESYSTEM_ELM
 
-#include <cstdint>
-#include <vector>
+    #include <cstdint>
+    #include <vector>
 
-#include <zephyr/fs/fs.h>
-#include <zephyr/ztest.h>
+    #include <zephyr/fs/fs.h>
+    #include <zephyr/ztest.h>
 
-#include "subsys/assets/asset_store.h"
+    #include "subsys/assets/asset_store.h"
 
-#include "assets_test_support.h"
+    #include "assets_test_support.h"
 
 // What the `assets` group relies on to read the log being written: a second handle of a file that
 // another handle has open for writing on FatFs. Zephyr builds FatFs without sharing control
