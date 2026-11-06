@@ -10,8 +10,11 @@
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
 #include "domain/logging_domain/loggers/logger_metadata.h"
 #include "domain/logging_domain/loggers/mdf4_logger_sensor_reading.h"
+#include "domain/logging_domain/models/log_session.h"
 #include "domain/system_domain/models/system_configuration.h"
 #include "subsys/event_bus/event_channel.h"
+#include "subsys/random/rng.h"
+#include "subsys/time/boot_id.h"
 
 #include "log_writer_supervisor.h"
 
@@ -22,14 +25,58 @@ using eerie_leap::domain::logging_domain::event_bus::LoggingEventType;
 using eerie_leap::domain::logging_domain::event_bus::LoggingPayloadType;
 using eerie_leap::domain::logging_domain::loggers::LoggerMetadata;
 using eerie_leap::domain::logging_domain::loggers::Mdf4LoggerSensorReading;
+using eerie_leap::domain::logging_domain::models::LogSession;
 using eerie_leap::domain::system_domain::models::SystemConfiguration;
 using eerie_leap::subsys::event_bus::CreateScopedSubscription;
+using eerie_leap::subsys::random::Rng;
 using eerie_leap::subsys::threading::ServiceState;
+using eerie_leap::subsys::time::GetBootId;
 
 LOG_MODULE_REGISTER(log_writer_supervisor_logger);
 
+// The current session. Apart from State, which owns the writer and so the logger factory: the factory
+// holds this, and holding State would make a cycle. The task makes a session, the factory reads it on
+// whichever thread starts the writer.
+class SessionSlot {
+private:
+    mutable k_mutex mutex_{};
+    std::shared_ptr<LogSession> session_;
+
+public:
+    SessionSlot() {
+        k_mutex_init(&mutex_);
+    }
+
+    SessionSlot(const SessionSlot&) = delete;
+    SessionSlot& operator=(const SessionSlot&) = delete;
+    SessionSlot(SessionSlot&&) = delete;
+    SessionSlot& operator=(SessionSlot&&) = delete;
+    ~SessionSlot() = default;
+
+    std::shared_ptr<LogSession> Get() const {
+        k_mutex_lock(&mutex_, K_FOREVER);
+        auto session = session_;
+        k_mutex_unlock(&mutex_);
+
+        return session;
+    }
+
+    // A new session with an ID drawn at random, never 0 (0 in a header means no session).
+    void StartNew() {
+        auto session = std::make_shared<LogSession>();
+        while(session->id == 0)
+            session->id = Rng::Get<uint32_t>();
+
+        k_mutex_lock(&mutex_, K_FOREVER);
+        session_ = std::move(session);
+        k_mutex_unlock(&mutex_);
+    }
+};
+
 struct LogWriterSupervisor::State {
     std::shared_ptr<LogWriterService> log_writer_service;
+    // The session of the writer's current run of files; a new one for each start that opens the writer.
+    std::shared_ptr<SessionSlot> session = std::make_shared<SessionSlot>();
     // The thread every transition below is meant to run on.
     std::shared_ptr<WorkQueueThread> config_work_queue_thread;
 
@@ -133,7 +180,8 @@ namespace {
 LoggerMetadata CreateLoggerMetadata(
     SensorsConfigurationManager& sensors_configuration_manager,
     const std::string& tool_id,
-    const LogWriterSupervisor::DeviceIdProvider& device_id_provider
+    const LogWriterSupervisor::DeviceIdProvider& device_id_provider,
+    std::shared_ptr<LogSession> session
 ) {
 
     LoggerMetadata metadata;
@@ -147,9 +195,16 @@ LoggerMetadata CreateLoggerMetadata(
     metadata.hw_version = SystemConfiguration::HW_VERSION;
     metadata.sw_version = SystemConfiguration::SW_VERSION;
 
-    // Unassigned (0) until the unit has claimed an ID on the CDMP network, or without one.
-    if(device_id_provider)
-        metadata.device_id = device_id_provider();
+    // Unassigned (0) until the unit has claimed an ID on the CDMP network, or without one. Read
+    // together, so the pair describes one moment.
+    if(device_id_provider) {
+        const auto ids = device_id_provider();
+        metadata.device_id = ids.device_id;
+        metadata.unit_uid = ids.uid;
+    }
+
+    metadata.boot_id = GetBootId();
+    metadata.session = std::move(session);
 
     // The CRC of the stored CBOR, so a log can be matched with the configuration that produced it.
     // A stored configuration that was rejected at boot is not what runs: 0, unknown, instead.
@@ -159,17 +214,18 @@ LoggerMetadata CreateLoggerMetadata(
     return metadata;
 }
 
-// Run by every start, so each file describes the configurations and the device ID in effect when it
-// was opened. It holds what it needs, not the supervisor, so a writer started after the supervisor
-// is gone (by the dependent) still gets its logger.
+// Run by every start, so each file describes the configurations and the device IDs in effect when it
+// was opened, and names the session in effect then. It holds what it needs, not the supervisor, so a
+// writer started after the supervisor is gone (by the dependent) still gets its logger.
 LogWriterService::LoggerFactory MakeLoggerFactory(
+    std::shared_ptr<SessionSlot> session,
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::string tool_id,
     LogWriterSupervisor::DeviceIdProvider device_id_provider
 ) {
 
-    return [logging_configuration_manager = std::move(logging_configuration_manager),
+    return [session = std::move(session), logging_configuration_manager = std::move(logging_configuration_manager),
                sensors_configuration_manager = std::move(sensors_configuration_manager), tool_id = std::move(tool_id),
                device_id_provider = std::move(device_id_provider)] -> std::shared_ptr<ILogger<SensorReading>> {
         const auto sensors = sensors_configuration_manager->Get();
@@ -180,7 +236,7 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
 
         return std::make_shared<Mdf4LoggerSensorReading>(
             *logging_configuration, *sensors,
-            CreateLoggerMetadata(*sensors_configuration_manager, tool_id, device_id_provider)
+            CreateLoggerMetadata(*sensors_configuration_manager, tool_id, device_id_provider, session->Get())
         );
     };
 }
@@ -239,9 +295,9 @@ bool LogWriterSupervisor::Initialize() {
         return false;
     }
 
-    state_->log_writer_service->SetLoggerFactory(
-        MakeLoggerFactory(logging_configuration_manager_, sensors_configuration_manager_, tool_id_, device_id_provider_)
-    );
+    state_->log_writer_service->SetLoggerFactory(MakeLoggerFactory(
+        state_->session, logging_configuration_manager_, sensors_configuration_manager_, tool_id_, device_id_provider_
+    ));
 
     // The composition root decides which bus carries the channel. Until one does, IsActive() stays
     // false and a failed session is stopped only by the task's next run (a request or a stored
@@ -430,6 +486,9 @@ bool LogWriterSupervisor::ApplyStart() {
             return false;
         }
     }
+
+    // The writer is not running here, so this start opens a session of its own.
+    state_->session->StartNew();
 
     const bool is_started = state_->StartWriter();
     state_->is_logging_requested = is_started;

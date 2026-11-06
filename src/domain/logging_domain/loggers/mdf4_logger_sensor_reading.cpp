@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "domain/sensor_domain/models/sensor_type.h"
 #include "subsys/mdf/mdf_property.h"
 #include "subsys/mdf/mdf_value.h"
 
@@ -180,6 +181,20 @@ std::string GetSensorComment(const Sensor& sensor) {
     return comment;
 }
 
+// What a reader needs to treat the channel by its kind: the persisted type name, and the name and
+// description apart, since the comment's text joins them.
+std::vector<MdfProperty> GetSensorProperties(const Sensor& sensor) {
+    std::vector<MdfProperty> properties;
+    properties.push_back({ "sensor_type", GetSensorTypeName(sensor.configuration.type) });
+
+    if(!sensor.metadata.name.empty())
+        properties.push_back({ "sensor_name", std::string(sensor.metadata.name) });
+    if(!sensor.metadata.description.empty())
+        properties.push_back({ "sensor_description", std::string(sensor.metadata.description) });
+
+    return properties;
+}
+
 int64_t ToTicks(const std::chrono::system_clock::time_point& time) {
     return static_cast<int64_t>(time.time_since_epoch().count());
 }
@@ -315,13 +330,16 @@ void Mdf4LoggerSensorReading::SetFileMetadata(
     const LoggerMetadata& metadata
 ) {
     mdf4_file_->SetFileHistory(metadata.tool_id, TOOL_VENDOR, metadata.tool_version);
+    session_ = metadata.session;
 
-    const std::array<MdfProperty, 7> properties{ { { "device_name", metadata.device_name },
+    const std::array<MdfProperty, 10> properties{ { { "device_name", metadata.device_name },
         { "product_id", std::to_string(metadata.product_id) },
         { "device_id", std::to_string(static_cast<uint32_t>(metadata.device_id)) },
         { "hw_version", std::to_string(metadata.hw_version) }, { "sw_version", std::to_string(metadata.sw_version) },
         { "sensors_configuration_hash", std::to_string(metadata.sensors_configuration_hash) },
-        { "logging_interval_ms", std::to_string(configuration.logging_interval_ms) } } };
+        { "logging_interval_ms", std::to_string(configuration.logging_interval_ms) },
+        { "unit_uid", std::to_string(metadata.unit_uid) }, { "boot_id", std::to_string(metadata.boot_id) },
+        { "session_id", std::to_string(session_ != nullptr ? session_->id : 0U) } } };
 
     mdf4_file_->SetHeaderComment(HEADER_COMMENT, properties);
 }
@@ -341,9 +359,7 @@ void Mdf4LoggerSensorReading::AddValueTarget(
         channel_group, MdfDataType::Float32, sensor_id, std::string(sensor.metadata.unit), true
     );
 
-    const auto comment = GetSensorComment(sensor);
-    if(!comment.empty())
-        mdf4_file_->SetChannelComment(value_channel, comment);
+    mdf4_file_->SetChannelComment(value_channel, GetSensorComment(sensor), GetSensorProperties(sensor));
 
     const bool has_raw_value_channel = sensor.configuration.HasExpression()
         && sensor_configuration.log_raw_value
@@ -381,9 +397,7 @@ void Mdf4LoggerSensorReading::AddCanFrameTarget(const Sensor& sensor) {
         vlsd_channel_group, next_record_id_++, sensor_id
     );
 
-    const auto comment = GetSensorComment(sensor);
-    if(!comment.empty())
-        mdf4_file_->SetChannelGroupComment(channel_group, comment);
+    mdf4_file_->SetChannelGroupComment(channel_group, GetSensorComment(sensor), GetSensorProperties(sensor));
 
     // BusChannel numbers interfaces from 1; 0 tells readers the bus is unknown.
     const auto& canbus_source = sensor.configuration.canbus_source;
@@ -418,7 +432,11 @@ bool Mdf4LoggerSensorReading::StartLogging(
     }
 
     mdf4_file_->UpdateCurrentTime(start_time);
-    current_file_size_bytes_ = mdf4_file_->WriteHeaderToStream(stream);
+
+    // The index is taken only when this header syncs: a header that fails leaves no file behind.
+    const uint32_t file_index = session_ != nullptr ? session_->next_file_index.load() : 0U;
+    const std::array<MdfProperty, 1> file_properties{ { { "file_index", std::to_string(file_index) } } };
+    current_file_size_bytes_ = mdf4_file_->WriteHeaderToStream(stream, file_properties);
 
     // Every header builds new writers, so the previous file's pointers are stale now.
     for(const auto& [sensor_id_hash, channel_group] : target_channel_groups_) {
@@ -434,6 +452,9 @@ bool Mdf4LoggerSensorReading::StartLogging(
     // writes would only be noticed a sync interval later, with the file at 0 bytes.
     if(stream.pubsync() != 0)
         return false;
+
+    if(session_ != nullptr)
+        session_->next_file_index = file_index + 1;
 
     stream_ = &stream;
 

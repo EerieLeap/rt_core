@@ -1,4 +1,6 @@
 #include <array>
+#include <cstdint>
+#include <string>
 
 #include <zephyr/ztest.h>
 
@@ -25,6 +27,26 @@ constexpr std::array ALL_TYPES = { SensorType::NONE, SensorType::PHYSICAL_ANALOG
 ZTEST(sensor_type, test_persisted_type_ids_are_unchanged) {
     for(size_t i = 0; i < ALL_TYPES.size(); ++i)
         zassert_equal(static_cast<uint32_t>(ALL_TYPES[i]), i);
+}
+
+// The names are persisted in logs (the sensor_type property): append only, never renamed.
+ZTEST(sensor_type, test_names_are_the_enumerators_and_distinct) {
+    constexpr std::array<const char*, 12> NAMES = { "NONE", "PHYSICAL_ANALOG", "VIRTUAL_ANALOG", "PHYSICAL_INDICATOR",
+        "VIRTUAL_INDICATOR", "CANBUS_RAW", "CANBUS_ANALOG", "CANBUS_INDICATOR", "USER_ANALOG", "USER_INDICATOR",
+        "CONTROL_INDICATOR", "CONTROL_ANALOG" };
+    static_assert(NAMES.size() == static_cast<size_t>(SensorType::COUNT), "name every type below COUNT");
+
+    for(size_t i = 0; i < NAMES.size(); i++) {
+        const std::string name = GetSensorTypeName(static_cast<SensorType>(i));
+        zassert_equal(name, NAMES[i], "type %zu is named %s", i, NAMES[i]);
+
+        for(size_t j = 0; j < i; j++)
+            zassert_true(name != GetSensorTypeName(static_cast<SensorType>(j)), "type %zu repeats a name", i);
+    }
+
+    zassert_equal(std::string(GetSensorTypeName(SensorType::COUNT)), "UNKNOWN");
+    zassert_equal(std::string(GetSensorTypeName(static_cast<SensorType>(9999))), "UNKNOWN");
+    zassert_equal(std::string(GetSensorTypeName(static_cast<SensorType>(UINT32_MAX))), "UNKNOWN");
 }
 
 ZTEST(sensor_type, test_defined_types_are_valid) {

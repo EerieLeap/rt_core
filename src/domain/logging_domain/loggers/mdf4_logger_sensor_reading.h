@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "domain/logging_domain/models/log_session.h"
 #include "domain/logging_domain/models/logging_configuration.h"
 #include "domain/sensor_domain/models/sensor.h"
 #include "domain/sensor_domain/models/sensor_reading.h"
@@ -28,6 +29,7 @@ namespace eerie_leap::domain::logging_domain::loggers {
 namespace mdf4 = eerie_leap::subsys::mdf::mdf4;
 
 using eerie_leap::domain::logging_domain::models::LoggingConfiguration;
+using eerie_leap::domain::logging_domain::models::LogSession;
 using eerie_leap::domain::logging_domain::models::SensorLoggingConfiguration;
 using eerie_leap::domain::sensor_domain::models::Sensor;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
@@ -76,6 +78,8 @@ private:
     };
 
     std::unique_ptr<Mdf4File> mdf4_file_;
+    // Null without a session. Numbers this logger's files: each StartLogging() takes the next index.
+    std::shared_ptr<LogSession> session_;
     std::unordered_map<uint32_t, LogTarget> targets_;
     std::vector<TargetChannelGroup> target_channel_groups_;
     std::streambuf* stream_{ nullptr };

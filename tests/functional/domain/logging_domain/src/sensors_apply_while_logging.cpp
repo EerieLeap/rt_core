@@ -8,6 +8,7 @@
 // The supervisor alone is tested here, without LoggingController's update rule (L9): with it, and
 // after LoggingController::Start(), every sensors store stops logging first (logging_control's
 // writer_updates), and this restart is what a store during the unit's start does.
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -119,6 +120,19 @@ void ApplySensors(LogWriterRig& rig, SensorsController& controller, const std::s
     zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
 }
 
+// The value of a header property, empty when the file has none.
+std::string PropertyValue(const std::vector<uint8_t>& content, const char* name) {
+    const std::string start = std::string("<e name=\"") + name + "\">";
+    const auto begin = std::ranges::search(content, start);
+    if(begin.empty())
+        return {};
+
+    const std::string end = "</e>";
+    const auto value_end = std::search(begin.end(), content.end(), end.begin(), end.end());
+
+    return { begin.end(), value_end };
+}
+
 } // namespace
 
 ZTEST_SUITE(sensors_apply_while_logging, NULL, NULL, ResetAfterTest, NULL, NULL);
@@ -146,7 +160,7 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
     const StatusRecorder recorder;
     const auto device_id = std::make_shared<std::atomic<uint8_t>>(5);
     auto& supervisor = AttachSupervisor(rig, sensors_manager, true, [device_id] {
-        return device_id->load();
+        return LogWriterSupervisor::DeviceIds{ .device_id = device_id->load() };
     });
     controller.RegisterDependentService(supervisor.GetDependentService());
     // Both generations: the logger lists only the sensors stored at its start.
@@ -217,6 +231,13 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
         ContainsText(files[1].content, Property("device_id", "6")),
         "the second file must carry the device ID of its start"
     );
+
+    // The restart keeps the session: one ID, and the files are numbered on.
+    const auto session = PropertyValue(files[0].content, "session_id");
+    zassert_false(session.empty() || session == "0", "the session has an ID");
+    zassert_equal(PropertyValue(files[1].content, "session_id"), session, "a sensors restart keeps the session");
+    zassert_equal(PropertyValue(files[0].content, "file_index"), "0", "the first file");
+    zassert_equal(PropertyValue(files[1].content, "file_index"), "1", "the restart's file");
 }
 
 // A stop requested while processing restarts reaches the queue behind the restart, so the dependent

@@ -62,6 +62,8 @@ constexpr uint8_t VALUE_INVALID = 0x01;
 constexpr uint8_t RAW_VALUE_INVALID = 0x02;
 
 constexpr uint8_t TEST_DEVICE_ID = 7;
+constexpr uint32_t TEST_UNIT_UID = 2864434397U;
+constexpr uint32_t TEST_BOOT_ID = 913024577U;
 constexpr uint32_t TEST_SW_VERSION = 0x01020003;
 
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): test fixture built before main; a failed allocation aborts the run either way
@@ -120,6 +122,8 @@ LoggerMetadata MakeMetadata() {
     metadata.tool_version = "1.2.3";
     metadata.product_id = 50177;
     metadata.device_id = TEST_DEVICE_ID;
+    metadata.unit_uid = TEST_UNIT_UID;
+    metadata.boot_id = TEST_BOOT_ID;
     metadata.hw_version = 0x00000001;
     metadata.sw_version = TEST_SW_VERSION;
     metadata.sensors_configuration_hash = 0xDEADBEEF;
@@ -859,12 +863,88 @@ ZTEST(mdf4_logger, test_ChannelAndGroupNames) {
     );
 
     zassert_true(
-        AnyContains(comments, "<CNcomment><TX>Name of oil_pressure: Description of oil_pressure</TX></CNcomment>"),
+        AnyContains(comments, "<CNcomment><TX>Name of oil_pressure: Description of oil_pressure</TX>"),
         "the value channel comment is the sensor name and description"
     );
+    zassert_true(AnyContains(comments, "<CGcomment><TX>Raw frames</TX>"), "the CAN group comment is the sensor name");
+}
+
+// Every value channel says what kind of sensor it is, and the name and description apart; a CAN group
+// does too. The text stays "name: description".
+ZTEST(mdf4_logger, test_ChannelCommentsCarryTheSensorProperties) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("oil_pressure", "x * 0.1"),
+        MakeCanRawSensor("can_raw", 0) };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
+
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+
+    const auto comments = CollectBlockTexts(stream.Str(), "##MD");
     zassert_true(
-        AnyContains(comments, "<CGcomment><TX>Raw frames</TX></CGcomment>"), "the CAN group comment is the sensor name"
+        AnyContains(
+            comments,
+            "<CNcomment><TX>Name of oil_pressure: Description of oil_pressure</TX><common_properties>"
+            "<e name=\"sensor_type\">PHYSICAL_ANALOG</e><e name=\"sensor_name\">Name of oil_pressure</e>"
+            "<e name=\"sensor_description\">Description of oil_pressure</e></common_properties></CNcomment>"
+        ),
+        "the value channel names its type, name and description"
     );
+    zassert_true(
+        AnyContains(
+            comments,
+            "<CGcomment><TX>Raw frames</TX><common_properties><e name=\"sensor_type\">CANBUS_RAW</e>"
+            "<e name=\"sensor_name\">Raw frames</e></common_properties></CGcomment>"
+        ),
+        "the CAN group names its type, and leaves out the description it has none of"
+    );
+}
+
+ZTEST(mdf4_logger, test_AChannelWithoutNameOrDescriptionKeepsOnlyItsType) {
+    const auto sensor = MakeValueSensor("bare");
+    sensor->metadata.name = "";
+    sensor->metadata.description = "";
+    sensor->configuration.type = SensorType::VIRTUAL_INDICATOR;
+    sensor->configuration.expression = "1";
+
+    const std::vector<std::shared_ptr<Sensor>> sensors{ sensor };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+
+    const auto comments = CollectBlockTexts(stream.Str(), "##MD");
+    zassert_true(
+        AnyContains(
+            comments,
+            "<CNcomment><TX></TX><common_properties><e name=\"sensor_type\">VIRTUAL_INDICATOR</e>"
+            "</common_properties></CNcomment>"
+        ),
+        "a sensor without a name or description still has its type"
+    );
+    zassert_false(AnyContains(comments, "sensor_name"), "an empty name is left out");
+    zassert_false(AnyContains(comments, "sensor_description"), "an empty description is left out");
+}
+
+ZTEST(mdf4_logger, test_EverySensorTypeIsNamedInTheChannelComment) {
+    for(uint32_t type = 0; type < static_cast<uint32_t>(SensorType::COUNT); type++) {
+        if(static_cast<SensorType>(type) == SensorType::CANBUS_RAW)
+            continue;
+
+        const auto sensor = MakeValueSensor("typed");
+        sensor->configuration.type = static_cast<SensorType>(type);
+
+        const std::vector<std::shared_ptr<Sensor>> sensors{ sensor };
+        Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+        auto stream = MakeStream();
+        zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+
+        const std::string expected = std::string("<e name=\"sensor_type\">")
+            + GetSensorTypeName(static_cast<SensorType>(type)) + "</e>";
+        zassert_true(
+            AnyContains(CollectBlockTexts(stream.Str(), "##MD"), expected), "type %u is named in the comment", type
+        );
+    }
 }
 
 ZTEST(mdf4_logger, test_RecordIdSizeFollowsTheSensorCount) {
@@ -909,6 +989,16 @@ ZTEST(mdf4_logger, test_HeaderPropertiesAreWritten) {
     );
     zassert_true(AnyContains(comments, "<e name=\"device_id\">7</e>"), "the device id is a header property");
     zassert_true(
+        AnyContains(comments, "<e name=\"unit_uid\">" + std::to_string(TEST_UNIT_UID) + "</e>"),
+        "the unit UID is a header property"
+    );
+    zassert_true(
+        AnyContains(comments, "<e name=\"boot_id\">" + std::to_string(TEST_BOOT_ID) + "</e>"),
+        "the boot ID is a header property"
+    );
+    zassert_true(AnyContains(comments, "<e name=\"session_id\">0</e>"), "without a session the session ID is 0");
+    zassert_true(AnyContains(comments, "<e name=\"file_index\">0</e>"), "without a session the file index is 0");
+    zassert_true(
         AnyContains(comments, "<e name=\"sw_version\">" + std::to_string(TEST_SW_VERSION) + "</e>"),
         "the software version is a header property"
     );
@@ -926,6 +1016,72 @@ ZTEST(mdf4_logger, test_HeaderPropertiesAreWritten) {
     zassert_true(AnyContains(comments, "<tool_vendor>Eerie Leap</tool_vendor>"), "the file history names the vendor");
     zassert_true(
         AnyContains(comments, "<tool_version>1.2.3</tool_version>"), "the file history carries the tool version"
+    );
+}
+
+ZTEST(mdf4_logger, test_TheSessionIsWrittenAndNumbersTheFiles) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    auto metadata = MakeMetadata();
+    metadata.session = std::make_shared<LogSession>();
+    metadata.session->id = 40211837;
+
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, metadata);
+
+    // A rotation: the same logger starts the next file.
+    auto first = MakeStream();
+    zassert_true(logger.StartLogging(first, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(logger.StopLogging(), "the first file is finalized");
+
+    auto second = MakeStream();
+    zassert_true(logger.StartLogging(second, START_TIME), "the second StartLogging must succeed");
+
+    const auto first_comments = CollectBlockTexts(first.Str(), "##MD");
+    const auto second_comments = CollectBlockTexts(second.Str(), "##MD");
+    zassert_true(AnyContains(first_comments, "<e name=\"session_id\">40211837</e>"), "the session ID");
+    zassert_true(AnyContains(first_comments, "<e name=\"file_index\">0</e>"), "the first file is 0");
+    zassert_true(AnyContains(second_comments, "<e name=\"session_id\">40211837</e>"), "the same session");
+    zassert_true(AnyContains(second_comments, "<e name=\"file_index\">1</e>"), "the rotation's file is 1");
+
+    // A restart: another logger of the same session goes on counting.
+    Mdf4LoggerSensorReading restarted(MakeConfiguration(sensors), sensors, metadata);
+    auto third = MakeStream();
+    zassert_true(restarted.StartLogging(third, START_TIME), "the restarted logger must start");
+    zassert_true(
+        AnyContains(CollectBlockTexts(third.Str(), "##MD"), "<e name=\"file_index\">2</e>"),
+        "a logger of the same session continues the numbering"
+    );
+    zassert_equal(metadata.session->next_file_index.load(), 3, "the session counts three files");
+}
+
+namespace {
+
+// A stream whose sync fails: the header reached the buffer but not the medium.
+class UnsyncableStreamBuf : public MemoryStreamBuf {
+protected:
+    int sync() override {
+        return -1;
+    }
+};
+
+} // namespace
+
+ZTEST(mdf4_logger, test_AFailedStartTakesNoFileIndex) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    auto metadata = MakeMetadata();
+    metadata.session = std::make_shared<LogSession>();
+    metadata.session->id = 7;
+
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, metadata);
+
+    UnsyncableStreamBuf failing;
+    zassert_false(logger.StartLogging(failing, START_TIME), "a header that does not sync fails the start");
+    zassert_equal(metadata.session->next_file_index.load(), 0, "a failed header takes no index");
+
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, START_TIME), "the next start succeeds");
+    zassert_true(
+        AnyContains(CollectBlockTexts(stream.Str(), "##MD"), "<e name=\"file_index\">0</e>"),
+        "the file after a failed start is still the first"
     );
 }
 

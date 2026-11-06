@@ -196,6 +196,13 @@ Each run of the task:
 The rules:
 
 - A start while running does nothing. A stop while stopped does nothing and publishes nothing.
+- A start that opens the writer, including one that first stops a failed session, makes a new
+  session (`LogSession`, `models/log_session.h`) with a random, non-zero ID. Every file written
+  until logging is stopped (a stop request, or the stop of a failed session) belongs to it: the
+  rotations, the restart for a stored logging configuration and the stop and start around a sensors
+  restart keep it, although each of those stops the writer for a moment. A stop ends it, and the
+  next start makes another. The logger writes the ID into each header and numbers the files (see
+  [Loggers](#loggers)). Not to be confused with `LogSessionInfo`, the status's view of the writer.
 - A start of a failed session stops it and opens a new file. A start that cannot stop it starts
   nothing.
 - A failed start publishes nothing and leaves logging stopped; nothing retries it.
@@ -243,7 +250,9 @@ queue's stack for it; rt_daq gives it 8 KiB. The dependent works only on the que
 | `tool_version` | `EERIE_LEAP_SW_VERSION_MAJOR.MINOR.PATCH` |
 | `product_id` | `EERIE_LEAP_PRODUCT_ID` |
 | `hw_version`, `sw_version` | `SystemConfiguration`, packed. |
-| `device_id` | The supervisor's `DeviceIdProvider` callback. `LoggingController` gives it one that reads the COM service's CDMP device ID; 0 without a COM service. |
+| `device_id`, `unit_uid` | The supervisor's `DeviceIdProvider` callback, which returns both CDMP IDs read together. `LoggingController` gives it one that reads the COM service's device ID and UID; both are 0 without a COM service. |
+| `boot_id` | `GetBootId()` (`subsys/time/boot_id.h`): drawn at random once per power-on, never 0. |
+| `session` | The supervisor's current `LogSession`. |
 | `sensors_configuration_hash` | The CRC of the stored sensors configuration, 0 when it was rejected at boot. |
 
 The callback keeps the writer free of CDMP at compile time; `LoggingController` builds it from the
@@ -251,11 +260,16 @@ COM service. The factory, and the callback with it, lives as long as the writer,
 holds the COM service weakly:
 
 ```cpp
-[weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] {
+[weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] -> LogWriterSupervisor::DeviceIds {
     const auto com = weak_com.lock();
     const auto network_info = com != nullptr ? com->GetNetworkInfo() : nullptr;
 
-    return network_info != nullptr ? network_info->GetDeviceInfo().device_id : uint8_t{0};
+    if(network_info == nullptr)
+        return {};
+
+    const auto device_info = network_info->GetDeviceInfo();
+
+    return { .device_id = device_info.device_id, .uid = device_info.uid };
 }
 ```
 
@@ -779,8 +793,11 @@ returns false when the file could not be finalized. One implementation exists:
 
 **`Mdf4LoggerSensorReading`** (used by rt_daq). Built from a `LoggingConfiguration`, the sensors
 and a `LoggerMetadata` (device name, tool ID and version, product ID, CDMP device ID, packed
-hardware and software versions, sensors configuration hash), all copied at construction: a
-reading is matched by its sensor ID hash only and its sensor pointer is never followed. It
+hardware and software versions, sensors configuration hash, CDMP UID, boot ID and the
+`LogSession`). Everything from the configurations and the metadata values is copied at construction: a
+reading is matched by its sensor ID hash only and its sensor pointer is never followed. The session
+is the one thing shared: the logger keeps the pointer, and every `StartLogging()` reads and advances
+its `next_file_index`. It
 describes the sensors as they were when it was built, which is why the service builds one
 through its factory at every start. The file is written with the "unfinalized" identifier and
 patched on `StopLogging()`, so a file cut by a power loss stays readable. `StartLogging()` seals
@@ -808,11 +825,24 @@ sensor count.
   backed by a VLSD group for the payloads; asammdf's bus extraction reads it. Each frame's
   payload record is written before its frame record, so a file cut between the two ends in a
   payload no frame points at, which readers skip, rather than in a frame pointing past the end.
-- **Comments.** The value channel's comment (the CAN group's, for a raw sensor) is the sensor name,
-  followed by `: ` and the description when there is one. The header comment is
-  `Eerie Leap sensor log` with the common properties `device_name`, `product_id`, `device_id`,
-  `hw_version`, `sw_version`, `sensors_configuration_hash` and `logging_interval_ms`, in decimal;
-  the file history carries the tool ID and version with the vendor `Eerie Leap`.
+- **Comments.** The text of a value channel's comment (the CAN group's, for a raw sensor) is the
+  sensor name, followed by `: ` and the description when there is one. Every value channel has a
+  comment, and the CAN group's carries the same common properties: `sensor_type`, the sensor type's
+  enumerator name (`PHYSICAL_ANALOG`, ..., `CANBUS_RAW`; `GetSensorTypeName()`), then `sensor_name`
+  and `sensor_description`, each left out when empty. The names are persisted in logs: they are
+  never renamed, and a new type is named when it is added. The raw channel `<id>.raw` has only its
+  `expression:` comment, when it needs one. The header comment is `Eerie Leap sensor log` with the
+  common properties `device_name`, `product_id`, `device_id`, `hw_version`, `sw_version`,
+  `sensors_configuration_hash`, `logging_interval_ms`, `unit_uid`, `boot_id`, `session_id` and
+  `file_index`, in decimal. `unit_uid` is the CDMP UID, which stays when the network address
+  `device_id` changes. `boot_id` tells the files of two power-ons apart. `session_id` is the
+  session's ID, 0 without a session. `file_index` is 0 for a session's first file and counts on
+  with each file the session writes, a rotation's or a restart's: the logger reads the session's
+  next index when it writes the header and moves it on only once the header has synced, so a start
+  that fails takes no index. It is the one property that differs from file to file of one logger,
+  so `Mdf4File::WriteHeaderToStream()` takes it as a property of that file and builds the header
+  comment anew for each. The file history carries the tool ID and version with the vendor
+  `Eerie Leap`.
 - **Conversion.** The raw channel gets an algebraic conversion only when a reader evaluates it
   the way the expression engine does: the only identifier is `x`, and the expression uses
   nothing but `+ - * /`, parentheses, decimal numbers (no leading zero, which numexpr rejects)

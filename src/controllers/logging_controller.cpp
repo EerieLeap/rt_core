@@ -138,19 +138,24 @@ static_assert(
 #endif
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
-// The log header's device ID. The writer's logger factory keeps the provider as long as the writer
-// lives, which a dependent of SensorsController can stretch past the controller, so it holds the COM
-// service weakly. 0 without a service, or before it claimed an ID.
+// The log header's CDMP IDs, device ID and UID, read together. The writer's logger factory keeps the
+// provider as long as the writer lives, which a dependent of SensorsController can stretch past the
+// controller, so it holds the COM service weakly. Both are 0 without a service, and the device ID
+// before the unit claimed one.
 LogWriterSupervisor::DeviceIdProvider
 MakeDeviceIdProvider(const std::shared_ptr<CanbusComService>& canbus_com_service) {
     if(canbus_com_service == nullptr)
         return nullptr;
 
-    return [weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] -> uint8_t {
+    return [weak_com = std::weak_ptr<CanbusComService>(canbus_com_service)] -> LogWriterSupervisor::DeviceIds {
         const auto com = weak_com.lock();
         const auto network_info = com != nullptr ? com->GetNetworkInfo() : nullptr;
+        if(network_info == nullptr)
+            return {};
 
-        return network_info != nullptr ? network_info->GetDeviceInfo().device_id : uint8_t{ 0 };
+        const auto device_info = network_info->GetDeviceInfo();
+
+        return { .device_id = device_info.device_id, .uid = device_info.uid };
     };
 }
 #endif

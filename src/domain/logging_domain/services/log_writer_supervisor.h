@@ -35,6 +35,11 @@ using eerie_leap::subsys::threading::IService;
 // configuration work queue, one at a time. Requests return at once from any thread, and the latest
 // one wins. The supervisor builds each session's logger and stops a session that failed.
 //
+// A start that opens the writer makes a new LogSession, which every file until logging is stopped
+// (a stop request, or the stop of a failed session) shares: the rotations, the restarts for a stored
+// logging configuration and the ones around a sensors restart, which stop the writer only briefly.
+// The next start makes another.
+//
 // After LoggingController::Start() every stored configuration stops logging first (L9): the stop is
 // requested on the storing thread, before the store's own handler queues the restart for a logging
 // configuration or the sensors restart, so neither starts the writer again. Both restarts remain for a
@@ -42,17 +47,23 @@ using eerie_leap::subsys::threading::IService;
 // later request.
 class LogWriterSupervisor final : public ILoggingControl {
 public:
-    // This unit's CDMP device ID for the log header, 0 while it has none; called at every start on
-    // the configuration work queue. The writer's factory keeps it as long as the writer lives, so it
-    // should hold the COM service weakly.
-    using DeviceIdProvider = std::function<uint8_t()>;
+    // This unit's CDMP identity for the log header: the device ID, the network address that can change,
+    // and the UID, which stays. Both are 0 while the unit has none.
+    struct DeviceIds {
+        uint8_t device_id = 0;
+        uint32_t uid = 0;
+    };
+
+    // Reads both IDs together; called at every start on the configuration work queue. The writer's
+    // factory keeps it as long as the writer lives, so it should hold the COM service weakly.
+    using DeviceIdProvider = std::function<DeviceIds()>;
 
     /**
      * @param config_work_queue_thread The queue SensorsController restarts processing on, so the
      *        dependent (GetDependentService()) runs in turn with the requests.
      * @param log_writer_service Initialized and stopped; its owner keeps it.
      * @param tool_id The application that wrote the log, such as "rt_daq".
-     * @param device_id_provider Null: device ID 0.
+     * @param device_id_provider Null: device ID 0 and UID 0.
      */
     LogWriterSupervisor(
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,

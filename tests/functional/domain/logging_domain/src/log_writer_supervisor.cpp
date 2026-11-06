@@ -6,6 +6,7 @@
 //
 // Code that runs on the configuration work queue or the bus thread never asserts: an assertion there
 // aborts that thread. It records into a shared context that the test asserts on afterwards.
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -63,6 +64,33 @@ std::shared_ptr<SensorsConfigurationManager> MakeSensorsManager(const LogWriterR
         ),
         nullptr, 0, 0
     );
+}
+
+// The value of a property of the file's comments, empty when it has none.
+std::string PropertyValue(const std::vector<uint8_t>& content, const char* name) {
+    const std::string start = std::string("<e name=\"") + name + "\">";
+    const auto begin = std::ranges::search(content, start);
+    if(begin.empty())
+        return {};
+
+    const auto value_begin = begin.end();
+    const std::string end = "</e>";
+    const auto value_end = std::search(value_begin, content.end(), end.begin(), end.end());
+
+    return { value_begin, value_end };
+}
+
+// A supervisor on the rig's own logger factory and one stored virtual sensor, so the files carry the
+// header the supervisor builds.
+LogWriterSupervisor& AttachSessionSupervisor(LogWriterRig& rig) {
+    const auto sensors_manager = MakeSensorsManager(rig);
+    const std::vector<std::shared_ptr<Sensor>> sensors = { MakeVirtualSensor("session_sensor") };
+    zassert_true(sensors_manager->Update(sensors), "the sensors were not stored");
+
+    auto& supervisor = AttachSupervisor(rig, sensors_manager, true);
+    EnableSensorLogging(rig, sensors);
+
+    return supervisor;
 }
 
 } // namespace
@@ -972,7 +1000,7 @@ ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
     zassert_true(sensors_manager->Update(sensors), "the sensors were not stored");
 
     auto& supervisor = AttachSupervisor(rig, sensors_manager, true, [] {
-        return uint8_t{ 7 };
+        return LogWriterSupervisor::DeviceIds{ .device_id = 7, .uid = 0x2864434D };
     });
     EnableSensorLogging(rig, sensors);
 
@@ -1000,6 +1028,7 @@ ZTEST(log_writer_supervisor, test_TheLoggerNamesTheToolTheDeviceAndTheSensors) {
         ContainsText(content, Property("product_id", std::to_string(CONFIG_EERIE_LEAP_PRODUCT_ID))), "the product ID"
     );
     zassert_true(ContainsText(content, Property("device_id", "7")), "the device ID");
+    zassert_true(ContainsText(content, Property("unit_uid", std::to_string(0x2864434DU))), "the unit UID");
     zassert_true(
         ContainsText(content, Property("hw_version", std::to_string(SystemConfiguration::HW_VERSION))),
         "the hardware version"
@@ -1041,5 +1070,124 @@ ZTEST(log_writer_supervisor, test_ARejectedSensorsConfigurationIsLoggedWithoutAH
     zassert_equal(files.size(), 1, "one file (found %zu)", files.size());
     zassert_true(ContainsText(files[0].content, Property("sensors_configuration_hash", "0")), "an unknown hash is 0");
     zassert_true(ContainsText(files[0].content, Property("device_id", "0")), "no provider, device ID 0");
+    zassert_true(ContainsText(files[0].content, Property("unit_uid", "0")), "no provider, UID 0");
     zassert_true(ContainsText(files[0].content, std::string("<tool_id>") + TEST_TOOL_ID + "</tool_id>"), "the tool ID");
+}
+
+// A start that opens the writer makes a session, with an ID of its own: a stop and a start make a new
+// one, and each of its files is numbered from 0.
+ZTEST(log_writer_supervisor, test_AStartOpensANewSession) {
+    auto rig = MakeLogWriterRig();
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSessionSupervisor(rig);
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(3), "the second start must publish its status");
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(4), "the second stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+
+    const auto files = ReadLogFiles(*rig.fs_service);
+    zassert_equal(files.size(), 2, "one file per start (found %zu)", files.size());
+
+    const auto first = PropertyValue(files[0].content, "session_id");
+    const auto second = PropertyValue(files[1].content, "session_id");
+    zassert_false(first.empty() || first == "0", "the first session has an ID (%s)", first.c_str());
+    zassert_false(second.empty() || second == "0", "the second session has an ID (%s)", second.c_str());
+    zassert_true(first != second, "a stop and a start make a new session (%s, %s)", first.c_str(), second.c_str());
+
+    zassert_equal(PropertyValue(files[0].content, "file_index"), "0", "the first file of a session is 0");
+    zassert_equal(PropertyValue(files[1].content, "file_index"), "0", "so is the first file of the next one");
+    zassert_equal(
+        PropertyValue(files[0].content, "boot_id"), PropertyValue(files[1].content, "boot_id"),
+        "both files are of one power-on"
+    );
+    zassert_false(PropertyValue(files[0].content, "boot_id").empty(), "the files name the boot");
+}
+
+// A logging configuration stored while the writer runs restarts it: the new file continues the
+// session, and is its file 1.
+ZTEST(log_writer_supervisor, test_ARestartForAStoredConfigurationKeepsTheSession) {
+    auto rig = MakeLogWriterRig();
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSessionSupervisor(rig);
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+
+    StoreLoggingConfiguration(rig, 50);
+    zassert_true(
+        WaitFor(
+            [&rig] {
+                return CountLogFiles(*rig.fs_service) == 2 && rig.log_writer_service->IsRunning();
+            },
+            3000
+        ),
+        "the stored configuration must restart the writer into a second file"
+    );
+
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(
+        WaitFor(
+            [&rig] {
+                return rig.log_writer_service->IsStopped();
+            },
+            3000
+        ),
+        "the writer must stop"
+    );
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+
+    const auto files = ReadLogFiles(*rig.fs_service);
+    zassert_equal(files.size(), 2, "the start's file and the restart's (found %zu)", files.size());
+
+    const auto session = PropertyValue(files[0].content, "session_id");
+    zassert_false(session.empty() || session == "0", "the session has an ID");
+    zassert_equal(PropertyValue(files[1].content, "session_id"), session, "a restart keeps the session");
+    zassert_equal(PropertyValue(files[0].content, "file_index"), "0", "the start's file");
+    zassert_equal(PropertyValue(files[1].content, "file_index"), "1", "the restart's file");
+}
+
+// A rotation opens the next file of the session without a new logger: its index is 1.
+ZTEST(log_writer_supervisor, test_ARotationsFileIsTheNextOfTheSession) {
+    const std::vector<std::shared_ptr<Sensor>> sensors = { MakeVirtualSensor("session_sensor") };
+    auto rig = MakeLogWriterRig(sensors);
+    const StatusRecorder recorder;
+    auto& supervisor = AttachSessionSupervisor(rig);
+
+    // Any header is over the limit, so the next tick after a record rotates.
+    rig.log_writer_service->SetSizeLimitsForTesting(1, 0);
+
+    supervisor.RequestStart(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(1), "the start must publish its status");
+    zassert_true(
+        WaitFor(
+            [&] {
+                PublishValue(rig, *sensors[0], 1, rig.time_service->GetCurrentTime());
+                return rig.log_writer_service->GetStats().rotations >= 1;
+            },
+            3000
+        ),
+        "the writer must rotate"
+    );
+
+    supervisor.RequestStop(ILoggingControl::ALL_UNITS);
+    zassert_true(recorder.WaitForEventCount(2), "the stop must publish its status");
+    zassert_true(FlushConfigQueue(rig), "the configuration work queue did not run");
+
+    const auto files = ReadLogFiles(*rig.fs_service);
+    zassert_true(files.size() >= 2, "a rotation leaves two files at least (found %zu)", files.size());
+
+    const auto session = PropertyValue(files[0].content, "session_id");
+    zassert_false(session.empty() || session == "0", "the session has an ID");
+    for(size_t i = 0; i < files.size(); i++) {
+        zassert_equal(PropertyValue(files[i].content, "session_id"), session, "file %zu is of the session", i);
+        zassert_equal(
+            PropertyValue(files[i].content, "file_index"), std::to_string(i), "file %zu is numbered %zu", i, i
+        );
+    }
 }
