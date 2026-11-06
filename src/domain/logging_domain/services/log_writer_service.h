@@ -34,6 +34,7 @@ namespace threading = eerie_leap::subsys::threading;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::logging_domain::loggers::LogFileEnd;
 using eerie_leap::domain::logging_domain::loggers::LogFileStart;
 using eerie_leap::domain::logging_domain::models::LogSessionInfo;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
@@ -94,6 +95,9 @@ private:
 
     // Set by a tick that ended the session, cleared by the next Start().
     std::atomic<bool> has_failed_ = false;
+    // Why that tick ended it; the end event of a file left open by the failure says so. Written
+    // before has_failed_, meaningful only while it is set.
+    std::atomic<LoggingStatusReason> failure_reason_ = LoggingStatusReason::Stopped;
 
     // The reason DoStop() publishes; set only for the length of StopWithReason().
     std::atomic<LoggingStatusReason> stop_reason_ = LoggingStatusReason::Stopped;
@@ -110,8 +114,9 @@ private:
     bool HasMinimumFreeSpace() const;
     // Names, opens and starts a new file; on failure nothing is left open and no file behind.
     bool OpenLogFile(const std::chrono::system_clock::time_point& start_time);
-    // Finalizes what it can and closes the open file; false when it could not be finalized.
-    bool CloseLogFile(LogWriterTask& task);
+    // Finalizes what it can and closes the open file; false when it could not be finalized. The reason
+    // the session ends with goes into the file's end event; empty for a rotation.
+    bool CloseLogFile(LogWriterTask& task, std::optional<LoggingStatusReason> reason);
     void SetOpenFile(std::string_view path);
     void SetSession(bool is_active, int64_t since_ms = 0);
     void SetOpenFileBytes(uint64_t bytes);

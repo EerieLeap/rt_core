@@ -199,7 +199,68 @@ inline std::string Property(const char* name, const std::string& value) {
     return std::string("<e name=\"") + name + "\">" + value + "</e>";
 }
 
-// A finalized file ends exactly where its DT block says it ends.
+// MDF HD links: the event is the fifth (EventFirst); an EV block's links follow its 24 byte header.
+constexpr size_t HD_EVENT_FIRST_LINK_OFFSET = ID_BLOCK_SIZE + BLOCK_HEADER_SIZE + 4 * 8;
+constexpr size_t EV_NAME_LINK_OFFSET = BLOCK_HEADER_SIZE + 3 * 8;
+constexpr size_t EV_COMMENT_LINK_OFFSET = BLOCK_HEADER_SIZE + 4 * 8;
+constexpr size_t EV_FIELDS_OFFSET = BLOCK_HEADER_SIZE + 5 * 8;
+
+// Where the data of a finalized file ends: its DT block's address plus the length it carries. What
+// follows, if anything, is the padding and the end event.
+inline size_t FinalizedDataEnd(const std::vector<uint8_t>& content) {
+    const auto data_block_address = FindDataBlockAddress(content);
+    zassert_not_equal(data_block_address, 0, "the file has no DT block");
+
+    return data_block_address
+        + static_cast<size_t>(ReadField<uint64_t>(content, data_block_address + BLOCK_LENGTH_OFFSET));
+}
+
+inline std::string ReadTextBlock(const std::vector<uint8_t>& data, size_t address) {
+    const auto length = static_cast<size_t>(ReadField<uint64_t>(data, address + BLOCK_LENGTH_OFFSET));
+    zassert_true(address + length <= data.size(), "the text block runs past the end of the file");
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the text is inside a byte buffer
+    std::string text(
+        reinterpret_cast<const char*>(data.data() + address + BLOCK_HEADER_SIZE), length - BLOCK_HEADER_SIZE
+    );
+
+    return text.substr(0, text.find('\0'));
+}
+
+// The end event of a finalized file as the logger writes it.
+struct EndEvent {
+    bool is_present = false;
+    uint8_t type = 0;
+    uint8_t cause = 0;
+    int64_t base_value_us = 0;
+    std::string name;
+    std::string comment;
+};
+
+inline EndEvent ReadEndEvent(const std::vector<uint8_t>& content) {
+    EndEvent event;
+    const auto address = static_cast<size_t>(ReadField<uint64_t>(content, HD_EVENT_FIRST_LINK_OFFSET));
+    if(address == 0)
+        return event;
+
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the block id is text inside a byte buffer
+    zassert_equal(std::string(reinterpret_cast<const char*>(content.data() + address), 4), "##EV", "an event block");
+
+    event.is_present = true;
+    event.type = ReadField<uint8_t>(content, address + EV_FIELDS_OFFSET);
+    event.cause = ReadField<uint8_t>(content, address + EV_FIELDS_OFFSET + 3);
+    event.base_value_us = ReadField<int64_t>(content, address + EV_FIELDS_OFFSET + 16);
+    event.name = ReadTextBlock(
+        content, static_cast<size_t>(ReadField<uint64_t>(content, address + EV_NAME_LINK_OFFSET))
+    );
+    event.comment = ReadTextBlock(
+        content, static_cast<size_t>(ReadField<uint64_t>(content, address + EV_COMMENT_LINK_OFFSET))
+    );
+
+    return event;
+}
+
+// A finalized file ends where its DT block says it ends, or with the end event that follows (up to
+// seven padding bytes after the data, then the event, which the header links).
 inline void AssertFinalizedFile(const std::vector<uint8_t>& content, const char* name) {
     zassert_true(content.size() >= ID_BLOCK_SIZE + BLOCK_HEADER_SIZE, "%s is shorter than an MDF header", name);
     zassert_true(IsFinalized(content), "%s must carry the finalized identifier", name);
@@ -208,10 +269,14 @@ inline void AssertFinalizedFile(const std::vector<uint8_t>& content, const char*
     zassert_not_equal(data_block_address, 0, "%s has no DT block", name);
 
     const auto data_block_length = ReadField<uint64_t>(content, data_block_address + BLOCK_LENGTH_OFFSET);
-    zassert_equal(
-        content.size(), data_block_address + static_cast<size_t>(data_block_length),
-        "%s must end where the patched DT length says it ends", name
-    );
+    const auto data_end = data_block_address + static_cast<size_t>(data_block_length);
+
+    if(content.size() == data_end)
+        return;
+
+    const auto event = static_cast<size_t>(ReadField<uint64_t>(content, HD_EVENT_FIRST_LINK_OFFSET));
+    zassert_true(event >= data_end && event < data_end + 8, "%s: what follows the data must be the end event", name);
+    zassert_true(content.size() > event, "%s: the event is cut", name);
 }
 
 struct LogFile {

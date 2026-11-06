@@ -100,7 +100,10 @@ private:
     // The SI block of a value channel by the sensor's source, shared by name; null for a source without one.
     std::shared_ptr<mdf4::SourceInformationBlock> GetOrCreateChannelSource(const Sensor& sensor);
     void AddCanFrameTarget(const Sensor& sensor);
-    void SetFileMetadata(const LoggingConfiguration& configuration, const LoggerMetadata& metadata);
+    // Appends the event that says how the file ended; a failure is logged and goes no further.
+    void AppendEndEvent(const LogFileEnd& end) noexcept;
+    // Takes the attachments' bytes out of @p metadata, so each exists once.
+    void SetFileMetadata(const LoggingConfiguration& configuration, LoggerMetadata& metadata);
 
     double ToSeconds(const std::chrono::system_clock::time_point& time) const;
     void LogValueReading(const LogTarget& target, double time_delta_s, const SensorReading& reading);
@@ -110,13 +113,13 @@ public:
     Mdf4LoggerSensorReading(
         const LoggingConfiguration& configuration,
         std::span<const std::shared_ptr<Sensor>> sensors,
-        const LoggerMetadata& metadata
+        LoggerMetadata metadata
     );
     ~Mdf4LoggerSensorReading() override = default;
 
     const char* GetFileExtension() const override;
     bool StartLogging(std::streambuf& stream, const LogFileStart& start) override;
-    bool StopLogging() override;
+    bool StopLogging(const LogFileEnd& end) override;
     bool LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) override;
     [[nodiscard]] uint64_t GetBytesWritten() const override {
         return current_file_size_bytes_;

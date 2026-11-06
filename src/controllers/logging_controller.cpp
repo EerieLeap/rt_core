@@ -27,6 +27,12 @@
 #include "domain/logging_domain/control/canbus_com_logging_restart_monitor.h"
 
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
+    #include <array>
+    #include <string>
+    #include <vector>
+
+    #include <zephyr/sys/crc.h>
+
     #include "configuration/cbor/cbor_logging_config/cbor_logging_config.h"
 #endif
 
@@ -57,6 +63,7 @@ using eerie_leap::subsys::event_bus::ToSelectorValue;
 using eerie_leap::subsys::threading::ScopedMutex;
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+using eerie_leap::domain::logging_domain::loggers::LoggerAttachment;
 using eerie_leap::domain::logging_domain::services::LogEndTimes;
 #endif
 #if defined(CONFIG_EERIE_LEAP_ASSETS) && defined(CONFIG_EERIE_LEAP_DOMAIN_LOGGING)
@@ -157,6 +164,72 @@ MakeDeviceIdProvider(const std::shared_ptr<CanbusComService>& canbus_com_service
 
         return { .device_id = device_info.device_id, .uid = device_info.uid };
     };
+}
+
+// The stored configurations the unit runs, embedded in every log so a log can be read with the
+// configuration that produced it. Held weakly for the same reason as the COM service. Only a type the
+// service has a manager for, whose stored configuration was applied (a rejected one is not what runs)
+// and is not empty. The file name is the stored file's, as the controller that owns the type names it
+// (ADC_CONFIGURATION_NAME, CANBUS_CONFIGURATION_NAME, SENSORS_CONFIGURATION_NAME and
+// LOGGING_CONFIGURATION_NAME), which the writer role's tests compare with the files on the volume.
+LogWriterSupervisor::AttachmentsProvider
+MakeAttachmentsProvider(const std::shared_ptr<ConfigurationService>& configuration_service) {
+    if(configuration_service == nullptr)
+        return nullptr;
+
+    return
+        [weak_service = std::weak_ptr<ConfigurationService>(configuration_service)] -> std::vector<LoggerAttachment> {
+            struct AttachedType {
+                ConfigurationService::Type type;
+                const char* name;  // The stored file's name without ".cbor"
+                const char* label; // For the comment
+            };
+            static constexpr std::array<AttachedType, 4> ATTACHED_TYPES{
+                { { ConfigurationService::Type::Adc, "adc_config", "ADC" },
+                    { ConfigurationService::Type::Canbus, "canbus_config", "CAN bus" },
+                    { ConfigurationService::Type::Sensors, "sensors_config", "sensors" },
+                    { ConfigurationService::Type::Logging, "logging_config", "logging" } }
+            };
+
+            std::vector<LoggerAttachment> attachments;
+
+            const auto service = weak_service.lock();
+            if(service == nullptr)
+                return attachments;
+
+            for(const auto& [type, name, label] : ATTACHED_TYPES) {
+                if(!service->IsRegistered(type))
+                    continue;
+
+                // A failure here costs the attachment, never the start of logging.
+                try {
+                    // A manager without a stored configuration answers an empty info: nothing to read.
+                    const auto info = service->GetCborConfigurationInfo(type);
+                    if(!info.is_applied || info.size == 0)
+                        continue;
+
+                    const auto cbor = service->GetCborConfiguration(type);
+                    if(cbor.empty())
+                        continue;
+
+                    LoggerAttachment attachment;
+                    attachment.file_name = std::string(name) + ".cbor";
+                    attachment.mime_type = "application/cbor";
+                    attachment.comment_text = std::string("Eerie Leap ") + label + " configuration";
+                    attachment.properties = { { "configuration_type", std::to_string(std::to_underlying(type)) },
+                        { "crc", std::to_string(crc32_ieee(cbor.data(), cbor.size())) } };
+                    attachment.bytes.assign(cbor.begin(), cbor.end());
+                    attachments.push_back(std::move(attachment));
+                } catch(const std::exception& e) {
+                    LOG_WRN(
+                        "The %s configuration (type %u) is not attached to the log: %s", label,
+                        static_cast<unsigned>(std::to_underlying(type)), e.what()
+                    );
+                }
+            }
+
+            return attachments;
+        };
 }
 #endif
 
@@ -441,7 +514,7 @@ bool LoggingController::BuildRole() {
 
     log_writer_supervisor_ = std::make_shared<LogWriterSupervisor>(
         config_work_queue_thread_, log_writer_service_, logging_configuration_manager_, sensors_configuration_manager_,
-        tool_id_, MakeDeviceIdProvider(canbus_com_service_)
+        tool_id_, MakeDeviceIdProvider(canbus_com_service_), MakeAttachmentsProvider(configuration_service_)
     );
     if(!log_writer_supervisor_->Initialize()) {
         LOG_ERR("Failed to initialize the log writer supervisor.");

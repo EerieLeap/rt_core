@@ -185,6 +185,7 @@ LoggerMetadata CreateLoggerMetadata(
     SensorsConfigurationManager& sensors_configuration_manager,
     const std::string& tool_id,
     const LogWriterSupervisor::DeviceIdProvider& device_id_provider,
+    const LogWriterSupervisor::AttachmentsProvider& attachments_provider,
     std::shared_ptr<LogSession> session
 ) {
 
@@ -207,6 +208,9 @@ LoggerMetadata CreateLoggerMetadata(
         metadata.unit_uid = ids.uid;
     }
 
+    if(attachments_provider)
+        metadata.attachments = attachments_provider();
+
     metadata.boot_id = GetBootId();
     metadata.session = std::move(session);
 
@@ -226,12 +230,14 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::string tool_id,
-    LogWriterSupervisor::DeviceIdProvider device_id_provider
+    LogWriterSupervisor::DeviceIdProvider device_id_provider,
+    LogWriterSupervisor::AttachmentsProvider attachments_provider
 ) {
 
     return [session = std::move(session), logging_configuration_manager = std::move(logging_configuration_manager),
                sensors_configuration_manager = std::move(sensors_configuration_manager), tool_id = std::move(tool_id),
-               device_id_provider = std::move(device_id_provider)] -> std::shared_ptr<ILogger<SensorReading>> {
+               device_id_provider = std::move(device_id_provider),
+               attachments_provider = std::move(attachments_provider)] -> std::shared_ptr<ILogger<SensorReading>> {
         const auto sensors = sensors_configuration_manager->Get();
         const auto logging_configuration = logging_configuration_manager->Get();
 
@@ -240,7 +246,9 @@ LogWriterService::LoggerFactory MakeLoggerFactory(
 
         return std::make_shared<Mdf4LoggerSensorReading>(
             *logging_configuration, *sensors,
-            CreateLoggerMetadata(*sensors_configuration_manager, tool_id, device_id_provider, session->Get())
+            CreateLoggerMetadata(
+                *sensors_configuration_manager, tool_id, device_id_provider, attachments_provider, session->Get()
+            )
         );
     };
 }
@@ -253,13 +261,15 @@ LogWriterSupervisor::LogWriterSupervisor(
     std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
     std::string tool_id,
-    DeviceIdProvider device_id_provider
+    DeviceIdProvider device_id_provider,
+    AttachmentsProvider attachments_provider
 ) :
     config_work_queue_thread_(std::move(config_work_queue_thread)),
     logging_configuration_manager_(std::move(logging_configuration_manager)),
     sensors_configuration_manager_(std::move(sensors_configuration_manager)),
     tool_id_(std::move(tool_id)),
     device_id_provider_(std::move(device_id_provider)),
+    attachments_provider_(std::move(attachments_provider)),
     state_(std::make_shared<State>()),
     guard_(std::make_shared<DispatchGuard>(this)) {
 
@@ -300,7 +310,8 @@ bool LogWriterSupervisor::Initialize() {
     }
 
     state_->log_writer_service->SetLoggerFactory(MakeLoggerFactory(
-        state_->session, logging_configuration_manager_, sensors_configuration_manager_, tool_id_, device_id_provider_
+        state_->session, logging_configuration_manager_, sensors_configuration_manager_, tool_id_, device_id_provider_,
+        attachments_provider_
     ));
 
     // The composition root decides which bus carries the channel. Until one does, IsActive() stays

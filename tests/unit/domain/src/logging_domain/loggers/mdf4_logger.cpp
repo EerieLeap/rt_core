@@ -18,6 +18,7 @@
 #include <eerie_memory.hpp>
 #include <zephyr/ztest.h>
 
+#include "domain/logging_domain/event_bus/logging_status_reason.h"
 #include "domain/logging_domain/loggers/logger_metadata.h"
 #include "domain/logging_domain/loggers/mdf4_logger_sensor_reading.h"
 #include "domain/logging_domain/models/logging_configuration.h"
@@ -472,7 +473,7 @@ ZTEST(mdf4_logger, test_CanFrameRecord) {
         ReadAt<uint64_t>(records, second + 1 + TIME_SIZE + 7), 4U + 8U, "the offset advances by length + payload"
     );
 
-    zassert_true(logger.StopLogging(), "a string buffer finalizes");
+    zassert_true(logger.StopLogging(LogFileEnd{ .time = START_TIME }), "a string buffer finalizes");
     DumpToHost(stream, "logger_unit_dump.mf4");
 }
 
@@ -573,7 +574,7 @@ ZTEST(mdf4_logger, test_InvalidReadingsSetTheirInvalidationBits) {
     zassert_equal(oil, expected_oil.size());
     zassert_equal(coolant, expected_coolant.size());
 
-    zassert_true(logger.StopLogging(), "a memory buffer finalizes");
+    zassert_true(logger.StopLogging(LogFileEnd{ .time = START_TIME }), "a memory buffer finalizes");
     DumpToHost(stream, "logger_invalidation_dump.mf4");
 }
 
@@ -1396,6 +1397,114 @@ ZTEST(mdf4_logger, test_TheStartCauseIsWrittenFromTheSession) {
     );
 }
 
+namespace {
+
+// The attachments of a file, walked from the header's hd_at_first link.
+struct WrittenAttachment {
+    std::string file_name;
+    std::string mime_type;
+    std::string comment;
+    std::string data;
+    uint64_t original_size = 0;
+    uint64_t embedded_size = 0;
+    uint64_t address = 0;
+    uint64_t length = 0;
+};
+
+std::vector<WrittenAttachment> ReadAttachments(std::string_view file) {
+    constexpr size_t HD_LINK_ATTACHMENT_FIRST = 3;
+    constexpr size_t AT_FIXED_DATA = 2 + 2 + 4 + 16 + 8 + 8;
+
+    std::vector<WrittenAttachment> attachments;
+    auto address = ReadAt<uint64_t>(file, ID_BLOCK_SIZE + BLOCK_LINKS_OFFSET + HD_LINK_ATTACHMENT_FIRST * LINK_SIZE);
+
+    while(address != 0) {
+        zassert_equal(file.substr(address, 4), "##AT");
+        WrittenAttachment attachment;
+        attachment.address = address;
+        attachment.length = ReadAt<uint64_t>(file, address + BLOCK_LENGTH_OFFSET);
+        zassert_equal(attachment.length % 8, 0, "the block length is a multiple of 8");
+        zassert_equal(ReadAt<uint64_t>(file, address + 16), 4, "four links");
+
+        const auto data_offset = address + BLOCK_LINKS_OFFSET + 4 * LINK_SIZE;
+        attachment.file_name = TextAt(file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + LINK_SIZE));
+        attachment.mime_type = TextAt(file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + 2 * LINK_SIZE));
+        attachment.comment = TextAt(file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + 3 * LINK_SIZE));
+        zassert_equal(ReadAt<uint16_t>(file, data_offset), 1, "embedded, no MD5");
+        zassert_equal(ReadAt<uint16_t>(file, data_offset + 2), 0, "creator index");
+        attachment.original_size = ReadAt<uint64_t>(file, data_offset + 24);
+        attachment.embedded_size = ReadAt<uint64_t>(file, data_offset + 32);
+        attachment.data = std::string(file.substr(data_offset + AT_FIXED_DATA, attachment.embedded_size));
+        zassert_equal(
+            attachment.length,
+            BLOCK_LINKS_OFFSET + 4 * LINK_SIZE + AT_FIXED_DATA + ((attachment.embedded_size + 7) & ~7ULL),
+            "the data are padded to 8"
+        );
+
+        attachments.push_back(std::move(attachment));
+        address = ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET);
+    }
+
+    return attachments;
+}
+
+LoggerAttachment MakeAttachment(std::string name, std::vector<uint8_t> bytes, std::string type, std::string crc) {
+    LoggerAttachment attachment;
+    attachment.file_name = std::move(name);
+    attachment.mime_type = "application/cbor";
+    attachment.comment_text = "Eerie Leap test configuration";
+    attachment.properties = { { "configuration_type", std::move(type) }, { "crc", std::move(crc) } };
+    attachment.bytes = std::move(bytes);
+
+    return attachment;
+}
+
+} // namespace
+
+ZTEST(mdf4_logger, test_TheMetadataAttachmentsAreEmbeddedInEveryFile) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+
+    {
+        Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+        auto stream = MakeStream();
+        zassert_true(logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }));
+        zassert_true(ReadAttachments(stream.Str()).empty(), "without attachments the header links none");
+    }
+
+    auto metadata = MakeMetadata();
+    metadata.attachments.push_back(MakeAttachment("sensors_config.cbor", { 0xA1, 0x01, 0x02, 0x03, 0x04 }, "4", "99"));
+    metadata.attachments.push_back(MakeAttachment("logging_config.cbor", std::vector<uint8_t>(16, 0x5A), "5", "7"));
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, metadata);
+
+    // Every file of the logger carries them, as the header is written again for each.
+    for(int file = 0; file < 2; file++) {
+        auto stream = MakeStream();
+        zassert_true(logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }), "file %d", file);
+        const std::string content = stream.Str();
+
+        const auto attachments = ReadAttachments(content);
+        zassert_equal(attachments.size(), 2, "file %d", file);
+        zassert_equal(attachments[0].file_name, "sensors_config.cbor");
+        zassert_equal(attachments[0].mime_type, "application/cbor");
+        zassert_true(attachments[0].comment.contains("<TX>Eerie Leap test configuration</TX>"));
+        zassert_true(attachments[0].comment.contains("<e name=\"configuration_type\">4</e>"));
+        zassert_true(attachments[0].comment.contains("<e name=\"crc\">99</e>"));
+        zassert_equal(attachments[0].original_size, 5);
+        zassert_equal(attachments[0].embedded_size, 5);
+        zassert_equal(attachments[0].data, std::string("\xA1\x01\x02\x03\x04", 5));
+        zassert_equal(attachments[1].file_name, "logging_config.cbor");
+        zassert_equal(attachments[1].data, std::string(16, '\x5A'));
+        zassert_true(attachments[1].comment.contains("<e name=\"configuration_type\">5</e>"));
+
+        // The attachments come before the data group, so the DT block is still the header's last block.
+        const auto dt = content.find("##DT");
+        zassert_true(dt != std::string::npos && dt > attachments[1].address + attachments[1].length);
+        zassert_equal(logger.GetBytesWritten(), dt + 24, "the header ends with the DT block");
+
+        zassert_true(logger.StopLogging(LogFileEnd{ .time = START_TIME }), "file %d is finalized", file);
+    }
+}
+
 ZTEST(mdf4_logger, test_TheSessionIsWrittenAndNumbersTheFiles) {
     const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
     auto metadata = MakeMetadata();
@@ -1410,7 +1519,7 @@ ZTEST(mdf4_logger, test_TheSessionIsWrittenAndNumbersTheFiles) {
         logger.StartLogging(first, LogFileStart{ START_TIME, std::nullopt }),
         "StartLogging must succeed on a string buffer"
     );
-    zassert_true(logger.StopLogging(), "the first file is finalized");
+    zassert_true(logger.StopLogging(LogFileEnd{ .time = START_TIME }), "the first file is finalized");
 
     auto second = MakeStream();
     zassert_true(
@@ -1661,4 +1770,145 @@ ZTEST(mdf4_logger, test_NextFileTakesItsOwnClock) {
     zassert_true(logger.StartLogging(second, LogFileStart{ START_TIME, std::nullopt }), "second start");
     zassert_equal(ReadHeaderStart(second.Str()).time_class, 0, "the second file is on the unit's clock again");
     zassert_true(AnyContains(CollectBlockTexts(second.Str(), "##MD"), "<e name=\"clock\">uptime</e>"), "and says so");
+}
+
+namespace {
+
+using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
+
+constexpr size_t HD_LINK_EVENT_FIRST = 4;
+constexpr size_t EV_LINK_NAME = 3;
+constexpr size_t EV_LINK_COMMENT = 4;
+constexpr size_t EV_DATA_OFFSET = BLOCK_LINKS_OFFSET + 5 * LINK_SIZE;
+
+// A buffer whose syncs can be made to fail, which fails the finalize.
+class SyncFailingStreamBuf : public MemoryStreamBuf {
+protected:
+    int sync() override {
+        return fail_sync ? -1 : 0;
+    }
+
+public:
+    bool fail_sync = false;
+};
+
+struct EndEvent {
+    size_t address = 0;
+    uint8_t type = 0;
+    uint8_t sync_type = 0;
+    uint8_t range_type = 0;
+    uint8_t cause = 0;
+    int64_t base_value = 0;
+    double factor = 0.0;
+    std::string name;
+    std::string comment;
+};
+
+// The event the header links, or an address of 0.
+EndEvent ReadEndEvent(std::string_view file) {
+    EndEvent event;
+    event.address = static_cast<size_t>(
+        ReadAt<uint64_t>(file, ID_BLOCK_SIZE + BLOCK_LINKS_OFFSET + HD_LINK_EVENT_FIRST * LINK_SIZE)
+    );
+    if(event.address == 0)
+        return event;
+
+    zassert_equal(event.address % 8, 0U, "the event sits on an 8 byte boundary");
+    zassert_equal(file.substr(event.address, 4), "##EV", "the header links an event block");
+
+    const size_t fields = event.address + EV_DATA_OFFSET;
+    event.type = ReadAt<uint8_t>(file, fields);
+    event.sync_type = ReadAt<uint8_t>(file, fields + 1);
+    event.range_type = ReadAt<uint8_t>(file, fields + 2);
+    event.cause = ReadAt<uint8_t>(file, fields + 3);
+    event.base_value = ReadAt<int64_t>(file, fields + 16);
+    event.factor = ReadAt<double>(file, fields + 24);
+    event.name = TextAt(file, ReadAt<uint64_t>(file, event.address + BLOCK_LINKS_OFFSET + EV_LINK_NAME * LINK_SIZE));
+    event.comment = TextAt(
+        file, ReadAt<uint64_t>(file, event.address + BLOCK_LINKS_OFFSET + EV_LINK_COMMENT * LINK_SIZE)
+    );
+
+    return event;
+}
+
+EndEvent StopAndReadEvent(const LogFileEnd& end) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    auto stream = MakeStream();
+    zassert_true(logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }), "start");
+    const auto time = START_TIME + std::chrono::milliseconds(100);
+    zassert_true(logger.LogReading(time, MakeValueReading(*sensors[0], 1.0F, time)), "the reading is logged");
+
+    zassert_true(logger.StopLogging(end), "the file finalizes");
+
+    return ReadEndEvent(stream.Str());
+}
+
+} // namespace
+
+ZTEST(mdf4_logger, test_AStopEndsTheFileWithAnEventForTheUser) {
+    const auto event = StopAndReadEvent(
+        LogFileEnd{ .time = START_TIME + std::chrono::milliseconds(2500),
+            .stop_reason = LoggingStatusReason::Stopped,
+            .overruns = 3,
+            .frames_dropped = 7 }
+    );
+
+    zassert_not_equal(event.address, 0U, "the file has an end event");
+    zassert_equal(event.type, 4, "a stop recording trigger");
+    zassert_equal(event.sync_type, 1, "synced on time");
+    zassert_equal(event.range_type, 0, "a point");
+    zassert_equal(event.cause, 4, "the user stopped it");
+    zassert_equal(event.base_value, 2'500'000, "microseconds from the file's start");
+    zassert_equal(event.factor, 1e-6, "the factor makes them seconds");
+    zassert_equal(event.name, "Logging stopped", "the name");
+    zassert_true(event.comment.contains("<e name=\"stop_reason\">0</e>"), "the reason is the status value");
+    zassert_true(event.comment.contains("<e name=\"overruns\">3</e>"), "the overruns");
+    zassert_true(event.comment.contains("<e name=\"frames_dropped\">7</e>"), "the dropped frames");
+    zassert_false(event.comment.contains("rotated"), "a stop is not a rotation");
+}
+
+ZTEST(mdf4_logger, test_ARotationEndsTheFileWithoutAReason) {
+    const auto event = StopAndReadEvent(LogFileEnd{ .time = START_TIME, .stop_reason = std::nullopt });
+
+    zassert_not_equal(event.address, 0U, "the file has an end event");
+    zassert_equal(event.type, 4, "a stop recording trigger");
+    zassert_equal(event.cause, 2, "the tool closed it");
+    zassert_equal(event.base_value, 0, "a file without a tick ends where it began");
+    zassert_equal(event.name, "Next file", "the name");
+    zassert_true(event.comment.contains("<e name=\"rotated\">true</e>"), "it says it rotated");
+    zassert_false(event.comment.contains("stop_reason"), "a rotation has no reason");
+    zassert_true(event.comment.contains("<e name=\"overruns\">0</e>"), "the overruns");
+}
+
+ZTEST(mdf4_logger, test_AFailureEndsTheFileWithAnErrorEvent) {
+    const auto event = StopAndReadEvent(LogFileEnd{ .time = START_TIME, .stop_reason = LoggingStatusReason::NoSpace });
+
+    zassert_equal(event.cause, 1, "an error");
+    zassert_equal(event.name, "Logging stopped: no space", "the name says why");
+    zassert_true(event.comment.contains("<e name=\"stop_reason\">2</e>"), "the reason is NoSpace's status value, 2");
+
+    const auto update = StopAndReadEvent(
+        LogFileEnd{ .time = START_TIME, .stop_reason = LoggingStatusReason::FirmwareUpdate }
+    );
+    zassert_equal(update.cause, 2, "a firmware update is the tool's doing");
+}
+
+ZTEST(mdf4_logger, test_AFileThatCouldNotBeFinalizedGetsNoEvent) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    SyncFailingStreamBuf stream;
+    zassert_true(logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }), "start");
+
+    stream.fail_sync = true;
+    const auto size_before = stream.Str().size();
+    zassert_false(
+        logger.StopLogging(LogFileEnd{ .time = START_TIME, .stop_reason = LoggingStatusReason::Stopped }),
+        "the finalize fails"
+    );
+
+    zassert_equal(ReadEndEvent(stream.Str()).address, 0U, "no event is linked");
+    zassert_equal(stream.Str().size(), size_before, "nothing is appended to an unfinalized file");
 }

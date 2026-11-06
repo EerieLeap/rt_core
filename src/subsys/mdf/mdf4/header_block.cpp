@@ -29,12 +29,27 @@ std::shared_ptr<FileHistoryBlock> HeaderBlock::GetFileHistory() const {
     return std::dynamic_pointer_cast<FileHistoryBlock>(links_.GetLink(LinkType::FileHistoryFirst));
 }
 
+void HeaderBlock::SetEventFirst(std::shared_ptr<EventBlock> event) {
+    links_.SetLink(LinkType::EventFirst, std::move(event));
+}
+
 void HeaderBlock::AddFileHistory(std::shared_ptr<FileHistoryBlock> file_history) {
     if(links_.GetLink(LinkType::FileHistoryFirst)) {
         const auto linked_file_history = std::dynamic_pointer_cast<FileHistoryBlock>(
             links_.GetLink(LinkType::FileHistoryFirst)
         );
         linked_file_history->LinkBlock(std::move(file_history));
+    }
+}
+
+void HeaderBlock::AddAttachment(std::shared_ptr<AttachmentBlock> attachment) {
+    if(links_.GetLink(LinkType::AttachmentFirst)) {
+        const auto linked_attachment = std::dynamic_pointer_cast<AttachmentBlock>(
+            links_.GetLink(LinkType::AttachmentFirst)
+        );
+        linked_attachment->LinkBlock(std::move(attachment));
+    } else {
+        links_.SetLink(LinkType::AttachmentFirst, std::move(attachment));
     }
 }
 

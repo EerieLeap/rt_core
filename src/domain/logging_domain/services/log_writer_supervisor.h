@@ -6,11 +6,13 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "domain/logging_domain/configuration/logging_configuration_manager.h"
 #include "domain/logging_domain/control/i_logging_control.h"
 #include "domain/logging_domain/event_bus/logging_events_channel.h"
 #include "domain/logging_domain/event_bus/logging_status_reason.h"
+#include "domain/logging_domain/loggers/logger_metadata.h"
 #include "domain/logging_domain/models/logging_start_cause.h"
 #include "domain/sensor_domain/configuration/sensors_configuration_manager.h"
 #include "subsys/event_bus/dispatch_guard.h"
@@ -60,12 +62,17 @@ public:
     // factory keeps it as long as the writer lives, so it should hold the COM service weakly.
     using DeviceIdProvider = std::function<DeviceIds()>;
 
+    // The files to embed in the log, such as the stored configurations the unit runs; called at every
+    // start on the configuration work queue, with the same lifetime advice as the device ID provider.
+    using AttachmentsProvider = std::function<std::vector<loggers::LoggerAttachment>()>;
+
     /**
      * @param config_work_queue_thread The queue SensorsController restarts processing on, so the
      *        dependent (GetDependentService()) runs in turn with the requests.
      * @param log_writer_service Initialized and stopped; its owner keeps it.
      * @param tool_id The application that wrote the log, such as "rt_daq".
      * @param device_id_provider Null: device ID 0 and UID 0.
+     * @param attachments_provider Null: nothing is attached.
      */
     LogWriterSupervisor(
         std::shared_ptr<WorkQueueThread> config_work_queue_thread,
@@ -73,7 +80,8 @@ public:
         std::shared_ptr<LoggingConfigurationManager> logging_configuration_manager,
         std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager,
         std::string tool_id,
-        DeviceIdProvider device_id_provider = nullptr
+        DeviceIdProvider device_id_provider = nullptr,
+        AttachmentsProvider attachments_provider = nullptr
     );
 
     // Withdraws the status subscription, the updated handler and the task, and waits for a run of
@@ -150,6 +158,7 @@ private:
     std::shared_ptr<SensorsConfigurationManager> sensors_configuration_manager_;
     std::string tool_id_;
     DeviceIdProvider device_id_provider_;
+    AttachmentsProvider attachments_provider_;
 
     std::shared_ptr<State> state_;
     std::shared_ptr<DependentLogWriter> dependent_;

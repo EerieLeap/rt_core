@@ -8,6 +8,7 @@
 
 #include <zephyr/ztest.h>
 
+#include "subsys/mdf/mdf4/attachment_block.h"
 #include "subsys/mdf/mdf4/channel_block.h"
 #include "subsys/mdf/mdf4/channel_conversion_block.h"
 #include "subsys/mdf/mdf4/channel_group_block.h"
@@ -256,6 +257,102 @@ ZTEST(mdf_blocks, test_HeaderBlockChainsDataGroups) {
         first->GetNext(), std::static_pointer_cast<eerie_leap::subsys::mdf::ISerializableBlock>(second),
         "the second data group is the first one's dg_dg_next"
     );
+}
+
+ZTEST(mdf_blocks, test_AttachmentBlockLayout) {
+    const auto file_name = MakeTextBlock("sensors_config.cbor");
+    const auto mime_type = MakeTextBlock("application/cbor");
+    auto comment = std::make_shared<MetadataBlock>();
+    comment->SetComment("AT", "Eerie Leap sensors configuration");
+
+    AttachmentBlock block;
+    block.SetFileName(file_name);
+    block.SetMimeType(mime_type);
+    block.SetComment(comment);
+    block.SetData({ 1, 2, 3, 4, 5 });
+
+    constexpr size_t FIXED_DATA = 2 + 2 + 4 + 16 + 8 + 8;
+    zassert_equal(block.GetDataSize(), 5);
+    zassert_equal(block.GetBlockSize(), BaseSizeForLinks(4) + FIXED_DATA + 8, "five bytes pad to eight");
+
+    const auto data = ResolveAndSerialize(block);
+    zassert_equal(BlockId(data), std::string("##AT"));
+    zassert_equal(Read<uint64_t>(data, BLOCK_LENGTH_OFFSET), block.GetBlockSize());
+    zassert_equal(Read<uint64_t>(data, BLOCK_LENGTH_OFFSET) % 8, 0);
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINK_COUNT_OFFSET), 4);
+
+    // The links: no next attachment, then the file name, the MIME type and the comment.
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINKS_OFFSET), 0);
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINKS_OFFSET + LINK_SIZE), file_name->GetAddress());
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINKS_OFFSET + 2 * LINK_SIZE), mime_type->GetAddress());
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINKS_OFFSET + 3 * LINK_SIZE), comment->GetAddress());
+    zassert_not_equal(file_name->GetAddress(), 0);
+    zassert_not_equal(comment->GetAddress(), 0);
+
+    size_t offset = BaseSizeForLinks(4);
+    zassert_equal(Read<uint16_t>(data, offset), 1, "embedded, MD5 not valid");
+    zassert_equal(Read<uint16_t>(data, offset + 2), 0, "creator index");
+    for(size_t i = 0; i < 4 + 16; i++)
+        zassert_equal(data[offset + 4 + i], 0, "reserved and MD5 byte %zu", i);
+    offset += 2 + 2 + 4 + 16;
+    zassert_equal(Read<uint64_t>(data, offset), 5, "original size");
+    zassert_equal(Read<uint64_t>(data, offset + 8), 5, "embedded size");
+    offset += 16;
+
+    const std::array<uint8_t, 5> expected{ 1, 2, 3, 4, 5 };
+    for(size_t i = 0; i < expected.size(); i++)
+        zassert_equal(data[offset + i], expected[i], "data byte %zu", i);
+    for(size_t i = expected.size(); i < 8; i++)
+        zassert_equal(data[offset + i], 0, "padding byte %zu", i);
+    zassert_equal(data.size(), offset + 8);
+}
+
+ZTEST(mdf_blocks, test_AttachmentBlockPadsToEight) {
+    const struct {
+        size_t size;
+        size_t padded;
+    } cases[] = { { 0, 0 }, { 1, 8 }, { 7, 8 }, { 8, 8 }, { 9, 16 } };
+
+    for(const auto& test_case : cases) {
+        AttachmentBlock block;
+        block.SetData(std::vector<uint8_t>(test_case.size, 0xAB));
+
+        const size_t fixed = BaseSizeForLinks(4) + 40;
+        zassert_equal(block.GetBlockSize(), fixed + test_case.padded, "data of %zu bytes", test_case.size);
+
+        const auto data = Serialize(block);
+        zassert_equal(data.size(), fixed + test_case.padded);
+        zassert_equal(Read<uint64_t>(data, fixed - 16), test_case.size);
+        zassert_equal(Read<uint64_t>(data, fixed - 8), test_case.size);
+        for(size_t i = test_case.size; i < test_case.padded; i++)
+            zassert_equal(data[fixed + i], 0, "padding must be zero");
+    }
+}
+
+ZTEST(mdf_blocks, test_HeaderBlockChainsAttachmentsBeforeTheDataGroup) {
+    HeaderBlock block;
+
+    const auto first = std::make_shared<AttachmentBlock>();
+    const auto second = std::make_shared<AttachmentBlock>();
+    const auto data_group = std::make_shared<DataGroupBlock>(1);
+    first->SetData({ 1 });
+    second->SetData({ 2 });
+    block.AddAttachment(first);
+    block.AddAttachment(second);
+    block.AddDataGroup(data_group);
+
+    using eerie_leap::subsys::mdf::ISerializableBlock;
+    const auto children = block.GetChildren();
+    zassert_equal(children[3], std::static_pointer_cast<ISerializableBlock>(first), "hd_at_first");
+    zassert_equal(first->GetNext(), std::static_pointer_cast<ISerializableBlock>(second), "at_at_next");
+    zassert_is_null(second->GetNext().get());
+    zassert_equal(children.back(), std::static_pointer_cast<ISerializableBlock>(data_group), "DT stays last");
+
+    const auto data = ResolveAndSerialize(block);
+    zassert_equal(Read<uint64_t>(data, BLOCK_LINKS_OFFSET + 3 * LINK_SIZE), first->GetAddress());
+    zassert_true(first->GetAddress() < second->GetAddress());
+    zassert_true(second->GetAddress() < data_group->GetAddress());
+    zassert_equal(Read<uint64_t>(Serialize(*first), BLOCK_LINKS_OFFSET), second->GetAddress());
 }
 
 ZTEST(mdf_blocks, test_FileHistoryBlockLayout) {

@@ -21,6 +21,7 @@
 
 #include "subsys/mdf/mdf4/channel_group_block.h"
 #include "subsys/mdf/mdf4/data_group_block.h"
+#include "subsys/mdf/mdf4/event_block.h"
 #include "subsys/mdf/mdf4/source_information_block.h"
 #include "subsys/mdf/mdf4_file.h"
 #include "subsys/mdf/mdf_data_type.h"
@@ -844,6 +845,22 @@ ZTEST(mdf_file, test_CommentsCannotChangeOnceTheHeaderIsWritten) {
     }));
     zassert_true(Throws<std::runtime_error>([&] {
         mdf_file.SetHeaderComment("late", properties);
+    }));
+}
+
+ZTEST(mdf_file, test_AttachmentsCannotBeAddedOnceTheHeaderIsWritten) {
+    Mdf4File mdf_file;
+    const auto group = mdf_file.CreateChannelGroup(1, "pressure");
+    mdf_file.CreateDataChannel(group, MdfDataType::Float32, "pressure", "bar");
+
+    mdf_file.AddAttachment("config.cbor", "application/cbor", std::vector<uint8_t>{ 1, 2, 3 }, "Early");
+
+    auto file = MakeStream();
+    mdf_file.WriteHeaderToStream(file);
+    zassert_true(file.Str().find("config.cbor") != std::string::npos, "the attachment is in the header");
+
+    zassert_true(Throws<std::runtime_error>([&] {
+        mdf_file.AddAttachment("late.cbor", "application/cbor", std::vector<uint8_t>{ 4 }, "Late");
     }));
 }
 
@@ -2006,4 +2023,125 @@ ZTEST(mdf_file, test_HeaderTimeClassIsWrittenPerFile) {
     mdf_file.UpdateCurrentTime(time);
     mdf_file.WriteHeaderToStream(third);
     zassert_equal(ReadHeaderTime(third.Str()).time_class, 0, "a call without a class sets 0 again");
+}
+
+namespace {
+
+constexpr size_t HD_EVENT_FIRST_LINK = 4;
+constexpr size_t EV_NAME_LINK = 3;
+constexpr size_t EV_COMMENT_LINK = 4;
+constexpr size_t EV_FIELDS_OFFSET = BLOCK_LINKS_OFFSET + 5 * LINK_SIZE;
+constexpr size_t EV_BLOCK_SIZE = EV_FIELDS_OFFSET + 32;
+
+// A file with two records of an unaligned size, so its data does not end on an 8 byte boundary.
+struct EventFile {
+    Mdf4File mdf_file;
+    MemoryStreamBuf stream = MakeStream();
+    std::shared_ptr<mdf4::ChannelGroupBlock> group;
+    uint64_t header_bytes = 0;
+
+    EventFile() {
+        group = mdf_file.CreateChannelGroup(1, "group");
+        mdf_file.CreateDataChannel(group, MdfDataType::Float32, "value", "bar");
+        header_bytes = mdf_file.WriteHeaderToStream(stream);
+
+        const std::array<MdfValue, 2> record{ 0.5, 1.5F };
+        mdf_file.WriteDataRecordToStream(group, stream, record);
+        mdf_file.WriteDataRecordToStream(group, stream, record);
+    }
+};
+
+Mdf4EventOptions StopOptions() {
+    return Mdf4EventOptions{ .type = mdf4::EventBlock::Type::StopRecordingTrigger,
+        .cause = mdf4::EventBlock::Cause::Error,
+        .time = std::chrono::microseconds(1'234'567) };
+}
+
+} // namespace
+
+ZTEST(mdf_file, test_AnEventFollowsTheFinalizedDataOnAnEightByteBoundary) {
+    EventFile f;
+    f.mdf_file.FinalizeToStream(f.stream);
+
+    const auto finalized = f.stream.Str();
+    const auto data_size_before = Read<uint64_t>(AsBytes(finalized), FindDataBlockAddress(AsBytes(finalized)) + 8);
+    zassert_not_equal(finalized.size() % 8, 0U, "the data ends off the boundary, or the test proves nothing");
+
+    const std::array<MdfProperty, 1> properties{ { { "stop_reason", "2" } } };
+    const auto written = f.mdf_file.AppendEventToStream(f.stream, StopOptions(), "Logging stopped", "Why", properties);
+
+    const auto file_bytes = f.stream.Str();
+    const auto data = AsBytes(file_bytes);
+    zassert_equal(file_bytes.size(), finalized.size() + written, "the return value is what was appended");
+
+    const auto event = ReadLink(data, ID_BLOCK_SIZE, HD_EVENT_FIRST_LINK);
+    zassert_equal(event % 8, 0U, "the event is 8 byte aligned");
+    zassert_true(event >= finalized.size() && event < finalized.size() + 8, "right after the data and its padding");
+    for(size_t i = finalized.size(); i < event; i++)
+        zassert_equal(data[i], 0, "padding byte %zu is zero", i);
+
+    // The file stays final and the DT length is the same.
+    zassert_mem_equal(data.data(), "MDF     ", 8);
+    zassert_equal(Read<uint32_t>(data, ID_STANDARD_FLAGS_OFFSET), 0, "still no unfinalized flags");
+    zassert_equal(Read<uint64_t>(data, FindDataBlockAddress(data) + 8), data_size_before, "the DT length is unchanged");
+    zassert_equal(file_bytes.substr(0, ID_BLOCK_SIZE), finalized.substr(0, ID_BLOCK_SIZE), "the ID block is untouched");
+
+    // The EV block's bytes: links, then the fixed fields.
+    zassert_equal(BlockId(data, event), std::string("##EV"));
+    zassert_equal(Read<uint64_t>(data, event + BLOCK_LENGTH_OFFSET), EV_BLOCK_SIZE, "24 + 5 links + 32 data bytes");
+    zassert_equal(Read<uint64_t>(data, event + BLOCK_LINK_COUNT_OFFSET), 5U, "no scope and no attachment links");
+    zassert_equal(ReadLink(data, event, 0), 0U, "no next event");
+    zassert_equal(ReadLink(data, event, 1), 0U, "no parent");
+    zassert_equal(ReadLink(data, event, 2), 0U, "no range");
+    zassert_equal(ReadBlockText(data, ReadLink(data, event, EV_NAME_LINK)), std::string("Logging stopped"));
+    zassert_true(
+        ReadBlockText(data, ReadLink(data, event, EV_COMMENT_LINK)).contains("<e name=\"stop_reason\">2</e>"),
+        "the comment carries the properties"
+    );
+
+    const auto fields = event + EV_FIELDS_OFFSET;
+    zassert_equal(data[fields], 4, "ev_type: stop recording trigger");
+    zassert_equal(data[fields + 1], 1, "ev_sync_type: time");
+    zassert_equal(data[fields + 2], 0, "ev_range_type: point");
+    zassert_equal(data[fields + 3], 1, "ev_cause: error");
+    zassert_equal(data[fields + 4], 0, "ev_flags");
+    zassert_equal(Read<uint32_t>(data, fields + 8), 0U, "no scope");
+    zassert_equal(Read<uint16_t>(data, fields + 12), 0U, "no attachment");
+    zassert_equal(Read<uint16_t>(data, fields + 14), 0U, "creator index");
+    zassert_equal(Read<int64_t>(data, fields + 16), 1'234'567, "base value in microseconds");
+    zassert_equal(Read<double>(data, fields + 24), 1e-6, "the factor makes them seconds");
+
+    // The event, its name and its comment are the end of the file.
+    const auto name = ReadLink(data, event, EV_NAME_LINK);
+    const auto comment = ReadLink(data, event, EV_COMMENT_LINK);
+    zassert_true(name > event && comment > name, "the name and the comment follow the event");
+    zassert_equal(comment + Read<uint64_t>(data, comment + BLOCK_LENGTH_OFFSET), file_bytes.size(), "and end the file");
+}
+
+ZTEST(mdf_file, test_AnEventBeforeTheFinalizeThrows) {
+    EventFile f;
+    const auto size_before = f.stream.Str().size();
+
+    bool is_thrown = false;
+    try {
+        f.mdf_file.AppendEventToStream(f.stream, StopOptions(), "Logging stopped", "Why");
+    } catch(const std::runtime_error&) {
+        is_thrown = true;
+    }
+
+    zassert_true(is_thrown, "an unfinalized file takes no event");
+    zassert_equal(f.stream.Str().size(), size_before, "nothing was written");
+    const auto file_bytes = f.stream.Str();
+    zassert_equal(ReadLink(AsBytes(file_bytes), ID_BLOCK_SIZE, HD_EVENT_FIRST_LINK), 0U, "and nothing is linked");
+}
+
+ZTEST(mdf_file, test_ANewHeaderDoesNotCarryTheLastFilesEvent) {
+    EventFile f;
+    f.mdf_file.FinalizeToStream(f.stream);
+    f.mdf_file.AppendEventToStream(f.stream, StopOptions(), "Next file", "Why");
+
+    auto next = MakeStream();
+    f.mdf_file.WriteHeaderToStream(next);
+    const auto next_bytes = next.Str();
+    zassert_equal(ReadLink(AsBytes(next_bytes), ID_BLOCK_SIZE, HD_EVENT_FIRST_LINK), 0U, "the next file has no event");
 }

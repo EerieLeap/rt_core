@@ -2,6 +2,7 @@
 #include <array>
 #include <cstring>
 #include <ios>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -113,6 +114,24 @@ void Mdf4File::SetHeaderComment(std::string_view text, std::span<const MdfProper
 void Mdf4File::SetFileHistory(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version) {
     EnsureStructureEditable();
     header_block_->GetFileHistory()->SetTool(tool_id, tool_vendor, tool_version);
+}
+
+void Mdf4File::AddAttachment(
+    std::string_view file_name,
+    std::string_view mime_type,
+    std::vector<uint8_t>&& bytes,
+    std::string_view comment_text,
+    std::span<const MdfProperty> properties
+) {
+    EnsureStructureEditable();
+
+    auto attachment = std::make_shared<mdf4::AttachmentBlock>();
+    attachment->SetFileName(GetOrCreateTextBlock(std::string(file_name)));
+    attachment->SetMimeType(GetOrCreateTextBlock(std::string(mime_type)));
+    attachment->SetComment(CreateCommentBlock(attachment->GetId(), comment_text, properties));
+    attachment->SetData(std::move(bytes));
+
+    header_block_->AddAttachment(std::move(attachment));
 }
 
 void Mdf4File::SetChannelComment(
@@ -410,6 +429,9 @@ uint64_t Mdf4File::WriteHeaderToStream(std::streambuf& stream, std::span<const M
         header_block_->SetComment(std::move(comment));
     }
 
+    // The previous file's event is not this file's.
+    header_block_->SetEventFirst(nullptr);
+
     id_block_->Reset();
     header_block_->Reset();
 
@@ -527,6 +549,77 @@ uint64_t Mdf4File::FinalizeToStream(std::streambuf& stream) {
         throw std::ios_base::failure("Failed to sync the finalized stream.");
 
     is_finalized_ = true;
+
+    return bytes_written;
+}
+
+uint64_t Mdf4File::AppendEventToStream(
+    std::streambuf& stream,
+    const Mdf4EventOptions& options,
+    std::string_view name,
+    std::string_view comment_text,
+    std::span<const MdfProperty> properties
+) {
+    if(!is_finalized_)
+        throw std::runtime_error("An event can only follow a finalized file");
+
+    if(header_block_->HasEvent())
+        throw std::runtime_error("The file already has an event");
+
+    const auto end_position = stream.pubseekoff(0, std::ios_base::end, std::ios_base::out);
+    if(end_position == std::streambuf::pos_type(static_cast<std::streambuf::off_type>(-1)))
+        throw std::ios_base::failure("Failed to seek to the end of the stream.");
+
+    // Blocks sit on 8 byte boundaries; the zeros are unreferenced bytes after the data.
+    const auto end_address = static_cast<uint64_t>(static_cast<std::streamoff>(end_position));
+    const uint64_t padding = (8 - end_address % 8) % 8;
+    if(padding > 0) {
+        constexpr std::array<char, 8> ZEROS{};
+        if(stream.sputn(ZEROS.data(), static_cast<std::streamsize>(padding)) != static_cast<std::streamsize>(padding))
+            throw std::ios_base::failure("Failed to pad the stream.");
+    }
+
+    auto event = std::make_shared<mdf4::EventBlock>();
+    event->SetType(options.type);
+    event->SetSyncType(mdf4::EventBlock::SyncType::Time);
+    event->SetRangeType(mdf4::EventBlock::RangeType::Point);
+    event->SetCause(options.cause);
+    event->SetSyncBaseValue(options.time.count());
+    event->SetSyncFactor(1e-6);
+
+    auto name_block = std::make_shared<mdf4::TextBlock>();
+    name_block->SetText(std::string(name));
+    event->SetName(std::move(name_block));
+
+    auto comment = std::make_shared<mdf4::MetadataBlock>();
+    comment->SetComment(event->GetId(), std::string(comment_text), properties);
+    event->SetComment(std::move(comment));
+
+    uint64_t bytes_written = padding;
+    try {
+        event->ResolveAddress(end_address + padding);
+        bytes_written += event->WriteToStream(stream);
+
+        // The event is on the medium before anything points at it.
+        if(stream.pubsync() != 0)
+            throw std::ios_base::failure("Failed to sync the event.");
+
+        header_block_->SetEventFirst(event);
+        header_block_->RewriteToStream(stream);
+
+        if(stream.pubseekoff(0, std::ios_base::end, std::ios_base::out)
+            == std::streambuf::pos_type(static_cast<std::streambuf::off_type>(-1))) {
+
+            throw std::ios_base::failure("Failed to seek back to the end of the stream.");
+        }
+
+        if(stream.pubsync() != 0)
+            throw std::ios_base::failure("Failed to sync the header link of the event.");
+    } catch(...) {
+        // Whatever reached the medium, the link in memory goes, so a retry or the next header starts clean.
+        header_block_->SetEventFirst(nullptr);
+        throw;
+    }
 
     return bytes_written;
 }

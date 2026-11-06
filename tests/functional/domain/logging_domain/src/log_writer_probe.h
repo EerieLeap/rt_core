@@ -20,6 +20,7 @@
 namespace logging_test_support {
 
 using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::logging_domain::loggers::LogFileEnd;
 using eerie_leap::domain::logging_domain::loggers::LogFileStart;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::subsys::threading::ScopedMutex;
@@ -63,7 +64,7 @@ public:
         return inner_->StartLogging(stream, start);
     }
 
-    bool StopLogging() override {
+    bool StopLogging(const LogFileEnd& end) override {
         if(stop_throws > 0) {
             stop_throws--;
             throw std::ios_base::failure("The probe refuses to finalize.");
@@ -72,7 +73,7 @@ public:
         stop_thread = k_current_get();
         stop_found_held_reading_done = is_held_reading_done.load();
 
-        return inner_->StopLogging();
+        return inner_->StopLogging(end);
     }
 
     bool LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) override {

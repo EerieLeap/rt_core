@@ -5,8 +5,12 @@
 #include <cstdio>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include <zephyr/logging/log.h>
+
+#include "domain/logging_domain/event_bus/logging_status_reason.h"
 #include "domain/sensor_domain/models/sensor_type.h"
 #include "subsys/mdf/mdf_property.h"
 #include "subsys/mdf/mdf_value.h"
@@ -16,12 +20,16 @@
 namespace eerie_leap::domain::logging_domain::loggers {
 
 using namespace eerie_leap::domain::sensor_domain::models;
+using eerie_leap::domain::logging_domain::event_bus::GetReasonName;
+using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::logging_domain::models::GetStartCauseName;
 using eerie_leap::domain::logging_domain::models::LoggingStartCause;
 using namespace eerie_leap::subsys::mdf;
 using namespace eerie_leap::subsys::mdf::mdf4;
 using eerie_leap::utilities::voltage_interpolator::CalibrationData;
 using eerie_leap::utilities::voltage_interpolator::InterpolationMethod;
+
+LOG_MODULE_REGISTER(mdf4_logger_sensor_reading_logger);
 
 namespace {
 
@@ -288,7 +296,7 @@ std::optional<std::string> Mdf4LoggerSensorReading::ToMdfFormula(std::string_vie
 Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     const LoggingConfiguration& configuration,
     std::span<const std::shared_ptr<Sensor>> sensors,
-    const LoggerMetadata& metadata
+    LoggerMetadata metadata
 ) {
 
     // A disabled sensor never has a reading, so it gets no channel whatever its logging configuration says.
@@ -330,10 +338,7 @@ Mdf4LoggerSensorReading::Mdf4LoggerSensorReading(
     }
 }
 
-void Mdf4LoggerSensorReading::SetFileMetadata(
-    const LoggingConfiguration& configuration,
-    const LoggerMetadata& metadata
-) {
+void Mdf4LoggerSensorReading::SetFileMetadata(const LoggingConfiguration& configuration, LoggerMetadata& metadata) {
     mdf4_file_->SetFileHistory(metadata.tool_id, TOOL_VENDOR, metadata.tool_version);
     session_ = metadata.session;
 
@@ -349,6 +354,14 @@ void Mdf4LoggerSensorReading::SetFileMetadata(
             std::string(GetStartCauseName(session_ != nullptr ? session_->cause : LoggingStartCause::Unknown)) } } };
 
     mdf4_file_->SetHeaderComment(HEADER_COMMENT, properties);
+
+    // The file keeps its own copy, so every file of the session carries them.
+    for(auto& attachment : metadata.attachments) {
+        mdf4_file_->AddAttachment(
+            attachment.file_name, attachment.mime_type, std::move(attachment.bytes), attachment.comment_text,
+            attachment.properties
+        );
+    }
 }
 
 void Mdf4LoggerSensorReading::AddValueTarget(
@@ -559,7 +572,7 @@ bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const LogFile
     return true;
 }
 
-bool Mdf4LoggerSensorReading::StopLogging() {
+bool Mdf4LoggerSensorReading::StopLogging(const LogFileEnd& end) {
     if(stream_ == nullptr)
         return false;
 
@@ -573,9 +586,69 @@ bool Mdf4LoggerSensorReading::StopLogging() {
         result = false;
     }
 
+    // Only a finalized file gets its event: before that, the bytes after the data are records to a reader.
+    if(result)
+        AppendEndEvent(end);
+
     stream_ = nullptr;
 
     return result;
+}
+
+void Mdf4LoggerSensorReading::AppendEndEvent(const LogFileEnd& end) noexcept {
+    try {
+        const bool is_rotation = !end.stop_reason.has_value();
+
+        std::string name = "Next file";
+        auto cause = EventBlock::Cause::Tool;
+        std::vector<MdfProperty> properties;
+
+        if(!is_rotation) {
+            const auto reason = end.stop_reason.value();
+
+            name = reason == LoggingStatusReason::Stopped ? "Logging stopped"
+                                                          : std::string("Logging stopped: ") + GetReasonName(reason);
+
+            switch(reason) {
+                case LoggingStatusReason::WriteFailed:
+                case LoggingStatusReason::NoSpace:
+                case LoggingStatusReason::RotationFailed:
+                    cause = EventBlock::Cause::Error;
+                    break;
+                case LoggingStatusReason::FirmwareUpdate:
+                    cause = EventBlock::Cause::Tool;
+                    break;
+                case LoggingStatusReason::Stopped:
+                    cause = EventBlock::Cause::User;
+                    break;
+                case LoggingStatusReason::Unavailable:
+                    cause = EventBlock::Cause::Other;
+                    break;
+            }
+
+            properties.push_back({ "stop_reason", std::to_string(static_cast<uint32_t>(reason)) });
+        } else {
+            properties.push_back({ "rotated", "true" });
+        }
+
+        properties.push_back({ "overruns", std::to_string(end.overruns) });
+        properties.push_back({ "frames_dropped", std::to_string(end.frames_dropped) });
+
+        // Never before the file's start: the origin of the master time, which the header holds.
+        const auto since_start = std::max(end.time, start_time_) - start_time_;
+
+        mdf4_file_->AppendEventToStream(
+            *stream_,
+            Mdf4EventOptions{ .type = EventBlock::Type::StopRecordingTrigger,
+                .cause = cause,
+                .time = std::chrono::duration_cast<std::chrono::microseconds>(since_start) },
+            name, name, properties
+        );
+    } catch(const std::exception& e) {
+        LOG_ERR("Failed to append the end event: %s", e.what());
+    } catch(...) {
+        LOG_ERR("Failed to append the end event.");
+    }
 }
 
 void Mdf4LoggerSensorReading::LogValueReading(

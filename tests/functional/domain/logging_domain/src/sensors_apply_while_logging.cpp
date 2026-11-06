@@ -205,7 +205,9 @@ ZTEST(sensors_apply_while_logging, test_ASensorsApplyWhileLoggingStartsTheNextFi
         AssertFinalizedFile(files[i].content, files[i].path.c_str());
 
         const auto data_block_address = FindDataBlockAddress(files[i].content);
-        zassert_true(files[i].content.size() > data_block_address + BLOCK_HEADER_SIZE, "file %zu holds no record", i);
+        zassert_true(
+            FinalizedDataEnd(files[i].content) > data_block_address + BLOCK_HEADER_SIZE, "file %zu holds no record", i
+        );
     }
 
     zassert_true(ContainsText(files[0].content, "before_apply"), "the first file must describe the first sensors");

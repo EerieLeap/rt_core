@@ -5,8 +5,10 @@
 #include <string>
 #include <vector>
 
+#include "attachment_block.h"
 #include "block_base.h"
 #include "data_group_block.h"
+#include "event_block.h"
 #include "file_history_block.h"
 #include "metadata_block.h"
 #include "subsys/mdf/utilities/block_links.h"
@@ -46,6 +48,11 @@ public:
     }
     void SetComment(std::shared_ptr<MetadataBlock> comment);
     std::shared_ptr<FileHistoryBlock> GetFileHistory() const;
+    /** Links the first event of the file; null unlinks. */
+    void SetEventFirst(std::shared_ptr<EventBlock> event);
+    bool HasEvent() const {
+        return links_.GetLink(LinkType::EventFirst) != nullptr;
+    }
 
     uint64_t GetBlockSize() const override;
     std::unique_ptr<uint8_t[]> Serialize() const override;
@@ -62,6 +69,7 @@ public:
     }
 
     void AddFileHistory(std::shared_ptr<FileHistoryBlock> file_history);
+    void AddAttachment(std::shared_ptr<AttachmentBlock> attachment);
     void AddDataGroup(std::shared_ptr<DataGroupBlock> data_group);
 };
 

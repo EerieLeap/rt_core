@@ -110,6 +110,12 @@ bool LogWriterService::DoStart() {
     if(!HasMinimumFreeSpace())
         return false;
 
+    // Only while stopped: the previous logger, and the attachments it holds, go before the factory
+    // builds the next one, so they never exist twice.
+    logger_ = nullptr;
+    if(work_queue_task_.has_value())
+        work_queue_task_->GetUserdata()->logger = nullptr;
+
     try {
         logger_ = logger_factory_();
     } catch(const std::exception& e) {
@@ -162,6 +168,8 @@ bool LogWriterService::DoStart() {
     task.stats = LogWriterStats{};
     task.closed_files_bytes = 0;
     task.closed_files_stream_writes = 0;
+    task.file_start_overruns = 0;
+    task.file_start_frames_dropped = 0;
     task.last_dropped_count = sensor_readings_frame_->GetDroppedRawCanFrameCount();
     task.dropped_at_last_warning = 0;
 
@@ -199,7 +207,8 @@ bool LogWriterService::DoStop() {
     while(work_queue_task.Cancel())
         k_sleep(K_MSEC(1));
 
-    CloseLogFile(task);
+    // A session that failed says why, also when the stop that closes its file comes with another reason.
+    CloseLogFile(task, has_failed_ ? failure_reason_.load() : stop_reason_.load());
     SetSession(false);
 
     const LoggingStatusReason reason = stop_reason_;
@@ -338,7 +347,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
     return true;
 }
 
-bool LogWriterService::CloseLogFile(LogWriterTask& task) {
+bool LogWriterService::CloseLogFile(LogWriterTask& task, std::optional<LoggingStatusReason> reason) {
     // The stream goes now, so the task must not look at it any more.
     task.stream_buf = nullptr;
 
@@ -351,7 +360,14 @@ bool LogWriterService::CloseLogFile(LogWriterTask& task) {
     // Taken before finalizing, which rewrites blocks in place.
     task.closed_files_bytes += logger_->GetBytesWritten();
 
-    const bool is_finalized = logger_->StopLogging();
+    // The file's last tick, or its start when it had none, as RecordEndTime() has it; the unit's clock,
+    // which the records' times are relative to.
+    const LogFileEnd end{ .time = task.last_tick_time > file_start_time_ ? task.last_tick_time : file_start_time_,
+        .stop_reason = reason,
+        .overruns = task.stats.overruns - task.file_start_overruns,
+        .frames_dropped = task.stats.frames_dropped - task.file_start_frames_dropped };
+
+    const bool is_finalized = logger_->StopLogging(end);
     if(!is_finalized)
         LOG_ERR("Failed to finalize %s; it stays readable as unfinalized.", file_path_.CStr());
 
@@ -469,7 +485,7 @@ std::optional<LoggingStatusReason> LogWriterService::RotateFile(LogWriterTask& t
     if(!HasMinimumFreeSpace())
         return LoggingStatusReason::NoSpace;
 
-    if(!CloseLogFile(task))
+    if(!CloseLogFile(task, std::nullopt))
         task.stats.write_errors++;
 
     if(!OpenLogFile(task.last_tick_time)) {
@@ -478,6 +494,8 @@ std::optional<LoggingStatusReason> LogWriterService::RotateFile(LogWriterTask& t
     }
 
     task.stream_buf = fs_stream_buf_.get();
+    task.file_start_overruns = task.stats.overruns;
+    task.file_start_frames_dropped = task.stats.frames_dropped;
     task.is_rotation_due = false;
     // StartLogging() synced the header.
     task.last_sync_ms = k_uptime_get();
@@ -489,6 +507,7 @@ std::optional<LoggingStatusReason> LogWriterService::RotateFile(LogWriterTask& t
 }
 
 WorkQueueTaskResult LogWriterService::EndSession(LoggingStatusReason reason) {
+    failure_reason_ = reason;
     has_failed_ = true;
 
     // Stop() would wait for this very tick; the supervisor stops the service from another thread

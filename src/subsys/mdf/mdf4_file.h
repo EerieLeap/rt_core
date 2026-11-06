@@ -16,6 +16,7 @@
 #include "subsys/mdf/mdf4/channel_conversion_block.h"
 #include "subsys/mdf/mdf4/channel_group_block.h"
 #include "subsys/mdf/mdf4/data_group_block.h"
+#include "subsys/mdf/mdf4/event_block.h"
 #include "subsys/mdf/mdf4/header_block.h"
 #include "subsys/mdf/mdf4/id_block.h"
 #include "subsys/mdf/mdf4/record_writer.h"
@@ -32,6 +33,13 @@ struct Mdf4FileOptions {
     uint8_t record_id_size_bytes = 1;
     MdfDataType time_type = MdfDataType::Float64; // master channel of every group: seconds since the header start time
     uint8_t vlsd_offset_size_bytes = 8;           // width of the in-record VLSD offset (CAN_DataFrame.DataBytes)
+};
+
+/** One event of AppendEventToStream(), at a point in time of the file. */
+struct Mdf4EventOptions {
+    mdf4::EventBlock::Type type = mdf4::EventBlock::Type::Marker;
+    mdf4::EventBlock::Cause cause = mdf4::EventBlock::Cause::Other;
+    std::chrono::microseconds time{ 0 }; // from the file's start, the origin of every record time
 };
 
 /**
@@ -106,6 +114,18 @@ public:
     /** The metadata setters, like the structure, must be called before WriteHeaderToStream(). */
     void SetHeaderComment(std::string_view text, std::span<const MdfProperty> properties);
     void SetFileHistory(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version);
+    /**
+     * Embeds a file (an ##AT block). The block takes @p bytes and keeps them for the file's lifetime, since
+     * every WriteHeaderToStream() writes it again. @p comment_text and @p properties make its
+     * ATcomment.
+     */
+    void AddAttachment(
+        std::string_view file_name,
+        std::string_view mime_type,
+        std::vector<uint8_t>&& bytes,
+        std::string_view comment_text,
+        std::span<const MdfProperty> properties = {}
+    );
     void SetChannelComment(
         const std::shared_ptr<mdf4::ChannelBlock>& channel,
         std::string_view text,
@@ -177,6 +197,24 @@ public:
      * and leaves the file unfinalized.
      */
     uint64_t FinalizeToStream(std::streambuf& stream);
+
+    /**
+     * Appends an event after the finalized data: pads the end of the file to 8 with zeros, writes the
+     * event (##EV, its name and its comment) there and syncs, then links it from the header block and
+     * rewrites that block in place and syncs again. Only after FinalizeToStream() succeeded (throws
+     * otherwise): in an unfinalized file the reader takes everything after the data for records. A cut
+     * anywhere leaves a valid finalized file, at worst without the event. Returns the bytes written
+     * past the end of the file (padding and event). Throws std::ios_base::failure when the stream
+     * refuses; the in-memory link is then cleared, and the file stays valid either way (a cut after
+     * the header rewrite may still link the synced event). One event per file.
+     */
+    uint64_t AppendEventToStream(
+        std::streambuf& stream,
+        const Mdf4EventOptions& options,
+        std::string_view name,
+        std::string_view comment_text,
+        std::span<const MdfProperty> properties = {}
+    );
 };
 
 } // namespace eerie_leap::subsys::mdf

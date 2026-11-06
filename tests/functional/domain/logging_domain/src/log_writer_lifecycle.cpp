@@ -26,6 +26,15 @@ using rt_core_test::MemoryStreamBuf;
 
 namespace {
 
+// The number a property of an end event's comment holds; fails the case when it is not there.
+uint32_t EventCount(const EndEvent& event, const char* name) {
+    const std::string key = std::string("<e name=\"") + name + "\">";
+    const auto begin = event.comment.find(key);
+    zassert_not_equal(begin, std::string::npos, "the event has no %s", name);
+
+    return static_cast<uint32_t>(std::stoul(event.comment.substr(begin + key.size())));
+}
+
 // The bytes StartLogging() writes for the rig's sensors: what a file holds before its first record.
 uint64_t GetHeaderSize(const LogWriterRig& rig) {
     MemoryStreamBuf stream;
@@ -289,10 +298,29 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
     std::vector<uint8_t> sequences;
     double last_frame_time_ns = 0.0;
     uint64_t total_bytes = 0;
+    uint32_t event_overruns = 0;
+    uint32_t event_frames_dropped = 0;
 
     for(size_t i = 0; i < files.size(); i++) {
         AssertFinalizedFile(files[i].content, files[i].path.c_str());
-        total_bytes += files[i].content.size();
+
+        // Every file says how it ended: a rotation for all but the last, the requested stop for the last.
+        const auto event = ReadEndEvent(files[i].content);
+        zassert_true(event.is_present, "file %zu has no end event", i);
+        if(i + 1 < files.size()) {
+            zassert_equal(event.name, "Next file", "file %zu was closed for a rotation", i);
+            zassert_true(event.comment.contains("<e name=\"rotated\">true</e>"), "file %zu says it rotated", i);
+            zassert_false(event.comment.contains("stop_reason"), "a rotation has no reason (file %zu)", i);
+        } else {
+            zassert_equal(event.name, "Logging stopped", "the last file was stopped by request");
+            zassert_equal(EventCount(event, "stop_reason"), 0U, "Stopped is reason 0");
+        }
+        zassert_true(event.base_value_us >= 0, "an event lies within its file");
+
+        // The counts are the file's own, so they add up to the session's.
+        event_overruns += EventCount(event, "overruns");
+        event_frames_dropped += EventCount(event, "frames_dropped");
+        total_bytes += FinalizedDataEnd(files[i].content);
 
         if(i > 0)
             zassert_true(
@@ -314,6 +342,9 @@ ZTEST(log_writer_lifecycle, test_RotationAtTheSizeLimitKeepsEveryFrame) {
     );
     for(size_t i = 0; i < sequences.size(); i++)
         zassert_equal(sequences[i], i, "frame %zu is missing, repeated or out of order across the rotations", i);
+
+    zassert_equal(event_overruns, stats.overruns, "the files' overruns add up to the session's");
+    zassert_equal(event_frames_dropped, stats.frames_dropped, "the files' dropped frames add up to the session's");
 
     zassert_equal(
         stats.bytes, total_bytes, "the byte count must cover every file (%llu, files %llu)",
@@ -498,6 +529,14 @@ ZTEST(log_writer_lifecycle, test_ARotationWithoutTheMinimumFreeSpaceEndsWithNoSp
     const auto files = ReadLogFiles(*rig.fs_service);
     zassert_equal(files.size(), 1, "no next file may be opened (found %zu)", files.size());
     AssertFinalizedFile(files[0].content, "the full file");
+
+    // The file left open by the failure says why it ended, not that it was stopped.
+    const auto event = ReadEndEvent(files[0].content);
+    zassert_true(event.is_present, "the full file has an end event");
+    zassert_equal(event.cause, 1, "NoSpace is an error");
+    zassert_equal(event.name, "Logging stopped: no space", "the name says why");
+    zassert_equal(EventCount(event, "stop_reason"), 2U, "NoSpace's status value");
+    zassert_false(event.comment.contains("rotated"), "it did not rotate");
 
     RemoveFiller(*rig.fs_service, filler_path);
 }

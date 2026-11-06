@@ -56,6 +56,11 @@ struct LogWriterTask {
     uint64_t closed_files_bytes = 0;
     uint32_t closed_files_stream_writes = 0;
 
+    // The stats' overruns and dropped frames when the open file opened: the file's own counts are
+    // the difference, which its end event carries.
+    uint32_t file_start_overruns = 0;
+    uint32_t file_start_frames_dropped = 0;
+
     // The frame's drop count when last read; it starts again from 0 when processing restarts.
     uint32_t last_dropped_count = 0;
     uint32_t dropped_at_last_warning = 0;

@@ -5,11 +5,15 @@
 // and this one from the base scenario.
 #ifdef CONFIG_EERIE_LEAP_DOMAIN_LOGGING
 
+    #include <array>
     #include <atomic>
+    #include <cstring>
     #include <memory>
     #include <optional>
+    #include <string_view>
     #include <vector>
 
+    #include <zephyr/sys/crc.h>
     #include <zephyr/ztest.h>
 
     #ifdef CONFIG_EERIE_LEAP_ASSETS
@@ -247,6 +251,153 @@ ZTEST(logging_controller_writer, test_ACdmpStartIsAcceptedAndShared) {
     zassert_true(
         ContainsText(content, std::string("<tool_id>") + CONTROLLER_TOOL_ID + "</tool_id>"), "and the tool ID"
     );
+}
+
+namespace {
+
+struct EmbeddedFile {
+    std::string name;
+    std::string comment;
+    std::vector<uint8_t> data;
+};
+
+template<typename T>
+T ReadValue(const std::vector<uint8_t>& content, size_t offset) {
+    T value{};
+    zassert_true(offset + sizeof(T) <= content.size(), "read past the end of the log");
+    std::memcpy(&value, content.data() + offset, sizeof(T));
+
+    return value;
+}
+
+std::string TextBlockAt(const std::vector<uint8_t>& content, uint64_t address) {
+    const auto length = ReadValue<uint64_t>(content, address + 8);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): views the log bytes as text
+    std::string text(reinterpret_cast<const char*>(content.data()) + address + 24, length - 24);
+
+    return text.substr(0, text.find('\0'));
+}
+
+// The log's attachments, walked from the header's hd_at_first link (the 4th, after the 64 byte ID block).
+std::vector<EmbeddedFile> ReadEmbeddedFiles(const std::vector<uint8_t>& content) {
+    constexpr size_t HD_ADDRESS = 64;
+    constexpr size_t AT_DATA = 24 + 4 * 8 + 40;
+
+    std::vector<EmbeddedFile> files;
+    auto address = ReadValue<uint64_t>(content, HD_ADDRESS + 24 + 3 * 8);
+    while(address != 0) {
+        EmbeddedFile file;
+        file.name = TextBlockAt(content, ReadValue<uint64_t>(content, address + 24 + 8));
+        file.comment = TextBlockAt(content, ReadValue<uint64_t>(content, address + 24 + 24));
+        const auto size = ReadValue<uint64_t>(content, address + AT_DATA - 16);
+        zassert_equal(size, ReadValue<uint64_t>(content, address + AT_DATA - 8), "original and embedded size");
+        zassert_true(address + AT_DATA + size <= content.size());
+        file.data.assign(content.begin() + address + AT_DATA, content.begin() + address + AT_DATA + size);
+        files.push_back(std::move(file));
+
+        address = ReadValue<uint64_t>(content, address + 24);
+    }
+
+    return files;
+}
+
+// Runs the writer for one file and returns its attachments.
+std::vector<EmbeddedFile> LogAndReadEmbeddedFiles(LoggingController& controller) {
+    StoreLoggingConfiguration(controller, { "switch" });
+
+    const auto control = controller.GetControl();
+    const auto writer = controller.GetLogWriterService();
+    control->RequestStart(ALL_UNITS);
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsRunning();
+    }));
+    control->RequestStop(ALL_UNITS);
+    zassert_true(WaitUntil([&writer] {
+        return writer->IsStopped();
+    }));
+
+    const auto content = ReadTheLogFile(*F().rig->fs_service);
+    zassert_false(content.empty(), "The session wrote a file");
+
+    return ReadEmbeddedFiles(content);
+}
+
+} // namespace
+
+// The log carries the stored CBOR of each configuration the unit runs, as it is on the volume.
+ZTEST(logging_controller_writer, test_TheLogEmbedsTheStoredConfigurations) {
+    F().Open(false);
+
+    auto parts = F().MakeParts();
+    const auto service = parts.configuration_service;
+    // ADC and CAN bus stand in on their stored names; the sensors are the rig's.
+    const auto adc = MakeStandIn(*service, ConfigurationService::Type::Adc, "adc_config", F().rig->fs_service);
+    zassert_true(adc->Update(TriggersOn({ "switch" })));
+    const auto canbus = MakeStandIn(*service, ConfigurationService::Type::Canbus, "canbus_config", F().rig->fs_service);
+    zassert_true(canbus->Update(TriggersOn({ "ab" })));
+    service->RegisterCborConfigurationManager(ConfigurationService::Type::Sensors, F().rig->sensors_manager);
+
+    zassert_equal(F().Build(std::move(parts)).Initialize(), 0);
+
+    const auto files = LogAndReadEmbeddedFiles(*F().controller);
+
+    struct Expected {
+        ConfigurationService::Type type;
+        const char* name;
+    };
+    const std::array<Expected, 4> expected{ { { ConfigurationService::Type::Adc, "adc_config" },
+        { ConfigurationService::Type::Canbus, "canbus_config" },
+        { ConfigurationService::Type::Sensors, "sensors_config" },
+        { ConfigurationService::Type::Logging, "logging_config" } } };
+
+    zassert_equal(files.size(), expected.size(), "one attachment per applied type (found %zu)", files.size());
+    for(size_t i = 0; i < expected.size(); i++) {
+        const auto& [type, name] = expected[i];
+        const auto stored = service->GetCborConfiguration(type);
+        zassert_false(stored.empty(), "%s", name);
+
+        zassert_equal(files[i].name, std::string(name) + ".cbor");
+        zassert_true(
+            F().rig->fs_service->Exists(std::string("config/") + name + ".cbor"), "the name is the stored file's"
+        );
+        zassert_true(
+            std::equal(files[i].data.begin(), files[i].data.end(), stored.begin(), stored.end()), "%s: the stored CBOR",
+            name
+        );
+        zassert_true(
+            files[i].comment.contains(Property("configuration_type", std::to_string(std::to_underlying(type)))),
+            "%s: the type", name
+        );
+        zassert_true(
+            files[i].comment.contains(Property("crc", std::to_string(crc32_ieee(stored.data(), stored.size())))),
+            "%s: the CRC of the attached bytes", name
+        );
+    }
+}
+
+// A stored sensors configuration rejected at boot is not what runs; a type nobody registered is not there.
+ZTEST(logging_controller_writer, test_ARejectedSensorsConfigurationIsNotEmbedded) {
+    F().Open(false);
+
+    const std::vector<uint8_t> garbage(16, 0xFF);
+    zassert_true(F().rig->fs_service->WriteFile("config/sensors_config.cbor", garbage.data(), garbage.size()));
+    const auto rejected = std::make_shared<SensorsConfigurationManager>(
+        std::make_unique<CborConfigurationService<CborSensorsConfig>>(
+            "sensors_config", F().rig->fs_service, TestConfigQueue()
+        ),
+        nullptr, 0, 0
+    );
+    zassert_true(rejected->IsStoredConfigurationRejected(), "the garbage must be rejected");
+
+    auto parts = F().MakeParts();
+    const auto service = parts.configuration_service;
+    service->RegisterCborConfigurationManager(ConfigurationService::Type::Sensors, rejected);
+    zassert_equal(F().Build(std::move(parts)).Initialize(), 0);
+
+    const auto files = LogAndReadEmbeddedFiles(*F().controller);
+
+    zassert_equal(files.size(), 1, "only the logging configuration is attached (found %zu)", files.size());
+    zassert_equal(files[0].name, "logging_config.cbor");
 }
 
 // The LOGGING feature this unit sends on CDMP follows the log volume: senders skip a unit that cannot

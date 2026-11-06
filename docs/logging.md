@@ -53,8 +53,51 @@ has elapsed since the last sync, the tick flushes and syncs the file, so the siz
 on the card cover everything up to that point and a power loss costs at most one interval plus
 one buffer. `Stop()` waits for a tick in progress, then finalizes and closes the file; finalizing
 syncs twice, once after the lengths and counts are patched and once after the identifier flips,
-so the identifier never claims a length the card does not hold yet. It publishes `IsActive =
-false` with the reason `Stopped`.
+so the identifier never claims a length the card does not hold yet. Once the file is final, the
+logger appends an event that says how the file ended, and a third and fourth sync follow (see
+[The end of a file](#the-end-of-a-file)). It publishes `IsActive = false` with the reason `Stopped`.
+
+### The end of a file
+
+Every file that finalizes ends with an MDF 4.1 event block (`##EV`) that says how it
+ended, so a reader of the file alone can tell a stop from a rotation, and a failure that left the
+file open (see the exception below). `CloseLogFile()` passes the logger a
+`LogFileEnd` (`loggers/log_file_end.h`):
+
+- the end time: the file's last tick, or its start when it had none, as the end-time index has it;
+- the reason, empty for a rotation: a stop passes the session's failure reason when the session
+  failed (`EndSession()` remembers it, so a file left open by `NoSpace` says `NoSpace`), else the
+  stop's reason;
+- `overruns` and `frames_dropped` of this file: the task keeps both counters' values from when the
+  file opened and the close passes the differences, so the counts are per file and add up to the
+  stats'.
+
+The event is a stop recording trigger (type 4) synced on time, a point (range type 0), with no scope
+(the whole file): `ev_sync_base_value` is the end time in microseconds from the file's start and
+`ev_sync_factor` is 1e-6. Its cause is error for `WriteFailed`, `NoSpace` and `RotationFailed`, tool
+for a rotation and `FirmwareUpdate`, user for `Stopped` and other for anything else. The name is
+"Logging stopped", "Logging stopped: <reason>" (the name `GetReasonName()` gives) or "Next file". The
+comment's properties are `stop_reason` (the `LoggingStatusReason` value, as `STATUS` sends it; left
+out for a rotation), `rotated` (`true` for a rotation, otherwise left out), `overruns` and
+`frames_dropped`.
+
+A restart for a stored logging configuration, and the stop around a sensors restart, close their
+file as "Logging stopped" (cause user, `stop_reason` 0) while the session goes on in the next file
+(same `session_id`, next `file_index`). The one case the file cannot tell by itself is a failed
+rotation: the rotation closes the full file as "Next file" before it opens the next, so if that open
+fails the session ends with no next file. A last file of a session that says it rotated, with no file
+after it, ended in a failed rotation (the status's reason says `RotationFailed`).
+
+The event goes in only after the finalize succeeded, never before. In an unfinalized file the
+identifier `UnFinMF` and the "last DT length invalid" flag tell readers to take records up to the end
+of the file, and a block there would be read as records (`##` is record ID 35). The sequence is:
+finalize (two syncs); pad the end of the file to 8 with zeros; write the event with its name and
+comment and sync; set the header's event link, rewrite the header block in place (it is fixed in size
+and sits next to the ID block) and sync. A cut at any point leaves a valid finalized file, at worst
+without its event, and the bytes after the DT length are unreferenced, so readers skip them. A failed
+append is logged and does not fail `StopLogging()`; a stream that failed cannot finalize and so gets
+no event. The event with its name and comment is about 330 to 370 bytes, plus up to 7 of padding, and is not counted in `LogWriterStats::bytes`, which is taken
+before finalizing; it costs two more syncs per close, on the writer thread at a rotation.
 
 ### Deadlines and raw CAN capacity
 
@@ -264,6 +307,7 @@ queue's stack for it; rt_daq gives it 8 KiB. The dependent works only on the que
 | `boot_id` | `GetBootId()` (`subsys/time/boot_id.h`): drawn at random once per power-on, never 0. |
 | `session` | The supervisor's current `LogSession`. |
 | `sensors_configuration_hash` | The CRC of the stored sensors configuration, 0 when it was rejected at boot. |
+| `attachments` | The supervisor's `AttachmentsProvider`, called at every start: the stored configurations to embed (see Loggers). `LoggingController` builds it from its `ConfigurationService`; null (no service, or no provider) attaches nothing. |
 
 The callback keeps the writer free of CDMP at compile time; `LoggingController` builds it from the
 COM service. The factory, and the callback with it, lives as long as the writer, so the callback
@@ -797,8 +841,9 @@ as the gauge, builds them without `EERIE_LEAP_DOMAIN_LOGGING`, with `EERIE_LEAP_
 
 `ILogger<SensorReading>` has `StartLogging(stream, start)` (`LogFileStart`, `loggers/log_file_start.h`:
 the start on the unit's clock, and the clock's offset when it was set), `LogReading(time, reading)`
-(`time` is the caller's current time, see above), `StopLogging()`, `GetBytesWritten()` and the
-file extension. `LogReading()` throws only
+(`time` is the caller's current time, see above), `StopLogging(end)` (`LogFileEnd`,
+`loggers/log_file_end.h`: the end time, the reason or none for a rotation, and the file's overruns and
+dropped frames), `GetBytesWritten()` and the file extension. `LogReading()` throws only
 `std::ios_base::failure`, when the stream refuses a record; `StopLogging()` never throws and
 returns false when the file could not be finalized. One implementation exists:
 
@@ -811,7 +856,9 @@ is the one thing shared: the logger keeps the pointer, and every `StartLogging()
 its `next_file_index`. It
 describes the sensors as they were when it was built, which is why the service builds one
 through its factory at every start. The file is written with the "unfinalized" identifier and
-patched on `StopLogging()`, so a file cut by a power loss stays readable. `StartLogging()` seals
+patched on `StopLogging()`, which then appends the end event (see
+[The end of a file](#the-end-of-a-file); `GetBytesWritten()` does not count it), so a file cut by a
+power loss stays readable. `StartLogging()` seals
 the layout into one record writer per group; each record (a CAN frame together with its payload
 record) then reaches the stream's buffer in a single write, without a heap allocation, and the
 header is serialized along the block chains in loops, so its stack depth does not grow with the
@@ -877,6 +924,25 @@ sensor count.
   from `start.time` on the unit's clock whichever the file's clock, so a set never moves them.
   The file history carries the tool ID and version with the vendor
   `Eerie Leap`.
+- **Attachments.** The stored configurations the unit runs are embedded in every file, one `##AT`
+  block each on the header's attachment link (before the data group, so the DT block stays last),
+  so a log can be read with the configuration that produced it. The block is an embedded file
+  (flags 1, no MD5, creator index 0) of the stored CBOR as it is, padded with zeros to a multiple of
+  8; original and embedded size are equal. It links the file name, the MIME type (`application/cbor`)
+  and a comment, `Eerie Leap <type> configuration` with the common properties `configuration_type`
+  (the `ConfigurationService::Type` value, as the SMP `config` group numbers it) and `crc` (CRC-32/IEEE
+  of the attached bytes, so the two cannot disagree). The file name is the stored file's:
+  `adc_config.cbor` (type 2), `canbus_config.cbor` (3), `sensors_config.cbor` (4) and
+  `logging_config.cbor` (5). A type is attached only when the unit registered it, its stored
+  configuration was applied (one rejected at boot is not what runs) and the CBOR is not empty; a unit
+  without ADC inputs has no type 2. The logger takes them from `LoggerMetadata::attachments` at
+  construction (`Mdf4File::AddAttachment()`, structure only, before the first header) and moves the
+  bytes into the block, which keeps them since every file of the session writes the header again;
+  the writer drops its previous logger before the factory builds the next, so the bytes exist once.
+  A type whose read fails (an exception, such as running out of memory) is left out with a warning;
+  logging still starts. The 64 KiB cap (`DEFAULT_MAX_CBOR_SIZE`) holds for SMP `config` writes only:
+  a store through `Update()` or `Adopt()` is not capped, so a large configuration makes a large
+  header. A reader lists the attachments with `MDF(path).attachments`.
 - **Conversion.** The raw channel gets an algebraic conversion only when a reader evaluates it
   the way the expression engine does: the only identifier is `x`, and the expression uses
   nothing but `+ - * /`, parentheses, decimal numbers (no leading zero, which numexpr rejects)
@@ -992,7 +1058,7 @@ logging_controller->Start();
 | Parameter | Writer role | Remote role |
 | --- | --- | --- |
 | `fs_service`, `config_work_queue_thread` | Required. The queue is the one `SensorsController` has, running, so a sensors restart and the writer's transitions run in turn. | Same. |
-| `configuration_service` | Null: the managers are not registered. One that already holds type 5 or 8 fails `Initialize()`: build the controller once per service. | One that already holds type 8 fails `Initialize()`. |
+| `configuration_service` | Null: the managers are not registered. One that already holds type 5 or 8 fails `Initialize()`: build the controller once per service. The stored configurations of types 2 to 5 it holds are embedded in every log; null attaches nothing. | One that already holds type 8 fails `Initialize()`. |
 | `sensors_configuration_manager` | Required: the logger's sensors and metadata, and the check of a trigger's sensor. | Null: a trigger's sensor is not checked. |
 | `canbus_com_service` | Null: the unit logs on its own, without the `LOGGING` command or a shared status. | Required: `Initialize()` fails without it. |
 | `sensor_events_publisher` | Null: a rebuilt trigger waits for the next change of its value instead of a replay. | Same. |

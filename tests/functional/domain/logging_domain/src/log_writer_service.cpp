@@ -81,15 +81,10 @@ ZTEST(log_writer_service, test_StartAndStopProduceAFinalizedFile) {
     zassert_true(content.size() >= ID_BLOCK_SIZE + BLOCK_HEADER_SIZE, "the file is shorter than an MDF header");
     zassert_mem_equal(content.data(), "MDF     ", 8, "a stopped file must carry the finalized identifier");
 
-    const auto data_block_address = FindDataBlockAddress(content);
-    zassert_not_equal(data_block_address, 0, "the file has no DT block");
-
-    const auto data_block_length = ReadField<uint64_t>(content, data_block_address + BLOCK_LENGTH_OFFSET);
+    AssertFinalizedFile(content, "the stopped file");
     zassert_equal(
-        content.size(), data_block_address + static_cast<size_t>(data_block_length),
-        "the file must end where the patched DT length says it ends"
+        stats.bytes, FinalizedDataEnd(content), "the logger's byte count must match the data, the event not counted"
     );
-    zassert_equal(stats.bytes, content.size(), "the logger's byte count must match the file size");
 
     // Two frames 50 ms apart are drained by one tick, and each keeps the time it was published at.
     const auto records = ReadDataRecords(content);
