@@ -65,8 +65,9 @@ Mdf4File::~Mdf4File() {
 
 // NOTE: Incorrect start time in Header Block time seems to
 // cause asammdf gui to fail parsing the file
-void Mdf4File::UpdateCurrentTime(std::chrono::system_clock::time_point time) {
+void Mdf4File::UpdateCurrentTime(std::chrono::system_clock::time_point time, uint8_t time_class) {
     header_block_->SetCurrentTimeNs(TimeHelpers::ToUint64(time));
+    header_block_->SetTimeClass(time_class);
 }
 
 std::shared_ptr<mdf4::DataGroupBlock> Mdf4File::GetDataGroup() const {

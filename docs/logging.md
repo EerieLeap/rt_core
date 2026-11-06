@@ -22,7 +22,11 @@ unit stops logging on every unit (see [Configuration updates](#configuration-upd
 3. creates the `logs/` directory (`LogFileNaming::LOGS_DIR`) if missing and picks a new file name
    `<prefix>_<YYYYMMDD>T<HHMMSS>Z_<rand4>.<ext>` from the start time in UTC and a random
    four-digit suffix (`log_data_20261011T093000Z_4242.mf4` by default), so names sort by start
-   time; it tries up to ten suffixes when a name is taken (`LogFileNaming` builds the name).
+   time within one clock (files of a power-on whose clock was never set carry the unit's own date, 2025-10, and sort before older real-time files); it tries up to ten suffixes when a name is taken (`LogFileNaming` builds the name). The
+   time is the file's start on its clock: once a client has set the unit's clock (`SET_TIME`, see
+   [system.md](system.md#clock)) it is real time, else the unit's own clock. The start reads the
+   clock's offset once, and every file of that start, its rotations too, is on the same clock; a
+   set while logging takes effect at the next start;
    The directory is fixed, and is the directory of the `logs` asset kind (see
    [Log files as assets](#log-files-as-assets)); logs that earlier firmware wrote to `data_logs/`
    stay there and are not listed;
@@ -114,7 +118,8 @@ the SD service and a registry (see [Wiring](#wiring)); the remote role registers
 stop or a rotation, it records the time of the file's last tick (the file's start for one closed before
 its first tick), and a file that could not be finalized gets none. The index lives in memory and in
 `logs/end_times.txt` (`LogFileNaming::END_TIMES_FILE_NAME`), a line `<end_ms> <file name>` per log,
-`end_ms` in Unix milliseconds, UTC. It ends in neither log extension, so the `logs` kind never serves
+`end_ms` in Unix milliseconds, UTC, on the clock of its file (the writer adds the offset its start
+read, so `end_ms` less the start in the name stays the duration). It ends in neither log extension, so the `logs` kind never serves
 it. A record appends a line; the file is rewritten from memory once its lines outnumber the cap twice.
 It is read once per mount, when `LoggingController` wires the writer and at a `Start()` after the card
 came back: unreadable lines and the entries of logs that are gone are dropped and the file is rewritten
@@ -130,7 +135,7 @@ a log's duration without reading it.
 
 `LogWriterService::GetSessionInfo()` tells the running session for the SMP `logging` group's STATUS
 (`models/log_session_info.h`): null before `Start()` succeeded and after `Stop()`; else `since_ms` (the
-time service's time at `Start()`, Unix ms UTC), the open file's name without directory (empty between
+time service's time at `Start()` on the unit's clock: compare it with `TIME`'s `now_ms`, and add `wall_ms - now_ms` for real time), the open file's name without directory (empty between
 the two files of a rotation and after a failure closed the file) and its bytes so far, headers
 included, as of the last tick. A failed session still runs until the supervisor's `Stop()`, so it is
 returned. Any thread: it copies under the lock of `IsOpenFile()`, with no allocation or I/O.
@@ -790,7 +795,8 @@ as the gauge, builds them without `EERIE_LEAP_DOMAIN_LOGGING`, with `EERIE_LEAP_
 
 ## Loggers
 
-`ILogger<SensorReading>` has `StartLogging(stream, start_time)`, `LogReading(time, reading)`
+`ILogger<SensorReading>` has `StartLogging(stream, start)` (`LogFileStart`, `loggers/log_file_start.h`:
+the start on the unit's clock, and the clock's offset when it was set), `LogReading(time, reading)`
 (`time` is the caller's current time, see above), `StopLogging()`, `GetBytesWritten()` and the
 file extension. `LogReading()` throws only
 `std::ios_base::failure`, when the stream refuses a record; `StopLogging()` never throws and
@@ -846,7 +852,13 @@ sensor count.
   next index when it writes the header and moves it on only once the header has synced, so a start
   that fails takes no index. It is the one property that differs from file to file of one logger,
   so `Mdf4File::WriteHeaderToStream()` takes it as a property of that file and builds the header
-  comment anew for each. The file history carries the tool ID and version with the vendor
+  comment anew for each. `clock` is the other per-file property, after `file_index`: `set` when the
+  start came with an offset, `uptime` otherwise. A file on `set` has the header's start at
+  `start.time + offset` (real time) and the HD time class 10 (an external time source); a file on
+  `uptime` has the unit's clock and class 0. MDF has no field that says "not a date", which is
+  what `clock` is for. The time flags are 0 (UTC) either way. The records' times are seconds
+  from `start.time` on the unit's clock whichever the file's clock, so a set never moves them.
+  The file history carries the tool ID and version with the vendor
   `Eerie Leap`.
 - **Conversion.** The raw channel gets an algebraic conversion only when a reader evaluates it
   the way the expression engine does: the only identifier is `x`, and the expression uses

@@ -34,6 +34,7 @@ namespace threading = eerie_leap::subsys::threading;
 using eerie_leap::domain::logging_domain::configuration::LoggingConfigurationManager;
 using eerie_leap::domain::logging_domain::event_bus::LoggingStatusReason;
 using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::logging_domain::loggers::LogFileStart;
 using eerie_leap::domain::logging_domain::models::LogSessionInfo;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
 using eerie_leap::subsys::fs::services::FsServiceStreamBuf;
@@ -86,6 +87,10 @@ private:
     std::shared_ptr<LogEndTimes> end_times_;
     // Start of the file last opened, the end of one that closed before its first tick.
     std::chrono::system_clock::time_point file_start_time_;
+    // Real time minus the unit's clock as it was when Start() ran, when the clock had been set: the
+    // clock of every file of this start, rotations included. Written by DoStart() before the
+    // writer thread runs, so it needs no lock.
+    std::optional<std::chrono::system_clock::duration> wall_clock_offset_;
 
     // Set by a tick that ended the session, cleared by the next Start().
     std::atomic<bool> has_failed_ = false;
@@ -182,8 +187,8 @@ public:
      * The running session, or null when none runs: before Start() succeeded and after Stop(). A
      * session that failed still runs until the supervisor's Stop(), and is returned with an empty
      * file name once the failure closed the file, else with the file the failure left open.
-     * `since_ms` is the Start() time of the time service (Unix ms, UTC, the clock the file names
-     * use); `file_name` is the open file's name without directory, its name as an asset of the
+     * `since_ms` is the Start() time of the time service on the unit's clock (TIME's `now_ms`;
+     * the file names use that clock only while it is not set); `file_name` is the open file's name without directory, its name as an asset of the
      * `logs` kind, empty between the two files of a rotation; `file_bytes` its bytes so far,
      * headers included, as of the last tick. Any thread, the MCUmgr work queue included: it
      * allocates nothing, does no file I/O and takes the lock of IsOpenFile(), never held across I/O.

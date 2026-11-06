@@ -136,6 +136,8 @@ bool LogWriterService::DoStart() {
     }
 
     const auto start_time = time_service_->GetCurrentTime();
+    // Read once: a set of the clock while logging takes effect at the next start.
+    wall_clock_offset_ = time_service_->GetWallClockOffset();
 
     // Reads the index when the card came since the last read; a failure only loses end times.
     if(end_times_ != nullptr)
@@ -279,7 +281,8 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
 
     for(int i = 0; i < 10; i++) {
         const auto new_file_path = LogFileNaming::GetFilePath(
-            LogFileNaming::LOGS_DIR, CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX, start_time, Rng::Get<uint16_t>(),
+            LogFileNaming::LOGS_DIR, CONFIG_EERIE_LEAP_LOG_DATA_FILE_PREFIX,
+            start_time + wall_clock_offset_.value_or(std::chrono::system_clock::duration::zero()), Rng::Get<uint16_t>(),
             logger_->GetFileExtension()
         );
 
@@ -312,7 +315,7 @@ bool LogWriterService::OpenLogFile(const std::chrono::system_clock::time_point& 
 
     bool is_started = false;
     try {
-        is_started = logger_->StartLogging(*fs_stream_buf_, start_time);
+        is_started = logger_->StartLogging(*fs_stream_buf_, LogFileStart{ start_time, wall_clock_offset_ });
     } catch(const std::exception& e) {
         LOG_ERR("%s", e.what());
     }
@@ -374,7 +377,9 @@ void LogWriterService::RecordEndTime(const LogWriterTask& task) {
 
     try {
         // The last tick written into this file; a file closed before its first tick ends where it began.
-        const auto end_time = task.last_tick_time > file_start_time_ ? task.last_tick_time : file_start_time_;
+        auto end_time = task.last_tick_time > file_start_time_ ? task.last_tick_time : file_start_time_;
+        // On the file's clock, like its name and its header start.
+        end_time += wall_clock_offset_.value_or(std::chrono::system_clock::duration::zero());
         const auto end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time.time_since_epoch()).count();
 
         const auto path = file_path_.ToString();

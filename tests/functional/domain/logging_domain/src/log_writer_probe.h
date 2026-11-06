@@ -6,6 +6,7 @@
 #include <functional>
 #include <ios>
 #include <memory>
+#include <optional>
 #include <streambuf>
 #include <utility>
 #include <vector>
@@ -19,6 +20,7 @@
 namespace logging_test_support {
 
 using eerie_leap::domain::logging_domain::loggers::ILogger;
+using eerie_leap::domain::logging_domain::loggers::LogFileStart;
 using eerie_leap::domain::sensor_domain::models::SensorReading;
 using eerie_leap::subsys::threading::ScopedMutex;
 
@@ -57,8 +59,8 @@ public:
         return inner_->GetFileExtension();
     }
 
-    bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) override {
-        return inner_->StartLogging(stream, start_time);
+    bool StartLogging(std::streambuf& stream, const LogFileStart& start) override {
+        return inner_->StartLogging(stream, start);
     }
 
     bool StopLogging() override {

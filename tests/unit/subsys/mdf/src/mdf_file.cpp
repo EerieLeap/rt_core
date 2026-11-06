@@ -1953,3 +1953,57 @@ ZTEST(mdf_file, test_DataGroupOutlivingItsFileHoldsNoFreedGroups) {
     data_group->AddChannelGroup(std::make_shared<mdf4::ChannelGroupBlock>(1, 3));
     zassert_not_null(data_group->GetChildren()[1].get(), "a new group starts a new chain");
 }
+
+namespace {
+
+// HD time class and flags, after the start time, the two offsets and the links of the first block.
+struct HeaderTimeFields {
+    uint64_t start_time_ns;
+    uint8_t time_flags;
+    uint8_t time_class;
+};
+
+HeaderTimeFields ReadHeaderTime(const std::string& file) {
+    const auto data = AsBytes(file);
+    zassert_equal(BlockId(data, ID_BLOCK_SIZE), "##HD", "the header block follows the ID block");
+
+    const auto link_count = Read<uint64_t>(data, ID_BLOCK_SIZE + 16);
+    const size_t fields = ID_BLOCK_SIZE + 24 + static_cast<size_t>(link_count) * 8;
+
+    return HeaderTimeFields{ .start_time_ns = Read<uint64_t>(data, fields),
+        .time_flags = Read<uint8_t>(data, fields + 8 + 2 + 2),
+        .time_class = Read<uint8_t>(data, fields + 8 + 2 + 2 + 1) };
+}
+
+} // namespace
+
+ZTEST(mdf_file, test_HeaderTimeClassIsWrittenPerFile) {
+    Mdf4File mdf_file;
+    const auto group = mdf_file.CreateChannelGroup(1, "group");
+    mdf_file.CreateDataChannel(group, MdfDataType::Float32, "value", "C");
+    const auto time = std::chrono::system_clock::time_point(std::chrono::seconds(1'760'000'000));
+
+    auto first = MakeStream();
+    mdf_file.UpdateCurrentTime(time);
+    mdf_file.WriteHeaderToStream(first);
+    const auto first_bytes = first.Str();
+    const auto first_time = ReadHeaderTime(first_bytes);
+    zassert_equal(first_time.time_class, 0, "the default time class is 0");
+    zassert_equal(first_time.time_flags, 0, "the time flags stay 0");
+
+    auto second = MakeStream();
+    mdf_file.UpdateCurrentTime(time + std::chrono::hours(1), 10);
+    mdf_file.WriteHeaderToStream(second);
+    const auto second_bytes = second.Str();
+    const auto second_time = ReadHeaderTime(second_bytes);
+    zassert_equal(second_time.time_class, 10, "class 10 is an external time source");
+    zassert_equal(second_time.time_flags, 0, "the time flags stay 0");
+    zassert_equal(
+        second_time.start_time_ns - first_time.start_time_ns, 3'600'000'000'000ULL, "the start moves with the update"
+    );
+
+    auto third = MakeStream();
+    mdf_file.UpdateCurrentTime(time);
+    mdf_file.WriteHeaderToStream(third);
+    zassert_equal(ReadHeaderTime(third.Str()).time_class, 0, "a call without a class sets 0 again");
+}

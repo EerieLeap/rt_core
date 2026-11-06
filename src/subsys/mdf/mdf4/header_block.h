@@ -41,6 +41,9 @@ public:
     ~HeaderBlock() override = default;
 
     void SetCurrentTimeNs(uint64_t time_ns);
+    void SetTimeClass(uint8_t time_class) {
+        time_class_ = time_class;
+    }
     void SetComment(std::shared_ptr<MetadataBlock> comment);
     std::shared_ptr<FileHistoryBlock> GetFileHistory() const;
 

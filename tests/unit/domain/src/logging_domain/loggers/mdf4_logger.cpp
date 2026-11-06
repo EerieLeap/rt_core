@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -222,7 +224,10 @@ ZTEST(mdf4_logger, test_ValueReadingRecordBytes) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto time = START_TIME + std::chrono::milliseconds(1500);
@@ -249,7 +254,10 @@ ZTEST(mdf4_logger, test_RawValueRecord) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     auto reading = MakeValueReading(*sensors[0], 9.6F, START_TIME + std::chrono::milliseconds(250));
@@ -287,7 +295,10 @@ ZTEST(mdf4_logger, test_CanFrameRecord) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     CanFrame classic;
@@ -368,7 +379,10 @@ ZTEST(mdf4_logger, test_InvalidReadingsSetTheirInvalidationBits) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto reading =
@@ -471,7 +485,10 @@ ZTEST(mdf4_logger, test_ErrorReadingIsASampleForLogOnlyNewData) {
         Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, log_only_new_data), sensors, MakeMetadata());
 
         auto stream = MakeStream();
-        zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+        zassert_true(
+            logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+            "StartLogging must succeed on a string buffer"
+        );
         const uint64_t header_size = logger.GetBytesWritten();
 
         zassert_true(logger.LogReading(START_TIME + milliseconds(100), first), "the first sample is new");
@@ -517,7 +534,10 @@ ZTEST(mdf4_logger, test_CanFramesIgnoreLogOnlyNewData) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     CanFrame frame;
@@ -546,7 +566,10 @@ ZTEST(mdf4_logger, test_DisabledSensorIsNotWritten) {
     Mdf4LoggerSensorReading logger(configuration, sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto texts = CollectBlockTexts(stream.Str(), "##TX");
@@ -570,7 +593,10 @@ ZTEST(mdf4_logger, test_DisabledSensorGetsNoChannelEvenWithLoggingEnabled) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto texts = CollectBlockTexts(stream.Str(), "##TX");
@@ -621,7 +647,10 @@ ZTEST(mdf4_logger, test_RecordIdSizeCountsOnlyEnabledSensors) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     zassert_true(
@@ -640,7 +669,10 @@ ZTEST(mdf4_logger, test_LogOnlyNewDataSkipsUnchangedTimestamp) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
 
     const auto first = START_TIME + std::chrono::milliseconds(100);
     const auto second = START_TIME + std::chrono::milliseconds(200);
@@ -660,7 +692,10 @@ ZTEST(mdf4_logger, test_ReadingWithoutTimestampUsesTheGivenTime) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto tick_time = START_TIME + std::chrono::milliseconds(750);
@@ -703,7 +738,10 @@ ZTEST(mdf4_logger, test_HeldSampleIsRepeatedAtTheTickTime) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, false), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto sample_1 = MakeValueReading(*sensors[0], 1.0F, START_TIME + milliseconds(100));
@@ -749,7 +787,10 @@ ZTEST(mdf4_logger, test_TimeKeepsMicrosecondsAfterADay) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, false, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     const auto day = START_TIME + hours(24);
@@ -825,7 +866,10 @@ ZTEST(mdf4_logger, test_ConversionRule) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
 
     const auto file = stream.Str();
     zassert_true(
@@ -847,7 +891,10 @@ ZTEST(mdf4_logger, test_ChannelAndGroupNames) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
 
     const auto file = stream.Str();
     const auto texts = CollectBlockTexts(file, "##TX");
@@ -877,7 +924,10 @@ ZTEST(mdf4_logger, test_ChannelCommentsCarryTheSensorProperties) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors, true), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
 
     const auto comments = CollectBlockTexts(stream.Str(), "##MD");
     zassert_true(
@@ -910,7 +960,10 @@ ZTEST(mdf4_logger, test_AChannelWithoutNameOrDescriptionKeepsOnlyItsType) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
 
     const auto comments = CollectBlockTexts(stream.Str(), "##MD");
     zassert_true(
@@ -937,7 +990,10 @@ ZTEST(mdf4_logger, test_EverySensorTypeIsNamedInTheChannelComment) {
         Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
         auto stream = MakeStream();
-        zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+        zassert_true(
+            logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+            "StartLogging must succeed on a string buffer"
+        );
 
         const std::string expected = std::string("<e name=\"sensor_type\">")
             + GetSensorTypeName(static_cast<SensorType>(type)) + "</e>";
@@ -959,7 +1015,10 @@ ZTEST(mdf4_logger, test_RecordIdSizeFollowsTheSensorCount) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     const uint64_t header_size = logger.GetBytesWritten();
 
     zassert_true(
@@ -979,7 +1038,10 @@ ZTEST(mdf4_logger, test_HeaderPropertiesAreWritten) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
 
     const auto comments = CollectBlockTexts(stream.Str(), "##MD");
 
@@ -1029,11 +1091,16 @@ ZTEST(mdf4_logger, test_TheSessionIsWrittenAndNumbersTheFiles) {
 
     // A rotation: the same logger starts the next file.
     auto first = MakeStream();
-    zassert_true(logger.StartLogging(first, START_TIME), "StartLogging must succeed on a string buffer");
+    zassert_true(
+        logger.StartLogging(first, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
     zassert_true(logger.StopLogging(), "the first file is finalized");
 
     auto second = MakeStream();
-    zassert_true(logger.StartLogging(second, START_TIME), "the second StartLogging must succeed");
+    zassert_true(
+        logger.StartLogging(second, LogFileStart{ START_TIME, std::nullopt }), "the second StartLogging must succeed"
+    );
 
     const auto first_comments = CollectBlockTexts(first.Str(), "##MD");
     const auto second_comments = CollectBlockTexts(second.Str(), "##MD");
@@ -1045,7 +1112,9 @@ ZTEST(mdf4_logger, test_TheSessionIsWrittenAndNumbersTheFiles) {
     // A restart: another logger of the same session goes on counting.
     Mdf4LoggerSensorReading restarted(MakeConfiguration(sensors), sensors, metadata);
     auto third = MakeStream();
-    zassert_true(restarted.StartLogging(third, START_TIME), "the restarted logger must start");
+    zassert_true(
+        restarted.StartLogging(third, LogFileStart{ START_TIME, std::nullopt }), "the restarted logger must start"
+    );
     zassert_true(
         AnyContains(CollectBlockTexts(third.Str(), "##MD"), "<e name=\"file_index\">2</e>"),
         "a logger of the same session continues the numbering"
@@ -1074,11 +1143,14 @@ ZTEST(mdf4_logger, test_AFailedStartTakesNoFileIndex) {
     Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, metadata);
 
     UnsyncableStreamBuf failing;
-    zassert_false(logger.StartLogging(failing, START_TIME), "a header that does not sync fails the start");
+    zassert_false(
+        logger.StartLogging(failing, LogFileStart{ START_TIME, std::nullopt }),
+        "a header that does not sync fails the start"
+    );
     zassert_equal(metadata.session->next_file_index.load(), 0, "a failed header takes no index");
 
     auto stream = MakeStream();
-    zassert_true(logger.StartLogging(stream, START_TIME), "the next start succeeds");
+    zassert_true(logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }), "the next start succeeds");
     zassert_true(
         AnyContains(CollectBlockTexts(stream.Str(), "##MD"), "<e name=\"file_index\">0</e>"),
         "the file after a failed start is still the first"
@@ -1169,7 +1241,10 @@ ZTEST(mdf4_logger, test_ATickAllocatesNothing) {
     stream.Reserve(192 * 1024);
     const size_t capacity = stream.Capacity();
 
-    zassert_true(logger.StartLogging(stream, START_TIME), "StartLogging must succeed on a memory buffer");
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a memory buffer"
+    );
 
     const size_t allocations_before = GetAllocationCount();
     size_t logged = 0;
@@ -1190,4 +1265,85 @@ ZTEST(mdf4_logger, test_ATickAllocatesNothing) {
         static_cast<unsigned long long>(logger.GetBytesWritten()), capacity
     );
     zassert_equal(allocations, 0, "%zu allocations while logging 64 value readings and 32 frames", allocations);
+}
+
+namespace {
+
+// The HD block's start time (ns) and time class, read from the first block after the ID block.
+struct HeaderStart {
+    uint64_t start_time_ns;
+    uint8_t time_class;
+};
+
+HeaderStart ReadHeaderStart(std::string_view file) {
+    zassert_equal(file.substr(ID_BLOCK_SIZE, 4), "##HD", "the header block follows the ID block");
+
+    const auto link_count = ReadAt<uint64_t>(file, ID_BLOCK_SIZE + 16);
+    const size_t fields = ID_BLOCK_SIZE + BLOCK_HEADER_SIZE + static_cast<size_t>(link_count) * 8;
+
+    return HeaderStart{ .start_time_ns = ReadAt<uint64_t>(file, fields),
+        .time_class = ReadAt<uint8_t>(file, fields + 8 + 2 + 2 + 1) };
+}
+
+constexpr uint64_t START_TIME_NS = 1'760'000'000ULL * 1'000'000'000ULL;
+
+} // namespace
+
+ZTEST(mdf4_logger, test_FileOnRealTimeStampsStartClassAndClock) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+    const auto offset = std::chrono::seconds(1000);
+
+    auto stream = MakeStream();
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, offset }), "StartLogging must succeed on a string buffer"
+    );
+    const uint64_t header_size = logger.GetBytesWritten();
+
+    const auto header = ReadHeaderStart(stream.Str());
+    zassert_equal(header.start_time_ns, START_TIME_NS + 1000ULL * 1'000'000'000ULL, "the start is time + offset");
+    zassert_equal(header.time_class, 10, "a file on real time has the external time source class");
+    zassert_true(AnyContains(CollectBlockTexts(stream.Str(), "##MD"), "<e name=\"clock\">set</e>"), "the clock is set");
+
+    // Records stay relative to the unit's clock at the start.
+    const auto time = START_TIME + std::chrono::milliseconds(1500);
+    zassert_true(logger.LogReading(time, MakeValueReading(*sensors[0], 1.0F, time)), "the reading must be logged");
+    zassert_equal(ReadAt<double>(RecordBytes(stream, header_size), 1), 1.5, "the record time ignores the offset");
+}
+
+ZTEST(mdf4_logger, test_FileOnUptimeClockKeepsClassZero) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    auto stream = MakeStream();
+    zassert_true(
+        logger.StartLogging(stream, LogFileStart{ START_TIME, std::nullopt }),
+        "StartLogging must succeed on a string buffer"
+    );
+    const uint64_t header_size = logger.GetBytesWritten();
+
+    const auto header = ReadHeaderStart(stream.Str());
+    zassert_equal(header.start_time_ns, START_TIME_NS, "the start is the unit's clock");
+    zassert_equal(header.time_class, 0, "a file on the unit's clock has class 0");
+    zassert_true(
+        AnyContains(CollectBlockTexts(stream.Str(), "##MD"), "<e name=\"clock\">uptime</e>"), "the clock is uptime"
+    );
+
+    const auto time = START_TIME + std::chrono::milliseconds(1500);
+    zassert_true(logger.LogReading(time, MakeValueReading(*sensors[0], 1.0F, time)), "the reading must be logged");
+    zassert_equal(ReadAt<double>(RecordBytes(stream, header_size), 1), 1.5, "the record time is the same");
+}
+
+ZTEST(mdf4_logger, test_NextFileTakesItsOwnClock) {
+    const std::vector<std::shared_ptr<Sensor>> sensors{ MakeValueSensor("sensor_1") };
+    Mdf4LoggerSensorReading logger(MakeConfiguration(sensors), sensors, MakeMetadata());
+
+    auto first = MakeStream();
+    zassert_true(logger.StartLogging(first, LogFileStart{ START_TIME, std::chrono::seconds(5) }), "first start");
+    zassert_equal(ReadHeaderStart(first.Str()).time_class, 10, "the first file is on real time");
+
+    auto second = MakeStream();
+    zassert_true(logger.StartLogging(second, LogFileStart{ START_TIME, std::nullopt }), "second start");
+    zassert_equal(ReadHeaderStart(second.Str()).time_class, 0, "the second file is on the unit's clock again");
+    zassert_true(AnyContains(CollectBlockTexts(second.Str(), "##MD"), "<e name=\"clock\">uptime</e>"), "and says so");
 }

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <streambuf>
 
+#include "log_file_start.h"
+
 namespace eerie_leap::domain::logging_domain::loggers {
 
 template<typename T>
@@ -12,7 +14,7 @@ public:
     virtual ~ILogger() = default;
 
     virtual const char* GetFileExtension() const = 0;
-    virtual bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) = 0;
+    virtual bool StartLogging(std::streambuf& stream, const LogFileStart& start) = 0;
     /** False when the file could not be finalized; never throws, so a stop always closes the file. */
     virtual bool StopLogging() = 0;
     /**

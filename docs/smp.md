@@ -199,7 +199,8 @@ built-ins behaves as it always did.
 **`LIST`.** `end_ms` is the end of the file in milliseconds since the Unix epoch (UTC), given for the
 `logs` kind only and only for a file this unit's writer recorded when it finalized it (a normal stop
 or a rotation; not a file left unfinalized, a log from before the index, or one copied onto the card);
-the duration is `end_ms` less the start in the name. A file the writer has open
+`end_ms` is on the clock of the file (real time if the unit's clock was set when the log started, see
+[system.md](system.md#clock)), like the start in its name; the duration is `end_ms` less that start. A file the writer has open
 ([growing](#reading-a-growing-file)) is listed with its size as of the writer's last sync, `growing:
 true` and no `end_ms`.
 
@@ -396,7 +397,8 @@ when `EERIE_LEAP_SMP` is on.
   while `active`, as in the CDMP record. On a unit with a log writer it is that unit's own status (after
   a firmware upload started, `FirmwareUpdate`). On a unit without one (the gauge) it is the combined
   status the units share, and `Unavailable` while none reports.
-- `since_ms` is the start of the session in Unix milliseconds, UTC, and only present while this unit's
+- `since_ms` is the start of the session in milliseconds on the unit's clock (compare it with `TIME`'s `now_ms`, and add
+  `wall_ms - now_ms` for real time), and only present while this unit's
   own writer runs a session. `file` (the asset name in the [`logs`](#assets-asset-kinds) kind) and
   `bytes` (that file's size so far, headers included) are present only while a file is open; the file
   being written cannot be read as an asset. A unit without a writer never sends the three.

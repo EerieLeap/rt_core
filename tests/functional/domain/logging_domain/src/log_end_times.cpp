@@ -1,5 +1,7 @@
 #include <chrono>
 #include <cstdint>
+#include <cstring>
+#include <ctime>
 #include <memory>
 #include <string>
 #include <vector>
@@ -265,4 +267,155 @@ ZTEST(log_end_times, test_TheIndexKeepsTheNewestEntriesOnly) {
         end_times.Find("log_" + std::to_string(LogEndTimes::MAX_ENTRIES + EXTRA - 1) + ".mf4"),
         static_cast<int64_t>(LogEndTimes::MAX_ENTRIES + EXTRA - 1)
     );
+}
+
+namespace {
+
+constexpr size_t ID_BLOCK_SIZE = 64;
+
+struct FileClock {
+    int64_t start_ms;
+    uint8_t time_class;
+    bool says_set;
+    bool says_uptime;
+};
+
+// The HD block's start (ms) and time class, and the file's `clock` property.
+FileClock ReadFileClock(FsService& fs_service, const std::string& name) {
+    const auto bytes = ReadWholeFile(fs_service, std::string(LogFileNaming::LOGS_DIR) + "/" + name);
+    zassert_true(bytes.size() > ID_BLOCK_SIZE + 24, "the file holds no header");
+    zassert_equal(std::string(bytes.begin() + ID_BLOCK_SIZE, bytes.begin() + ID_BLOCK_SIZE + 4), "##HD");
+
+    uint64_t link_count = 0;
+    std::memcpy(&link_count, bytes.data() + ID_BLOCK_SIZE + 16, sizeof(link_count));
+    const size_t fields = ID_BLOCK_SIZE + 24 + static_cast<size_t>(link_count) * 8;
+
+    uint64_t start_ns = 0;
+    std::memcpy(&start_ns, bytes.data() + fields, sizeof(start_ns));
+
+    const std::string text(bytes.begin(), bytes.end());
+
+    return FileClock{ .start_ms = static_cast<int64_t>(start_ns / 1'000'000ULL),
+        .time_class = bytes[fields + 8 + 2 + 2 + 1],
+        .says_set = text.find("<e name=\"clock\">set</e>") != std::string::npos,
+        .says_uptime = text.find("<e name=\"clock\">uptime</e>") != std::string::npos };
+}
+
+// The `YYYYMMDDTHHMMSS` of a file name, as Unix seconds.
+int64_t NameSeconds(const std::string& name) {
+    const auto at = name.find('T') - 8;
+    std::tm time_utc{};
+    time_utc.tm_year = std::stoi(name.substr(at, 4)) - 1900;
+    time_utc.tm_mon = std::stoi(name.substr(at + 4, 2)) - 1;
+    time_utc.tm_mday = std::stoi(name.substr(at + 6, 2));
+    time_utc.tm_hour = std::stoi(name.substr(at + 9, 2));
+    time_utc.tm_min = std::stoi(name.substr(at + 11, 2));
+    time_utc.tm_sec = std::stoi(name.substr(at + 13, 2));
+
+    return static_cast<int64_t>(timegm(&time_utc));
+}
+
+constexpr int64_t DAY_MS = 24LL * 3600 * 1000;
+
+} // namespace
+
+ZTEST(log_end_times, test_AStartAfterASetIsOnRealTime) {
+    const auto sensors = MakeLoggedSensors();
+    auto rig = MakeLogWriterRig(sensors);
+    const auto end_times = AttachEndTimes(rig);
+
+    const int64_t wall_ms = NowMs(rig) + 400 * DAY_MS;
+    rig.time_service->SetWallClock(std::chrono::system_clock::time_point(std::chrono::milliseconds(wall_ms)));
+
+    zassert_true(rig.log_writer_service->Start());
+    k_msleep(350);
+    zassert_true(rig.log_writer_service->Stop());
+
+    const auto names = ListLogNames(*rig.fs_service);
+    zassert_equal(names.size(), 1);
+
+    const auto clock = ReadFileClock(*rig.fs_service, names[0]);
+    zassert_true(clock.says_set && !clock.says_uptime, "the file says its start is real time");
+    zassert_equal(clock.time_class, 10, "an external time source");
+    zassert_true(clock.start_ms >= wall_ms && clock.start_ms < wall_ms + 5000, "the HD start is real time");
+    zassert_equal(NameSeconds(names[0]), clock.start_ms / 1000, "the name is the start on the file's clock");
+
+    const auto end_ms = end_times->Find(names[0]);
+    zassert_true(end_ms.has_value());
+    zassert_true(*end_ms >= clock.start_ms && *end_ms < clock.start_ms + 5000, "end_ms is on the file's clock");
+}
+
+ZTEST(log_end_times, test_AStartBeforeASetStaysOnTheUnitsClock) {
+    const auto sensors = MakeLoggedSensors();
+    auto rig = MakeLogWriterRig(sensors);
+    const auto end_times = AttachEndTimes(rig);
+
+    zassert_true(rig.log_writer_service->Start());
+    const int64_t start_ms = NowMs(rig);
+    k_msleep(150);
+    rig.time_service->SetWallClock(
+        std::chrono::system_clock::time_point(std::chrono::milliseconds(start_ms + 400 * DAY_MS))
+    );
+    k_msleep(200);
+    zassert_true(rig.log_writer_service->Stop());
+
+    const auto names = ListLogNames(*rig.fs_service);
+    zassert_equal(names.size(), 1);
+
+    const auto clock = ReadFileClock(*rig.fs_service, names[0]);
+    zassert_true(clock.says_uptime && !clock.says_set, "a set while logging changes nothing in the file");
+    zassert_equal(clock.time_class, 0);
+    zassert_true(clock.start_ms >= start_ms - 1000 && clock.start_ms <= start_ms + 1000, "the HD start is unit time");
+    zassert_equal(NameSeconds(names[0]), clock.start_ms / 1000);
+
+    const auto end_ms = end_times->Find(names[0]);
+    zassert_true(end_ms.has_value());
+    zassert_true(*end_ms < start_ms + 5000, "end_ms stays on the unit's clock");
+}
+
+ZTEST(log_end_times, test_ARotationKeepsTheClockOfItsStart) {
+    const auto sensors = MakeLoggedSensors();
+    auto rig = MakeLogWriterRig(sensors);
+    const auto end_times = AttachEndTimes(rig);
+
+    const int64_t wall_ms = NowMs(rig) + 400 * DAY_MS;
+    rig.time_service->SetWallClock(std::chrono::system_clock::time_point(std::chrono::milliseconds(wall_ms)));
+
+    rig.log_writer_service->SetSizeLimitsForTesting(2048, 0);
+    zassert_true(rig.log_writer_service->Start());
+
+    // A later set must not reach the files of this start.
+    rig.time_service->SetWallClock(
+        std::chrono::system_clock::time_point(std::chrono::milliseconds(wall_ms + 400 * DAY_MS))
+    );
+
+    uint8_t sequence = 0;
+    zassert_true(
+        WaitFor(
+            [&] {
+                for(int i = 0; i < 2; i++)
+                    PublishFrame(rig, *sensors[1], sequence++, rig.time_service->GetCurrentTime());
+
+                return rig.log_writer_service->GetStats().rotations >= 1;
+            },
+            5000
+        ),
+        "the frames must reach the size limit"
+    );
+    zassert_true(rig.log_writer_service->Stop());
+
+    const auto names = ListLogNames(*rig.fs_service);
+    zassert_true(names.size() >= 2);
+
+    for(const auto& name : names) {
+        const auto clock = ReadFileClock(*rig.fs_service, name);
+        zassert_true(clock.says_set, "every file of the start is on real time");
+        zassert_equal(clock.time_class, 10);
+        zassert_true(clock.start_ms >= wall_ms && clock.start_ms < wall_ms + 60'000, "and on the first set's offset");
+        zassert_equal(NameSeconds(name), clock.start_ms / 1000);
+
+        const auto end_ms = end_times->Find(name);
+        zassert_true(end_ms.has_value());
+        zassert_true(*end_ms >= clock.start_ms && *end_ms < wall_ms + 60'000, "end_ms is on the same clock");
+    }
 }

@@ -99,7 +99,7 @@ public:
     Mdf4File(const Mdf4File&) = delete;
     Mdf4File& operator=(const Mdf4File&) = delete;
 
-    void UpdateCurrentTime(std::chrono::system_clock::time_point time);
+    void UpdateCurrentTime(std::chrono::system_clock::time_point time, uint8_t time_class = 0);
 
     std::shared_ptr<mdf4::DataGroupBlock> GetDataGroup() const;
 

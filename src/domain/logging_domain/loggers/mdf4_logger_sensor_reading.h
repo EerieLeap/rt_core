@@ -51,6 +51,9 @@ private:
     static constexpr int64_t NO_TIMESTAMP = std::numeric_limits<int64_t>::min();
     // The master channel resolves microseconds; a record moved to keep it increasing moves by one.
     static constexpr auto MIN_RECORD_TIME_STEP = std::chrono::microseconds(1);
+    // MDF time quality classes of the header: 0 local PC reference time, 10 external time source.
+    static constexpr uint8_t HD_TIME_CLASS_LOCAL = 0;
+    static constexpr uint8_t HD_TIME_CLASS_EXTERNAL = 10;
 
     struct LogTarget {
         enum class Kind : uint8_t {
@@ -109,7 +112,7 @@ public:
     ~Mdf4LoggerSensorReading() override = default;
 
     const char* GetFileExtension() const override;
-    bool StartLogging(std::streambuf& stream, const std::chrono::system_clock::time_point& start_time) override;
+    bool StartLogging(std::streambuf& stream, const LogFileStart& start) override;
     bool StopLogging() override;
     bool LogReading(const std::chrono::system_clock::time_point& time, const SensorReading& reading) override;
     [[nodiscard]] uint64_t GetBytesWritten() const override {

@@ -99,6 +99,10 @@ unset, and the unit's clock starts at its fixed date. A client sets the clock af
 group's `SET_TIME`, and reads it back with `TIME`. `boot_id` in the answer tells a client that the unit has restarted
 since it last set the clock.
 
+A start of logging takes the clock as it is: the log writer reads the offset once, and the file names, the header
+starts and the `end_ms` of that start's files (rotations included) are real time if it was set, the unit's clock
+if not (the file's `clock` property says which). A set while logging changes nothing until the next start.
+
 To line a live value up with the unit's clock, `now_ms - uptime_ms` of one `TIME` answer is the unit's clock at
 power-on, the same for the whole power-on. With `wall_ms`, `wall_ms - uptime_ms` is real time at power-on, as long
 as the clock has not been set again.

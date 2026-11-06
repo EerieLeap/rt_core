@@ -28,7 +28,7 @@ public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
         /// Read: `{active, reason, since_ms?, file?, bytes?}`. `reason` is a LoggingStatusReason, 0
-        /// while active. `since_ms` (the session's start, Unix ms UTC) only while this unit's writer
+        /// while active. `since_ms` (the session's start on the unit's clock, as TIME's `now_ms`) only while this unit's writer
         /// runs a session; `file` (asset name in the `logs` kind) and `bytes` only with a file open.
         STATUS = 0,
         /// Write `{uid?}`: `{}`. `uid` is the CDMP UID of the unit to start; absent or 0 is every unit.

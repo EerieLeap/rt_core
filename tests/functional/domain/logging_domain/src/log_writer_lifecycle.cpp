@@ -31,7 +31,8 @@ uint64_t GetHeaderSize(const LogWriterRig& rig) {
     MemoryStreamBuf stream;
     const auto logger = rig.logger_factory();
     zassert_true(
-        logger->StartLogging(stream, rig.time_service->GetCurrentTime()), "the header could not be written to memory"
+        logger->StartLogging(stream, LogFileStart{ rig.time_service->GetCurrentTime(), std::nullopt }),
+        "the header could not be written to memory"
     );
 
     return logger->GetBytesWritten();

@@ -26,7 +26,7 @@ public:
 
     /**
      * '<directory>/<prefix>_<YYYYMMDD>T<HHMMSS>Z_<rand4>.<extension>' in UTC, so names sort by start
-     * time; the prefix and its underscore are left out when it is empty. @p random_value is reduced
+     * time within one clock (a file on the unit's own clock, never set, sorts before older real-time files); the prefix and its underscore are left out when it is empty. @p random_value is reduced
      * to four decimal digits; it only separates files started within the same second.
      */
     static StaticString<PATH_MAX_LENGTH> GetFilePath(

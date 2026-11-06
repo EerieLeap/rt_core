@@ -418,24 +418,27 @@ const char* Mdf4LoggerSensorReading::GetFileExtension() const {
     return Mdf4File::LOG_DATA_FILE_EXTENSION;
 }
 
-bool Mdf4LoggerSensorReading::StartLogging(
-    std::streambuf& stream,
-    const std::chrono::system_clock::time_point& start_time
-) {
+bool Mdf4LoggerSensorReading::StartLogging(std::streambuf& stream, const LogFileStart& start) {
     // Set once the header is out: until then the writers the targets point at may not exist.
     stream_ = nullptr;
-    start_time_ = start_time;
+    start_time_ = start.time;
 
     for(auto& [_, target] : targets_) {
         target.last_timestamp = NO_TIMESTAMP;
         target.last_record_time = NO_TIMESTAMP;
     }
 
-    mdf4_file_->UpdateCurrentTime(start_time);
+    // Records stay relative to start.time; a file on real time only moves the header's start, and says so.
+    const bool is_wall_clock = start.wall_clock_offset.has_value();
+    mdf4_file_->UpdateCurrentTime(
+        start.time + start.wall_clock_offset.value_or(std::chrono::system_clock::duration::zero()),
+        is_wall_clock ? HD_TIME_CLASS_EXTERNAL : HD_TIME_CLASS_LOCAL
+    );
 
     // The index is taken only when this header syncs: a header that fails leaves no file behind.
     const uint32_t file_index = session_ != nullptr ? session_->next_file_index.load() : 0U;
-    const std::array<MdfProperty, 1> file_properties{ { { "file_index", std::to_string(file_index) } } };
+    const std::array<MdfProperty, 2> file_properties{ { { "file_index", std::to_string(file_index) },
+        { "clock", is_wall_clock ? "set" : "uptime" } } };
     current_file_size_bytes_ = mdf4_file_->WriteHeaderToStream(stream, file_properties);
 
     // Every header builds new writers, so the previous file's pointers are stale now.
