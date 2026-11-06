@@ -69,6 +69,11 @@ private:
     std::vector<mdf4::RecordWriter> record_writers_;
     std::vector<mdf4::CanRecordWriter> can_record_writers_;
 
+    // The header comment is built for every header from these, so each file carries its own properties.
+    bool has_header_comment_{ false };
+    std::string header_comment_text_;
+    std::vector<MdfProperty> header_comment_properties_;
+
     bool is_header_written_{ false };
     bool is_finalized_{ false };
 
@@ -101,8 +106,16 @@ public:
     /** The metadata setters, like the structure, must be called before WriteHeaderToStream(). */
     void SetHeaderComment(std::string_view text, std::span<const MdfProperty> properties);
     void SetFileHistory(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version);
-    void SetChannelComment(const std::shared_ptr<mdf4::ChannelBlock>& channel, std::string_view text);
-    void SetChannelGroupComment(const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group, std::string_view text);
+    void SetChannelComment(
+        const std::shared_ptr<mdf4::ChannelBlock>& channel,
+        std::string_view text,
+        std::span<const MdfProperty> properties = {}
+    );
+    void SetChannelGroupComment(
+        const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
+        std::string_view text,
+        std::span<const MdfProperty> properties = {}
+    );
 
     std::shared_ptr<mdf4::ChannelGroupBlock> CreateChannelGroup(uint64_t record_id, const std::string& name);
     std::shared_ptr<mdf4::ChannelGroupBlock> CreateVLSDChannelGroup(uint64_t record_id);
@@ -126,8 +139,13 @@ public:
     std::shared_ptr<mdf4::ChannelConversionBlock> CreateAlgebraicConversion(const std::string& formula);
     std::shared_ptr<mdf4::TextBlock> GetOrCreateTextBlock(const std::string& name);
 
-    /** Seals the layout: builds the record writers and resets every counter for a new file. */
-    uint64_t WriteHeaderToStream(std::streambuf& stream);
+    /**
+     * Seals the layout: builds the record writers and resets every counter for a new file. The
+     * header comment of this file is the one SetHeaderComment() described, with @p file_properties
+     * after its properties: what differs from one file of the layout to the next, such as the index of
+     * the file in its session. Nothing is added when no header comment was set.
+     */
+    uint64_t WriteHeaderToStream(std::streambuf& stream, std::span<const MdfProperty> file_properties = {});
 
     /**
      * The writer of a group from CreateChannelGroup() or CreateCanDataFrameChannelGroup(), valid from

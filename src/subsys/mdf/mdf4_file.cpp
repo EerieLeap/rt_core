@@ -100,8 +100,13 @@ std::shared_ptr<mdf4::MetadataBlock> Mdf4File::CreateCommentBlock(
     return comment;
 }
 
+// Kept rather than built: WriteHeaderToStream() makes the comment block of each file from it.
 void Mdf4File::SetHeaderComment(std::string_view text, std::span<const MdfProperty> properties) {
-    header_block_->SetComment(CreateCommentBlock(header_block_->GetId(), text, properties));
+    EnsureStructureEditable();
+
+    header_comment_text_ = std::string(text);
+    header_comment_properties_.assign(properties.begin(), properties.end());
+    has_header_comment_ = true;
 }
 
 void Mdf4File::SetFileHistory(std::string_view tool_id, std::string_view tool_vendor, std::string_view tool_version) {
@@ -109,21 +114,26 @@ void Mdf4File::SetFileHistory(std::string_view tool_id, std::string_view tool_ve
     header_block_->GetFileHistory()->SetTool(tool_id, tool_vendor, tool_version);
 }
 
-void Mdf4File::SetChannelComment(const std::shared_ptr<mdf4::ChannelBlock>& channel, std::string_view text) {
+void Mdf4File::SetChannelComment(
+    const std::shared_ptr<mdf4::ChannelBlock>& channel,
+    std::string_view text,
+    std::span<const MdfProperty> properties
+) {
     if(!channel)
         throw std::invalid_argument("Channel cannot be null");
 
-    channel->SetComment(CreateCommentBlock(channel->GetId(), text));
+    channel->SetComment(CreateCommentBlock(channel->GetId(), text, properties));
 }
 
 void Mdf4File::SetChannelGroupComment(
     const std::shared_ptr<mdf4::ChannelGroupBlock>& channel_group,
-    std::string_view text
+    std::string_view text,
+    std::span<const MdfProperty> properties
 ) {
     if(!channel_group)
         throw std::invalid_argument("Channel group cannot be null");
 
-    channel_group->SetComment(CreateCommentBlock(channel_group->GetId(), text));
+    channel_group->SetComment(CreateCommentBlock(channel_group->GetId(), text, properties));
 }
 
 std::shared_ptr<mdf4::ChannelGroupBlock> Mdf4File::CreateChannelGroupBlock(uint64_t record_id) {
@@ -368,7 +378,7 @@ std::shared_ptr<mdf4::TextBlock> Mdf4File::GetOrCreateTextBlock(const std::strin
     return new_text_block;
 }
 
-uint64_t Mdf4File::WriteHeaderToStream(std::streambuf& stream) {
+uint64_t Mdf4File::WriteHeaderToStream(std::streambuf& stream, std::span<const MdfProperty> file_properties) {
     const auto data_block = data_group_->GetDataBlock();
     if(!data_block)
         throw std::runtime_error("Data group has no data block");
@@ -388,6 +398,16 @@ uint64_t Mdf4File::WriteHeaderToStream(std::streambuf& stream) {
     id_block_->AddStandardFlag(mdf4::IdBlock::StandardFlag::InvalidCGCount);
     id_block_->AddStandardFlag(mdf4::IdBlock::StandardFlag::InvalidLastDTBlock);
     id_block_->AddStandardFlag(mdf4::IdBlock::StandardFlag::InvalidDataVLSDBlock);
+
+    // A block of its own for every file, built before the reset so the addresses resolve over it.
+    if(has_header_comment_) {
+        std::vector<MdfProperty> properties(header_comment_properties_);
+        properties.insert(properties.end(), file_properties.begin(), file_properties.end());
+
+        auto comment = std::make_shared<mdf4::MetadataBlock>();
+        comment->SetComment(header_block_->GetId(), header_comment_text_, properties);
+        header_block_->SetComment(std::move(comment));
+    }
 
     id_block_->Reset();
     header_block_->Reset();

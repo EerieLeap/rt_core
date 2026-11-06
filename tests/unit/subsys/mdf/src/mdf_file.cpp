@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <streambuf>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #ifdef CONFIG_ARCH_POSIX
@@ -137,6 +139,35 @@ size_t FindDataBlockAddress(std::span<const uint8_t> data) {
     }
 
     return 0;
+}
+
+// The text of every MD block of the header, in file order, up to the DT block.
+std::vector<std::string> ReadMetadataTexts(std::span<const uint8_t> data) {
+    std::vector<std::string> texts;
+    size_t offset = ID_BLOCK_SIZE;
+
+    while(offset + BLOCK_HEADER_SIZE <= data.size()) {
+        const auto id = BlockId(data, offset);
+        if(id == "##DT")
+            break;
+
+        if(id == "##MD")
+            texts.push_back(ReadBlockText(data, offset));
+
+        offset += static_cast<size_t>(Read<uint64_t>(data, offset + BLOCK_LENGTH_OFFSET));
+    }
+
+    return texts;
+}
+
+bool IsFinalizedFile(std::span<const uint8_t> data) {
+    return AsText(data, 0, 8) == "MDF     ";
+}
+
+bool AnyContains(const std::vector<std::string>& texts, std::string_view fragment) {
+    return std::ranges::any_of(texts, [fragment](const std::string& text) {
+        return text.contains(fragment);
+    });
 }
 
 CanFrame MakeCanFrame(size_t payload_size) {
@@ -662,6 +693,157 @@ ZTEST(mdf_file, test_StructureIsFrozenOnceTheHeaderIsWritten) {
     }));
     zassert_true(Throws<std::runtime_error>([&] {
         mdf_file.CreateDataChannel(channel_group, MdfDataType::Float32, "late", "");
+    }));
+}
+
+// A channel and a channel group carry properties in their comments, escaped like the header's.
+ZTEST(mdf_file, test_ChannelAndGroupCommentsCarryProperties) {
+    Mdf4File mdf_file;
+    const auto group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel = mdf_file.CreateDataChannel(group, MdfDataType::Float32, "pressure", "bar");
+    const auto vlsd_group = mdf_file.CreateVLSDChannelGroup(2);
+    const auto can_group = mdf_file.CreateCanDataFrameChannelGroup(vlsd_group, 3, "can0");
+
+    const std::array<MdfProperty, 2> channel_properties{ { { "sensor_type", "PHYSICAL_ANALOG" },
+        { "sensor_description", "main <gallery> & \"filter\"" } } };
+    const std::array<MdfProperty, 1> group_properties{ { { "sensor_type", "CANBUS_RAW" } } };
+    mdf_file.SetChannelComment(channel, "Pressure: main", channel_properties);
+    mdf_file.SetChannelGroupComment(can_group, "Raw frames", group_properties);
+
+    auto file = MakeStream();
+    mdf_file.WriteHeaderToStream(file);
+
+    const auto content = file.Str();
+    const auto texts = ReadMetadataTexts(AsBytes(content));
+    zassert_true(
+        AnyContains(
+            texts,
+            "<CNcomment><TX>Pressure: main</TX><common_properties><e name=\"sensor_type\">PHYSICAL_ANALOG</e>"
+            "<e name=\"sensor_description\">main &lt;gallery&gt; &amp; &quot;filter&quot;</e></common_properties>"
+            "</CNcomment>"
+        ),
+        "the channel comment holds its properties, escaped"
+    );
+    zassert_true(
+        AnyContains(
+            texts,
+            "<CGcomment><TX>Raw frames</TX><common_properties><e name=\"sensor_type\">CANBUS_RAW</e>"
+            "</common_properties></CGcomment>"
+        ),
+        "the channel group comment holds its properties"
+    );
+}
+
+// The header comment is built for every header: each file shows the properties it was written with, and
+// the DT block is still the last block.
+ZTEST(mdf_file, test_EachHeaderCarriesItsOwnFileProperties) {
+    Mdf4File mdf_file;
+    mdf_file.SetHeaderComment("two files", std::array<MdfProperty, 1>{ { { "device_name", "bench" } } });
+    const auto group = mdf_file.CreateChannelGroup(1, "pressure");
+    mdf_file.CreateDataChannel(group, MdfDataType::Float32, "pressure", "bar");
+
+    constexpr size_t RECORD_BYTES = RECORD_ID_SIZE + TIME_SIZE + 4;
+
+    // The comment of the file, found through the header's comment link rather than by scanning.
+    const auto header_comment = [](const std::string& content) {
+        const auto data = AsBytes(content);
+        const auto address = ReadLink(data, ID_BLOCK_SIZE, HD_COMMENT_LINK);
+        zassert_not_equal(address, 0, "the header links a comment");
+        zassert_equal(BlockId(data, address), std::string("##MD"), "the link points at a comment block");
+
+        return ReadBlockText(data, address);
+    };
+
+    auto first = MakeStream();
+    const auto first_size = mdf_file.WriteHeaderToStream(
+        first, std::array<MdfProperty, 1>{ { { "file_index", "0" } } }
+    );
+    const std::array<MdfValue, 2> record{ 0.5, 1.0F };
+    mdf_file.WriteDataRecordToStream(group, first, record);
+    mdf_file.FinalizeToStream(first);
+    const auto first_group_address = static_cast<size_t>(group->GetAddress());
+
+    // Eight digits, so the comment block grows by a padded 8 bytes and every later block moves: the
+    // addresses have to be resolved again for this file.
+    auto second = MakeStream();
+    const auto second_size = mdf_file.WriteHeaderToStream(
+        second, std::array<MdfProperty, 1>{ { { "file_index", "12345678" } } }
+    );
+    mdf_file.WriteDataRecordToStream(group, second, record);
+    mdf_file.WriteDataRecordToStream(group, second, record);
+    mdf_file.FinalizeToStream(second);
+    const auto second_group_address = static_cast<size_t>(group->GetAddress());
+
+    const auto first_content = first.Str();
+    const auto second_content = second.Str();
+
+    zassert_equal(
+        header_comment(first_content),
+        std::string(
+            "<HDcomment><TX>two files</TX><common_properties><e name=\"device_name\">bench</e>"
+            "<e name=\"file_index\">0</e></common_properties></HDcomment>"
+        ),
+        "the first file shows its index after the header's properties"
+    );
+    zassert_equal(
+        header_comment(second_content),
+        std::string(
+            "<HDcomment><TX>two files</TX><common_properties><e name=\"device_name\">bench</e>"
+            "<e name=\"file_index\">12345678</e></common_properties></HDcomment>"
+        ),
+        "the second file shows its own"
+    );
+    zassert_true(second_size > first_size, "the longer comment moves the DT block");
+    zassert_true(second_group_address > first_group_address, "and the blocks before it");
+
+    const auto expect_file = [](const std::string& content, uint64_t header_size, size_t group_address,
+                                 uint64_t cycles) {
+        const auto data = AsBytes(content);
+        const auto data_block = FindDataBlockAddress(data);
+        zassert_not_equal(data_block, 0, "the file has a DT block");
+        zassert_equal(data_block + BLOCK_HEADER_SIZE, header_size, "the DT block is the last block of the header");
+        zassert_equal(
+            Read<uint64_t>(data, data_block + BLOCK_LENGTH_OFFSET), BLOCK_HEADER_SIZE + cycles * RECORD_BYTES,
+            "the DT length covers this file's records"
+        );
+        zassert_equal(content.size(), data_block + BLOCK_HEADER_SIZE + cycles * RECORD_BYTES, "and ends the file");
+        zassert_equal(BlockId(data, group_address), std::string("##CG"), "the channel group is at its own address");
+        zassert_equal(Read<uint64_t>(data, group_address + CG_CYCLE_COUNT), cycles, "the cycle count is this file's");
+        zassert_true(IsFinalizedFile(data), "the file is finalized");
+    };
+    expect_file(first_content, first_size, first_group_address, 1);
+    expect_file(second_content, second_size, second_group_address, 2);
+}
+
+ZTEST(mdf_file, test_AHeaderWithoutAHeaderCommentAddsNone) {
+    Mdf4File mdf_file;
+    const auto group = mdf_file.CreateChannelGroup(1, "pressure");
+    mdf_file.CreateDataChannel(group, MdfDataType::Float32, "pressure", "bar");
+
+    auto file = MakeStream();
+    mdf_file.WriteHeaderToStream(file, std::array<MdfProperty, 1>{ { { "file_index", "0" } } });
+
+    const auto content = file.Str();
+    zassert_false(AnyContains(ReadMetadataTexts(AsBytes(content)), "file_index"), "no comment to add them to");
+}
+
+ZTEST(mdf_file, test_CommentsCannotChangeOnceTheHeaderIsWritten) {
+    Mdf4File mdf_file;
+    const auto group = mdf_file.CreateChannelGroup(1, "pressure");
+    const auto channel = mdf_file.CreateDataChannel(group, MdfDataType::Float32, "pressure", "bar");
+
+    auto file = MakeStream();
+    mdf_file.WriteHeaderToStream(file);
+
+    const std::array<MdfProperty, 1> properties{ { { "sensor_type", "PHYSICAL_ANALOG" } } };
+    zassert_true(Throws<std::runtime_error>([&] {
+        mdf_file.SetChannelComment(channel, "late", properties);
+    }));
+    zassert_true(Throws<std::runtime_error>([&] {
+        mdf_file.SetChannelGroupComment(group, "late", properties);
+    }));
+    zassert_true(Throws<std::runtime_error>([&] {
+        mdf_file.SetHeaderComment("late", properties);
     }));
 }
 
