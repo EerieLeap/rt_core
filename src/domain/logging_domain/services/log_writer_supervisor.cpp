@@ -38,6 +38,8 @@ LOG_MODULE_REGISTER(log_writer_supervisor_logger);
 // The current session. Apart from State, which owns the writer and so the logger factory: the factory
 // holds this, and holding State would make a cycle. The task makes a session, the factory reads it on
 // whichever thread starts the writer.
+namespace {
+
 class SessionSlot {
 private:
     mutable k_mutex mutex_{};
@@ -74,6 +76,8 @@ public:
         k_mutex_unlock(&mutex_);
     }
 };
+
+} // namespace
 
 struct LogWriterSupervisor::State {
     std::shared_ptr<LogWriterService> log_writer_service;

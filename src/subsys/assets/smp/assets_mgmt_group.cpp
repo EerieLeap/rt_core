@@ -82,6 +82,48 @@ bool IsGrowing(const AssetProvider& provider, std::string_view name) {
     return provider.get_growing_size && provider.get_growing_size(name).has_value();
 }
 
+// The sizes that the provider says its growing files have, one per entry (nothing for a file that is not growing).
+// Asked before anything is encoded: the provider's callback may throw, and an error must not be appended to a
+// half-written list.
+std::vector<std::optional<uint64_t>>
+GetGrowingSizes(const AssetProvider& provider, const std::vector<AssetEntry>& entries) {
+    std::vector<std::optional<uint64_t>> growing_sizes(entries.size());
+    if(provider.get_growing_size) {
+        for(size_t i = 0; i < entries.size(); i++)
+            growing_sizes[i] = provider.get_growing_size(entries[i].name);
+    }
+    return growing_sizes;
+}
+
+// Encodes the map of one stored file of a LIST page. A file that is growing has the size its writer has synced, which
+// is what a read serves, and no end yet.
+bool PutStoredEntry(
+    zcbor_state_t* zse,
+    const AssetProvider& provider,
+    const AssetEntry& entry,
+    const std::optional<uint64_t>& growing_size
+) {
+    const bool is_growing = growing_size.has_value();
+
+    const auto size = static_cast<uint32_t>(std::min<uint64_t>(is_growing ? *growing_size : entry.size, UINT32_MAX));
+
+    // Only an end that is known and not before the epoch.
+    std::optional<int64_t> end_ms;
+    if(provider.get_end_ms && !is_growing)
+        end_ms = provider.get_end_ms(entry.name);
+    const bool has_end = end_ms.has_value() && *end_ms >= 0;
+    const uint32_t pairs = (has_end || is_growing) ? 3 : 2;
+
+    return zcbor_map_start_encode(zse, pairs)
+        && zcbor_tstr_put_lit(zse, "name")
+        && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
+        && zcbor_tstr_put_lit(zse, "size")
+        && zcbor_uint32_put(zse, size)
+        && (!has_end || (zcbor_tstr_put_lit(zse, "end_ms") && zcbor_uint64_put(zse, static_cast<uint64_t>(*end_ms))))
+        && (!is_growing || (zcbor_tstr_put_lit(zse, "growing") && zcbor_bool_put(zse, true)))
+        && zcbor_map_end_encode(zse, pairs);
+}
+
 // The name that a stored file shadowed by a built-in moves to: the stem, "-uploaded" (then "-uploaded-2", "-uploaded-3"
 // and so on) and the extension, the stem cut short where the name would be too long. Empty when nothing is left of the
 // stem. @p number 1 is the first.
@@ -437,6 +479,55 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
     return MGMT_RETURN_CHECK(ok);
 }
 
+bool AssetsMgmtGroup::IsGrowingCheckpointOf(
+    const std::shared_ptr<const AssetProvider>& provider,
+    std::string_view name
+) const {
+    return checkpoint_.is_valid
+        && checkpoint_.is_growing
+        && checkpoint_.kind == provider->kind
+        && checkpoint_.name == name;
+}
+
+bool AssetsMgmtGroup::DropStaleGrowingState(
+    const std::shared_ptr<const AssetProvider>& provider,
+    std::string_view name
+) {
+    if(IsReadSessionOf(provider, name)) {
+        if(!read_session_.is_growing)
+            return false;
+
+        DropReadSession();
+        return true;
+    }
+
+    if(!IsGrowingCheckpointOf(provider, name))
+        return false;
+
+    checkpoint_.is_valid = false;
+    return true;
+}
+
+std::optional<uint32_t> AssetsMgmtGroup::GrowingCrc(
+    const std::shared_ptr<const AssetProvider>& provider,
+    std::string_view name,
+    uint64_t generation,
+    size_t synced
+) const {
+    if(IsReadSessionOf(provider, name)
+        && read_session_.is_growing
+        && read_session_.generation == generation
+        && read_session_.crc_end == synced) {
+
+        return read_session_.crc;
+    }
+
+    if(IsGrowingCheckpointOf(provider, name) && checkpoint_.generation == generation && checkpoint_.crc_end == synced)
+        return checkpoint_.crc;
+
+    return std::nullopt;
+}
+
 int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
     uint32_t kind = 0;
     uint32_t offset = 0;
@@ -480,13 +571,7 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
         });
     }
 
-    // Asked before anything is encoded: the provider's callback may throw, and an error must not be
-    // appended to a half-written list.
-    std::vector<std::optional<uint64_t>> growing_sizes(entries.size());
-    if(provider->get_growing_size) {
-        for(size_t i = 0; i < entries.size(); i++)
-            growing_sizes[i] = provider->get_growing_size(entries[i].name);
-    }
+    const auto growing_sizes = GetGrowingSizes(*provider, entries);
 
     zcbor_state_t* zse = ctxt->writer->zs;
     const size_t candidates = built_in_page + entries.size();
@@ -521,31 +606,7 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
         if(Remaining(zse) < LIST_ENTRY_OVERHEAD + entry.name.size() + LIST_TAIL_SIZE)
             break;
 
-        // A file that is growing has the size its writer has synced, which is what a read serves, and no
-        // end yet.
-        const std::optional<uint64_t>& growing_size = growing_sizes[listed];
-        const bool is_growing = growing_size.has_value();
-
-        const auto size = static_cast<uint32_t>(
-            std::min<uint64_t>(is_growing ? *growing_size : entry.size, UINT32_MAX)
-        );
-
-        // Only an end that is known and not before the epoch.
-        std::optional<int64_t> end_ms;
-        if(provider->get_end_ms && !is_growing)
-            end_ms = provider->get_end_ms(entry.name);
-        const bool has_end = end_ms.has_value() && *end_ms >= 0;
-        const uint32_t pairs = (has_end || is_growing) ? 3 : 2;
-
-        ok = zcbor_map_start_encode(zse, pairs)
-            && zcbor_tstr_put_lit(zse, "name")
-            && zcbor_tstr_encode_ptr(zse, entry.name.data(), entry.name.size())
-            && zcbor_tstr_put_lit(zse, "size")
-            && zcbor_uint32_put(zse, size)
-            && (!has_end
-                || (zcbor_tstr_put_lit(zse, "end_ms") && zcbor_uint64_put(zse, static_cast<uint64_t>(*end_ms))))
-            && (!is_growing || (zcbor_tstr_put_lit(zse, "growing") && zcbor_bool_put(zse, true)))
-            && zcbor_map_end_encode(zse, pairs);
+        ok = PutStoredEntry(zse, *provider, entry, growing_sizes[listed]);
         listed++;
     }
 
@@ -616,27 +677,11 @@ int AssetsMgmtGroup::ExecuteRead(smp_streamer* ctxt) {
         // The session in progress, if any, is left alone: the client may still need it.
         if(!wants_growing)
             return Fail(ctxt, Error::IN_USE);
-    } else if(offset > 0) {
+    } else if(offset > 0 && DropStaleGrowingState(provider, asset_name) && wants_growing) {
         // The writer closed the file, which rewrote bytes of its header: what a session or a checkpoint
-        // of it knew is not continued.
-        bool is_stale = false;
-
-        if(IsReadSessionOf(provider, asset_name)) {
-            if(read_session_.is_growing) {
-                DropReadSession();
-                is_stale = true;
-            }
-        } else if(checkpoint_.is_valid
-            && checkpoint_.is_growing
-            && checkpoint_.kind == provider->kind
-            && checkpoint_.name == asset_name) {
-
-            checkpoint_.is_valid = false;
-            is_stale = true;
-        }
-
-        if(is_stale && wants_growing)
-            return Fail(ctxt, Error::CHANGED);
+        // of it knew is not continued. The call drops that stale state even when the request does not opt
+        // in to a growing file; only a request that does is told the file changed.
+        return Fail(ctxt, Error::CHANGED);
     }
 
     if(offset == 0 || !IsReadSessionOf(provider, asset_name) || read_session_.is_growing != is_growing) {
@@ -840,23 +885,7 @@ int AssetsMgmtGroup::ExecuteStat(smp_streamer* ctxt) {
         // The size the writer has synced; the file is never read, so the CRC is only what a session or
         // a checkpoint of this file already covers, exactly.
         const auto synced = static_cast<size_t>(std::min<uint64_t>(*growing_size, UINT32_MAX));
-        std::optional<uint32_t> growing_crc;
-
-        if(IsReadSessionOf(provider, asset_name)
-            && read_session_.is_growing
-            && read_session_.generation == generation
-            && read_session_.crc_end == synced) {
-
-            growing_crc = read_session_.crc;
-        } else if(checkpoint_.is_valid
-            && checkpoint_.is_growing
-            && checkpoint_.kind == provider->kind
-            && checkpoint_.name == asset_name
-            && checkpoint_.generation == generation
-            && checkpoint_.crc_end == synced) {
-
-            growing_crc = checkpoint_.crc;
-        }
+        const std::optional<uint32_t> growing_crc = GrowingCrc(provider, asset_name, generation, synced);
 
         zcbor_state_t* growing_zse = ctxt->writer->zs;
         bool growing_ok = zcbor_tstr_put_lit(growing_zse, "len")

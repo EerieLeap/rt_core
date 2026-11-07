@@ -218,8 +218,8 @@ inline size_t FinalizedDataEnd(const std::vector<uint8_t>& content) {
 inline std::string ReadTextBlock(const std::vector<uint8_t>& data, size_t address) {
     const auto length = static_cast<size_t>(ReadField<uint64_t>(data, address + BLOCK_LENGTH_OFFSET));
     zassert_true(address + length <= data.size(), "the text block runs past the end of the file");
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the text is inside a byte buffer
     std::string text(
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the text is inside a byte buffer
         reinterpret_cast<const char*>(data.data() + address + BLOCK_HEADER_SIZE), length - BLOCK_HEADER_SIZE
     );
 

@@ -679,9 +679,9 @@ ZTEST(mdf_blocks, test_ChannelBlockLimitsAndSourceInformation) {
     const auto base = BaseSizeForLinks(8);
     const auto data = ResolveAndSerialize(channel);
 
-    constexpr uint32_t expected_flags = std::to_underlying(ChannelBlock::Flag::BusEvent)
+    constexpr uint32_t EXPECTED_FLAGS = std::to_underlying(ChannelBlock::Flag::BusEvent)
         | std::to_underlying(ChannelBlock::Flag::InvalidValid) | std::to_underlying(ChannelBlock::Flag::LimitValid);
-    zassert_equal(Read<uint32_t>(data, base + 12), expected_flags, "LimitValid joins the flags set before");
+    zassert_equal(Read<uint32_t>(data, base + 12), EXPECTED_FLAGS, "LimitValid joins the flags set before");
     zassert_equal(Read<double>(data, base + 40), -2.5, "cn_limit_min");
     zassert_equal(Read<double>(data, base + 48), 40.0, "cn_limit_max");
     zassert_equal(Read<double>(data, base + 24), 0.0, "cn_val_range_min stays unset");

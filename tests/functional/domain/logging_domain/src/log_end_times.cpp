@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/timeutil.h>
 #include <zephyr/ztest.h>
 
 #include "domain/logging_domain/services/log_end_times.h"
@@ -297,8 +298,8 @@ FileClock ReadFileClock(FsService& fs_service, const std::string& name) {
 
     return FileClock{ .start_ms = static_cast<int64_t>(start_ns / 1'000'000ULL),
         .time_class = bytes[fields + 8 + 2 + 2 + 1],
-        .says_set = text.find("<e name=\"clock\">set</e>") != std::string::npos,
-        .says_uptime = text.find("<e name=\"clock\">uptime</e>") != std::string::npos };
+        .says_set = text.contains("<e name=\"clock\">set</e>"),
+        .says_uptime = text.contains("<e name=\"clock\">uptime</e>") };
 }
 
 // The `YYYYMMDDTHHMMSS` of a file name, as Unix seconds.
@@ -312,7 +313,7 @@ int64_t NameSeconds(const std::string& name) {
     time_utc.tm_min = std::stoi(name.substr(at + 11, 2));
     time_utc.tm_sec = std::stoi(name.substr(at + 13, 2));
 
-    return static_cast<int64_t>(timegm(&time_utc));
+    return timeutil_timegm(&time_utc);
 }
 
 constexpr int64_t DAY_MS = 24LL * 3600 * 1000;

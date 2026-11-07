@@ -857,7 +857,7 @@ ZTEST(mdf_file, test_AttachmentsCannotBeAddedOnceTheHeaderIsWritten) {
 
     auto file = MakeStream();
     mdf_file.WriteHeaderToStream(file);
-    zassert_true(file.Str().find("config.cbor") != std::string::npos, "the attachment is in the header");
+    zassert_true(file.Str().contains("config.cbor"), "the attachment is in the header");
 
     zassert_true(Throws<std::runtime_error>([&] {
         mdf_file.AddAttachment("late.cbor", "application/cbor", std::vector<uint8_t>{ 4 }, "Late");
@@ -2043,6 +2043,7 @@ struct EventFile {
     EventFile() {
         group = mdf_file.CreateChannelGroup(1, "group");
         mdf_file.CreateDataChannel(group, MdfDataType::Float32, "value", "bar");
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the header is written after the channel is added
         header_bytes = mdf_file.WriteHeaderToStream(stream);
 
         const std::array<MdfValue, 2> record{ 0.5, 1.5F };

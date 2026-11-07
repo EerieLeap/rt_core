@@ -579,7 +579,7 @@ uint64_t Mdf4File::AppendEventToStream(
             throw std::ios_base::failure("Failed to pad the stream.");
     }
 
-    auto event = std::make_shared<mdf4::EventBlock>();
+    const auto event = std::make_shared<mdf4::EventBlock>();
     event->SetType(options.type);
     event->SetSyncType(mdf4::EventBlock::SyncType::Time);
     event->SetRangeType(mdf4::EventBlock::RangeType::Point);

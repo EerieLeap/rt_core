@@ -403,6 +403,26 @@ private:
      */
     bool MayBeReadSessionOf(AssetKind kind, std::string_view name) const;
     /**
+     * @brief Whether the checkpoint is valid, of a growing file, and of @p name of @p provider's kind.
+     */
+    bool IsGrowingCheckpointOf(const std::shared_ptr<const AssetProvider>& provider, std::string_view name) const;
+    /**
+     * @brief A file that is no longer growing has had its header rewritten by the writer on closing: drops the
+     *        read session or the checkpoint of it that knew it as growing, so that neither is continued.
+     * @return Whether a session or a checkpoint was dropped.
+     */
+    bool DropStaleGrowingState(const std::shared_ptr<const AssetProvider>& provider, std::string_view name);
+    /**
+     * @brief The CRC that the open read session, else the checkpoint, of the growing file @p name already covers
+     *        up to exactly @p synced bytes of generation @p generation; nothing when neither does.
+     */
+    std::optional<uint32_t> GrowingCrc(
+        const std::shared_ptr<const AssetProvider>& provider,
+        std::string_view name,
+        uint64_t generation,
+        size_t synced
+    ) const;
+    /**
      * @brief Opens the read session on @p name, closing the one that is open.
      * @param use_checkpoint Start the CRC from the checkpoint of this file, when there is one.
      * @param growing_size The provider's size of the file when it is growing, else nothing. A growing

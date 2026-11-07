@@ -266,8 +266,8 @@ ChannelSource FindChannelSource(std::string_view file, std::string_view channel_
     zassert_equal(file.substr(source.address, 4), "##SI", "cn_si_source must lead to an SI block");
     source.found = true;
     source.name = TextAt(file, ReadAt<uint64_t>(file, source.address + BLOCK_LINKS_OFFSET));
-    source.source_type = ReadAt<uint8_t>(file, source.address + BLOCK_LINKS_OFFSET + 3 * LINK_SIZE);
-    source.bus_type = ReadAt<uint8_t>(file, source.address + BLOCK_LINKS_OFFSET + 3 * LINK_SIZE + 1);
+    source.source_type = ReadAt<uint8_t>(file, source.address + BLOCK_LINKS_OFFSET + uint64_t{ 3 } * LINK_SIZE);
+    source.bus_type = ReadAt<uint8_t>(file, source.address + BLOCK_LINKS_OFFSET + uint64_t{ 3 } * LINK_SIZE + 1);
 
     return source;
 }
@@ -1426,10 +1426,14 @@ std::vector<WrittenAttachment> ReadAttachments(std::string_view file) {
         zassert_equal(attachment.length % 8, 0, "the block length is a multiple of 8");
         zassert_equal(ReadAt<uint64_t>(file, address + 16), 4, "four links");
 
-        const auto data_offset = address + BLOCK_LINKS_OFFSET + 4 * LINK_SIZE;
+        const auto data_offset = address + BLOCK_LINKS_OFFSET + uint64_t{ 4 } * LINK_SIZE;
         attachment.file_name = TextAt(file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + LINK_SIZE));
-        attachment.mime_type = TextAt(file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + 2 * LINK_SIZE));
-        attachment.comment = TextAt(file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + 3 * LINK_SIZE));
+        attachment.mime_type = TextAt(
+            file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + uint64_t{ 2 } * LINK_SIZE)
+        );
+        attachment.comment = TextAt(
+            file, ReadAt<uint64_t>(file, address + BLOCK_LINKS_OFFSET + uint64_t{ 3 } * LINK_SIZE)
+        );
         zassert_equal(ReadAt<uint16_t>(file, data_offset), 1, "embedded, no MD5");
         zassert_equal(ReadAt<uint16_t>(file, data_offset + 2), 0, "creator index");
         attachment.original_size = ReadAt<uint64_t>(file, data_offset + 24);
