@@ -437,8 +437,9 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
         const std::string& directory = store.GetDirectory();
         const bool is_available = store.IsAvailable();
         const AssetStore::Space space = is_available ? store.GetSpace() : AssetStore::Space{};
-        // free and used join the entry while the volume is mounted.
-        const size_t entry_size = is_available ? 9 : 7;
+        // fmt joins the entry of a raw pixel kind, free and used while the volume is mounted.
+        const bool has_format = provider->pixel_format != 0;
+        const size_t entry_size = 7 + (has_format ? 1 : 0) + (is_available ? 2 : 0);
 
         ok = ok
             && zcbor_map_start_encode(zse, entry_size)
@@ -462,6 +463,9 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
             && zcbor_list_end_encode(zse, provider->extensions.size())
             && zcbor_tstr_put_lit(zse, "avail")
             && zcbor_bool_put(zse, is_available);
+
+        if(has_format)
+            ok = ok && zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, provider->pixel_format);
 
         if(is_available) {
             ok = ok

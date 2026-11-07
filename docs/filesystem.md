@@ -119,7 +119,8 @@ the old one; when that fails the staged file is deleted. `Abort()` closes and de
 **`AssetProvider`** is what a unit serves of one kind: the kind and its name (`"images"`), the store,
 the extensions with their dot, the allowed operations as bits (`READ` 1, `WRITE` 2, `DELETE` 4), the
 largest upload (`max_size`, 0 for a kind that takes none), an optional `is_in_use(operation,
-name)` that refuses an operation on a file and an optional span of `built_ins`. The `is_in_use` callback
+name)` that refuses an operation on a file, an optional span of `built_ins` and an optional `pixel_format`
+(the LVGL colour-format number of a kind's raw pixel files, which carry no header; `KINDS` reports it as `fmt`). The `is_in_use` callback
 runs on the configuration work queue without the registry's lock and must not take the LVGL lock.
 `MakeScriptProvider()` builds the two script kinds.
 

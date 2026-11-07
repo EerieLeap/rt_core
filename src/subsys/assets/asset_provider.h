@@ -67,6 +67,12 @@ struct AssetProvider {
      * not served. Empty: the kind has none.
      */
     std::span<const BuiltInAsset> built_ins;
+    /**
+     * The pixel format of the kind's raw pixel files, as the number of an LVGL colour format
+     * (0x14 RGB565A8, 0x15 AL88), for a kind whose files carry no header to tell it; the SMP assets
+     * group lists it as `fmt`. 0: not a raw pixel kind, nothing is listed.
+     */
+    uint32_t pixel_format = 0;
 };
 
 /** @return The built-in of @p provider that @p name names, ASCII case ignored as names compare on FAT; null when none. */

@@ -737,6 +737,39 @@ ZTEST_F(smp_assets_group, test_kinds_lists_the_registered_kinds_in_order) {
     }
 }
 
+ZTEST_F(smp_assets_group, test_kinds_reports_the_pixel_format_only_of_a_kind_that_has_one) {
+    Harness& harness = *fixture->harness;
+
+    constexpr uint32_t RGB565A8 = 0x14;
+
+    harness.registry->Unregister(AssetKind::IMAGES);
+    zassert_true(harness.registry->Register(
+        {
+            .kind = AssetKind::IMAGES,
+            .name = "images",
+            .store = harness.images_store,
+            .extensions = IMAGE_EXTENSIONS,
+            .access = ALL_ACCESS,
+            .max_size = IMAGES_MAX_SIZE,
+            .pixel_format = RGB565A8,
+        }
+    ));
+
+    const auto response = harness.Kinds();
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 5);
+    zassert_equal(response.entries[0].at("kind"), IMAGES);
+    zassert_true(response.entries[0].contains("fmt"), "The images carry a format");
+    zassert_equal(response.entries[0].at("fmt"), RGB565A8);
+    // The entry still ends with the volume's state.
+    zassert_true(response.entry_flags[0].at("avail"));
+    zassert_true(response.entries[0].contains("free"));
+
+    for(size_t i = 1; i < response.entries.size(); i++)
+        zassert_false(response.entries[i].contains("fmt"), "Kind %u has no format", static_cast<unsigned>(i));
+}
+
 ZTEST_F(smp_assets_group, test_kinds_reports_whether_the_volume_is_mounted_now) {
     Harness& harness = *fixture->harness;
 
