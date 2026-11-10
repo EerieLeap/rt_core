@@ -41,7 +41,78 @@ run on the COM channel are in [cdmp.md](cdmp.md).
 | `EERIE_LEAP_CANBUS` | n | Builds the subsystem. Depends on `CONFIG_CAN`; CAN FD needs `CONFIG_CAN_FD_MODE`. |
 | `EERIE_LEAP_CANBUS_AUTO_DETECT_INTERVAL_MS` | 5000 | Pause between autodetect attempts. |
 | `EERIE_LEAP_CANBUS_RX_QUEUE_SIZE` | 1..1024, 32 | Frames buffered between the driver callback and the RX thread. |
+| `EERIE_LEAP_CAN_MONITOR_TX_SLOTS` | 1..64, 16 | Frames in flight the tap's echo of the unit's own frames can follow (see [the tap](#the-tap)). Allocated at the first `SetTap()`. |
 | `EERIE_LEAP_CANBUS_LOG_LEVEL_*` | | Log level of the subsystem. |
+
+### Receive times
+
+Every entry the driver's context queues carries `NowUs()` (`canbus_time.h`, also `Canbus::NowUs()`):
+microseconds since power-on, the base of `TIME`'s `uptime_ms`. `CanFrame::time_us` is the frame's
+time, and the CAN monitor stamps its own events with the same function.
+
+- **Base.** With `CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER` it is `k_cyc_to_us_floor64(k_cycle_get_64())`,
+  which resolves frames a few hundred µs apart (240 MHz on the ESP32-S3, 16 MHz on the P4). Without it
+  (the Cortex-A9 and MIPS QEMU targets) it is `k_ticks_to_us_floor64(k_uptime_ticks())`, as coarse as
+  the kernel tick: 100 µs on the S3 build, 1 ms on the P4, so frames closer than a tick share a time.
+- **Where it is taken.** In the receive callback, in the driver's context. On the MCP2518FD that is the
+  driver's interrupt thread after the frame was read over SPI, so a time lags the wire by that read and
+  by whatever the thread waited for. The TWAI has no controller timestamp at all, and Zephyr's own
+  `timestamp` is 16 bits of the controller's timer, so neither is used.
+- **Other fields.** `CanFrame` also carries `dlc` as received (a remote frame has a length but no
+  payload; a frame built for sending may leave it 0) and `is_error_state_indicator` (CAN FD ESI).
+
+### The tap
+
+`SetTap(ICanFrameTap*)` (`i_can_frame_tap.h`) gives one observer, a monitor, every frame on the bus.
+One tap a bus; `nullptr` removes it and never fails. `SetTap(tap)` returns false when the bus is not
+initialized, another tap is set, or the driver rejects the filters (nothing has changed then). The tap
+does not survive `DoStop()`, `Configure()` or `DoInitialize()`, and the destructor removes it, so the
+driver never calls back into a stopped bus.
+
+- **Calls.** The receive thread calls the tap under the bus's lock, as it calls handlers, so
+  `SetTap(nullptr)` waits for a call in progress and none follows once it returns. All calls come from
+  that one thread (cooperative, at a very high priority: a tap must not wait on anything a lower thread
+  holds), so a tap that writes a single-producer ring needs no lock. `OnFrame(frame, time_us,
+  is_transmit, tx_error)` comes before the frame is dispatched; `OnState(state, counters, time_us)`
+  and `OnFilterSwap(may_have_missed, time_us)` complete the interface.
+- **The filter swap.** Two drivers call every matching filter's callback for each frame (Zephyr's
+  SJA1000 core, used by the ESP32's TWAI, and the loopback driver), so an accept-all filter beside the
+  handlers' own would queue a frame twice. `SetTap(tap)` therefore swaps: it adds two accept-all
+  filters (mask 0, one standard and one `CAN_FILTER_IDE`) with the receive callback, then uninstalls
+  the handlers' filters. `DispatchFrame()` already matches in software, so handlers get the same
+  frames in the same order. `SetTap(nullptr)` installs the handlers' filters again and removes the
+  accept-all ones. A handler registered while the tap is set is recorded and installs no hardware
+  filter; it gets its filter when the tap goes.
+- **What the swap may cost.** For the few filter writes both sets are installed, so a frame a handler
+  matches may be queued twice on those two drivers: *repeated*. Where the driver has no room for two
+  more filters, the swap removes first and adds after, so a frame in between may be *missed*. Either way
+  the receive thread calls `OnFilterSwap(may_have_missed, time)` once, before the first entry it
+  handles after the swap; `SetTap()` only records the outcome in an atomic, which keeps the tap
+  single-producer. The MCP2518FD routes a frame through the first matching filter, so it cannot repeat one.
+- **Bitrate detection.** While a bus detects its bitrate (bitrate 0), `SetTap()` only records the tap.
+  When detection succeeds, the accept-all filters go in instead of the handlers' ones and the receive
+  thread calls `OnState()` with the controller's state, so a session can report the detected bitrate.
+  The detection's own accept-all filter feeds only its counter, never the tap.
+- **Remote frames.** With `CONFIG_CAN_ACCEPT_RTR` the drivers pass remote frames. The receive thread
+  gives them to the tap and never dispatches them, tap or not: handlers have never been given a frame
+  without a payload.
+- **The unit's own frames.** The TX completion callback gets no frame, so while a tap is set `SendFrame()`
+  keeps each frame in a slot of a pool of `EERIE_LEAP_CAN_MONITOR_TX_SLOTS` (a lock-free bitmap) and
+  passes it as `can_send()`'s `user_data`. The completion, in the driver's context, queues a TX echo
+  entry (the frame, `NowUs()`, the error) and frees the slot; the tap then hears `OnFrame(..., true,
+  error)`. The loopback driver also loops each frame back as a received one; a real bus does not. With no
+  free slot the frame goes out as usual and `GetTxEchoLostCount()` counts it (an echo dropped by a full
+  queue counts too). The pool is allocated at the first `SetTap()` and freed with the bus; `DoStop()`
+  frees every slot, because `can_stop()` aborts the frames in flight and a driver may drop them without
+  a completion.
+- **State changes.** `BusStateChangedCallback` (driver context) logs and queues a state entry through
+  `OnBusStateChanged(state, counters)`; the receive thread calls `OnState()` with it. A full queue drops
+  the entry. The loopback driver never changes state, so tests call `OnBusStateChanged()` themselves.
+- **The queue entry** (`canbus_rx_entry.h`) is a trivially copyable `CanbusRxEntry`: the raw
+  `can_frame`, `time_us`, a kind (`RECEIVED`, `TX_ECHO`, `STATE_CHANGE`), the TX error (int8, clamped)
+  and, for a state entry, the `can_state` and error counters. About 90 bytes, so the default 32-entry
+  queue is about 2.8 KiB. With no tap, the only change on the receive path is the time each entry
+  carries; the receive thread ignores echo and state entries.
 
 ## Stored configuration
 

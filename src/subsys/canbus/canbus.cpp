@@ -2,9 +2,11 @@
 #include <cstring>
 #include <exception>
 #include <memory>
+#include <new>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <zephyr/logging/log.h>
 
@@ -42,6 +44,35 @@ void PrintCanLimitsDetails(uint32_t bitrate, int ret) {
         LOG_ERR("  %u bps: SAMPLE POINT OUT OF RANGE (error: %d).", bitrate, ret);
 }
 
+// Classical frames never carry more than 8 bytes even though DLC 9..15 is legal on the wire, and
+// remote frames carry none at all.
+CanFrame ToCanFrame(const can_frame& raw_frame, uint64_t time_us, bool is_transmit) {
+    const bool is_can_fd = (raw_frame.flags & CAN_FRAME_FDF) != 0;
+    const bool is_remote_request = (raw_frame.flags & CAN_FRAME_RTR) != 0;
+
+    CanFrame can_frame = { .id = raw_frame.id,
+        .is_extended = (raw_frame.flags & CAN_FRAME_IDE) != 0,
+        .is_transmit = is_transmit,
+        .is_can_fd = is_can_fd,
+        .is_bitrate_switch = (raw_frame.flags & CAN_FRAME_BRS) != 0,
+        .is_remote_request = is_remote_request,
+        .is_error_state_indicator = (raw_frame.flags & CAN_FRAME_ESI) != 0,
+        .dlc = raw_frame.dlc,
+        .time_us = time_us };
+
+    size_t frame_size = 0;
+    if(!is_remote_request) {
+        frame_size = can_dlc_to_bytes(raw_frame.dlc);
+        // NOLINTNEXTLINE(bugprone-branch-clone): CAN_MAX_DLEN is 8 too without CONFIG_CAN_FD_MODE
+        frame_size = std::min<size_t>(frame_size, is_can_fd ? CAN_MAX_DLEN : 8U);
+        frame_size = std::min<size_t>(frame_size, sizeof(raw_frame.data));
+    }
+
+    can_frame.data.Assign(std::span<const uint8_t>(raw_frame.data, frame_size));
+
+    return can_frame;
+}
+
 } // namespace
 
 Canbus::Canbus(const CanbusConfig& config) :
@@ -54,7 +85,8 @@ Canbus::Canbus(const CanbusConfig& config) :
         config_.data_bitrate = config_.bitrate;
 
     k_mutex_init(&lock_);
-    k_msgq_init(&frame_msgq_, frame_msgq_buffer_, sizeof(can_frame), FRAME_MSGQ_SIZE);
+    k_msgq_init(&frame_msgq_, frame_msgq_buffer_, sizeof(CanbusRxEntry), FRAME_MSGQ_SIZE);
+    state_change_node_.canbus = this;
 
     thread_ = std::make_unique<Thread>(
         "can_" + std::string(config_.canbus_dev->name), this, THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_IS_COOPERATIVE
@@ -80,6 +112,7 @@ Canbus::~Canbus() {
         UnregisterStateChangeCallback();
 
         ScopedMutex guard(lock_);
+        ClearTap();
         RemoveAllFilters();
     } catch(const std::exception& e) {
         LOG_ERR("CANBus teardown failed: %s", e.what());
@@ -99,6 +132,7 @@ bool Canbus::DoInitialize() {
     {
         ScopedMutex guard(lock_);
 
+        ClearTap();
         RemoveAllFilters();
         ClearEntries();
     }
@@ -178,7 +212,9 @@ bool Canbus::Configure(const CanbusConfig& config) {
 
     ScopedMutex guard(lock_);
 
-    // A previous run may still hold filters bound to the old device.
+    // A previous run may still hold filters bound to the old device. A tap does not survive a
+    // reconfiguration: its accept-all filters would have to follow the device and the filter swap.
+    ClearTap();
     RemoveAllFilters();
 
     CanbusConfig previous_config = config_;
@@ -279,11 +315,15 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
     // can_send() may wait for a TX slot, so the lock RX dispatch needs is not held across it.
     const device* canbus_dev = nullptr;
     CanbusType type = CanbusType::CLASSICAL_CAN;
+    const TxSlot* slots = nullptr;
     {
         ScopedMutex guard(lock_);
 
         canbus_dev = config_.canbus_dev;
         type = config_.type;
+
+        if(tap_ != nullptr)
+            slots = tx_slots_.get();
     }
 
     const uint32_t max_data_length = std::min<uint32_t>(GetMaxDataLength(type), CAN_MAX_DLEN);
@@ -310,8 +350,24 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
     // The DLC table rounds FD lengths up, so the padding bytes stay zeroed.
     std::ranges::copy(frame_data, std::begin(can_frame.data));
 
-    const int res = can_send(canbus_dev, &can_frame, timeout, SendFrameCallback, nullptr);
+    // The completion callback gets no frame, so a tapped bus keeps the frame in a slot until then.
+    TxSlot* slot = nullptr;
+    if(slots != nullptr) {
+        slot = TakeTxSlot();
+        if(slot == nullptr) {
+            atomic_inc(&tx_echo_lost_);
+        } else {
+            slot->owner = this;
+            slot->frame = can_frame;
+        }
+    }
+
+    const int res = can_send(canbus_dev, &can_frame, timeout, SendFrameCallback, slot);
     if(res != 0) {
+        // The callback does not run for a frame that was not accepted.
+        if(slot != nullptr)
+            ReleaseTxSlot(slot);
+
         LOG_DBG("Failed to send frame [%d].", res);
         return res;
     }
@@ -322,10 +378,44 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
 
 void Canbus::SendFrameCallback(const device* dev, int error, void* user_data) {
     ARG_UNUSED(dev);
-    ARG_UNUSED(user_data);
 
     if(error != 0)
         LOG_ERR("SendFrameCallback error: %d", error);
+
+    // Driver context, like the receive callback: only the message queue may be touched here.
+    auto* slot = static_cast<TxSlot*>(user_data);
+    if(slot == nullptr)
+        return;
+
+    const Canbus* canbus = slot->owner;
+    const CanbusRxEntry entry = CanbusRxEntry::TxEcho(slot->frame, NowUs(), error);
+
+    if(k_msgq_put(&canbus->frame_msgq_, &entry, K_NO_WAIT) != 0)
+        atomic_inc(&canbus->tx_echo_lost_);
+
+    canbus->ReleaseTxSlot(slot);
+}
+
+Canbus::TxSlot* Canbus::TakeTxSlot() const {
+    TxSlot* slots = tx_slots_.get();
+    if(slots == nullptr)
+        return nullptr;
+
+    for(size_t i = 0; i < TX_SLOTS; i++) {
+        if(!atomic_test_and_set_bit(tx_slots_used_, static_cast<int>(i)))
+            return &slots[i];
+    }
+
+    return nullptr;
+}
+
+void Canbus::ReleaseTxSlot(TxSlot* slot) const {
+    atomic_clear_bit(tx_slots_used_, static_cast<int>(slot - tx_slots_.get()));
+}
+
+void Canbus::ResetTxSlots() const {
+    for(auto& word : tx_slots_used_)
+        atomic_clear(&word);
 }
 
 void Canbus::CanFrameReceivedCallback(const device* dev, can_frame* frame, void* user_data) {
@@ -335,7 +425,8 @@ void Canbus::CanFrameReceivedCallback(const device* dev, can_frame* frame, void*
 
     // Runs in ISR context: only the message queue may be touched here, the
     // handler maps are owned by the bottom half thread and its mutex.
-    if(k_msgq_put(&canbus->frame_msgq_, frame, K_NO_WAIT) != 0)
+    const CanbusRxEntry entry = CanbusRxEntry::Received(*frame, NowUs());
+    if(k_msgq_put(&canbus->frame_msgq_, &entry, K_NO_WAIT) != 0)
         atomic_inc(&canbus->rx_dropped_);
 }
 
@@ -345,8 +436,8 @@ void Canbus::RegisterStateChangeCallback() {
 
     UnregisterStateChangeCallback();
 
-    can_init_state_change_callback(&state_change_callback_, BusStateChangedCallback);
-    const int err = can_add_state_change_callback(config_.canbus_dev, &state_change_callback_);
+    can_init_state_change_callback(&state_change_node_.callback, BusStateChangedCallback);
+    const int err = can_add_state_change_callback(config_.canbus_dev, &state_change_node_.callback);
     if(err != 0) {
         LOG_WRN("Failed to register the CAN state change callback [%d].", err);
         return;
@@ -359,7 +450,7 @@ void Canbus::UnregisterStateChangeCallback() {
     if(state_change_callback_dev_ == nullptr)
         return;
 
-    can_remove_state_change_callback(state_change_callback_dev_, &state_change_callback_);
+    can_remove_state_change_callback(state_change_callback_dev_, &state_change_node_.callback);
     state_change_callback_dev_ = nullptr;
 }
 
@@ -370,12 +461,22 @@ void Canbus::BusStateChangedCallback(
     can_bus_err_cnt err_cnt
 ) {
     ARG_UNUSED(dev);
-    ARG_UNUSED(callback);
 
+    // The node is the first member of a StateChangeNode, which is all that was registered.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the callback carries no user data, see StateChangeNode
+    const auto* node = reinterpret_cast<const StateChangeNode*>(callback);
+    node->canbus->OnBusStateChanged(state, err_cnt);
+}
+
+void Canbus::OnBusStateChanged(can_state state, can_bus_err_cnt err_cnt) {
     LOG_WRN(
         "CAN bus state changed to %d (tx errors: %u, rx errors: %u).", static_cast<int>(state), err_cnt.tx_err_cnt,
         err_cnt.rx_err_cnt
     );
+
+    // Driver context. A full queue drops the entry; the next change or the statistics catch up.
+    const CanbusRxEntry entry = CanbusRxEntry::StateChange(state, err_cnt, NowUs());
+    k_msgq_put(&frame_msgq_, &entry, K_NO_WAIT);
 }
 
 int Canbus::RegisterFrameReceivedHandler(const CanFilter& requested_filter, CanFrameHandler handler) {
@@ -424,8 +525,14 @@ int Canbus::RegisterFrameReceivedHandler(const CanFilter& requested_filter, CanF
     entry->handlers.emplace(handler_id, std::move(handler));
 
     // Hardware filters are installed once the bitrate is known.
-    if(atomic_get(&auto_detect_running_) != 0 && !IsBitrateDetected()) {
+    if(IsDetectingBitrate()) {
         LOG_DBG("Frame received handler deferred for 0x%08X/0x%08X pending bitrate detection.", filter.id, filter.mask);
+        return handler_id;
+    }
+
+    // The tap's accept-all filters feed this handler through the software dispatch until the tap goes.
+    if(tap_ != nullptr) {
+        LOG_DBG("Frame received handler for 0x%08X/0x%08X served by the tap's filters.", filter.id, filter.mask);
         return handler_id;
     }
 
@@ -547,14 +654,178 @@ void Canbus::UninstallFilter(FilterEntry& entry) const {
     entry.filter_id = -1;
 }
 
-void Canbus::InstallDeferredFilters() {
+bool Canbus::InstallDeferredFilters() {
+    bool all_installed = true;
+
     for(auto& [_, entry] : exact_entries_)
-        InstallFilter(entry);
+        all_installed &= InstallFilter(entry);
 
     for(auto& entry : mask_entries_) {
         if(entry.has_value())
-            InstallFilter(entry.value());
+            all_installed &= InstallFilter(entry.value());
     }
+
+    return all_installed;
+}
+
+bool Canbus::IsDetectingBitrate() const {
+    return atomic_get(&auto_detect_running_) != 0 && !IsBitrateDetected();
+}
+
+bool Canbus::HasTapFilters() const {
+    return tap_filter_ids_[0] >= 0 || tap_filter_ids_[1] >= 0;
+}
+
+// Accept-all filters (mask 0), one for standard and one for extended identifiers, to the same callback
+// the handlers' filters use. All or none.
+bool Canbus::AddTapFilters() {
+    if(HasTapFilters())
+        return true;
+
+    for(size_t i = 0; i < tap_filter_ids_.size(); i++) {
+        const can_filter filter = { .id = 0, .mask = 0, .flags = static_cast<uint8_t>(i == 1 ? CAN_FILTER_IDE : 0) };
+
+        const int filter_id = can_add_rx_filter(config_.canbus_dev, CanFrameReceivedCallback, this, &filter);
+        if(filter_id < 0) {
+            LOG_WRN("Unable to add the tap's rx filter [%d].", filter_id);
+            RemoveTapFilters();
+
+            return false;
+        }
+
+        tap_filter_ids_[i] = filter_id;
+    }
+
+    return true;
+}
+
+void Canbus::RemoveTapFilters() {
+    for(int& filter_id : tap_filter_ids_) {
+        if(filter_id >= 0)
+            can_remove_rx_filter(config_.canbus_dev, filter_id);
+
+        filter_id = -1;
+    }
+}
+
+// Requires lock_. For a bus that goes away or is reconfigured: the driver must not call back afterwards,
+// and the handlers' filters are the caller's to remove or keep.
+void Canbus::ClearTap() {
+    tap_ = nullptr;
+    atomic_clear(&tap_active_);
+    atomic_set(&filter_swap_, FILTER_SWAP_NONE);
+
+    RemoveTapFilters();
+}
+
+// Receive thread. The tap is called under lock_, as the handlers are, so SetTap(nullptr) waits for a call
+// in progress and none follows it. A swap SetTap() finished is announced first, so the tap hears of it
+// before the first entry it sees after the swap; SetTap() never calls the tap itself (R-11: one producer).
+template<typename Call>
+void Canbus::WithTap(Call&& call) {
+    if(atomic_get(&tap_active_) == 0)
+        return;
+
+    ScopedMutex guard(lock_);
+
+    if(tap_ == nullptr)
+        return;
+
+    const atomic_val_t swap = atomic_set(&filter_swap_, FILTER_SWAP_NONE);
+    if(swap != FILTER_SWAP_NONE)
+        tap_->OnFilterSwap(swap == FILTER_SWAP_MAY_HAVE_MISSED, filter_swap_time_us_);
+
+    std::forward<Call>(call)(*tap_);
+}
+
+bool Canbus::SetTap(ICanFrameTap* tap) {
+    ScopedMutex guard(lock_);
+
+    if(tap == tap_)
+        return true;
+
+    if(tap == nullptr) {
+        // The receive thread waits on lock_ from here on, so no call to the old tap is left.
+        tap_ = nullptr;
+        atomic_clear(&tap_active_);
+        atomic_set(&filter_swap_, FILTER_SWAP_NONE);
+
+        // While the bitrate is detected no filter is installed, the handlers' ones wait for it.
+        if(IsDetectingBitrate())
+            return true;
+
+        // The tap's filters never went in (the driver refused them after detection): the handlers'
+        // ones are installed already, or go in now.
+        if(!HasTapFilters()) {
+            if(!InstallDeferredFilters())
+                LOG_ERR("Unable to restore every handler filter after the tap.");
+
+            return true;
+        }
+
+        // The handlers' filters go in before the accept-all ones leave; where the driver has no room for
+        // both, the rest follow once the room is there.
+        const bool all_installed = InstallDeferredFilters();
+        RemoveTapFilters();
+        if(!all_installed && !InstallDeferredFilters())
+            LOG_ERR("Unable to restore every handler filter after the tap.");
+
+        return true;
+    }
+
+    if(tap_ != nullptr) {
+        LOG_ERR("A tap is already set.");
+        return false;
+    }
+
+    if(atomic_get(&is_initialized_) == 0) {
+        LOG_ERR("CANBus is not initialized.");
+        return false;
+    }
+
+    // Allocated once and kept for the bus's life, so a completion can never find the pool gone.
+    if(!tx_slots_) {
+        tx_slots_.reset(new(std::nothrow) TxSlot[TX_SLOTS]);
+        if(!tx_slots_) {
+            LOG_ERR("Unable to allocate the tap's TX slots.");
+            return false;
+        }
+    }
+
+    if(IsDetectingBitrate()) {
+        // Nothing is installed yet: BitrateAutodetectTask() installs the accept-all filters and reports
+        // the state when detection succeeds.
+        tap_ = tap;
+        atomic_set(&tap_active_, 1);
+
+        return true;
+    }
+
+    bool may_have_missed = false;
+
+    if(AddTapFilters()) {
+        // Both sets are installed for a moment: a frame may reach a handler twice.
+        RemoveAllFilters();
+    } else {
+        // No room for both: a frame may go missing between the two steps.
+        may_have_missed = true;
+        RemoveAllFilters();
+
+        if(!AddTapFilters()) {
+            InstallDeferredFilters();
+            LOG_ERR("The driver rejected the tap's rx filters.");
+
+            return false;
+        }
+    }
+
+    tap_ = tap;
+    atomic_set(&tap_active_, 1);
+
+    filter_swap_time_us_ = NowUs();
+    atomic_set(&filter_swap_, may_have_missed ? FILTER_SWAP_MAY_HAVE_MISSED : FILTER_SWAP_REPEATED);
+
+    return true;
 }
 
 void Canbus::RemoveAllFilters() {
@@ -635,7 +906,25 @@ void Canbus::BitrateAutodetectTask() {
                 bitrate = config_.bitrate;
                 callback = bitrate_detected_fn_;
 
-                InstallDeferredFilters();
+                if(tap_ == nullptr) {
+                    InstallDeferredFilters();
+                } else {
+                    // The tap's filters stand in for the handlers' ones, which the software dispatch serves.
+                    // Without room for them the handlers keep their own, and the tap sees only their frames.
+                    if(!AddTapFilters()) {
+                        LOG_ERR("Unable to add the tap's rx filters after bitrate detection.");
+                        InstallDeferredFilters();
+                    }
+
+                    can_state state = CAN_STATE_ERROR_ACTIVE;
+                    can_bus_err_cnt err_cnt = {};
+
+                    // Tells the session the bus is up; the receive thread is the one running this.
+                    if(can_get_state(config_.canbus_dev, &state, &err_cnt) == 0)
+                        WithTap([&](ICanFrameTap& tap) {
+                            tap.OnState(state, err_cnt, NowUs());
+                        });
+                }
             }
 
             LOG_INF("Bitrate successfully detected: %u bps", bitrate);
@@ -654,32 +943,51 @@ void Canbus::BitrateAutodetectTask() {
 }
 
 void Canbus::ProcessFramesTask() {
-    can_frame raw_frame{};
-    if(k_msgq_get(&frame_msgq_, &raw_frame, K_MSEC(MSGQ_GET_TIMEOUT_MS)) != 0)
+    CanbusRxEntry entry;
+    if(k_msgq_get(&frame_msgq_, &entry, K_MSEC(MSGQ_GET_TIMEOUT_MS)) != 0) {
+        // A swap that ended while the queue was idle is announced now, not with the next frame.
+        if(atomic_get(&filter_swap_) != FILTER_SWAP_NONE)
+            WithTap([](ICanFrameTap&) {});
+
         return;
-
-    const bool is_can_fd = (raw_frame.flags & CAN_FRAME_FDF) != 0;
-    const bool is_remote_request = (raw_frame.flags & CAN_FRAME_RTR) != 0;
-
-    CanFrame can_frame = { .id = raw_frame.id,
-        .is_extended = (raw_frame.flags & CAN_FRAME_IDE) != 0,
-        .is_transmit = false,
-        .is_can_fd = is_can_fd,
-        .is_bitrate_switch = (raw_frame.flags & CAN_FRAME_BRS) != 0,
-        .is_remote_request = is_remote_request };
-
-    // Classical frames never carry more than 8 bytes even though DLC 9..15 is
-    // legal on the wire, and remote frames carry none at all.
-    size_t frame_size = 0;
-    if(!is_remote_request) {
-        frame_size = can_dlc_to_bytes(raw_frame.dlc);
-        frame_size = std::min<size_t>(frame_size, is_can_fd ? CAN_MAX_DLEN : 8U);
-        frame_size = std::min<size_t>(frame_size, sizeof(raw_frame.data));
     }
 
-    can_frame.data.Assign(std::span<const uint8_t>(raw_frame.data, frame_size));
+    switch(entry.kind) {
+        case CanbusRxKind::RECEIVED:
+            ProcessReceivedEntry(entry);
+            break;
+        case CanbusRxKind::TX_ECHO:
+            ProcessTxEchoEntry(entry);
+            break;
+        case CanbusRxKind::STATE_CHANGE:
+            WithTap([&](ICanFrameTap& tap) {
+                tap.OnState(entry.state, entry.err_cnt, entry.time_us);
+            });
+            break;
+    }
+}
+
+void Canbus::ProcessReceivedEntry(const CanbusRxEntry& entry) {
+    const CanFrame can_frame = ToCanFrame(entry.frame, entry.time_us, false);
+
+    WithTap([&](ICanFrameTap& tap) {
+        tap.OnFrame(can_frame, entry.time_us, false, 0);
+    });
+
+    // Remote frames belong to the tap alone: the handlers have never been given a frame without a payload.
+    if(can_frame.is_remote_request)
+        return;
 
     DispatchFrame(can_frame);
+}
+
+// The unit's own frame, completed by the controller; only a tap wants it.
+void Canbus::ProcessTxEchoEntry(const CanbusRxEntry& entry) {
+    const CanFrame can_frame = ToCanFrame(entry.frame, entry.time_us, true);
+
+    WithTap([&](ICanFrameTap& tap) {
+        tap.OnFrame(can_frame, entry.time_us, true, entry.tx_error);
+    });
 }
 
 void Canbus::DispatchFrame(const CanFrame& frame) {
@@ -917,11 +1225,16 @@ bool Canbus::DoStop() {
     {
         ScopedMutex guard(lock_);
 
+        ClearTap();
         RemoveAllFilters();
         ClearEntries();
     }
 
     k_msgq_purge(&frame_msgq_);
+
+    // can_stop() aborted the frames in flight, and some drivers drop them without a completion (the
+    // loopback does), so their slots would stay taken. The pool itself stays until the destructor.
+    ResetTxSlots();
 
     atomic_clear(&is_initialized_);
     atomic_clear(&bitrate_detected_);

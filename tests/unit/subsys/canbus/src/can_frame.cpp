@@ -17,7 +17,25 @@ ZTEST(can_frame, test_default_fields_are_zeroed) {
     zassert_false(frame.is_can_fd);
     zassert_false(frame.is_bitrate_switch);
     zassert_false(frame.is_remote_request);
+    zassert_false(frame.is_error_state_indicator);
     zassert_true(frame.data.empty());
+    zassert_equal(frame.dlc, 0);
+    zassert_equal(frame.time_us, 0);
+}
+
+ZTEST(can_frame, test_receive_fields_follow_the_flags_in_designated_initialization) {
+    CanFrame frame{ .id = 0x123,
+        .is_remote_request = true,
+        .is_error_state_indicator = true,
+        .data = {},
+        .dlc = 8,
+        .time_us = 5'000'000'000ULL };
+
+    zassert_true(frame.is_remote_request);
+    zassert_true(frame.is_error_state_indicator);
+    zassert_true(frame.data.empty(), "A remote frame has a DLC but no payload");
+    zassert_equal(frame.dlc, 8);
+    zassert_equal(frame.time_us, 5'000'000'000ULL);
 }
 
 ZTEST(can_frame, test_designated_initialization) {

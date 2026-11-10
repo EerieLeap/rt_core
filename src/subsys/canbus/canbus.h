@@ -7,6 +7,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 #include <zephyr/device.h>
@@ -21,7 +22,10 @@
 #include "can_filter.h"
 #include "can_frame.h"
 #include "can_id.h"
+#include "canbus_rx_entry.h"
+#include "canbus_time.h"
 #include "canbus_type.h"
+#include "i_can_frame_tap.h"
 
 namespace eerie_leap::subsys::canbus {
 
@@ -35,6 +39,10 @@ using CanFrameHandler = std::function<void(const CanFrame&)>;
 // The header is pulled in by domains that can be built without the subsystem.
 #ifndef CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE
     #define CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE 32
+#endif
+
+#ifndef CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SLOTS
+    #define CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SLOTS 16
 #endif
 
 /** @brief Controller, bus type and bitrates of one CAN channel. */
@@ -75,6 +83,9 @@ public:
 
     static constexpr k_timeout_t DEFAULT_SEND_TIMEOUT = K_MSEC(2);
 
+    /// Frames in flight the tap's echo of the unit's own frames can follow.
+    static constexpr size_t TX_SLOTS = CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SLOTS;
+
 private:
     static constexpr int FRAME_MSGQ_SIZE = CONFIG_EERIE_LEAP_CANBUS_RX_QUEUE_SIZE;
     static constexpr int MSGQ_GET_TIMEOUT_MS = 10;
@@ -86,10 +97,12 @@ private:
         std::unordered_map<int, CanFrameHandler> handlers;
     };
 
-    alignas(4) char frame_msgq_buffer_[FRAME_MSGQ_SIZE * sizeof(can_frame)] = {};
-    k_msgq frame_msgq_{};
+    // Entries come from the driver's context: received frames, the completions of the unit's own frames
+    // (SendFrame() is const, so the queue is mutable) and state changes.
+    alignas(8) char frame_msgq_buffer_[FRAME_MSGQ_SIZE * sizeof(CanbusRxEntry)] = {};
+    mutable k_msgq frame_msgq_{};
 
-    // Guards config_, the filter entries and bitrate_detected_fn_.
+    // Guards config_, the filter entries, bitrate_detected_fn_, the tap and its filters.
     // Never taken from the RX callback, which only feeds the message queue.
     mutable k_mutex lock_{};
 
@@ -104,10 +117,43 @@ private:
     atomic_t auto_detect_frame_count_ = ATOMIC_INIT(0);
     atomic_t rx_dropped_ = ATOMIC_INIT(0);
     BitrateDetectedCallback bitrate_detected_fn_;
+
+    // The state change callback has no user data, so the driver's node is the first member of a
+    // standard-layout struct that adds the bus, and the callback casts the node back.
+    struct StateChangeNode {
+        can_state_change_callback callback{};
+        Canbus* canbus = nullptr;
+    };
+    static_assert(std::is_standard_layout_v<StateChangeNode>);
+
     // Registered on the configured device in Configure() and removed in the destructor; the
     // driver keeps a pointer to it, so it lives in the object, never on a stack.
-    can_state_change_callback state_change_callback_{};
+    StateChangeNode state_change_node_{};
     const device* state_change_callback_dev_ = nullptr;
+
+    /// A frame the unit sent, kept until the controller completes it: the completion callback gets no frame.
+    struct TxSlot {
+        const Canbus* owner = nullptr;
+        can_frame frame{};
+    };
+
+    static constexpr atomic_val_t FILTER_SWAP_NONE = 0;
+    static constexpr atomic_val_t FILTER_SWAP_REPEATED = 1;
+    static constexpr atomic_val_t FILTER_SWAP_MAY_HAVE_MISSED = 2;
+
+    // The tap and its two accept-all hardware filters (standard, extended); guarded by lock_.
+    ICanFrameTap* tap_ = nullptr;
+    std::array<int, 2> tap_filter_ids_ = { -1, -1 };
+    uint64_t filter_swap_time_us_ = 0;
+    // tap_ != nullptr, readable without lock_ so the receive thread takes the lock only while a tap is set.
+    atomic_t tap_active_ = ATOMIC_INIT(0);
+    // The outcome of the swap SetTap() made, which the receive thread announces to the tap and clears.
+    atomic_t filter_swap_ = ATOMIC_INIT(FILTER_SWAP_NONE);
+
+    // Allocated by the first SetTap() under lock_, then fixed until the destructor frees it.
+    std::unique_ptr<TxSlot[]> tx_slots_;
+    mutable atomic_t tx_slots_used_[ATOMIC_BITMAP_SIZE(TX_SLOTS)] = {};
+    mutable atomic_t tx_echo_lost_ = ATOMIC_INIT(0);
 
     void RegisterStateChangeCallback();
     void UnregisterStateChangeCallback();
@@ -144,6 +190,10 @@ private:
     void BitrateAutodetectTask();
     void ProcessFramesTask();
     void DispatchFrame(const CanFrame& frame);
+    void ProcessReceivedEntry(const CanbusRxEntry& entry);
+    void ProcessTxEchoEntry(const CanbusRxEntry& entry);
+    template<typename Call>
+    void WithTap(Call&& call);
 
     bool DoInitialize() override;
     bool DoStart() override;
@@ -164,9 +214,17 @@ private:
     bool HasOverlap(const CanFilter& filter) const;
     bool InstallFilter(FilterEntry& entry);
     void UninstallFilter(FilterEntry& entry) const;
-    void InstallDeferredFilters();
+    bool InstallDeferredFilters();
     void RemoveAllFilters();
     void ClearEntries();
+    bool IsDetectingBitrate() const;
+    bool AddTapFilters();
+    void RemoveTapFilters();
+    bool HasTapFilters() const;
+    void ClearTap();
+    TxSlot* TakeTxSlot() const;
+    void ReleaseTxSlot(TxSlot* slot) const;
+    void ResetTxSlots() const;
 
     static void SendFrameCallback(const device* dev, int error, void* user_data);
     bool SetTiming(uint32_t bitrate) const;
@@ -210,11 +268,51 @@ public:
      */
     bool RemoveFrameReceivedHandler(int handler_id);
 
+    /**
+     * @brief Sets the tap that sees every frame the bus receives and every frame the unit sends. One a bus.
+     *
+     * The receive thread calls the tap under the bus's lock, before it dispatches a received frame, so
+     * clearing it (nullptr) waits for a call in progress and no call follows once this returns.
+     *
+     * Setting a tap swaps the hardware filters: two accept-all filters (standard and extended) go in, then
+     * the registered handlers' filters go out, and the receive thread matches frames to handlers in
+     * software, so handlers get the same frames. A driver that calls every matching filter (Zephyr's
+     * SJA1000 core, the loopback driver) delivers a frame twice while both sets are installed, so frames
+     * around the swap may repeat. Where the driver has no room for the new filters, the old ones go first
+     * and frames may go missing; the tap hears which in OnFilterSwap(). Clearing the tap reverses the swap.
+     * Handlers registered meanwhile get no hardware filter until the tap goes.
+     *
+     * While the bitrate is being detected, the tap is only recorded: the accept-all filters go in when
+     * detection succeeds, followed by an OnState() call with the controller's state.
+     *
+     * Remote frames reach the tap and never the handlers. Stopping or reconfiguring the bus clears the tap.
+     *
+     * @return false when the bus is not initialized, another tap is set, or the driver rejected the
+     *         filters (everything is then as before). Clearing always succeeds.
+     */
+    bool SetTap(ICanFrameTap* tap);
+
+    /// The time source of every time the bus stamps; see canbus_time.h.
+    static uint64_t NowUs() {
+        return eerie_leap::subsys::canbus::NowUs();
+    }
+
+    /**
+     * @brief Queues a change of the controller's state for the tap and logs it.
+     *
+     * What the driver's state change callback calls, in the driver's context; public because the loopback
+     * driver never changes state, so tests call it. A full queue drops the entry.
+     */
+    void OnBusStateChanged(can_state state, can_bus_err_cnt err_cnt);
+
     CanbusType GetType() const;
     CanbusConfig GetConfig() const;
 
     /**
      * @brief Sends one frame without holding the handler lock.
+     *
+     * While a tap is set the tap sees the frame again as a transmitted one when the controller completes
+     * it; with all TX_SLOTS in flight the frame goes out without that echo (GetTxEchoLostCount()).
      *
      * @param timeout How long to wait for space in the TX queue; K_NO_WAIT never blocks.
      * @return 0, -ENETDOWN when the bus is not running, -EINVAL for a malformed frame,
@@ -231,6 +329,10 @@ public:
     }
     uint32_t GetRxDroppedCount() const {
         return static_cast<uint32_t>(atomic_get(&rx_dropped_));
+    }
+    /// Frames sent while a tap was set whose echo never reached the tap: no free slot, or a full queue.
+    uint32_t GetTxEchoLostCount() const {
+        return static_cast<uint32_t>(atomic_get(&tx_echo_lost_));
     }
     void RegisterBitrateDetectedCallback(const BitrateDetectedCallback& callback);
 

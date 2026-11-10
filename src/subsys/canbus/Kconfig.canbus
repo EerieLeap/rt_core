@@ -20,6 +20,18 @@ menu "EerieLeap CANBus config"
           bottom half thread. Frames arriving on a full queue are dropped and
           counted by Canbus::GetRxDroppedCount().
 
+    config EERIE_LEAP_CAN_MONITOR_TX_SLOTS
+        int "Frames in flight the CAN monitor's echo can follow"
+        default 16
+        range 1 64
+        help
+          Frames in flight the CAN monitor's echo can follow. While a tap is set, each
+          frame the unit sends takes a slot from a pool of this size until the controller
+          completes it, so the tap sees it as a transmitted frame. A frame sent with no
+          free slot goes out as usual but has no echo, and is counted by
+          Canbus::GetTxEchoLostCount(). The pool is allocated at the first
+          Canbus::SetTap(), and costs about 80 bytes a slot.
+
     module = EERIE_LEAP_CANBUS
     module-str = eerie_leap_canbus
     source "subsys/logging/Kconfig.template.log_config"
