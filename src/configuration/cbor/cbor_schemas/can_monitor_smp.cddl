@@ -7,8 +7,9 @@
 ; it: NO_SESSION, BAD_TOKEN and NOT_FOUND to ENOENT; BUSY and RATE to EBUSY; BAD_MODE, BAD_BITRATE and
 ; BAD_SEQ to EINVAL; NOT_LISTENING, NOT_ARMED and BUS_OFF to EBADSTATE; NO_MEMORY and NO_ROOM to ENOMEM;
 ; RESERVED to EACCESSDENIED; TX_UNSUPPORTED to ENOTSUP; UNKNOWN to EUNKNOWN). A request that is malformed
-; (a missing key, a value out of range) is MGMT_ERR_EINVAL instead. A command the build does not have
-; answers MGMT_ERR_ENOTSUP, as firmware without the group does.
+; (a missing key, a value out of range) is MGMT_ERR_EINVAL instead. Firmware without the group answers
+; MGMT_ERR_ENOTSUP to every command. In a build without EERIE_LEAP_CAN_MONITOR_TX, ARM, SEND, PERIODIC and REPLAY
+; answer the group error TX_UNSUPPORTED (rc 15; ENOTSUP for SMP v1 clients).
 ;
 ; CanMonitorError
 ;   1 UNKNOWN          2 NO_SESSION       3 BAD_TOKEN        4 BUSY             5 NOT_FOUND
@@ -45,7 +46,7 @@ CanMonitorBusState = 0..4                       ; 0 error active, 1 warning, 2 p
 
 ; 1 OPEN (write)
 CanMonitorOpenRequest = {
-    ? ch: uint .le 254,                         ; the port; required without `synthetic`, otherwise ignored
+    ? ch: uint .le 255,                         ; the port; required without `synthetic`, otherwise ignored (255 is NOT_FOUND)
     ? mode: CanMonitorMode,                     ; required without `synthetic`, otherwise ignored
     ? type: CanMonitorBusType,                  ; a session on its own bus: classical by default
     ? bitrate: uint,                            ; a session on its own bus: 0 or absent detects it
@@ -99,42 +100,62 @@ CanMonitorStatsAnswer = {
     filtered: uint                              ; frames the unit filter left out
 }
 
-; The commands below are built only with EERIE_LEAP_CAN_MONITOR_TX (TX_UNSUPPORTED otherwise).
+; The commands below are built only with EERIE_LEAP_CAN_MONITOR_TX (TX_UNSUPPORTED otherwise). A session sends
+; nothing until it is armed (NOT_ARMED), and not while its bus is off (BUS_OFF). A request the bus cannot carry,
+; or that is malformed, is MGMT_ERR_EINVAL. The frames a session sends come back in its stream as sent frames.
+;
+; Disarming (ARM off, CLOSE, a lapsed lease, a lost connection, bus-off, a stored CAN configuration) stops the
+; periodic frames and the replay and puts a tx event record in the stream: 1 disarmed or 2 bus-off, with the count
+; of frames not sent (the frames still due of periodic frames that have a count, and the replay's frames left).
+; Other tx events: 3 frames skipped (over the cap, or a replay frame with a reserved identifier or that the bus
+; refused), at most one record a second; 4 replay done, with the frames played; 5 replay underrun, with the number
+; of underruns so far.
 
-; 5 ARM (write): armed frames may be sent; a listen-only session is BAD_MODE
+; 5 ARM (write): TAP and ACTIVE sessions; BAD_MODE for LISTEN_ONLY and synthetic ones, BUS_OFF while the bus
+; is off, BAD_BITRATE while it is still detecting its bitrate. Arming again changes nothing.
 CanMonitorArmRequest = { tok: uint, on: bool }
 CanMonitorArmAnswer = {
     armed: bool,
-    share_pct: uint,                            ; the cap on the bus time the session transmits
-    reserved: [0*8 [from: uint, to: uint, ext: bool]]   ; identifiers the COM channel keeps (RESERVED)
+    share_pct: uint,                            ; the cap on the share of the bus time the session transmits
+    reserved: [0*2 [from: uint, to: uint, ext: bool]]   ; identifiers the COM channel keeps (RESERVED); none elsewhere
 }
 
-; 6 SEND (write): at most 16 frames, each through the cap
+; 6 SEND (write): 1 to 16 frames, in order, each through the cap. A reserved identifier (RESERVED) or a frame the
+; bus cannot carry (EINVAL) refuses the whole request before anything is sent. The first frame over the cap ends
+; it: `sent` frames went and `refused` did not; RATE when none went.
 CanMonitorSendRequest = { tok: uint, frames: [1*16 CanMonitorSendFrame] }
 CanMonitorSendFrame = [id: uint, flags: CanMonitorFrameFlags, data: bstr .size (0..64)]
 CanMonitorFrameFlags = uint .le 15              ; bit 0 IDE, bit 1 FDF, bit 2 BRS, bit 3 RTR
+; A remote frame (RTR) sends no data: the number of bytes of `data` is the length it asks for (0 to 8).
 CanMonitorSendAnswer = { sent: uint, refused: uint }
 
-; 7 PERIODIC (write): replaces the list; an empty list stops them all
-CanMonitorPeriodicRequest = { tok: uint, list: [0*16 CanMonitorPeriodicFrame] }
+; 7 PERIODIC (write): replaces the list; an empty list stops them all. At most EERIE_LEAP_CAN_MONITOR_PERIODIC_SLOTS
+; entries with distinct slots (EINVAL otherwise). Each entry sends its frame at once and then every `period_ms`
+; through the cap; a frame over the cap is skipped. `count` is the number of frames sent before it stops.
+CanMonitorPeriodicRequest = { tok: uint, list: [0*16 CanMonitorPeriodicFrame] }   ; up to EERIE_LEAP_CAN_MONITOR_PERIODIC_SLOTS (16 by default); more is EINVAL
 CanMonitorPeriodicFrame = {
     slot: uint,
     id: uint,
     flags: CanMonitorFrameFlags,
     data: bstr .size (0..64),
     period_ms: uint .ge 1,
-    ? count: uint                               ; stops after this many frames
+    ? count: uint
 }
 CanMonitorPeriodicAnswer = {}
 
-; 8 REPLAY (write): the unit plays a buffer the client keeps filled ahead
+; 8 REPLAY (write): the unit plays a buffer the client keeps filled ahead. Every answer carries the buffer's free
+; bytes. Chunks are whole records of kind 0 in order of `seq` from 0 after the start: BAD_SEQ for one out of order
+; or sent with no replay started, NO_ROOM for one larger than `room`, EINVAL for one that is not whole records.
+; A frame over the cap waits. A replay frame with a reserved identifier is skipped and counted (tx event 3).
+; Without a chunk to play, the replay waits for the next (an underrun); with `loop`, it starts over when the whole
+; replay fit in the buffer. A replay that played its last frame ends with tx event 4.
 CanMonitorReplayRequest = {
     tok: uint,
     op: CanMonitorReplayOp,
-    ? speed_pct: uint,                          ; op 0: 100 by default
+    ? speed_pct: uint .ge 1 .le 10000,          ; op 0: 100 by default
     ? loop: bool,                               ; op 0
-    ? seq: uint,                                ; op 1: chunks come in order (BAD_SEQ)
-    ? data: bstr                                ; op 1: records of kind 0, at most `room` bytes (NO_ROOM)
+    ? seq: uint .le 65535,                      ; op 1
+    ? data: bstr                                ; op 1
 }
 CanMonitorReplayOp = 0 / 1 / 2 / 3              ; 0 start, 1 chunk, 2 stop, 3 no more chunks
-CanMonitorReplayAnswer = { room: uint }         ; the buffer's free bytes
+CanMonitorReplayAnswer = { room: uint }

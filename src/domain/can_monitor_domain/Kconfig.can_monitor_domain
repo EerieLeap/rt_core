@@ -70,8 +70,9 @@ menu "EerieLeap CAN monitor domain config"
         default 4096
         help
           The queue ends the sessions whose lease lapsed and those of a lost connection, which stops the
-          bus of a session that owns one (waiting for its thread), and Phase 4 sends the periodic frames
-          and the replay from it. It needs room to unwind exceptions.
+          bus of a session that owns one (waiting for its thread), and, with
+          EERIE_LEAP_CAN_MONITOR_TX, sends the periodic frames and the replay. It needs room to unwind
+          exceptions.
 
     config EERIE_LEAP_CAN_MONITOR_WORK_QUEUE_PRIORITY
         int "Priority of the domain's work queue (preemptible)"

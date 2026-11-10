@@ -41,7 +41,10 @@ CanTxLimiter::CanTxLimiter(
         throw std::invalid_argument("Invalid CAN transmit limiter parameters");
 
     nominal_bitrate_ = nominal_bitrate;
-    data_bitrate_ = is_fd ? (data_bitrate == 0 ? nominal_bitrate : data_bitrate) : 0;
+    // A classical channel has no data phase; an FD one with no data bitrate runs it at the nominal one.
+    data_bitrate_ = 0;
+    if(is_fd)
+        data_bitrate_ = data_bitrate != 0 ? data_bitrate : nominal_bitrate;
 
     // The largest frame the channel carries; a 29-bit ID is the longer one.
     const uint64_t largest_ns = is_fd

@@ -26,7 +26,7 @@ struct CanReservedRange {
 /**
  * @brief The identifiers a session may not transmit: the network's own on the COM channel.
  *
- * Only the port that is the stored configuration's @c bus_channel has any (R-12): the CDMP IDs, the
+ * Only the port that is the stored configuration's @c bus_channel has any (transmitting on the COM channel is allowed, less the network's own IDs): the CDMP IDs, the
  * 11-bit @c cdmp_base_can_id to +99, and the SMP IDs, the 29-bit @c smp_can_id_base to
  * @c smp_can_id_base | 0xFFFF. Every other port, and a configuration without a COM channel, reserves
  * nothing. The ranges are a snapshot: a new configuration needs a new object (and disarms the session).

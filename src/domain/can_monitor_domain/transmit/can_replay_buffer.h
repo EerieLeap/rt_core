@@ -44,7 +44,7 @@ struct CanReplayFrame {
 };
 
 /**
- * @brief The pure part of REPLAY (§6.5): the app's chunks of kind 0 frame records, played back in time.
+ * @brief The pure part of REPLAY: the app's chunks of kind 0 frame records, played back in time.
  *
  * The caller owns the clock and the bus: it passes the time of every call and sends what Pop() hands out.
  * Nothing here blocks, waits or reads a clock, and nothing is thread safe: the caller serialises the calls
@@ -190,6 +190,8 @@ public:
     [[nodiscard]] bool IsFinished() const {
         return active_ && finished_;
     }
+    /** @brief The frames that wait to be played (parses them, so not for the playback's hot path). */
+    [[nodiscard]] size_t PendingFrames() const;
     /** @brief Frames wait to be played. */
     [[nodiscard]] bool HasFrames() const {
         return pending_ > 0;

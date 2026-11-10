@@ -13,3 +13,9 @@ common:
 
 tests:
   functional.can_monitor_domain: {}
+  # A build without transmit: ARM, SEND, PERIODIC and REPLAY answer TX_UNSUPPORTED.
+  functional.can_monitor_domain.no_tx:
+    extra_args:
+      - RT_CORE_NO_TX=y
+    extra_configs:
+      - CONFIG_EERIE_LEAP_CAN_MONITOR_TX=n

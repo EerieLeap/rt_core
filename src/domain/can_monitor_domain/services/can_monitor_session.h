@@ -19,6 +19,7 @@
 #include "subsys/canbus/i_can_frame_tap.h"
 
 #include "can_error_counters.h"
+#include "i_can_bus_state_listener.h"
 
 #ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
     #include "domain/can_monitor_domain/utilities/can_delta_table.h"
@@ -129,6 +130,7 @@ private:
 
     // Producer only. The bus is null for a synthetic session.
     Canbus* bus_ = nullptr;
+    ICanBusStateListener* state_listener_ = nullptr;
     uint32_t nominal_bitrate_;
     uint32_t data_bitrate_;
     uint32_t last_reported_bitrate_;
@@ -197,6 +199,15 @@ public:
      * Call before the tap is set, with the bus the tap will be set on. A synthetic session binds none.
      */
     void BindBus(Canbus* bus);
+
+    /**
+     * @brief Tells @p listener of every change of the bus's state, from the receive thread.
+     *
+     * Call before the tap is set. The listener has to outlive the tap.
+     */
+    void SetStateListener(ICanBusStateListener* listener) {
+        state_listener_ = listener;
+    }
 
     // ICanFrameTap: the producer path. The synthetic source calls OnFrame() too.
 

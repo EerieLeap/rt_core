@@ -43,6 +43,9 @@ enum class CanMonitorError : uint16_t {
     NO_ROOM = 14,
     TX_UNSUPPORTED = 15,
     BAD_SEQ = 16,
+    /// Never on the wire: a request that decoded but whose contents cannot be acted on (a frame no bus
+    /// carries, a repeated slot, a bad speed). The group answers it as a malformed request.
+    INVALID = 0xFFFF,
 };
 
 /** @brief OPEN's `mode`; the values are the wire's. */
@@ -170,6 +173,81 @@ struct CanMonitorStats {
     /// Controller, receive queue, ring, echoes.
     std::array<uint64_t, 4> lost{};
     uint64_t filtered = 0;
+};
+
+/** @brief The bits of a transmitted frame's `flags`. */
+inline constexpr uint8_t CAN_TX_FLAG_IDE = 0x01;
+inline constexpr uint8_t CAN_TX_FLAG_FDF = 0x02;
+inline constexpr uint8_t CAN_TX_FLAG_BRS = 0x04;
+inline constexpr uint8_t CAN_TX_FLAG_RTR = 0x08;
+inline constexpr uint8_t CAN_TX_FLAGS_MASK = 0x0F;
+
+/** @brief The longest payload of a transmitted frame. */
+inline constexpr size_t CAN_TX_MAX_DATA_SIZE = 64;
+
+/**
+ * @brief A frame a client asks the unit to send, as SEND, PERIODIC and REPLAY's frames are written.
+ *
+ * A remote frame (RTR) sends no payload: its length is the number of bytes of @c data, which are not sent.
+ */
+struct CanMonitorTxFrame {
+    uint32_t id = 0;
+    uint8_t flags = 0;
+    uint8_t size = 0;
+    std::array<uint8_t, CAN_TX_MAX_DATA_SIZE> data{};
+};
+
+/** @brief One entry of PERIODIC's list. */
+struct CanMonitorPeriodic {
+    uint32_t slot = 0;
+    CanMonitorTxFrame frame;
+    uint32_t period_ms = 0;
+    /// Stops after this many frames were sent; none means for as long as it is armed.
+    std::optional<uint32_t> count;
+};
+
+/** @brief The identifiers from @c from to @c to, both included, one format, that ARM reports as reserved. */
+struct CanMonitorReservedRange {
+    uint32_t from = 0;
+    uint32_t to = 0;
+    bool ext = false;
+};
+
+/** @brief ARM's answer. */
+struct CanMonitorArmState {
+    bool is_armed = false;
+    /// The cap on the share of the bus time the session transmits, in percent.
+    uint8_t share_pct = 0;
+    std::vector<CanMonitorReservedRange> reserved;
+};
+
+/** @brief SEND's answer: the frames that went and those that did not. */
+struct CanMonitorSendResult {
+    uint32_t sent = 0;
+    uint32_t refused = 0;
+};
+
+/** @brief REPLAY's `op`; the values are the wire's. */
+enum class CanMonitorReplayOp : uint8_t {
+    START = 0,
+    CHUNK = 1,
+    STOP = 2,
+    FINISH = 3,
+};
+
+inline constexpr uint32_t CAN_MONITOR_REPLAY_OP_COUNT = 4;
+
+/** @brief REPLAY's request. */
+struct CanMonitorReplayRequest {
+    CanMonitorReplayOp op = CanMonitorReplayOp::START;
+    /// START: 100 plays at the capture's pace.
+    uint32_t speed_pct = 100;
+    /// START: play again from the first frame while the whole replay fits in the buffer.
+    bool is_loop = false;
+    /// CHUNK: the chunk's number, from 0 after START.
+    uint16_t seq = 0;
+    /// CHUNK: whole kind 0 records. Valid during the call.
+    std::span<const uint8_t> data;
 };
 
 } // namespace eerie_leap::domain::can_monitor_domain::models

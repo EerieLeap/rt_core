@@ -359,7 +359,7 @@ inline CanStatistics SumStatistics(const std::vector<DecodedNotification>& notif
  * The payload span of the record points into the notification and is valid during the call.
  */
 template<typename Visit>
-void WalkStream(const std::vector<SentNotification>& sent, Visit&& visit, uint16_t first_sequence = 0) {
+void WalkStream(const std::vector<SentNotification>& sent, const Visit& visit, uint16_t first_sequence = 0) {
     uint64_t previous_end_us = 0;
     for(size_t i = 0; i < sent.size(); ++i) {
         const Bytes& raw = sent[i].data;
@@ -454,6 +454,45 @@ inline StreamSummary Summarize(const std::vector<SentNotification>& sent, uint16
     return summary;
 }
 
+/** @brief The frames with this identifier in the stream so far, received (tx false) or sent (tx true). */
+inline size_t CountStreamFrames(const std::vector<SentNotification>& sent, uint32_t id, bool is_tx) {
+    size_t count = 0;
+    WalkStream(sent, [&](const CanRecord& record, uint64_t) {
+        if(record.kind == CanRecordKind::FRAME && record.id == id && record.tx == is_tx)
+            ++count;
+    });
+
+    return count;
+}
+
+/** @brief A tx event record of the stream. */
+struct StreamTxEvent {
+    CanTxEvent event = CanTxEvent::DISARMED;
+    uint64_t count = 0;
+};
+
+/** @brief The tx event records of the stream so far, in order. */
+inline std::vector<StreamTxEvent> StreamTxEvents(const std::vector<SentNotification>& sent) {
+    std::vector<StreamTxEvent> events;
+    WalkStream(sent, [&](const CanRecord& record, uint64_t) {
+        if(record.kind == CanRecordKind::TX_EVENT)
+            events.push_back({ record.tx_event, record.tx_count });
+    });
+
+    return events;
+}
+
+/** @brief The times of the sent frames with this identifier, µs on the unit's clock. */
+inline std::vector<uint64_t> StreamSendTimes(const std::vector<SentNotification>& sent, uint32_t id) {
+    std::vector<uint64_t> times;
+    WalkStream(sent, [&](const CanRecord& record, uint64_t time_us) {
+        if(record.kind == CanRecordKind::FRAME && record.id == id && record.tx)
+            times.push_back(time_us);
+    });
+
+    return times;
+}
+
 /**
  * @brief The unit with the CAN monitor on top: the canbus service of a stored configuration that runs
  * can0 (can1 is not run), a fake link and the monitor service, running.
@@ -470,7 +509,8 @@ public:
     std::shared_ptr<CanbusService> canbus_service;
     std::shared_ptr<CanMonitorService> service;
 
-    Harness() {
+    /** @param is_com_channel can0, the configured channel, carries the network (CDMP and SMP over CAN). */
+    explicit Harness(bool is_com_channel = false) {
         DtCanbus::Initialize();
         DtFs::InitInternalFs();
         const auto fs_service = std::make_shared<FsService>(DtFs::GetInternalFsMp());
@@ -486,6 +526,8 @@ public:
         channel.bus_channel = CONFIGURED_PORT;
         channel.bitrate = 500000;
         configuration.channel_configurations.emplace(CONFIGURED_PORT, std::move(channel));
+        if(is_com_channel)
+            configuration.com_configuration.bus_channel = CONFIGURED_PORT;
         zassert_true(configuration_manager->Update(configuration));
 
         canbus_service = std::make_shared<CanbusService>(DtCanbus::Get, configuration_manager);
@@ -540,7 +582,8 @@ public:
     /** @brief Sleeps @p duration_ms, renewing the session's lease every half second. */
     void Sleep(uint32_t token, int duration_ms) {
         for(int slept = 0; slept < duration_ms; slept += 500) {
-            service->GetStats(token);
+            // Any request with the token renews the lease.
+            [[maybe_unused]] const auto stats = service->GetStats(token);
             k_msleep(std::min(500, duration_ms - slept));
         }
     }
@@ -594,7 +637,7 @@ public:
 /** @brief A request body for OPEN: the keys the SMP test client's map builder can't write. */
 class OpenBody {
 private:
-    std::array<uint8_t, 256> buffer_{};
+    std::array<uint8_t, 512> buffer_{};
     zcbor_state_t states_[5]{};
 
 public:
@@ -650,6 +693,66 @@ public:
             && zcbor_bool_put(states_, fd)
             && zcbor_map_end_encode(states_, 5)
         );
+        return *this;
+    }
+
+    // zcbor writes byte strings from text pointers.
+    static const char* AsText(const Bytes& bytes) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor takes the bytes as char
+        return reinterpret_cast<const char*>(bytes.data());
+    }
+
+    struct FrameSpec {
+        uint32_t id = 0;
+        uint32_t flags = 0;
+        Bytes data;
+    };
+
+    struct PeriodicSpec {
+        uint32_t slot = 0;
+        FrameSpec frame;
+        uint32_t period_ms = 0;
+        std::optional<uint32_t> count;
+    };
+
+    /** @brief SEND's `frames`: [[id, flags, data]]. */
+    OpenBody& PutFrames(std::span<const FrameSpec> frames) {
+        bool ok = zcbor_tstr_put_lit(states_, "frames") && zcbor_list_start_encode(states_, frames.size());
+        for(const FrameSpec& frame : frames) {
+            ok = ok
+                && zcbor_list_start_encode(states_, 3)
+                && zcbor_uint32_put(states_, frame.id)
+                && zcbor_uint32_put(states_, frame.flags)
+                && zcbor_bstr_encode_ptr(states_, AsText(frame.data), frame.data.size())
+                && zcbor_list_end_encode(states_, 3);
+        }
+
+        zassert_true(ok && zcbor_list_end_encode(states_, frames.size()));
+        return *this;
+    }
+
+    /** @brief PERIODIC's `list`: [{slot, id, flags, data, period_ms, ? count}]. */
+    OpenBody& PutPeriodic(std::span<const PeriodicSpec> list) {
+        bool ok = zcbor_tstr_put_lit(states_, "list") && zcbor_list_start_encode(states_, list.size());
+        for(const PeriodicSpec& entry : list) {
+            ok = ok
+                && zcbor_map_start_encode(states_, 6)
+                && zcbor_tstr_put_lit(states_, "slot")
+                && zcbor_uint32_put(states_, entry.slot)
+                && zcbor_tstr_put_lit(states_, "id")
+                && zcbor_uint32_put(states_, entry.frame.id)
+                && zcbor_tstr_put_lit(states_, "flags")
+                && zcbor_uint32_put(states_, entry.frame.flags)
+                && zcbor_tstr_put_lit(states_, "data")
+                && zcbor_bstr_encode_ptr(states_, AsText(entry.frame.data), entry.frame.data.size())
+                && zcbor_tstr_put_lit(states_, "period_ms")
+                && zcbor_uint32_put(states_, entry.period_ms);
+            if(entry.count.has_value())
+                ok = ok && zcbor_tstr_put_lit(states_, "count") && zcbor_uint32_put(states_, *entry.count);
+            ok = ok && zcbor_map_end_encode(states_, 6);
+        }
+
+        zassert_true(ok && zcbor_list_end_encode(states_, list.size()));
         return *this;
     }
 

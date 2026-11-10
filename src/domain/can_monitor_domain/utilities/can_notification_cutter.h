@@ -28,7 +28,7 @@ struct CanNotificationCut {
     bool malformed = false;
 };
 
-/** @brief Cuts a notification's records out of the bytes the sender copied from the ring (§4.4). */
+/** @brief Cuts a notification's records out of the bytes the sender copied from the ring. */
 class CanNotificationCutter {
 public:
     /**

@@ -217,6 +217,25 @@ void CanReplayBuffer::Stop() {
     pending_ = 0;
 }
 
+size_t CanReplayBuffer::PendingFrames() const {
+    size_t frames = 0;
+
+    for(size_t offset = 0; offset < pending_;) {
+        std::array<uint8_t, CAN_MAX_RECORD_SIZE> bytes{};
+        const size_t count = std::min(pending_ - offset, bytes.size());
+        CopyOut(retained_ + offset, std::span(bytes).first(count));
+
+        const std::optional<CanRecord> record = ParseRecord(std::span<const uint8_t>(bytes).first(count));
+        if(!record.has_value() || record->size == 0)
+            break;
+
+        ++frames;
+        offset += record->size;
+    }
+
+    return frames;
+}
+
 std::optional<uint64_t> CanReplayBuffer::NextDueUs() const {
     if(!active_ || pending_ == 0)
         return std::nullopt;

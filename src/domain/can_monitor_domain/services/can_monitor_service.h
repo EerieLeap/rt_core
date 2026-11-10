@@ -26,18 +26,28 @@
 #include "can_monitor_session.h"
 #include "can_synthetic_source.h"
 
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+    #include "domain/can_monitor_domain/transmit/can_session_transmitter.h"
+#endif
+
 namespace eerie_leap::domain::can_monitor_domain::services {
 
 using eerie_leap::domain::can_monitor_domain::models::CanbusType;
+using eerie_leap::domain::can_monitor_domain::models::CanMonitorArmState;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorError;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorMode;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorOpenAnswer;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorOpenRequest;
+using eerie_leap::domain::can_monitor_domain::models::CanMonitorPeriodic;
+using eerie_leap::domain::can_monitor_domain::models::CanMonitorReplayRequest;
+using eerie_leap::domain::can_monitor_domain::models::CanMonitorSendResult;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorStats;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorStatus;
+using eerie_leap::domain::can_monitor_domain::models::CanMonitorTxFrame;
 using eerie_leap::domain::can_monitor_domain::models::CanSyntheticParameters;
 using eerie_leap::domain::can_monitor_domain::models::CanUnitFilter;
 using eerie_leap::domain::can_monitor_domain::utilities::CanEndReason;
+using eerie_leap::domain::can_monitor_domain::utilities::CanTxEvent;
 using eerie_leap::domain::canbus_domain::services::CanbusService;
 using eerie_leap::subsys::canbus::CanbusProxy;
 using eerie_leap::subsys::threading::ServiceBase;
@@ -50,7 +60,7 @@ using eerie_leap::subsys::threading::WorkQueueThread;
  *
  * - Initialize() starts the sender and the domain's work queue; the sender keeps running until the service
  *   is destroyed so that sessions ended by Stop() still drain. Start() lets OPEN in; Stop() ends every
- *   session with the reason "configuration stored" (§3.5), which is how
+ *   session with the reason "configuration stored", which is how
  *   CanbusController::RegisterDependentService() uses it before a new CAN configuration is applied.
  * - At most EERIE_LEAP_CAN_MONITOR_MAX_SESSIONS sessions, at most one a port (255 for the synthetic one),
  *   all under one k_mutex that the tap never takes. The lock is taken before the sender's.
@@ -104,6 +114,27 @@ private:
 #ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC
         std::unique_ptr<CanSyntheticSource> source;
 #endif
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+        /// What the session may transmit; none for a session that listens only or has no bus. Declared after
+        /// the bus, so it goes first.
+        std::unique_ptr<transmit::CanSessionTransmitter> transmitter;
+#endif
+    };
+
+    /// What OPEN asked for, once checked against the ports and the stored configuration.
+    struct OpenPlan {
+        uint8_t port = 0;
+        CanMonitorMode mode = CanMonitorMode::TAP;
+        bool is_synthetic = false;
+        /// LISTEN_ONLY or ACTIVE: the session builds a bus on a port the configuration doesn't run.
+        bool is_own_bus = false;
+        const device* controller = nullptr;
+        std::shared_ptr<CanbusProxy> proxy;
+        /// The configured channel's bus, for TAP.
+        Canbus* bus = nullptr;
+        CanbusType own_type = CanbusType::CLASSICAL_CAN;
+        uint32_t own_bitrate = 0;
+        uint32_t own_data_bitrate = 0;
     };
 
     std::shared_ptr<CanbusService> canbus_service_;
@@ -125,6 +156,31 @@ private:
     [[nodiscard]] const OpenSession* FindConst(uint8_t port) const;
     [[nodiscard]] uint32_t NewToken() const;
     [[nodiscard]] std::shared_ptr<ICanErrorCounters> MakeCounters(const device* controller) const;
+
+    // OPEN, in steps. They require lock_.
+    [[nodiscard]] static std::optional<CanMonitorError>
+    PlanOwnBus(const CanMonitorOpenRequest& request, OpenPlan& plan);
+    [[nodiscard]] std::optional<CanMonitorError> PlanPort(const CanMonitorOpenRequest& request, OpenPlan& plan) const;
+    [[nodiscard]] std::expected<OpenPlan, CanMonitorError> PlanOpen(const CanMonitorOpenRequest& request) const;
+    [[nodiscard]] std::optional<std::expected<CanMonitorOpenAnswer, CanMonitorError>>
+    Admit(const OpenPlan& plan, const RequestKey& key) const;
+    [[nodiscard]] CanMonitorOpenAnswer MakeAnswer(const OpenPlan& plan) const;
+    [[nodiscard]] std::expected<OpenSession, CanMonitorError> CreateSession(
+        const CanMonitorOpenRequest& request,
+        const OpenPlan& plan,
+        const CanMonitorOpenAnswer& answer,
+        const RequestKey& key
+    );
+    void AttachTransmitter(OpenSession& open, Canbus& bus);
+    [[nodiscard]] std::optional<CanMonitorError>
+    StartSynthetic(OpenSession& open, const CanMonitorOpenRequest& request);
+    [[nodiscard]] std::optional<CanMonitorError> StartTap(OpenSession& open);
+    [[nodiscard]] std::optional<CanMonitorError> StartOwnBus(OpenSession& open, const OpenPlan& plan);
+    [[nodiscard]] std::optional<CanMonitorError>
+    StartProducer(OpenSession& open, const OpenPlan& plan, const CanMonitorOpenRequest& request);
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+    [[nodiscard]] std::expected<transmit::CanSessionTransmitter*, CanMonitorError> Transmitter(uint32_t token);
+#endif
     /// The session of @p token with its lease renewed, or why there is none. Requires lock_.
     [[nodiscard]] std::expected<OpenSession*, CanMonitorError> Touch(uint32_t token);
     // The following require lock_.
@@ -187,6 +243,29 @@ public:
      * @return BAD_TOKEN, NO_SESSION; UNKNOWN for more filters than EERIE_LEAP_CAN_MONITOR_MAX_FILTERS.
      */
     std::expected<void, CanMonitorError> SetFilters(uint32_t token, std::span<const CanUnitFilter> filters);
+
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+    /**
+     * @brief Arms or disarms a session: until it is armed nothing is sent. For TAP and ACTIVE sessions;
+     * BAD_MODE for LISTEN_ONLY and synthetic ones. BUS_OFF while the bus is off, BAD_BITRATE while it
+     * detects its bitrate. Disarming stops the periodic frames and the replay and queues a tx event.
+     * @return Whether it is armed, the cap's share and the identifiers the port reserves.
+     */
+    std::expected<CanMonitorArmState, CanMonitorError> Arm(uint32_t token, bool on);
+
+    /**
+     * @brief Sends up to 16 frames in order, through the cap (CanSessionTransmitter::Send()).
+     * @return The count sent and the count refused; NOT_ARMED, BUS_OFF, RESERVED, INVALID, RATE.
+     */
+    std::expected<CanMonitorSendResult, CanMonitorError>
+    Send(uint32_t token, std::span<const CanMonitorTxFrame> frames);
+
+    /** @brief Replaces the session's periodic frames; an empty list stops them (CanSessionTransmitter::SetPeriodic()). */
+    std::expected<void, CanMonitorError> SetPeriodic(uint32_t token, std::span<const CanMonitorPeriodic> list);
+
+    /** @brief START, CHUNK, STOP or FINISH of a replay; the room left in its buffer (CanSessionTransmitter::Replay()). */
+    std::expected<uint32_t, CanMonitorError> Replay(uint32_t token, const CanMonitorReplayRequest& request);
+#endif
 
     /** @brief Totals since OPEN, and the controller's state now. @return BAD_TOKEN, NO_SESSION. */
     std::expected<CanMonitorStats, CanMonitorError> GetStats(uint32_t token);

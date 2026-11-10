@@ -136,6 +136,32 @@ size_t CanMonitorSender::GetSessionCount() {
     return slots_.size();
 }
 
+void CanMonitorSender::QueueTxEvent(const CanMonitorSession* session, CanTxEvent event, uint64_t count) {
+    {
+        const ScopedMutex guard(slots_lock_);
+
+        for(auto& slot : slots_) {
+            if(slot->session.get() != session)
+                continue;
+
+            auto* const waiting = std::find_if(
+                slot->events.begin(), slot->events.begin() + slot->event_count, [event](const PendingEvent& pending) {
+                    return pending.event == event;
+                }
+            );
+
+            if(waiting != slot->events.begin() + slot->event_count)
+                waiting->count = event == CanTxEvent::REPLAY_UNDERRUN ? count : waiting->count + count;
+            else if(slot->event_count < slot->events.size())
+                slot->events[slot->event_count++] = { event, count };
+
+            break;
+        }
+    }
+
+    wake_.Wake();
+}
+
 void CanMonitorSender::ReleaseInFlight() {
     uint32_t current = in_flight_.load(std::memory_order_relaxed);
     while(current > 0 && !in_flight_.compare_exchange_weak(current, current - 1, std::memory_order_relaxed)) {
@@ -303,7 +329,7 @@ bool CanMonitorSender::Serve(Slot& slot, int64_t now_ms, size_t notify_max, bool
     }
 
     const size_t waiting_bytes = ring.Size();
-    if(waiting_bytes == 0 && slot.statistics_size == 0 && !slot.is_ending) {
+    if(waiting_bytes == 0 && slot.statistics_size == 0 && slot.event_count == 0 && !slot.is_ending) {
         slot.first_waiting_ms = -1;
         return false;
     }
@@ -376,6 +402,25 @@ bool CanMonitorSender::Build(Slot& slot, size_t notify_max) {
         slot.statistics_size = 0;
     }
 
+    // Tx events, as many as fit; the rest wait for the next notification.
+    size_t events_taken = 0;
+    while(events_taken < slot.event_count && records < CAN_NOTIFICATION_MAX_RECORDS) {
+        const PendingEvent& pending = slot.events[events_taken];
+        const size_t size = EncodeTxEvent(
+            std::span(built.data).subspan(position, limit - position), 0, pending.event, pending.count
+        );
+        if(size == 0)
+            break;
+
+        position += size;
+        ++records;
+        ++events_taken;
+    }
+    if(events_taken != 0) {
+        std::copy(slot.events.begin() + events_taken, slot.events.begin() + slot.event_count, slot.events.begin());
+        slot.event_count -= events_taken;
+    }
+
     // The producer has stopped: losses it never got to write as a gap go in behind its records.
     if(slot.is_ending)
         slot.session->FlushLossesAfterStop();
@@ -433,7 +478,7 @@ bool CanMonitorSender::Build(Slot& slot, size_t notify_max) {
     }
 
     // The ring is empty with this notification: the final statistics record and the end record follow.
-    if(slot.is_ending && ring.Size() == built.ring_bytes) {
+    if(slot.is_ending && slot.event_count == 0 && ring.Size() == built.ring_bytes) {
         if(!slot.is_final_staged && slot.statistics_size == 0) {
             slot.statistics_size = EncodeStatistics(slot.statistics_record, 0, TakeStatistics(slot));
             slot.is_final_staged = true;
@@ -518,7 +563,7 @@ void CanMonitorSender::Commit(int64_t now_ms) {
     ring.Consume(built_.ring_bytes);
     slot.running_us += built_.dt_sum_us;
     ++slot.sequence;
-    slot.first_waiting_ms = (ring.Size() > 0 || slot.statistics_size > 0) ? now_ms : -1;
+    slot.first_waiting_ms = (ring.Size() > 0 || slot.statistics_size > 0 || slot.event_count > 0) ? now_ms : -1;
 
     if(built_.is_final)
         slot.is_done = true;

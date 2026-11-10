@@ -26,7 +26,6 @@ using eerie_leap::utilities::memory::Mrm;
 
 using models::CAN_MONITOR_MODE_COUNT;
 using models::CAN_MONITOR_SYNTHETIC_PORT;
-using models::CAN_MONITOR_VERSION;
 using models::CanMonitorPortStatus;
 using utilities::CanBusState;
 using utilities::ToCanBusState;
@@ -192,82 +191,81 @@ std::expected<CanMonitorService::OpenSession*, CanMonitorError> CanMonitorServic
     return open;
 }
 
-std::expected<CanMonitorOpenAnswer, CanMonitorError> CanMonitorService::Open(const CanMonitorOpenRequest& request) {
-    const ScopedMutex guard(lock_);
+// What OPEN asks for, checked against the ports and the stored configuration. Synthetic, TAP on a channel
+// the configuration runs, or LISTEN_ONLY and ACTIVE on a port it doesn't.
+std::optional<CanMonitorError> CanMonitorService::PlanOwnBus(const CanMonitorOpenRequest& request, OpenPlan& plan) {
+    plan.own_type = request.type.value_or(CanbusType::CLASSICAL_CAN);
+    plan.own_bitrate = request.bitrate.value_or(0);
 
-    if(!IsRunning() || !sender_.IsRunning())
-        return std::unexpected(CanMonitorError::BUSY);
+    if(plan.own_type == CanbusType::CANFD) {
+        can_mode_t capabilities = 0;
+        if(can_get_capabilities(plan.controller, &capabilities) != 0 || (capabilities & CAN_MODE_FD) == 0)
+            return CanMonitorError::BAD_MODE;
 
-    const bool is_synthetic = request.synthetic.has_value();
+        // An FD port takes its data bitrate, or uses the nominal one.
+        plan.own_data_bitrate = request.data_bitrate.value_or(0);
+    }
+
+    if(!Canbus::IsBitrateSupported(plan.own_type, plan.own_bitrate)
+        || (plan.own_type == CanbusType::CANFD && !Canbus::IsBitrateSupported(plan.own_type, plan.own_data_bitrate)))
+        return CanMonitorError::BAD_BITRATE;
+
+    if(plan.own_type == CanbusType::CANFD && plan.own_data_bitrate == 0)
+        plan.own_data_bitrate = plan.own_bitrate;
+
+    return std::nullopt;
+}
+
+std::optional<CanMonitorError> CanMonitorService::PlanPort(const CanMonitorOpenRequest& request, OpenPlan& plan) const {
+    plan.controller = dt_canbus_provider_ ? dt_canbus_provider_(plan.port) : nullptr;
+    if(plan.controller == nullptr)
+        return CanMonitorError::NOT_FOUND;
+
+    if(static_cast<uint32_t>(plan.mode) >= CAN_MONITOR_MODE_COUNT)
+        return CanMonitorError::BAD_MODE;
+
+    plan.proxy = canbus_service_->GetCanbus(plan.port);
+    plan.bus = plan.proxy ? plan.proxy->Get() : nullptr;
+
+    // TAP is for a channel the configuration runs, the other modes for a port it doesn't.
+    if((plan.mode == CanMonitorMode::TAP) != (plan.bus != nullptr))
+        return CanMonitorError::BAD_MODE;
+
+    plan.is_own_bus = plan.mode != CanMonitorMode::TAP;
+
+    return plan.is_own_bus ? PlanOwnBus(request, plan) : std::nullopt;
+}
+
+std::expected<CanMonitorService::OpenPlan, CanMonitorError>
+CanMonitorService::PlanOpen(const CanMonitorOpenRequest& request) const {
+    OpenPlan plan;
+    plan.is_synthetic = request.synthetic.has_value();
 
 #ifndef CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC
-    if(is_synthetic)
+    if(plan.is_synthetic)
         return std::unexpected(CanMonitorError::BAD_MODE);
 #endif
 
     if(request.filters.size() > CONFIG_EERIE_LEAP_CAN_MONITOR_MAX_FILTERS
-        || (is_synthetic && !request.synthetic->IsValid()))
+        || (plan.is_synthetic && !request.synthetic->IsValid()))
         return std::unexpected(CanMonitorError::UNKNOWN);
 
-    const uint8_t port = is_synthetic ? CAN_MONITOR_SYNTHETIC_PORT : request.ch;
-    const CanMonitorMode mode = is_synthetic ? CanMonitorMode::TAP : request.mode;
+    plan.port = plan.is_synthetic ? CAN_MONITOR_SYNTHETIC_PORT : request.ch;
+    plan.mode = plan.is_synthetic ? CanMonitorMode::TAP : request.mode;
 
-    std::shared_ptr<CanbusProxy> proxy;
-    Canbus* bus = nullptr;
-    const device* controller = nullptr;
-
-    // What a session on a bus of its own runs at.
-    CanbusType own_type = CanbusType::CLASSICAL_CAN;
-    uint32_t own_bitrate = 0;
-    uint32_t own_data_bitrate = 0;
-    const bool is_own_bus = !is_synthetic && mode != CanMonitorMode::TAP;
-
-    if(!is_synthetic) {
-        controller = dt_canbus_provider_ ? dt_canbus_provider_(port) : nullptr;
-        if(controller == nullptr)
-            return std::unexpected(CanMonitorError::NOT_FOUND);
-
-        if(static_cast<uint32_t>(mode) >= CAN_MONITOR_MODE_COUNT)
-            return std::unexpected(CanMonitorError::BAD_MODE);
-
-        proxy = canbus_service_->GetCanbus(port);
-        bus = proxy ? proxy->Get() : nullptr;
-
-        // TAP is for a channel the configuration runs, the other modes for a port it doesn't.
-        if((mode == CanMonitorMode::TAP) != (bus != nullptr))
-            return std::unexpected(CanMonitorError::BAD_MODE);
-
-        if(is_own_bus) {
-            own_type = request.type.value_or(CanbusType::CLASSICAL_CAN);
-            own_bitrate = request.bitrate.value_or(0);
-
-            can_mode_t capabilities = 0;
-            if(own_type == CanbusType::CANFD
-                && (can_get_capabilities(controller, &capabilities) != 0 || (capabilities & CAN_MODE_FD) == 0))
-                return std::unexpected(CanMonitorError::BAD_MODE);
-
-            // An FD port takes its data bitrate, or uses the nominal one.
-            if(own_type == CanbusType::CANFD)
-                own_data_bitrate = request.data_bitrate.value_or(0);
-
-            if(!Canbus::IsBitrateSupported(own_type, own_bitrate)
-                || (own_type == CanbusType::CANFD && !Canbus::IsBitrateSupported(own_type, own_data_bitrate)))
-                return std::unexpected(CanMonitorError::BAD_BITRATE);
-
-            if(own_type == CanbusType::CANFD && own_data_bitrate == 0)
-                own_data_bitrate = own_bitrate;
-        }
+    if(!plan.is_synthetic) {
+        if(const auto error = PlanPort(request, plan); error.has_value())
+            return std::unexpected(*error);
     }
 
-    const RequestKey key{ .port = port,
-        .mode = mode,
-        .type = request.type,
-        .bitrate = request.bitrate,
-        .data_bitrate = request.data_bitrate,
-        .synthetic = request.synthetic };
+    return plan;
+}
 
-    // A client that lost the answer asks again: it gets its session, until a request has used the token.
-    if(const OpenSession* existing = Find(port); existing != nullptr) {
+// A client that lost the answer asks again: it gets its session, until a request has used the token.
+// Otherwise the link, the port and the slots decide. Nothing when the session may be opened.
+std::optional<std::expected<CanMonitorOpenAnswer, CanMonitorError>>
+CanMonitorService::Admit(const OpenPlan& plan, const RequestKey& key) const {
+    if(const OpenSession* existing = FindConst(plan.port); existing != nullptr) {
         if(!existing->is_token_used && existing->key == key)
             return existing->answer;
 
@@ -280,31 +278,46 @@ std::expected<CanMonitorOpenAnswer, CanMonitorError> CanMonitorService::Open(con
     if(sessions_.size() >= CONFIG_EERIE_LEAP_CAN_MONITOR_MAX_SESSIONS)
         return std::unexpected(CanMonitorError::BUSY);
 
+    return std::nullopt;
+}
+
+CanMonitorOpenAnswer CanMonitorService::MakeAnswer(const OpenPlan& plan) const {
     CanMonitorOpenAnswer answer;
     answer.tok = NewToken();
-    answer.ch = port;
-    answer.mode = mode;
+    answer.ch = plan.port;
+    answer.mode = plan.mode;
     answer.lease_ms = CONFIG_EERIE_LEAP_CAN_MONITOR_LEASE_MS;
-    if(is_own_bus) {
-        answer.type = own_type;
-        answer.bitrate = own_bitrate;
-        answer.data_bitrate = own_data_bitrate;
-    } else if(bus != nullptr) {
-        answer.type = bus->GetType();
-        ReadBitrates(*bus, answer.bitrate, answer.data_bitrate);
+
+    if(plan.is_own_bus) {
+        answer.type = plan.own_type;
+        answer.bitrate = plan.own_bitrate;
+        answer.data_bitrate = plan.own_data_bitrate;
+    } else if(plan.bus != nullptr) {
+        answer.type = plan.bus->GetType();
+        ReadBitrates(*plan.bus, answer.bitrate, answer.data_bitrate);
     }
 
+    return answer;
+}
+
+// The session and its place in the sender, which serves it from here on; whatever fails after this hands it back.
+std::expected<CanMonitorService::OpenSession, CanMonitorError> CanMonitorService::CreateSession(
+    const CanMonitorOpenRequest& request,
+    const OpenPlan& plan,
+    const CanMonitorOpenAnswer& answer,
+    const RequestKey& key
+) {
     CanMonitorSessionParameters parameters;
     parameters.token = answer.tok;
-    parameters.port = port;
-    parameters.mode = mode;
+    parameters.port = plan.port;
+    parameters.mode = plan.mode;
     parameters.type = answer.type;
     parameters.bitrate = answer.bitrate;
     parameters.data_bitrate = answer.data_bitrate;
     parameters.start_time_us = NowUs();
     parameters.is_delta = request.delta;
-    if(!is_synthetic)
-        parameters.counters = MakeCounters(controller);
+    if(!plan.is_synthetic)
+        parameters.counters = MakeCounters(plan.controller);
 
     auto session = CanMonitorSession::Create(parameters, sender_.GetWakeSignal(), Mrm::GetExtPmr());
     if(!session)
@@ -316,9 +329,10 @@ std::expected<CanMonitorOpenAnswer, CanMonitorError> CanMonitorService::Open(con
     open.key = key;
     open.answer = answer;
     open.session = session.get();
-    open.proxy = std::move(proxy);
-    open.controller = controller;
-    open.bus = bus;
+    open.proxy = plan.proxy;
+    open.controller = plan.controller;
+    open.bus = plan.bus;
+    open.lease_deadline_ms = k_uptime_get() + CONFIG_EERIE_LEAP_CAN_MONITOR_LEASE_MS;
 
     try {
         sender_.Attach(std::move(session));
@@ -326,69 +340,146 @@ std::expected<CanMonitorOpenAnswer, CanMonitorError> CanMonitorService::Open(con
         return std::unexpected(CanMonitorError::NO_MEMORY);
     }
 
-    // The sender serves the session from here; a failure below hands it back.
-    std::unique_ptr<Canbus> own_bus;
-    try {
-        if(is_synthetic) {
-#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC
-            open.source = std::make_unique<CanSyntheticSource>(*open.session, *request.synthetic);
-            if(!open.source->Start()) {
-                sender_.Discard(open.session);
-                return std::unexpected(CanMonitorError::NO_MEMORY);
-            }
+    return open;
+}
+
+void CanMonitorService::AttachTransmitter([[maybe_unused]] OpenSession& open, [[maybe_unused]] Canbus& bus) {
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+    CanMonitorSession* session = open.session;
+
+    open.transmitter = std::make_unique<transmit::CanSessionTransmitter>(
+        bus, open.answer.ch, work_queue_->GetWorkQueue(), [this, session](CanTxEvent event, uint64_t count) {
+            sender_.QueueTxEvent(session, event, count);
+        }
+    );
+    session->SetStateListener(open.transmitter.get());
 #endif
-        } else if(is_own_bus) {
-            const can_mode_t modes = mode == CanMonitorMode::LISTEN_ONLY ? CAN_MODE_LISTENONLY : 0;
-            own_bus = std::make_unique<Canbus>(
-                CanbusConfig(controller, own_type, own_bitrate, own_data_bitrate, modes)
-            );
+}
 
-            // Initialize() first: it configures the controller and clears any tap. The tap goes on before
-            // Start(), so the first frame, or the detected bitrate, finds it.
-            if(!own_bus->Initialize()) {
-                sender_.Discard(open.session);
-                return std::unexpected(own_bitrate != 0 ? CanMonitorError::BAD_BITRATE : CanMonitorError::UNKNOWN);
-            }
+std::optional<CanMonitorError>
+CanMonitorService::StartSynthetic([[maybe_unused]] OpenSession& open, const CanMonitorOpenRequest& request) {
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC
+    if(!request.synthetic.has_value())
+        return CanMonitorError::UNKNOWN;
 
-            open.session->BindBus(own_bus.get());
-            if(!own_bus->SetTap(open.session) || !own_bus->Start()) {
-                LOG_ERR("CAN monitor: the bus of port %u would not start.", port);
-                own_bus->SetTap(nullptr);
-                // Initialize() started the controller, which no Stop() of a bus that never started undoes.
-                can_stop(controller);
-                sender_.Discard(open.session);
-                return std::unexpected(CanMonitorError::UNKNOWN);
-            }
-
-            open.bus = own_bus.get();
-            open.own_bus = std::move(own_bus);
-        } else {
-            open.session->BindBus(bus);
-            if(!bus->SetTap(open.session)) {
-                LOG_ERR("CAN monitor: the bus of port %u refused the tap.", port);
-                sender_.Discard(open.session);
-                return std::unexpected(CanMonitorError::UNKNOWN);
-            }
-        }
-    } catch(const std::bad_alloc&) {
-        if(own_bus) {
-            own_bus->SetTap(nullptr);
-            can_stop(controller);
-        }
+    open.source = std::make_unique<CanSyntheticSource>(*open.session, *request.synthetic);
+    if(!open.source->Start()) {
         sender_.Discard(open.session);
+        return CanMonitorError::NO_MEMORY;
+    }
+#else
+    (void)request;
+#endif
 
-        return std::unexpected(CanMonitorError::NO_MEMORY);
+    return std::nullopt;
+}
+
+std::optional<CanMonitorError> CanMonitorService::StartTap(OpenSession& open) {
+    AttachTransmitter(open, *open.bus);
+
+    open.session->BindBus(open.bus);
+    if(!open.bus->SetTap(open.session)) {
+        LOG_ERR("CAN monitor: the bus of port %u refused the tap.", open.answer.ch);
+        sender_.Discard(open.session);
+        return CanMonitorError::UNKNOWN;
     }
 
-    open.lease_deadline_ms = k_uptime_get() + CONFIG_EERIE_LEAP_CAN_MONITOR_LEASE_MS;
+    return std::nullopt;
+}
+
+// Initialize() first: it configures the controller and clears any tap. The tap goes on before Start(), so
+// the first frame, or the detected bitrate, finds it.
+std::optional<CanMonitorError> CanMonitorService::StartOwnBus(OpenSession& open, const OpenPlan& plan) {
+    const can_mode_t modes = plan.mode == CanMonitorMode::LISTEN_ONLY ? CAN_MODE_LISTENONLY : 0;
+    auto own_bus = std::make_unique<Canbus>(
+        CanbusConfig(plan.controller, plan.own_type, plan.own_bitrate, plan.own_data_bitrate, modes)
+    );
+
+    if(!own_bus->Initialize()) {
+        sender_.Discard(open.session);
+        return plan.own_bitrate != 0 ? CanMonitorError::BAD_BITRATE : CanMonitorError::UNKNOWN;
+    }
+
+    // Past this the controller is started, which a Stop() of a bus that never started does not undo.
+    const auto abandon = [&] {
+        own_bus->SetTap(nullptr);
+        can_stop(plan.controller);
+        sender_.Discard(open.session);
+    };
+
+    try {
+        // A listen-only session never transmits, so it gets no transmitter.
+        if(plan.mode == CanMonitorMode::ACTIVE)
+            AttachTransmitter(open, *own_bus);
+
+        open.session->BindBus(own_bus.get());
+
+        if(!own_bus->SetTap(open.session) || !own_bus->Start()) {
+            LOG_ERR("CAN monitor: the bus of port %u would not start.", open.answer.ch);
+            abandon();
+            return CanMonitorError::UNKNOWN;
+        }
+    } catch(const std::bad_alloc&) {
+        abandon();
+        return CanMonitorError::NO_MEMORY;
+    }
+
+    open.bus = own_bus.get();
+    open.own_bus = std::move(own_bus);
+
+    return std::nullopt;
+}
+
+std::optional<CanMonitorError>
+CanMonitorService::StartProducer(OpenSession& open, const OpenPlan& plan, const CanMonitorOpenRequest& request) {
+    try {
+        if(plan.is_synthetic)
+            return StartSynthetic(open, request);
+
+        return plan.is_own_bus ? StartOwnBus(open, plan) : StartTap(open);
+    } catch(const std::bad_alloc&) {
+        sender_.Discard(open.session);
+
+        return CanMonitorError::NO_MEMORY;
+    }
+}
+
+std::expected<CanMonitorOpenAnswer, CanMonitorError> CanMonitorService::Open(const CanMonitorOpenRequest& request) {
+    const ScopedMutex guard(lock_);
+
+    if(!IsRunning() || !sender_.IsRunning())
+        return std::unexpected(CanMonitorError::BUSY);
+
+    const auto plan = PlanOpen(request);
+    if(!plan)
+        return std::unexpected(plan.error());
+
+    const RequestKey key{ .port = plan->port,
+        .mode = plan->mode,
+        .type = request.type,
+        .bitrate = request.bitrate,
+        .data_bitrate = request.data_bitrate,
+        .synthetic = request.synthetic };
+
+    if(const auto refusal = Admit(*plan, key); refusal.has_value())
+        return *refusal;
+
+    const CanMonitorOpenAnswer answer = MakeAnswer(*plan);
+
+    auto open = CreateSession(request, *plan, answer, key);
+    if(!open)
+        return std::unexpected(open.error());
+
+    if(const auto error = StartProducer(*open, *plan, request); error.has_value())
+        return std::unexpected(*error);
 
     if(link_.hold_fast)
         link_.hold_fast();
 
-    sessions_.push_back(std::move(open));
+    sessions_.push_back(std::move(*open));
     ScheduleHousekeeping();
 
-    LOG_INF("CAN monitor: session %08x opened on port %u.", answer.tok, port);
+    LOG_INF("CAN monitor: session %08x opened on port %u.", answer.tok, plan->port);
 
     return answer;
 }
@@ -507,13 +598,14 @@ CanMonitorStatus CanMonitorService::GetStatus() const {
 Canbus* CanMonitorService::GetOwnBus(uint32_t token) {
     const ScopedMutex guard(lock_);
 
-    OpenSession* open = Find(token);
+    const OpenSession* open = Find(token);
 
     return open != nullptr ? open->own_bus.get() : nullptr;
 }
 
-// The producer stops first (the tap removed, the source joined, the own bus stopped), so the sender may
-// free the ring once it has drained it.
+// The producer stops first (the source joined, the tap removed), then what the session transmits, then the
+// bus it owns, so the sender may free the ring once it has drained it. The transmitter's last tx event is
+// queued before the end record.
 void CanMonitorService::EndSession(OpenSession& open, CanEndReason reason) {
 #ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC
     if(open.source)
@@ -521,14 +613,20 @@ void CanMonitorService::EndSession(OpenSession& open, CanEndReason reason) {
 #endif
 
     if(open.own_bus) {
-        // Stop() waits for the bus's thread, which may be detecting a bitrate; the bus is freed with the entry.
         open.own_bus->SetTap(nullptr);
-        if(!open.own_bus->Stop())
-            LOG_ERR("CAN monitor: the bus of port %u would not stop.", open.answer.ch);
     } else if(open.bus != nullptr && open.proxy->Get() == open.bus) {
         // A reconfiguration may have put another bus behind the proxy; its tap is not ours to clear.
         open.bus->SetTap(nullptr);
     }
+
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+    if(open.transmitter)
+        open.transmitter->Shutdown();
+#endif
+
+    // Stop() waits for the bus's thread, which may be detecting a bitrate; the bus is freed with the entry.
+    if(open.own_bus && !open.own_bus->Stop())
+        LOG_ERR("CAN monitor: the bus of port %u would not stop.", open.answer.ch);
 
     if(link_.release_fast)
         link_.release_fast();
@@ -584,6 +682,65 @@ void CanMonitorService::EndOnDisconnect() {
     const ScopedMutex guard(lock_);
     EndAll(CanEndReason::DISCONNECTED);
 }
+
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+
+std::expected<transmit::CanSessionTransmitter*, CanMonitorError> CanMonitorService::Transmitter(uint32_t token) {
+    const auto open = Touch(token);
+    if(!open)
+        return std::unexpected(open.error());
+
+    // A session that listens only, or has no bus, cannot transmit.
+    if(!(*open)->transmitter)
+        return std::unexpected(CanMonitorError::BAD_MODE);
+
+    return (*open)->transmitter.get();
+}
+
+std::expected<CanMonitorArmState, CanMonitorError> CanMonitorService::Arm(uint32_t token, bool on) {
+    const ScopedMutex guard(lock_);
+
+    const auto transmitter = Transmitter(token);
+    if(!transmitter)
+        return std::unexpected(transmitter.error());
+
+    return (*transmitter)->Arm(on, canbus_service_->GetComConfiguration());
+}
+
+std::expected<CanMonitorSendResult, CanMonitorError>
+CanMonitorService::Send(uint32_t token, std::span<const CanMonitorTxFrame> frames) {
+    const ScopedMutex guard(lock_);
+
+    const auto transmitter = Transmitter(token);
+    if(!transmitter)
+        return std::unexpected(transmitter.error());
+
+    return (*transmitter)->Send(frames);
+}
+
+std::expected<void, CanMonitorError>
+CanMonitorService::SetPeriodic(uint32_t token, std::span<const CanMonitorPeriodic> list) {
+    const ScopedMutex guard(lock_);
+
+    const auto transmitter = Transmitter(token);
+    if(!transmitter)
+        return std::unexpected(transmitter.error());
+
+    return (*transmitter)->SetPeriodic(list);
+}
+
+std::expected<uint32_t, CanMonitorError>
+CanMonitorService::Replay(uint32_t token, const CanMonitorReplayRequest& request) {
+    const ScopedMutex guard(lock_);
+
+    const auto transmitter = Transmitter(token);
+    if(!transmitter)
+        return std::unexpected(transmitter.error());
+
+    return (*transmitter)->Replay(request);
+}
+
+#endif // CONFIG_EERIE_LEAP_CAN_MONITOR_TX
 
 void CanMonitorService::OnNotificationSent() {
     sender_.OnNotificationSent();

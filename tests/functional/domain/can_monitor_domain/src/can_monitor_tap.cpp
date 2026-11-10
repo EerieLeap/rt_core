@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -129,11 +130,11 @@ ZTEST(can_monitor_tap, test_the_stream_carries_the_frames_and_echoes_and_the_con
 
     const auto frames = consumer.Frames();
     zassert_equal(frames.size(), 10U, "Every frame once, tap or not");
-    for(uint8_t i = 0; i < frames.size(); ++i) {
+    for(size_t i = 0; i < frames.size(); ++i) {
         zassert_equal(frames[i].id, CONSUMER_ID);
         zassert_equal(frames[i].data.size(), 3U);
-        const auto expected = PayloadOf(i);
-        zassert_mem_equal(frames[i].data.data(), expected.data(), expected.size(), "Frame %u", i);
+        const auto expected = PayloadOf(static_cast<uint8_t>(i));
+        zassert_mem_equal(frames[i].data.data(), expected.data(), expected.size(), "Frame %zu", i);
         zassert_false(frames[i].is_transmit);
     }
 
@@ -218,13 +219,13 @@ ZTEST(can_monitor_tap, test_a_change_of_state_is_a_record_with_the_counters) {
     harness.Bus()->OnBusStateChanged(CAN_STATE_ERROR_PASSIVE, { .tx_err_cnt = 130, .rx_err_cnt = 20 });
 
     zassert_true(WaitUntil([&] {
-        for(const SentNotification& sent : harness.notifier->Notifications()) {
-            const auto decoded = DecodeNotification(sent);
-            if(decoded && !RecordsOf({ *decoded }, CanRecordKind::STATE).empty())
-                return true;
-        }
+        const auto sent = harness.notifier->Notifications();
 
-        return false;
+        return std::ranges::any_of(sent, [](const SentNotification& notification) {
+            const auto decoded = DecodeNotification(notification);
+
+            return decoded && !RecordsOf({ *decoded }, CanRecordKind::STATE).empty();
+        });
     }));
     harness.CloseAndDrain(answer->tok);
 

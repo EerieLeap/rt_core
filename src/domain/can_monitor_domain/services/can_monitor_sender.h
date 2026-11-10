@@ -20,11 +20,12 @@ namespace eerie_leap::domain::can_monitor_domain::services {
 
 using eerie_leap::domain::can_monitor_domain::utilities::CanEndReason;
 using eerie_leap::domain::can_monitor_domain::utilities::CanStatistics;
+using eerie_leap::domain::can_monitor_domain::utilities::CanTxEvent;
 using eerie_leap::subsys::threading::IThread;
 using eerie_leap::subsys::threading::Thread;
 
 /**
- * @brief The one thread that cuts every session's ring into `bus` notifications (§4.4).
+ * @brief The one thread that cuts every session's ring into `bus` notifications.
  *
  * - A notification is the 13-byte header, then the sender's own records (statistics, with dt 0), then
  *   whole ring records. `base_us` is the time of the record before the first, kept as a running time per
@@ -58,6 +59,16 @@ public:
     static constexpr int64_t DRAIN_TIMEOUT_MS = 5000;
 
 private:
+    /// A tx event record waiting for the next notification of its session.
+    struct PendingEvent {
+        CanTxEvent event = CanTxEvent::DISARMED;
+        uint64_t count = 0;
+    };
+
+    /// Tx events a session may have waiting: one for each kind (disarmed, bus-off, skipped, replay done,
+    /// replay underrun), so none is ever dropped.
+    static constexpr size_t MAX_PENDING_EVENTS = 5;
+
     struct Slot {
         std::unique_ptr<CanMonitorSession> session;
         uint16_t sequence = 0;
@@ -69,6 +80,8 @@ private:
         int64_t next_statistics_ms = 0;
         std::array<uint8_t, utilities::CAN_MAX_RECORD_SIZE> statistics_record{};
         size_t statistics_size = 0;
+        std::array<PendingEvent, MAX_PENDING_EVENTS> events;
+        size_t event_count = 0;
 
         /// -1 while nothing waits.
         int64_t first_waiting_ms = -1;
@@ -119,8 +132,8 @@ private:
     [[nodiscard]] bool CanSend(int64_t now_ms, size_t notify_max, int64_t& next_ms) const;
 
     bool Serve(Slot& slot, int64_t now_ms, size_t notify_max, bool can_send, int64_t& next_ms);
-    void StageStatistics(Slot& slot, int64_t now_ms);
-    [[nodiscard]] CanStatistics TakeStatistics(Slot& slot);
+    static void StageStatistics(Slot& slot, int64_t now_ms);
+    [[nodiscard]] static CanStatistics TakeStatistics(Slot& slot);
     bool Build(Slot& slot, size_t notify_max);
     bool Submit(int64_t now_ms);
     bool RetryBuilt(int64_t now_ms, int64_t& next_ms);
@@ -166,6 +179,18 @@ public:
      * record, then frees it. The producer must be stopped.
      */
     void End(const CanMonitorSession* session, CanEndReason reason);
+
+    /**
+     * @brief Queues a tx event record for a session: the sender writes it, with a time delta of 0, into the next
+     * notification, ahead of the ring's records. The ring itself has one producer, so no other thread writes it.
+     *
+     * An event of a kind that already waits for the session joins it: the counts add up (frames not sent,
+     * skipped, played), except an underrun's, which is the number of underruns so far and so becomes the
+     * latest. The events keep the order in which their kinds first waited.
+     *
+     * Callable from any thread. Nothing happens for a session the sender no longer holds.
+     */
+    void QueueTxEvent(const CanMonitorSession* session, CanTxEvent event, uint64_t count);
 
     /** @brief A `bus` notification left; callable from any thread. */
     void OnNotificationSent();

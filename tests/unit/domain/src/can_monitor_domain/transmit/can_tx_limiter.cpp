@@ -21,9 +21,9 @@ constexpr int64_t US_PER_SECOND = 1'000'000;
 constexpr int64_t NS_PER_US = 1000;
 
 // 8 data bytes, 29-bit ID, classical: 67 + 64 = 131 bits.
-constexpr uint64_t CLASSICAL_8_EXT_500K_NS = 131 * 2000;
+constexpr uint64_t CLASSICAL_8_EXT_500K_NS = uint64_t{ 131 } * 2000;
 // No data, 11-bit ID, classical: 47 bits.
-constexpr uint64_t CLASSICAL_0_STD_500K_NS = 47 * 2000;
+constexpr uint64_t CLASSICAL_0_STD_500K_NS = uint64_t{ 47 } * 2000;
 
 unsigned long long Ull(uint64_t value) {
     return value;
@@ -87,7 +87,7 @@ ZTEST(can_tx_limiter, test_ABucketIsAsDeepAsBurstFramesOfTheLargestFrame) {
 
     // No data bitrate: the data phase runs at the nominal one.
     CanTxLimiter fd_one_rate(500000, 0, true, 50, 4, 0);
-    zassert_equal(fd_one_rate.CapacityNs(), 4 * (598 * 2000));
+    zassert_equal(fd_one_rate.CapacityNs(), uint64_t{ 4 } * 598 * 2000);
 
     // A classical channel ignores the data bitrate.
     CanTxLimiter classical_with_data(500000, 2000000, false, 50, 8, 0);
@@ -102,7 +102,7 @@ ZTEST(can_tx_limiter, test_TheCostOfAFrameIsItsBitTime) {
 
     CanFrame remote = Classical(true, 0);
     remote.is_remote_request = true;
-    zassert_equal(limiter.CostNs(remote), (67 * 2000U), "A remote frame has no data field");
+    zassert_equal(limiter.CostNs(remote), (uint64_t{ 67 } * 2000), "A remote frame has no data field");
 
     // The same through the record the encoders take: the data field's length comes from the DLC.
     const CanRecordFrame record = { .id = 0x123, .dlc = 8, .ide = true };
@@ -356,8 +356,8 @@ ZTEST(can_tx_limiter, test_ResetWithNewParametersReplacesTheLimiter) {
     CanTxLimiter limiter(500000, 0, false, 50, 8, 0);
 
     limiter.Reset(1000000, 4000000, true, 20, 2, 500);
-    zassert_equal(limiter.CostNs(Classical(false, 0)), 47 * 1000U);
-    zassert_equal(limiter.CapacityNs(), 2 * ((49 * 1000U) + (549 * 250U)));
+    zassert_equal(limiter.CostNs(Classical(false, 0)), uint64_t{ 47 } * 1000);
+    zassert_equal(limiter.CapacityNs(), uint64_t{ 2 } * ((uint64_t{ 49 } * 1000) + (uint64_t{ 549 } * 250)));
 
     // Rejected parameters leave it as it was.
     bool thrown = false;
@@ -367,7 +367,7 @@ ZTEST(can_tx_limiter, test_ResetWithNewParametersReplacesTheLimiter) {
         thrown = true;
     }
     zassert_true(thrown);
-    zassert_equal(limiter.CostNs(Classical(false, 0)), 47 * 1000U);
+    zassert_equal(limiter.CostNs(Classical(false, 0)), uint64_t{ 47 } * 1000);
 }
 
 ZTEST(can_tx_limiter, test_ADefaultLimiterAndInvalidParametersLetNothingThrough) {
@@ -408,8 +408,8 @@ ZTEST(can_tx_limiter, test_TheDefaultsComeFromKconfig) {
         limiter.WaitUs(CLASSICAL_8_EXT_500K_NS),
         static_cast<int64_t>(
             ((CLASSICAL_8_EXT_500K_NS - limiter.CreditNs()) * 100
-                + (CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SHARE_PERCENT * 1000 - 1))
-            / (CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SHARE_PERCENT * 1000)
+                + (uint64_t{ CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SHARE_PERCENT } * 1000 - 1))
+            / (uint64_t{ CONFIG_EERIE_LEAP_CAN_MONITOR_TX_SHARE_PERCENT } * 1000)
         )
     );
 }

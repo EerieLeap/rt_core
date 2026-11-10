@@ -21,7 +21,7 @@ using eerie_leap::subsys::threading::Thread;
 
 /**
  * @brief Writes generated frames into a session's ring through the session's own producer path, as if a
- * bus had received them, to measure the link without one (§7).
+ * bus had received them, to measure the link without one.
  *
  * - `ids` distinct identifiers in turn (11-bit from 0, or 29-bit from 0x18DA0000 with `ext`), the DLC
  *   `dlc`, FD with a bit rate switch when `fd`.

@@ -61,15 +61,8 @@ std::expected<CanMonitorOpenAnswer, CanMonitorError> OpenOwn(
     return harness.service->Open(request);
 }
 
-// The frames with this identifier the stream holds so far, received (tx false) or echoed (tx true).
 size_t CountFrames(Harness& harness, uint32_t id, bool is_tx) {
-    size_t count = 0;
-    WalkStream(harness.notifier->Notifications(), [&](const CanRecord& record, uint64_t) {
-        if(record.kind == CanRecordKind::FRAME && record.id == id && record.tx == is_tx)
-            ++count;
-    });
-
-    return count;
+    return CountStreamFrames(harness.notifier->Notifications(), id, is_tx);
 }
 
 std::array<uint8_t, 3> PayloadOf(uint8_t index) {
@@ -130,7 +123,11 @@ ZTEST(can_monitor_sessions, test_status_lists_the_ports_and_what_the_build_has) 
     zassert_equal(status.filters_max, static_cast<uint32_t>(CONFIG_EERIE_LEAP_CAN_MONITOR_MAX_FILTERS));
     zassert_equal(status.ring_bytes, static_cast<uint32_t>(CONFIG_EERIE_LEAP_CAN_MONITOR_RING_SIZE));
     zassert_equal(status.notify_max, NOTIFY_MAX);
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_TX
+    zassert_true(status.has_tx);
+#else
     zassert_false(status.has_tx);
+#endif
     zassert_true(status.has_synthetic);
     zassert_true(status.has_delta);
 
@@ -460,7 +457,7 @@ ZTEST(can_monitor_sessions, test_active_on_an_unconfigured_port_sends_and_sees_i
     zassert_true(stats.has_value());
     zassert_equal(stats->frames_received, 1U);
     zassert_equal(stats->frames_sent, 1U);
-    zassert_equal(stats->busy_us, 2 * 2 * BUSY_US_PER_FRAME);
+    zassert_equal(stats->busy_us, 4 * BUSY_US_PER_FRAME);
 
     harness.CloseAndDrain(answer->tok);
 }

@@ -19,7 +19,7 @@ namespace eerie_leap::domain::can_monitor_domain::utilities {
 
 /**
  * @brief The last payload of up to `capacity` identifiers, and the encoder that sends a repeat as
- * its changed bytes (record kind 1, §4.3).
+ * its changed bytes (record kind 1).
  *
  * An entry is a (ID, IDE) and the payload last sent for it, 1 to 64 bytes. Entries are added while
  * there is room and never evicted, so an ID that found the table full goes whole for good (until

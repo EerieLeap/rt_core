@@ -112,20 +112,20 @@ void CanMonitorSession::CollectLosses() {
 
     const uint32_t dropped = bus_->GetRxDroppedCount();
     if(dropped != last_rx_dropped_) {
-        writer_.AddLoss(CanGapCause::RECEIVE_QUEUE, static_cast<uint32_t>(dropped - last_rx_dropped_));
+        writer_.AddLoss(CanGapCause::RECEIVE_QUEUE, dropped - last_rx_dropped_);
         last_rx_dropped_ = dropped;
     }
 
     const uint32_t echoes = bus_->GetTxEchoLostCount();
     if(echoes != last_echo_lost_) {
-        writer_.AddLoss(CanGapCause::ECHO_POOL, static_cast<uint32_t>(echoes - last_echo_lost_));
+        writer_.AddLoss(CanGapCause::ECHO_POOL, echoes - last_echo_lost_);
         last_echo_lost_ = echoes;
     }
 
     if(counters_) {
         const uint32_t overruns = counters_->Read().rx_overruns;
         if(overruns != last_overruns_) {
-            writer_.AddLoss(CanGapCause::CONTROLLER, static_cast<uint32_t>(overruns - last_overruns_));
+            writer_.AddLoss(CanGapCause::CONTROLLER, overruns - last_overruns_);
             last_overruns_ = overruns;
         }
     }
@@ -212,6 +212,9 @@ void CanMonitorSession::OnState(can_state state, can_bus_err_cnt counters, uint6
             detected_bitrate = config.bitrate;
         }
     }
+
+    if(state_listener_ != nullptr)
+        state_listener_->OnBusState(state);
 
     const size_t size_before = ring_->Size();
     writer_.WriteState(time_us, ToCanBusState(state), counters.tx_err_cnt, counters.rx_err_cnt, detected_bitrate);

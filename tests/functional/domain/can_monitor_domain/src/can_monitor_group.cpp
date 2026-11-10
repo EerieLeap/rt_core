@@ -255,17 +255,3 @@ ZTEST(can_monitor_group, test_filters_of_open_are_applied_to_the_stream) {
     zassert_equal(sum.frames_received, 4U);
     zassert_equal(sum.frames_sent, 4U);
 }
-
-ZTEST(can_monitor_group, test_the_commands_of_phase_4_are_not_supported_yet) {
-    GroupHarness unit;
-    const auto opened = unit.OpenTap();
-
-    const Bytes token_body = CborMap().Put("tok", opened.Value("tok")).Build();
-    zassert_false(unit.client.Write(GROUP, Id(Command::ARM), token_body).IsOk());
-    zassert_false(unit.client.Write(GROUP, Id(Command::SEND), token_body).IsOk());
-    zassert_false(unit.client.Write(GROUP, Id(Command::PERIODIC), token_body).IsOk());
-    zassert_false(unit.client.Write(GROUP, Id(Command::REPLAY), token_body).IsOk());
-
-    // They did not touch the session.
-    zassert_equal(unit.harness.service->GetSessionCount(), 1U);
-}

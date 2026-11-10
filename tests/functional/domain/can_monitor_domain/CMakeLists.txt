@@ -3,6 +3,11 @@ cmake_minimum_required(VERSION 3.20.0)
 set(RT_CORE_TEST_SIM_FLASH ON)
 # Two CAN controllers on every board: can0, which the stored configuration runs, and can1, which it doesn't.
 list(APPEND EXTRA_DTC_OVERLAY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/can_monitor.overlay")
+# Transmit and replay, unless the scenario without them says so.
+if(NOT RT_CORE_NO_TX)
+    list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_SOURCE_DIR}/tx.conf")
+endif()
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../../rt_core_test.cmake)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
