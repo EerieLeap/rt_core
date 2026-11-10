@@ -11,6 +11,7 @@
 #include "adc.h"
 #include "adc_emulator.h"
 #include "adc_manager.h"
+#include "adc_randomizer.h"
 #include "adc_simulator.h"
 #include "i_adc.h"
 #include "i_adc_manager.h"
@@ -28,7 +29,9 @@ public:
     explicit AdcFactory(DtAdcProvider dt_adc_provider) :
         dt_adc_provider_(std::move(dt_adc_provider)) {}
 
-    // One device per device-tree ADC: emulated, then real; a simulator when there is none.
+    // One device per device-tree ADC: emulated, then real. With CONFIG_EERIE_LEAP_ADC_RANDOMIZER a
+    // randomizer follows them (its channels are numbered after the hardware); an AdcSimulator stands
+    // in only when there is nothing else.
     // NOLINTNEXTLINE(readability-convert-member-functions-to-static): reads dt_adc_provider_ when CONFIG_ADC or CONFIG_ADC_EMUL is set, which this build is not
     std::shared_ptr<IAdcManager> Create() {
         std::vector<std::shared_ptr<IAdc>> adcs;
@@ -43,6 +46,23 @@ public:
     #endif
             }
         }
+#endif
+
+#ifdef CONFIG_EERIE_LEAP_ADC_RANDOMIZER
+        adcs.push_back(
+            std::make_shared<AdcRandomizer>(AdcRandomizerConfig{
+                .channel_count = CONFIG_EERIE_LEAP_ADC_RANDOMIZER_CHANNELS,
+    #ifdef CONFIG_EERIE_LEAP_ADC_VOLTAGE_MAX_MV
+                // The pin voltage that maps to the full sensor input.
+                .volts_max = CONFIG_EERIE_LEAP_ADC_VOLTAGE_MAX_MV / 1000.0F,
+    #else
+                .volts_max = 3.3F,
+    #endif
+                .move_min_ms = CONFIG_EERIE_LEAP_ADC_RANDOMIZER_MOVE_MIN_MS,
+                .move_max_ms = CONFIG_EERIE_LEAP_ADC_RANDOMIZER_MOVE_MAX_MS,
+                .hold_max_ms = CONFIG_EERIE_LEAP_ADC_RANDOMIZER_HOLD_MAX_MS,
+            })
+        );
 #endif
 
         if(adcs.empty())

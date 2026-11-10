@@ -25,4 +25,52 @@ menu "EerieLeap ADC config"
           accepts extra_samplings. Each ADC keeps a buffer of this many
           samples per channel in internal RAM; a request for more samples
           is served in several calls.
+
+    config EERIE_LEAP_ADC_RANDOMIZER
+        bool "Random ADC channels (bench and development aid)"
+        help
+          Adds an ADC whose channels are random but plausible voltages, after
+          the device tree ADCs (hardware channels keep their numbers), so a
+          PHYSICAL_ANALOG sensor can be connected to one by its channel
+          number like to a real input. Each channel eases to a random target
+          between 0 V and the ADC pin voltage that maps to the full sensor
+          input, holds for a while and moves on. Without any device tree ADC
+          it replaces the white-noise simulator. A bench and development
+          aid: leave it off in a shipped build.
+
+    config EERIE_LEAP_ADC_RANDOMIZER_CHANNELS
+        int "Random ADC channels"
+        depends on EERIE_LEAP_ADC_RANDOMIZER
+        range 1 16
+        default 4
+        help
+          Number of random channels; they are numbered after the hardware
+          channels.
+
+    config EERIE_LEAP_ADC_RANDOMIZER_MOVE_MIN_MS
+        int "Shortest move to a new voltage (ms)"
+        depends on EERIE_LEAP_ADC_RANDOMIZER
+        range 1 600000
+        default 200
+        help
+          A channel takes a random time between this and the longest move to
+          ease to its next voltage.
+
+    config EERIE_LEAP_ADC_RANDOMIZER_MOVE_MAX_MS
+        int "Longest move to a new voltage (ms)"
+        depends on EERIE_LEAP_ADC_RANDOMIZER
+        range 1 600000
+        default 4000
+        help
+          Upper bound of the move time; a value below the shortest move is
+          treated as equal to it.
+
+    config EERIE_LEAP_ADC_RANDOMIZER_HOLD_MAX_MS
+        int "Longest hold at a voltage (ms)"
+        depends on EERIE_LEAP_ADC_RANDOMIZER
+        range 0 600000
+        default 2000
+        help
+          After a move a channel holds its voltage for a random time between
+          0 and this before it picks the next target.
 endmenu

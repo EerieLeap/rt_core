@@ -48,6 +48,27 @@ for an unknown channel).
 | `EERIE_LEAP_ADC_SAMPLES_MAX` | 1..65535, 4096 | Cap on `samples` per request; larger requests are clamped. Every conversion blocks the sampling thread, so size it for the slowest driver. |
 | `EERIE_LEAP_ADC_BURST_CHUNK` | 1..1024, 64 | Conversions per driver call on a bursting driver. Each ADC keeps `channels × chunk` 16-bit samples in internal RAM. |
 
+## Random channels
+
+A bench and development aid, off by default. With `CONFIG_EERIE_LEAP_ADC_RANDOMIZER` the factory
+appends an `AdcRandomizer` after the device tree ADCs, so hardware channels keep their numbers and
+the random ones follow; without any device tree ADC it replaces the `AdcSimulator`. A
+`PHYSICAL_ANALOG` sensor connects to a random channel by its global number like to any input.
+
+Each channel is an `AdcRandomSignal`: it eases (smoothstep) from its voltage to a random target in
+`[0, EERIE_LEAP_ADC_VOLTAGE_MAX_MV]` (3.3 V without the ADC domain) over a random move time,
+holds for a random time, and repeats, so a sensor moves like a real one and never jumps. The
+signal is a function of `k_uptime_get()`; `samples` has no effect. `Sample()` keeps `Adc`'s request
+contract and counts stats like the simulator; the device reports burst and multi-channel support
+and 0 us per conversion. A seed of 0 comes from `sys_rand32_get()`, so each boot differs.
+
+| Symbol | Range / default | Meaning |
+| --- | --- | --- |
+| `EERIE_LEAP_ADC_RANDOMIZER` | n | Adds the random ADC. |
+| `EERIE_LEAP_ADC_RANDOMIZER_CHANNELS` | 1..16, 4 | Number of random channels. |
+| `EERIE_LEAP_ADC_RANDOMIZER_MOVE_MIN_MS` / `_MOVE_MAX_MS` | 200 / 4000 | Bounds of a move's duration. |
+| `EERIE_LEAP_ADC_RANDOMIZER_HOLD_MAX_MS` | 0..600000, 2000 | A hold lasts 0 to this. |
+
 ## Voltage path
 
 ```

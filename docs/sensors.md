@@ -55,6 +55,11 @@ last written ([scripting.md](scripting.md#functions-a-sensor-script-can-define))
 channels are checked against the unit: an ADC or GPIO channel must exist (the error names the
 channels the unit has), and while an SD card is mounted a `script_path` must exist.
 
+A bench unit can offer random channels (`CONFIG_EERIE_LEAP_ADC_RANDOMIZER`,
+`CONFIG_EERIE_LEAP_GPIO_RANDOMIZER`): a sensor connects to one by its global channel number like to
+a hardware input, hardware channels first, then the random ones ([adc.md](adc.md#random-channels),
+[gpio.md](gpio.md#random-channels)).
+
 When a client applies a configuration (the SMP `config` group), each CAN sensor's bus must also be
 configured in the CAN bus configuration the unit runs, and a signal sensor's frame and signal must
 be defined on it, the message enabled when the sensor is (see [canbus.md](canbus.md)); a raw

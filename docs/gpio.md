@@ -21,11 +21,28 @@ Digital input channels for `PHYSICAL_INDICATOR` sensors. Code: `src/subsys/gpio/
 - Handlers share the system work queue: anything long-running must hop to its own queue, as the
   sensor domain's `GpioSensorReader` does.
 
+## Random channels
+
+A bench and development aid, off by default. With `CONFIG_EERIE_LEAP_GPIO_RANDOMIZER` the factory
+adds a `GpioRandomizer`: alone when the unit has no `gpioc` node (instead of the `GpioSimulator`,
+which raises no edges), otherwise together with the hardware in a `CompositeGpio`, whose channels
+are the hardware's followed by the random ones, so hardware keeps its numbers. A
+`PHYSICAL_INDICATOR` sensor connects to a random channel by its global number.
+
+A channel holds a level for a random time (`GpioRandomSignal`) and flips. Handlers follow the
+contract above: ids, edge filters, `ERR_NOT_INITIALIZED` before `Initialize()`, the system work
+queue, the newest level when the queue is late. A flip is scheduled only while a channel has
+handlers, so an unwatched channel costs nothing; `ReadChannel()` gives the level now. The
+composite hands out its own handler ids and calls a handler with the global channel.
+
 ## Kconfig
 
 | Symbol | Default | Meaning |
 | --- | --- | --- |
 | `EERIE_LEAP_GPIO` | n | Builds the subsystem. Needs `CONFIG_GPIO` for real hardware. |
+| `EERIE_LEAP_GPIO_RANDOMIZER` | n | Adds the random channels. |
+| `EERIE_LEAP_GPIO_RANDOMIZER_CHANNELS` | 1..32, 4 | Number of random channels. |
+| `EERIE_LEAP_GPIO_RANDOMIZER_HOLD_MIN_MS` / `_HOLD_MAX_MS` | 100 / 5000 | Bounds of a level's hold time. |
 
 ## Use by sensors
 

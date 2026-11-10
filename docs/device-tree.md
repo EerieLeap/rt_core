@@ -99,5 +99,9 @@ slot (`zephyr,sdhc`, disk name `SD`) and an SSD1306 display (`zephyr,display`).
 | CAN | `can_loopback0` or a real controller | A configured bus whose device is missing is logged and skipped |
 | Flash | `CONFIG_FLASH_SIMULATOR` | |
 
+`CONFIG_EERIE_LEAP_ADC_RANDOMIZER` and `CONFIG_EERIE_LEAP_GPIO_RANDOMIZER` add random bench channels
+after the device tree ones and take the simulators' place when the unit has no hardware; see
+[adc.md](adc.md#random-channels) and [gpio.md](gpio.md#random-channels).
+
 The test overlays in `tests/` (`qemu_adc.overlay`, `qemu_flash.overlay`,
 `qemu_flash_disk.overlay`) are the reference for QEMU targets.

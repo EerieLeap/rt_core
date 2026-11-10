@@ -2,3 +2,46 @@ config EERIE_LEAP_GPIO
     bool "EerieLeap GPIO"
     help
       Add EerieLeap GPIO.
+
+menu "EerieLeap GPIO config"
+    depends on EERIE_LEAP_GPIO
+
+    config EERIE_LEAP_GPIO_RANDOMIZER
+        bool "Random GPIO channels (bench and development aid)"
+        help
+          Adds GPIO channels whose level flips after random hold times,
+          after the device tree channels (hardware channels keep their
+          numbers), so a PHYSICAL_INDICATOR sensor can be connected to one
+          by its channel number like to a real input. The channels raise
+          edges to registered handlers like hardware. Without any device
+          tree GPIO it replaces the white-noise simulator, which raises no
+          edges. A bench and development aid: leave it off in a shipped
+          build.
+
+    config EERIE_LEAP_GPIO_RANDOMIZER_CHANNELS
+        int "Random GPIO channels"
+        depends on EERIE_LEAP_GPIO_RANDOMIZER
+        range 1 32
+        default 4
+        help
+          Number of random channels; they are numbered after the hardware
+          channels.
+
+    config EERIE_LEAP_GPIO_RANDOMIZER_HOLD_MIN_MS
+        int "Shortest hold of a level (ms)"
+        depends on EERIE_LEAP_GPIO_RANDOMIZER
+        range 1 600000
+        default 100
+        help
+          A channel holds a level for a random time between this and the
+          longest hold, then flips.
+
+    config EERIE_LEAP_GPIO_RANDOMIZER_HOLD_MAX_MS
+        int "Longest hold of a level (ms)"
+        depends on EERIE_LEAP_GPIO_RANDOMIZER
+        range 1 600000
+        default 5000
+        help
+          Upper bound of the hold time; a value below the shortest hold is
+          treated as equal to it.
+endmenu
