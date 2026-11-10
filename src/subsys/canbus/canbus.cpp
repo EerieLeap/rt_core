@@ -305,12 +305,34 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
     if(atomic_get(&is_initialized_) == 0 || !IsBitrateDetected() || GetState() != ServiceState::RUNNING)
         return -ENETDOWN;
 
-    if(!frame_id.IsValid()) {
-        LOG_ERR(
-            "Frame ID 0x%08X does not fit a %s identifier.", frame_id.id, frame_id.is_extended ? "29-bit" : "11-bit"
-        );
+    const CanbusType type = GetType();
+    const bool is_can_fd = type == CanbusType::CANFD;
+
+    // CanFramePayload truncates what it cannot hold, which the caller must hear of instead.
+    const uint32_t max_data_length = std::min<uint32_t>(GetMaxDataLength(type), CAN_MAX_DLEN);
+    if(frame_data.size() > max_data_length) {
+        LOG_ERR("Frame payload of %zu bytes exceeds the %u byte limit.", frame_data.size(), max_data_length);
         return -EINVAL;
     }
+
+    CanFrame frame = {
+        .id = frame_id.id,
+        .is_extended = frame_id.is_extended,
+        .is_can_fd = is_can_fd,
+        .is_bitrate_switch = is_can_fd,
+    };
+    frame.data.Assign(frame_data);
+
+    // The DLC table rounds FD lengths up; the padding bytes are zero.
+    if(is_can_fd)
+        frame.data.Resize(can_dlc_to_bytes(can_bytes_to_dlc(static_cast<uint8_t>(frame_data.size()))));
+
+    return SendFrame(frame, timeout);
+}
+
+int Canbus::SendFrame(const CanFrame& frame, k_timeout_t timeout) const {
+    if(atomic_get(&is_initialized_) == 0 || !IsBitrateDetected() || GetState() != ServiceState::RUNNING)
+        return -ENETDOWN;
 
     // can_send() may wait for a TX slot, so the lock RX dispatch needs is not held across it.
     const device* canbus_dev = nullptr;
@@ -326,29 +348,68 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
             slots = tx_slots_.get();
     }
 
-    const uint32_t max_data_length = std::min<uint32_t>(GetMaxDataLength(type), CAN_MAX_DLEN);
-    if(frame_data.size() > max_data_length) {
-        LOG_ERR("Frame payload of %zu bytes exceeds the %u byte limit.", frame_data.size(), max_data_length);
+    const CanId frame_id = { frame.id, frame.is_extended };
+    if(!frame_id.IsValid()) {
+        LOG_DBG("Frame ID 0x%08X does not fit a %s identifier.", frame.id, frame.is_extended ? "29-bit" : "11-bit");
         return -EINVAL;
+    }
+
+    if(frame.is_can_fd && type != CanbusType::CANFD) {
+        LOG_DBG("An FD frame does not go on a classical channel.");
+        return -EINVAL;
+    }
+
+    if(frame.is_bitrate_switch && !frame.is_can_fd) {
+        LOG_DBG("A bit rate switch needs an FD frame.");
+        return -EINVAL;
+    }
+
+    const size_t size = frame.data.size();
+    uint8_t dlc = 0;
+
+    if(frame.is_remote_request) {
+        // CAN FD has no remote frames, and a remote frame carries no data.
+        if(frame.is_can_fd || size != 0 || frame.dlc > CAN_MAX_DLC) {
+            LOG_DBG("Malformed remote frame (FD %d, %zu bytes, DLC %u).", frame.is_can_fd, size, frame.dlc);
+            return -EINVAL;
+        }
+
+        dlc = frame.dlc;
+    } else {
+        const size_t max_data_length = frame.is_can_fd ? std::min(CAN_FRAME_MAX_DATA_LENGTH, sizeof(can_frame::data))
+                                                       : static_cast<size_t>(CAN_MAX_DLC);
+        if(size > max_data_length) {
+            LOG_DBG("Frame payload of %zu bytes exceeds the %zu byte limit.", size, max_data_length);
+            return -EINVAL;
+        }
+
+        dlc = can_bytes_to_dlc(static_cast<uint8_t>(size));
+        if(can_dlc_to_bytes(dlc) != size) {
+            LOG_DBG("No DLC gives %zu bytes.", size);
+            return -EINVAL;
+        }
     }
 
     uint8_t flags = 0;
 
-    if(type == CanbusType::CANFD)
-        flags |= CAN_FRAME_FDF | CAN_FRAME_BRS;
+    if(frame.is_can_fd)
+        flags |= CAN_FRAME_FDF;
 
-    if(frame_id.is_extended)
+    if(frame.is_bitrate_switch)
+        flags |= CAN_FRAME_BRS;
+
+    if(frame.is_remote_request)
+        flags |= CAN_FRAME_RTR;
+
+    if(frame.is_extended)
         flags |= CAN_FRAME_IDE;
 
-    const uint8_t dlc = can_bytes_to_dlc(static_cast<uint8_t>(frame_data.size()));
-
     struct can_frame can_frame = {
-        .id = frame_id.id,
+        .id = frame.id,
         .dlc = dlc,
         .flags = flags,
     };
-    // The DLC table rounds FD lengths up, so the padding bytes stay zeroed.
-    std::ranges::copy(frame_data, std::begin(can_frame.data));
+    std::ranges::copy(frame.data, std::begin(can_frame.data));
 
     // The completion callback gets no frame, so a tapped bus keeps the frame in a slot until then.
     TxSlot* slot = nullptr;
@@ -372,7 +433,7 @@ int Canbus::SendFrame(const CanId& frame_id, std::span<const uint8_t> frame_data
         return res;
     }
 
-    LOG_DBG("Frame sent: ID=0x%08X, DLC=%d", frame_id.id, dlc);
+    LOG_DBG("Frame sent: ID=0x%08X, DLC=%d", frame.id, dlc);
     return 0;
 }
 

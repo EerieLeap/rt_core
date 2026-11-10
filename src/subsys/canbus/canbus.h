@@ -311,6 +311,10 @@ public:
     /**
      * @brief Sends one frame without holding the handler lock.
      *
+     * Every frame on a CAN FD channel goes out as an FD frame with bit rate switch, its length rounded
+     * up to the next DLC (the padding is zero); a classical channel sends a classical frame. IDE comes
+     * from @p frame_id. To send a frame as it is, use the overload that takes a CanFrame.
+     *
      * While a tap is set the tap sees the frame again as a transmitted one when the controller completes
      * it; with all TX_SLOTS in flight the frame goes out without that echo (GetTxEchoLostCount()).
      *
@@ -323,6 +327,24 @@ public:
         std::span<const uint8_t> frame_data,
         k_timeout_t timeout = DEFAULT_SEND_TIMEOUT
     ) const;
+
+    /**
+     * @brief Sends @p frame with its own IDE, FDF, BRS and RTR; the ESI is the controller's to set.
+     *
+     * The DLC is @c frame.dlc (at most 8) for a remote frame and the payload's for any other. The tap's
+     * echo works as for the other overload. Nothing is logged above debug level for a refusal, because
+     * the CAN monitor may send many frames.
+     *
+     * @return 0, -ENETDOWN when the bus is not running, or -EAGAIN or another driver error as above.
+     *         -EINVAL for:
+     *         - an FD frame on a classical channel;
+     *         - BRS without FDF;
+     *         - a remote frame with FDF (CAN FD has none), with a payload or with a DLC above 8;
+     *         - more than 8 bytes without FDF;
+     *         - a length no DLC gives (FD: 0 to 8, 12, 16, 20, 24, 32, 48 or 64);
+     *         - an ID that does not fit its format.
+     */
+    int SendFrame(const CanFrame& frame, k_timeout_t timeout = DEFAULT_SEND_TIMEOUT) const;
     uint32_t GetDetectedBitrate() const;
     bool IsBitrateDetected() const {
         return atomic_get(&bitrate_detected_) != 0;

@@ -33,6 +33,12 @@ run on the COM channel are in [cdmp.md](cdmp.md).
   rejected (`ERR_FILTER_OVERLAP`). Identical filters share one hardware filter.
 - **Send.** `SendFrame(id, data, timeout)` with a 2 ms default wait for TX queue space; returns
   `-ENETDOWN` while the bus is not running.
+- **Send a frame as it is.** `SendFrame(const CanFrame&, timeout)` keeps the frame's own IDE, FDF, BRS and
+  RTR (a remote frame's DLC is `frame.dlc`; the ESI is the controller's) where `SendFrame(id, data, timeout)`
+  makes every frame on an FD channel an FD frame with BRS. It answers `-EINVAL` for an FD frame on a classical
+  channel, BRS without FDF, a remote frame with FDF, a payload or a DLC above 8, more than 8 bytes without
+  FDF, a length no DLC gives, or an ID that does not fit its format, and logs those at debug level only. The
+  tap's echo (below) covers both overloads.
 - `CanbusProxy` hands the active instance to consumers that outlive a reconfiguration and
   notifies them when it is replaced.
 
