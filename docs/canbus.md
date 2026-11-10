@@ -69,7 +69,8 @@ time, and the CAN monitor stamps its own events with the same function.
 
 ### The tap
 
-`SetTap(ICanFrameTap*)` (`i_can_frame_tap.h`) gives one observer, a monitor, every frame on the bus.
+`SetTap(ICanFrameTap*)` (`i_can_frame_tap.h`) gives one observer, a monitor, every frame on the bus; the CAN
+monitor ([can_monitor.md](can_monitor.md)) is its user.
 One tap a bus; `nullptr` removes it and never fails. `SetTap(tap)` returns false when the bus is not
 initialized, another tap is set, or the driver rejects the filters (nothing has changed then). The tap
 does not survive `DoStop()`, `Configure()` or `DoInitialize()`, and the destructor removes it, so the

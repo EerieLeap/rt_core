@@ -16,12 +16,12 @@ Base UUID `e7a1b2c3-d4e5-6f78-9a0b-c1d2e3f4xxxx`:
 | `info` | `0001` | read, no pairing needed | `[protocol version][max packet size: u16 LE][requests in flight]` |
 | `smp` | `0002` | write and write without response (encrypted link required), notify | SMP packets with a route prefix |
 | `live` | `0003` | notify | Live value notifications |
-| `bus` | `0004` | notify | The CAN monitor's stream |
+| `bus` | `0004` | notify | The CAN monitor's stream ([can_monitor.md](can_monitor.md)) |
 
 `bus` is appended after `info` so that no existing handle moves, and its client configuration
 descriptor is open like `live`'s. A bonded central that cached the table learns of it through
 Service Changed, which needs `CONFIG_BT_GATT_SERVICE_CHANGED`. The characteristic is always
-present; whether anything streams on it depends on the CAN monitor.
+present; whether anything streams on it depends on the [CAN monitor](can_monitor.md).
 
 **Advertising.** The advertisement carries the flags, the service UUID and manufacturer data
 (7 bytes: `company 0xFFFF`, product ID, feature bits, revision, little-endian, from the system

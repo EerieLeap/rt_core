@@ -33,6 +33,7 @@ packet (it parses the 8-byte header only). See [dfu.md](dfu.md).
 | `logging` | 71 | `LoggingController` | `STATUS` 0, `START` 1, `STOP` 2 |
 | `dfu` | 72 | `DfuController` | `STATUS` 0 |
 | `ui` | 73 | served by the application (rt_gauge's UI preview) | `BEGIN` 0, `STAGE` 1, `PATCH` 2, `SHOW` 3, `HIGHLIGHT` 4, `END` 5, `STATUS` 6 (read) |
+| `canmon` | 74 | `CanMonitorController` | `STATUS` 0 (read), `OPEN` 1, `CLOSE` 2, `FILTER` 3, `STATS` 4 (read), `ARM` 5, `SEND` 6, `PERIODIC` 7, `REPLAY` 8 |
 
 ### `config`: read and write stored configurations
 
@@ -449,6 +450,85 @@ stores nothing and stops no logging (see [logging.md](logging.md#configuration-u
 all or nothing and checked as an upload is, and reports for each operation whether the unit applied it in place,
 built a widget or a screen again, or did not show it; it stores nothing either. A unit built without the preview
 answers the group as it answers any group it does not serve.
+
+### `canmon`: CAN monitor sessions
+
+Group 74 (`SmpGroupId::CAN_MONITOR`) opens and controls the CAN monitor's sessions; the frames themselves stream
+on the BLE `bus` characteristic. `CanMonitorController` registers it (`EERIE_LEAP_CONTROLLER_CAN_MONITOR`).
+A unit built without it answers the group as it answers any group it does not serve. The sessions, the records
+and the transmit rules are in [can_monitor.md](can_monitor.md); the requests and answers are written out in
+`src/configuration/cbor/cbor_schemas/can_monitor_smp.cddl`. Every request and answer is a map with text keys, and
+unknown keys in a request are skipped.
+
+| Command | Request | Response |
+| --- | --- | --- |
+| `STATUS` (read) | | `{version, ports: [{ch, types, configured, state, bitrate, data_bitrate, session}], filters_max, ring_bytes, notify_max, tx, synthetic, delta}` |
+| `OPEN` (write) | `{ch, mode, ? type, ? bitrate, ? data_bitrate, ? filters, ? delta, ? synthetic}` | `{tok, ch, mode, type, bitrate, data_bitrate, lease_ms}` |
+| `CLOSE` (write) | `{tok}` | `{}` |
+| `FILTER` (write) | `{tok, filters}` | `{}` |
+| `STATS` (read) | `{tok}` | `{state, tec, rec, rx, tx, busy_us, errors, lost, filtered}` |
+| `ARM` (write) | `{tok, on}` | `{armed, share_pct, reserved: [[from, to, ext]]}` |
+| `SEND` (write) | `{tok, frames: [[id, flags, data]]}` | `{sent, refused}` |
+| `PERIODIC` (write) | `{tok, list: [{slot, id, flags, data, period_ms, ? count}]}` | `{}` |
+| `REPLAY` (write) | `{tok, op, ...}`: `op` 0 start `{? speed_pct, ? loop}`, 1 chunk `{seq, data}`, 2 stop, 3 no more chunks | `{room}` |
+
+- `STATUS`: `version` is the records' version (1). `ports` has an entry for each `can<N>` alias the devicetree
+  has (0 to 7): `types` lists 1 (classical), and 2 (CAN FD) when the controller does it; `configured` says the
+  stored configuration runs the port; `state` is a `state` record's code (0 error active ... 4 stopped); the
+  bitrates are the detected ones, 0 until detected. `notify_max` is the largest notification the link takes now
+  (MTU - 3, at most 512), 0 while `bus` notifications are off. `tx`, `synthetic` and `delta` say what the build
+  has.
+- `OPEN`: `mode` 0 `TAP`, 1 `LISTEN_ONLY`, 2 `ACTIVE`. `type` is 1 or 2. `filters` and `FILTER`'s list are up to
+  `filters_max` entries `[id, mask, ext]`; an empty list passes every frame. `synthetic` is `{fps, ids, dlc,
+  ? ext, ? fd}`; with it `ch` and `mode` are ignored and the answer states `ch` 255, `mode` 0, `type` 0. The
+  answer's `bitrate` is 0 while a bitrate is being detected.
+- `STATS`: totals since OPEN, `rx` and `tx` being the frames received and sent, `errors` the five counts
+  `[bit, stuff, crc, form, ack]` and `lost` the four `[controller, queue, ring, echoes]`; `busy_us` and the rest
+  are as in [Statistics and bus state](can_monitor.md#statistics-and-bus-state).
+- `SEND`: `flags` are bits IDE (0), FDF (1), BRS (2) and RTR (3); `data` is a byte string of at most 64 bytes; 1 to
+  16 frames. `PERIODIC`: every key but `count` is required; at most `EERIE_LEAP_CAN_MONITOR_PERIODIC_SLOTS`
+  entries. `REPLAY`: `speed_pct` 1 to 10000 (100 by default), `seq` 0 to 65535, `data` the chunk's records;
+  `room` is the replay buffer's free bytes. The rules are in
+  [Transmit and replay](can_monitor.md#transmit-and-replay).
+- `ARM`, `SEND`, `PERIODIC` and `REPLAY` exist only in a build with `EERIE_LEAP_CAN_MONITOR_TX`; without it
+  they answer `TX_UNSUPPORTED`, whatever the request.
+- Every request that carries `tok` renews the session's lease (`lease_ms`), except CLOSE, which ends it. OPEN's
+  repeat before the token is used returns the same token.
+- **Bad requests** are `rc` `EINVAL`, not a group error: a request that cannot be decoded or lacks a key,
+  `ch` above 255, a `type` other than 1 and 2, more filters than `filters_max`, an incomplete `synthetic`, an
+  unknown REPLAY `op`; and what the unit cannot send or play: a SEND
+  without frames or with more than 16, a frame the bus cannot carry (an unknown flag, an ID that does not fit its
+  format, BRS without FDF, FD on a classical channel, a length no DLC gives), a repeated PERIODIC slot or a
+  period of 0 or too many entries, a speed out of range, a chunk that is not whole kind 0 records. A mode above 2
+  is `BAD_MODE`.
+
+Errors (SMP v2 `{err: {group: 74, rc}}`):
+
+| Error | `rc` | Meaning | SMP v1 `rc` |
+| --- | --- | --- | --- |
+| `UNKNOWN` | 1 | Arguments that do not hold (synthetic parameters out of range), a bus that refuses the tap or will not start, a SEND the bus took none of, an unexpected failure. | `EUNKNOWN` |
+| `NO_SESSION` | 2 | No session holds this token (never opened, ended, or its lease lapsed). | `ENOENT` |
+| `BAD_TOKEN` | 3 | The token is 0. | `ENOENT` |
+| `BUSY` | 4 | The port has a session (not the repeat of the OPEN that opened it), every session slot is taken, or the service is stopped (a CAN configuration is being applied). | `EBUSY` |
+| `NOT_FOUND` | 5 | The devicetree has no such port. | `ENOENT` |
+| `BAD_MODE` | 6 | OPEN: a mode the port cannot take (`TAP` on a port the configuration does not run, `LISTEN_ONLY` or `ACTIVE` on a channel it runs, an unknown mode), CAN FD on a controller without it, `synthetic` in a build without it. ARM and the rest: the session cannot transmit (`LISTEN_ONLY` or synthetic). | `EINVAL` |
+| `BAD_BITRATE` | 7 | A bitrate or data bitrate the subsystem does not support, or the port's own bus would not start at the one given; ARM while the bus is still detecting its bitrate. | `EINVAL` |
+| `NOT_LISTENING` | 8 | `bus` notifications are off: the central has not enabled them. | `EBADSTATE` |
+| `NO_MEMORY` | 9 | The ring (or the changed-bytes table, or the replay buffer) could not be had. | `ENOMEM` |
+| `NOT_ARMED` | 10 | The session is not armed (SEND, PERIODIC, a REPLAY start, chunk or `op: 3`). | `EBADSTATE` |
+| `RESERVED` | 11 | A SEND or PERIODIC frame has an ID the COM channel uses. | `EACCESSDENIED` |
+| `RATE` | 12 | SEND: not one frame was within the transmit cap. | `EBUSY` |
+| `BUS_OFF` | 13 | The session's bus is in bus-off: ARM and the transmit commands are refused. | `EBADSTATE` |
+| `NO_ROOM` | 14 | The replay chunk is larger than `room`. | `ENOMEM` |
+| `TX_UNSUPPORTED` | 15 | The build has no transmit. | `ENOTSUP` |
+| `BAD_SEQ` | 16 | A replay chunk out of order, or a chunk or `op: 3` with no replay running. | `EINVAL` |
+
+A unit without the group answers `rc` 8 (`ENOTSUP`), which a client reads as "unsupported". The group's
+requests nest lists in lists, so the domain selects four levels of CBOR decoding (and of encoding, for
+`STATUS`).
+
+Threading: the handlers run on the MCUmgr work queue and call the service, which has its own lock; OPEN
+allocates the session's ring and sets its tap there.
 
 ## Transports
 

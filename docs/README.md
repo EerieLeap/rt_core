@@ -9,7 +9,7 @@ application's `main()` only chooses what to build and in which order to start it
 | Layer | Directory | Contents |
 | --- | --- | --- |
 | Subsystems | `src/subsys/` | Hardware and OS wrappers: ADC, CAN, GPIO, filesystem, assets, Bluetooth, SMP, firmware update, CDMP, Lua, expression engine, MDF, threading, time, event bus, random, CFB, device tree accessors. |
-| Domains | `src/domain/` | One concern each: system, ADC, sensors, CAN bus, CAN COM, logging, scripting, BLE, configuration. A domain with user settings owns a model, a CBOR schema, a validator, a configuration manager and, with SMP, a management group. |
+| Domains | `src/domain/` | One concern each: system, ADC, sensors, CAN bus, CAN COM, CAN monitor, logging, scripting, BLE, configuration. A domain with user settings owns a model, a CBOR schema, a validator, a configuration manager and, with SMP, a management group. |
 | Controllers | `src/controllers/` | Composition roots: each builds the services of one domain, registers its configuration manager and wires it to the others. |
 | Configuration | `src/configuration/` | CBOR storage service and generated zcbor code. |
 
@@ -24,8 +24,9 @@ Each subsystem and domain is compiled only when its Kconfig symbol is set (`CMak
 | [adc.md](adc.md) | ADC hardware access, samples and calibration configuration, the calibration service |
 | [sensors.md](sensors.md) | Sensor types, the processing pipeline, indicator conditioning, rate groups, event-driven sensors, the readings frame, sensor events |
 | [canbus.md](canbus.md) | CAN buses, messages and signals, sending, reconfiguration |
+| [can_monitor.md](can_monitor.md) | The CAN monitor: sessions on a CAN port, the `bus` stream and its records, statistics, transmit and replay |
 | [cdmp.md](cdmp.md) | The CAN device management protocol, the COM channel, shared state, SMP over CAN |
-| [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`, `assets`, `logging`, `dfu`) and transports |
+| [smp.md](smp.md) | MCUmgr groups (`config`, `device`, `network`, `live`, `calibration`, `files`, `assets`, `logging`, `dfu`, `canmon`) and transports |
 | [dfu.md](dfu.md) | Firmware update: MCUboot swap and revert, slot layout rules, the image identity check, the `dfu` group, confirmation, client flow |
 | [bluetooth.md](bluetooth.md) | The BLE access point: GATT service, SMP routing, live data |
 | [logging.md](logging.md) | Log writer, logging control, triggers and the logging controller, the MDF4 logger, logging configuration, logging status on other units |
@@ -103,6 +104,7 @@ automatically.
 | `EERIE_LEAP_DOMAIN_SENSOR` | `CONFIGURATION`, `ADC`, `CANBUS` | `DOMAIN_SCRIPT`, `DOMAIN_ADC`, `DOMAIN_CANBUS` |
 | `EERIE_LEAP_DOMAIN_CANBUS` | `CONFIGURATION`, `CANBUS` | |
 | `EERIE_LEAP_DOMAIN_CANBUS_COM` | | `SMP_CAN` |
+| `EERIE_LEAP_DOMAIN_CAN_MONITOR` | `DOMAIN_CANBUS` | `THREADING`; with `SMP`, `MCUMGR_SMP_CBOR_MIN_DECODING_LEVEL_4` (and the encoding level with `ZCBOR_CANONICAL`) |
 | `EERIE_LEAP_DOMAIN_LOGGING` | `CONFIGURATION`, `DOMAIN_SENSOR` | `EVENT_BUS`, `MDF`, `DOMAIN_SYSTEM` |
 | `EERIE_LEAP_DOMAIN_SCRIPT` | | |
 | `EERIE_LEAP_DOMAIN_BLE` | `BLUETOOTH`, `DOMAIN_SENSOR`, `DOMAIN_SYSTEM` | `SMP_BLE` |
@@ -112,6 +114,7 @@ automatically.
 | `EERIE_LEAP_CONTROLLER_CANBUS` | `DOMAIN_CANBUS`, `DOMAIN_CANBUS_COM`, `DEVICE_TREE`, `FS` | `THREADING` |
 | `EERIE_LEAP_CONTROLLER_SENSORS` | `DOMAIN_SENSOR`, `DOMAIN_CANBUS`, `GPIO`, `RANDOM`, `FS` | `THREADING` |
 | `EERIE_LEAP_CONTROLLER_BLE` | `DOMAIN_BLE` | |
+| `EERIE_LEAP_CONTROLLER_CAN_MONITOR` | `DOMAIN_CAN_MONITOR`, `SMP`, `CONTROLLER_CANBUS`, `CONTROLLER_BLE` | |
 | `EERIE_LEAP_CONTROLLER_LOGGING` | `CONFIGURATION`, `EVENT_BUS`, `DOMAIN_SENSOR`, `DOMAIN_CANBUS_COM` | `THREADING` |
 
 `EERIE_LEAP_SMP_ASSETS` is on by default wherever its dependencies are set; it adds the `assets` SMP
