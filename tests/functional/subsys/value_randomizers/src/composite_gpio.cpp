@@ -201,3 +201,22 @@ ZTEST(composite_gpio, test_edges_of_two_randomizers_reach_handlers_with_global_c
     zassert_equal(low_calls.load(), low_after);
     zassert_equal(high_calls.load(), high_after);
 }
+
+ZTEST(composite_gpio, test_a_handler_may_remove_itself_during_its_call) {
+    auto first = std::make_shared<GpioRandomizer>(Config(2, 11));
+    CompositeGpio gpio({ first });
+    zassert_equal(gpio.Initialize(), 0);
+
+    std::atomic<int> calls = 0;
+    int id = 0;
+
+    id = gpio.RegisterChannelChangedHandler(1, GpioEdge::BOTH, [&](int, bool) {
+        calls++;
+        gpio.RemoveChannelChangedHandler(1, id);
+    });
+    zassert_true(id > 0);
+
+    k_sleep(K_MSEC(300));
+
+    zassert_equal(calls.load(), 1);
+}

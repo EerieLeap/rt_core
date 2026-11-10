@@ -37,6 +37,14 @@ GpioRandomizer::GpioRandomizer(const GpioRandomizerConfig& config) {
 }
 
 GpioRandomizer::~GpioRandomizer() {
+    {
+        // Without handlers a run in progress cannot reschedule after the cancel below returns.
+        ScopedMutex guard(lock_);
+
+        for(auto& channel : channels_)
+            channel->handlers.clear();
+    }
+
     // The work item points into this object; wait out a run in progress.
     for(auto& channel : channels_) {
         k_work_sync sync{};
@@ -145,7 +153,12 @@ void GpioRandomizer::OnFlipDue(Channel& channel) {
     if(state != channel.dispatched_level) {
         channel.dispatched_level = state;
 
-        for(const auto& channel_handler : channel.handlers) {
+        // Dispatch over a copy: a handler may register or remove handlers of this device, which
+        // would destroy the running std::function or shift the loop. A handler removed by another
+        // handler during this dispatch may still receive this level.
+        const std::vector<ChannelHandler> handlers = channel.handlers;
+
+        for(const auto& channel_handler : handlers) {
             if(channel_handler.edge == GpioEdge::ACTIVE && !state)
                 continue;
 

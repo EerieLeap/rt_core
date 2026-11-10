@@ -265,3 +265,63 @@ ZTEST(gpio_randomizer, test_destruction_with_active_handlers_is_safe) {
 
     zassert_equal(calls.load(), at_destruction, "no work survives the object");
 }
+
+ZTEST(gpio_randomizer, test_a_handler_may_remove_itself_during_its_call) {
+    auto gpio = MakeInitialized();
+
+    std::atomic<int> calls = 0;
+    int id = 0;
+
+    id = gpio->RegisterChannelChangedHandler(0, GpioEdge::BOTH, [&](int, bool) {
+        calls++;
+        gpio->RemoveChannelChangedHandler(0, id);
+    });
+    zassert_true(id > 0);
+
+    k_sleep(K_MSEC(300));
+
+    zassert_equal(calls.load(), 1, "removed on its first call, so never again");
+}
+
+ZTEST(gpio_randomizer, test_a_handler_may_register_another_during_its_call) {
+    auto gpio = MakeInitialized();
+
+    std::atomic<int> late_calls = 0;
+    std::atomic<int> registered = 0;
+
+    const int id = gpio->RegisterChannelChangedHandler(1, GpioEdge::BOTH, [&](int, bool) {
+        if(registered++ == 0) {
+            gpio->RegisterChannelChangedHandler(1, GpioEdge::BOTH, [&](int, bool) {
+                late_calls++;
+            });
+        }
+    });
+    zassert_true(id > 0);
+
+    k_sleep(K_MSEC(400));
+
+    zassert_equal(registered.load() > 1, true);
+    zassert_true(late_calls > 0, "%d", late_calls.load());
+}
+
+ZTEST(gpio_randomizer, test_destruction_leaves_no_handler_call_behind) {
+    std::atomic<int> calls = 0;
+
+    {
+        auto gpio = MakeInitialized();
+
+        for(int channel = 0; channel < 3; channel++) {
+            gpio->RegisterChannelChangedHandler(channel, GpioEdge::BOTH, [&](int, bool) {
+                calls++;
+                k_busy_wait(2000);
+            });
+        }
+
+        k_sleep(K_MSEC(100));
+    }
+
+    const int at_destruction = calls;
+    k_sleep(K_MSEC(300));
+
+    zassert_equal(calls.load(), at_destruction);
+}
