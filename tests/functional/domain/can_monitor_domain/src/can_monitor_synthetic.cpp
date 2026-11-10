@@ -6,13 +6,7 @@
 
 using namespace can_monitor_test;
 
-namespace {
-
-void ResetControllers(void*) {
-    can_stop(ConfiguredDevice());
-}
-
-} // namespace
+namespace {} // namespace
 
 ZTEST_SUITE(can_monitor_synthetic, NULL, NULL, NULL, ResetControllers, NULL);
 
@@ -22,7 +16,7 @@ ZTEST(can_monitor_synthetic, test_the_rate_holds_within_one_percent) {
     constexpr uint32_t WINDOW_MS = 5000;
 
     const auto answer = harness.OpenSynthetic(FPS, 8);
-    k_msleep(WINDOW_MS);
+    harness.Sleep(answer.tok, WINDOW_MS);
     harness.CloseAndDrain(answer.tok);
 
     const auto notifications = DecodeAll(harness.notifier->Notifications());

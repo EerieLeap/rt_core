@@ -25,10 +25,6 @@ constexpr uint8_t Id(Command command) {
     return std::to_underlying(command);
 }
 
-void ResetControllers(void*) {
-    can_stop(ConfiguredDevice());
-}
-
 // The unit, its group and a client; the client goes first, then the group, then the unit.
 struct GroupHarness {
     Harness harness;
@@ -153,11 +149,11 @@ ZTEST(can_monitor_group, test_unknown_ports_and_modes_the_port_cannot_take) {
     // TAP is for a channel the configuration runs; can1 is not run.
     ExpectGroupError(unit.OpenTap(UNCONFIGURED_PORT), CanMonitorError::BAD_MODE);
 
-    // LISTEN_ONLY and ACTIVE build a bus of their own, which is Phase 3; and a mode nobody knows.
-    ExpectGroupError(unit.OpenTap(UNCONFIGURED_PORT, 1), CanMonitorError::BAD_MODE);
-    ExpectGroupError(unit.OpenTap(UNCONFIGURED_PORT, 2), CanMonitorError::BAD_MODE);
+    // LISTEN_ONLY and ACTIVE are for a port the configuration doesn't run; can0 is run. And a mode nobody knows.
     ExpectGroupError(unit.OpenTap(CONFIGURED_PORT, 1), CanMonitorError::BAD_MODE);
+    ExpectGroupError(unit.OpenTap(CONFIGURED_PORT, 2), CanMonitorError::BAD_MODE);
     ExpectGroupError(unit.OpenTap(CONFIGURED_PORT, 7), CanMonitorError::BAD_MODE);
+    ExpectGroupError(unit.OpenTap(UNCONFIGURED_PORT, 7), CanMonitorError::BAD_MODE);
 
     zassert_equal(unit.harness.service->GetSessionCount(), 0U);
     zassert_equal(unit.harness.holds.load(), 0);
@@ -260,14 +256,11 @@ ZTEST(can_monitor_group, test_filters_of_open_are_applied_to_the_stream) {
     zassert_equal(sum.frames_sent, 4U);
 }
 
-ZTEST(can_monitor_group, test_the_commands_of_later_phases_are_not_supported_yet) {
+ZTEST(can_monitor_group, test_the_commands_of_phase_4_are_not_supported_yet) {
     GroupHarness unit;
     const auto opened = unit.OpenTap();
 
     const Bytes token_body = CborMap().Put("tok", opened.Value("tok")).Build();
-    zassert_false(unit.client.Read(GROUP, Id(Command::STATUS)).IsOk());
-    zassert_false(unit.client.Read(GROUP, Id(Command::STATS), token_body).IsOk());
-    zassert_false(unit.client.Write(GROUP, Id(Command::FILTER), token_body).IsOk());
     zassert_false(unit.client.Write(GROUP, Id(Command::ARM), token_body).IsOk());
     zassert_false(unit.client.Write(GROUP, Id(Command::SEND), token_body).IsOk());
     zassert_false(unit.client.Write(GROUP, Id(Command::PERIODIC), token_body).IsOk());

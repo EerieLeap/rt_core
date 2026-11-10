@@ -9,3 +9,33 @@ common:
 
 tests:
   lint.bluetooth: {}
+  # Also the CAN bus controller and the CAN monitor's controller, which sit on the Bluetooth stack: the
+  # compile database of this scenario holds can_monitor_controller.cpp.
+  lint.bluetooth.can_monitor:
+    extra_args:
+      - RT_CORE_LINT_CAN_MONITOR=y
+    extra_configs:
+      - CONFIG_FLASH=y
+      - CONFIG_FLASH_MAP=y
+      - CONFIG_FLASH_SIMULATOR=y
+      - CONFIG_FILE_SYSTEM=y
+      - CONFIG_FILE_SYSTEM_LITTLEFS=y
+      - CONFIG_FILE_SYSTEM_MKFS=y
+      - CONFIG_CRC=y
+      - CONFIG_CAN_FD_MODE=y
+      - CONFIG_CAN_LOOPBACK=y
+      - CONFIG_EERIE_LEAP_CDMP=y
+      - CONFIG_EERIE_LEAP_DEVICE_TREE=y
+      - CONFIG_EERIE_LEAP_FS=y
+      - CONFIG_EERIE_LEAP_GPIO=y
+      - CONFIG_EERIE_LEAP_RANDOM=y
+      - CONFIG_EERIE_LEAP_TIME=y
+      - CONFIG_EERIE_LEAP_SMP=y
+      - CONFIG_EERIE_LEAP_DOMAIN_CANBUS=y
+      - CONFIG_EERIE_LEAP_DOMAIN_CANBUS_COM=y
+      - CONFIG_EERIE_LEAP_DOMAIN_SCRIPT=y
+      - CONFIG_EERIE_LEAP_DOMAIN_CAN_MONITOR=y
+      - CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC=y
+      - CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA=y
+      - CONFIG_EERIE_LEAP_CONTROLLER_CANBUS=y
+      - CONFIG_EERIE_LEAP_CONTROLLER_CAN_MONITOR=y

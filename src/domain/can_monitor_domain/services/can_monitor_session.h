@@ -18,14 +18,22 @@
 #include "subsys/canbus/canbus.h"
 #include "subsys/canbus/i_can_frame_tap.h"
 
+#include "can_error_counters.h"
+
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
+    #include "domain/can_monitor_domain/utilities/can_delta_table.h"
+#endif
+
 namespace eerie_leap::domain::can_monitor_domain::services {
 
 using eerie_leap::domain::can_monitor_domain::models::CanbusType;
 using eerie_leap::domain::can_monitor_domain::models::CanMonitorMode;
 using eerie_leap::domain::can_monitor_domain::models::CanUnitFilter;
 using eerie_leap::domain::can_monitor_domain::utilities::ByteRing;
+using eerie_leap::domain::can_monitor_domain::utilities::CanCounterWidener;
 using eerie_leap::domain::can_monitor_domain::utilities::CanRecordFrame;
 using eerie_leap::domain::can_monitor_domain::utilities::CanRecordWriter;
+using eerie_leap::domain::can_monitor_domain::utilities::CanStatistics;
 using eerie_leap::subsys::canbus::Canbus;
 using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::subsys::canbus::ICanFrameTap;
@@ -48,6 +56,23 @@ struct CanMonitorWakeSignal {
     }
 };
 
+/** @brief What a session is opened with. */
+struct CanMonitorSessionParameters {
+    uint32_t token = 0;
+    uint8_t port = 0;
+    CanMonitorMode mode = CanMonitorMode::TAP;
+    CanbusType type = CanbusType::NONE;
+    /// The bitrates the session's bus runs at; 0 while a bitrate is being detected, or for no bus.
+    uint32_t bitrate = 0;
+    uint32_t data_bitrate = 0;
+    /// NowUs() at OPEN: the time of the record before the first.
+    uint64_t start_time_us = 0;
+    /// Changed-bytes records; ignored in a build without EERIE_LEAP_CAN_MONITOR_DELTA.
+    bool is_delta = false;
+    /// The controller's counts; none for a session with no bus.
+    std::shared_ptr<ICanErrorCounters> counters;
+};
+
 /**
  * @brief One open session: the tap of a bus (or the synthetic source's producer path), the ring its
  * records wait in, and the counters the statistics record is made of.
@@ -57,7 +82,8 @@ struct CanMonitorWakeSignal {
  *   source's thread. It never blocks, takes no k_mutex, allocates nothing and logs nothing per frame.
  *   Everything it writes is either an atomic or only it touches.
  * - Sender: reads the ring and the atomic counters.
- * - Any thread: SetFilters() (a spinlock the producer takes too).
+ * - Any thread: SetFilters() (a spinlock the producer takes too) and Totals() (a mutex the producer never
+ *   takes).
  *
  * A session is destroyed only after its producer has stopped (the tap removed, the source joined).
  */
@@ -71,7 +97,11 @@ private:
 
     CanMonitorWakeSignal& wake_;
     std::unique_ptr<ByteRing> ring_;
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
+    std::unique_ptr<utilities::CanDeltaTable> delta_;
+#endif
     CanRecordWriter writer_;
+    std::shared_ptr<ICanErrorCounters> counters_;
 
     // The unit filters. The spinlock is the only thing the producer and another thread share here.
     k_spinlock filter_lock_{};
@@ -84,9 +114,21 @@ private:
     std::atomic<uint32_t> busy_us_{ 0 };
     std::atomic<uint32_t> filtered_{ 0 };
 
+    // Totals since OPEN, widened from the counters above and the controller's. Taken by the threads that
+    // make statistics, never by the producer.
+    k_mutex totals_lock_{};
+    CanCounterWidener received_total_;
+    CanCounterWidener sent_total_;
+    CanCounterWidener busy_total_;
+    CanCounterWidener filtered_total_;
+    std::array<CanCounterWidener, utilities::CAN_GAP_CAUSE_COUNT> lost_totals_{};
+    std::array<CanCounterWidener, 5> error_totals_{};
+    uint64_t discarded_ = 0;
+    // The controller's counts when the session started; only the changes since count.
+    CanErrorCounts error_baseline_;
+
     // Producer only. The bus is null for a synthetic session.
     Canbus* bus_ = nullptr;
-    const device* device_ = nullptr;
     uint32_t nominal_bitrate_;
     uint32_t data_bitrate_;
     uint32_t last_reported_bitrate_;
@@ -96,16 +138,13 @@ private:
     uint32_t last_overruns_ = 0;
 
     CanMonitorSession(
-        uint32_t token,
-        uint8_t port,
-        CanMonitorMode mode,
-        CanbusType type,
-        uint32_t bitrate,
-        uint32_t data_bitrate,
-        uint64_t start_time_us,
+        const CanMonitorSessionParameters& parameters,
         CanMonitorWakeSignal& wake,
         std::unique_ptr<ByteRing> ring
     );
+
+    /// The table the writer encodes changed bytes with; none without the option or without OPEN's `delta`.
+    utilities::CanDeltaTable* GetDeltaTable();
 
     bool PassesFilter(uint32_t id, bool ext);
     void CollectLosses();
@@ -114,17 +153,11 @@ private:
 
 public:
     /**
-     * @param start_time_us The session's start (NowUs() at OPEN): the time of the record before the first.
-     * @return nullptr when the ring (EERIE_LEAP_CAN_MONITOR_RING_SIZE bytes from @p memory) can't be had.
+     * @return nullptr when the ring (EERIE_LEAP_CAN_MONITOR_RING_SIZE bytes from @p memory) or, with
+     * OPEN's `delta`, the changed-bytes table can't be had.
      */
     static std::unique_ptr<CanMonitorSession> Create(
-        uint32_t token,
-        uint8_t port,
-        CanMonitorMode mode,
-        CanbusType type,
-        uint32_t bitrate,
-        uint32_t data_bitrate,
-        uint64_t start_time_us,
+        const CanMonitorSessionParameters& parameters,
         CanMonitorWakeSignal& wake,
         std::pmr::memory_resource* memory
     );
@@ -159,7 +192,7 @@ public:
     bool SetFilters(std::span<const CanUnitFilter> filters);
 
     /**
-     * @brief Takes the bus's counters as the baseline for the losses the session reports.
+     * @brief Takes the bus's counts as the baseline for the losses and errors the session reports.
      *
      * Call before the tap is set, with the bus the tap will be set on. A synthetic session binds none.
      */
@@ -189,19 +222,15 @@ public:
     [[nodiscard]] const CanRecordWriter& GetWriter() const {
         return writer_;
     }
-    [[nodiscard]] uint32_t GetFramesReceived() const {
-        return frames_received_.load(std::memory_order_relaxed);
-    }
-    [[nodiscard]] uint32_t GetFramesSent() const {
-        return frames_sent_.load(std::memory_order_relaxed);
-    }
-    /** @brief Whole µs of bus time; the sub-µs rest waits in the producer. */
-    [[nodiscard]] uint32_t GetBusyUs() const {
-        return busy_us_.load(std::memory_order_relaxed);
-    }
-    [[nodiscard]] uint32_t GetFiltered() const {
-        return filtered_.load(std::memory_order_relaxed);
-    }
+
+    /**
+     * @brief Everything counted since OPEN: frames, bus time, the controller's error counts and the losses
+     * at each stage, widened to 64 bits. Callable from the sender and the service; the producer never waits for it.
+     */
+    [[nodiscard]] CanStatistics Totals();
+
+    /** @brief Frames the sender discarded after the ring gave them up (a record too large, a refused notification). */
+    void AddDiscarded(uint64_t frames);
 };
 
 } // namespace eerie_leap::domain::can_monitor_domain::services

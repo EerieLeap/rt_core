@@ -330,26 +330,10 @@ bool CanMonitorSender::Serve(Slot& slot, int64_t now_ms, size_t notify_max, bool
     return Submit(now_ms);
 }
 
-// The totals the session counted so far less those of the previous record; the cause arrays are in the
-// statistics record's order.
+// What the session counted since the previous statistics record. The totals are the session's: STATS asks
+// for them too.
 CanStatistics CanMonitorSender::TakeStatistics(Slot& slot) {
-    const CanMonitorSession& session = *slot.session;
-    const CanRecordWriter& writer = session.GetWriter();
-
-    CanStatistics totals = slot.reported;
-    totals.frames_received = slot.received.Update(session.GetFramesReceived());
-    totals.frames_sent = slot.sent.Update(session.GetFramesSent());
-    totals.busy_us = slot.busy.Update(session.GetBusyUs());
-    totals.filtered = slot.filtered.Update(session.GetFiltered());
-
-    const auto lost = [&](CanGapCause cause) {
-        return slot.lost[static_cast<size_t>(cause) - 1].Update(writer.LostCount(cause));
-    };
-    totals.lost[CanStatistics::LOST_CONTROLLER] = lost(CanGapCause::CONTROLLER);
-    totals.lost[CanStatistics::LOST_RECEIVE_QUEUE] = lost(CanGapCause::RECEIVE_QUEUE);
-    totals.lost[CanStatistics::LOST_RING] = lost(CanGapCause::RING) + slot.sender_lost;
-    totals.lost[CanStatistics::LOST_ECHOES] = lost(CanGapCause::ECHO_POOL);
-
+    const CanStatistics totals = slot.session->Totals();
     const CanStatistics delta = Subtract(totals, slot.reported);
     slot.reported = totals;
 
@@ -416,7 +400,7 @@ bool CanMonitorSender::Build(Slot& slot, size_t notify_max) {
                 available
             );
             ring.Consume(available);
-            ++slot.sender_lost;
+            slot.session->AddDiscarded(1);
             is_skipped = true;
             cut = {};
             break;
@@ -427,7 +411,7 @@ bool CanMonitorSender::Build(Slot& slot, size_t notify_max) {
             if(cut.first_record_size > capacity) {
                 ring.Consume(cut.first_record_size);
                 slot.running_us += cut.first_record_dt_us;
-                ++slot.sender_lost;
+                slot.session->AddDiscarded(1);
                 is_skipped = true;
                 continue;
             }
@@ -561,7 +545,7 @@ void CanMonitorSender::Drop(int64_t now_ms) {
         offset += record.size;
     }
 
-    slot.sender_lost += frames;
+    slot.session->AddDiscarded(frames);
     LOG_WRN("CAN monitor dropped a notification of session %u (%zu frames)", slot.session->GetToken(), frames);
 
     Commit(now_ms);

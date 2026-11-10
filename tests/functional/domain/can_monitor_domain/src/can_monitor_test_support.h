@@ -63,6 +63,48 @@ inline const device* ConfiguredDevice() {
     return DEVICE_DT_GET(DT_ALIAS(can0));
 }
 
+/** @brief can1, which the stored configuration does not run. */
+inline const device* UnconfiguredDevice() {
+    return DEVICE_DT_GET(DT_ALIAS(can1));
+}
+
+/** @brief The loopback controller only hands frames back in loopback mode; Canbus starts it in normal mode. */
+inline void SwitchToLoopbackMode(const device* controller) {
+    zassert_ok(can_stop(controller));
+    zassert_ok(can_set_mode(controller, CAN_MODE_LOOPBACK));
+    zassert_ok(can_start(controller));
+}
+
+// A failing assertion skips the harness, so the controllers are stopped separately.
+inline void ResetControllers(void*) {
+    can_stop(ConfiguredDevice());
+    can_stop(UnconfiguredDevice());
+}
+
+/** @brief The controller's counts, set by the test. */
+class StubCounters : public ICanErrorCounters {
+private:
+    std::array<std::atomic<uint32_t>, 5> errors_{};
+    std::atomic<uint32_t> rx_overruns_{ 0 };
+
+public:
+    [[nodiscard]] CanErrorCounts Read() const override {
+        CanErrorCounts counts;
+        for(size_t i = 0; i < errors_.size(); ++i)
+            counts.errors[i] = errors_[i].load();
+        counts.rx_overruns = rx_overruns_.load();
+
+        return counts;
+    }
+
+    void AddError(size_t index, uint32_t count) {
+        errors_[index] += count;
+    }
+    void AddOverruns(uint32_t count) {
+        rx_overruns_ += count;
+    }
+};
+
 /** @brief Sleeps a few ms at a time until @p predicate holds; the clock of native_sim only moves while a thread sleeps. */
 template<typename Predicate>
 bool WaitUntil(Predicate predicate, int timeout_ms = 3000) {
@@ -343,6 +385,17 @@ void WalkStream(const std::vector<SentNotification>& sent, Visit&& visit, uint16
     }
 }
 
+/** @brief The notifications of one port: each session numbers and chains its own, so a stream of two is two. */
+inline std::vector<SentNotification> OnPort(const std::vector<SentNotification>& sent, uint8_t port) {
+    std::vector<SentNotification> notifications;
+    for(const SentNotification& notification : sent) {
+        if(notification.data.size() > 1 && notification.data[1] == port)
+            notifications.push_back(notification);
+    }
+
+    return notifications;
+}
+
 /** @brief What a stream holds, counted as it was walked. */
 struct StreamSummary {
     size_t notifications = 0;
@@ -382,6 +435,8 @@ inline StreamSummary Summarize(const std::vector<SentNotification>& sent, uint16
                     summary.statistics.frames_sent += s.frames_sent;
                     summary.statistics.busy_us += s.busy_us;
                     summary.statistics.filtered += s.filtered;
+                    for(size_t i = 0; i < s.errors.size(); ++i)
+                        summary.statistics.errors[i] += s.errors[i];
                     for(size_t i = 0; i < s.lost.size(); ++i)
                         summary.statistics.lost[i] += s.lost[i];
                     break;
@@ -410,6 +465,8 @@ public:
     std::atomic<bool> is_auto_complete{ true };
     std::atomic<int> holds{ 0 };
     std::atomic<int> releases{ 0 };
+    /// The error counts every session reads.
+    std::shared_ptr<StubCounters> counters = std::make_shared<StubCounters>();
     std::shared_ptr<CanbusService> canbus_service;
     std::shared_ptr<CanMonitorService> service;
 
@@ -453,7 +510,11 @@ public:
             return is_smp_busy.load();
         };
 
-        service = std::make_shared<CanMonitorService>(canbus_service, DtCanbus::Get, link);
+        service = std::make_shared<CanMonitorService>(
+            canbus_service, DtCanbus::Get, link, [this](const device*) -> std::shared_ptr<ICanErrorCounters> {
+                return counters;
+            }
+        );
         zassert_true(service->Initialize());
         zassert_true(service->Start());
 
@@ -473,6 +534,15 @@ public:
         service.reset();
         canbus_service.reset();
         can_stop(ConfiguredDevice());
+        can_stop(UnconfiguredDevice());
+    }
+
+    /** @brief Sleeps @p duration_ms, renewing the session's lease every half second. */
+    void Sleep(uint32_t token, int duration_ms) {
+        for(int slept = 0; slept < duration_ms; slept += 500) {
+            service->GetStats(token);
+            k_msleep(std::min(500, duration_ms - slept));
+        }
     }
 
     [[nodiscard]] eerie_leap::subsys::canbus::Canbus* Bus() const {

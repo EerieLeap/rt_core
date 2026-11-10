@@ -18,7 +18,6 @@
 
 namespace eerie_leap::domain::can_monitor_domain::services {
 
-using eerie_leap::domain::can_monitor_domain::utilities::CanCounterWidener;
 using eerie_leap::domain::can_monitor_domain::utilities::CanEndReason;
 using eerie_leap::domain::can_monitor_domain::utilities::CanStatistics;
 using eerie_leap::subsys::threading::IThread;
@@ -65,14 +64,7 @@ private:
         /// The time of the record before the next one the ring gives.
         uint64_t running_us = 0;
 
-        CanCounterWidener received;
-        CanCounterWidener sent;
-        CanCounterWidener busy;
-        CanCounterWidener filtered;
-        std::array<CanCounterWidener, utilities::CAN_GAP_CAUSE_COUNT> lost{};
-        /// Frames the sender itself discarded (a record too large, a notification refused).
-        uint64_t sender_lost = 0;
-        /// The totals at the last statistics record.
+        /// The session's totals at the last statistics record.
         CanStatistics reported;
         int64_t next_statistics_ms = 0;
         std::array<uint8_t, utilities::CAN_MAX_RECORD_SIZE> statistics_record{};

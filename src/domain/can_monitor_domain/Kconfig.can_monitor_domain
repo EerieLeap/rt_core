@@ -5,6 +5,8 @@ config EERIE_LEAP_DOMAIN_CAN_MONITOR
     # The canmon group's requests nest lists in lists in the request map (OPEN's and FILTER's
     # filters, SEND's frames, PERIODIC's list of maps): four levels of zcbor decoding state.
     select MCUMGR_SMP_CBOR_MIN_DECODING_LEVEL_4 if EERIE_LEAP_SMP
+    # STATUS answers a list of maps that hold a list: four levels with the response map.
+    select MCUMGR_SMP_CBOR_MIN_ENCODING_LEVEL_4 if EERIE_LEAP_SMP && ZCBOR_CANONICAL
     help
       Sessions that stream the frames of a CAN port to a client: the
       records, the ring they wait in, the sender and, with EERIE_LEAP_SMP,
@@ -62,6 +64,19 @@ menu "EerieLeap CAN monitor domain config"
     config EERIE_LEAP_CAN_MONITOR_SENDER_STACK_SIZE
         int "Stack size of the sender thread"
         default 2048
+
+    config EERIE_LEAP_CAN_MONITOR_WORK_QUEUE_STACK_SIZE
+        int "Stack size of the domain's work queue"
+        default 4096
+        help
+          The queue ends the sessions whose lease lapsed and those of a lost connection, which stops the
+          bus of a session that owns one (waiting for its thread), and Phase 4 sends the periodic frames
+          and the replay from it. It needs room to unwind exceptions.
+
+    config EERIE_LEAP_CAN_MONITOR_WORK_QUEUE_PRIORITY
+        int "Priority of the domain's work queue (preemptible)"
+        range 0 127
+        default 6
 
     config EERIE_LEAP_CAN_MONITOR_MAX_FILTERS
         int "Unit filters a session takes"

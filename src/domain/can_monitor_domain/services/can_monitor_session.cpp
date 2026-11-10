@@ -7,42 +7,47 @@
 
 #include "domain/can_monitor_domain/utilities/can_bit_time.h"
 #include "domain/can_monitor_domain/utilities/can_record.h"
+#include "subsys/threading/scoped_mutex.h"
 
 namespace eerie_leap::domain::can_monitor_domain::services {
 
 using namespace eerie_leap::domain::can_monitor_domain::utilities;
+using eerie_leap::subsys::threading::ScopedMutex;
 
 CanMonitorSession::CanMonitorSession(
-    uint32_t token,
-    uint8_t port,
-    CanMonitorMode mode,
-    CanbusType type,
-    uint32_t bitrate,
-    uint32_t data_bitrate,
-    uint64_t start_time_us,
+    const CanMonitorSessionParameters& parameters,
     CanMonitorWakeSignal& wake,
     std::unique_ptr<ByteRing> ring
 ) :
-    token_(token),
-    port_(port),
-    mode_(mode),
-    type_(type),
-    start_time_us_(start_time_us),
+    token_(parameters.token),
+    port_(parameters.port),
+    mode_(parameters.mode),
+    type_(parameters.type),
+    start_time_us_(parameters.start_time_us),
     wake_(wake),
     ring_(std::move(ring)),
-    writer_(*ring_, start_time_us),
-    nominal_bitrate_(bitrate),
-    data_bitrate_(data_bitrate),
-    last_reported_bitrate_(bitrate) {}
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
+    delta_(parameters.is_delta ? CanDeltaTable::Create() : nullptr),
+#endif
+    writer_(*ring_, parameters.start_time_us, GetDeltaTable()),
+    counters_(parameters.counters),
+    nominal_bitrate_(parameters.bitrate),
+    data_bitrate_(parameters.data_bitrate),
+    last_reported_bitrate_(parameters.bitrate) {
+
+    k_mutex_init(&totals_lock_);
+}
+
+CanDeltaTable* CanMonitorSession::GetDeltaTable() {
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
+    return delta_.get();
+#else
+    return nullptr;
+#endif
+}
 
 std::unique_ptr<CanMonitorSession> CanMonitorSession::Create(
-    uint32_t token,
-    uint8_t port,
-    CanMonitorMode mode,
-    CanbusType type,
-    uint32_t bitrate,
-    uint32_t data_bitrate,
-    uint64_t start_time_us,
+    const CanMonitorSessionParameters& parameters,
     CanMonitorWakeSignal& wake,
     std::pmr::memory_resource* memory
 ) {
@@ -51,8 +56,14 @@ std::unique_ptr<CanMonitorSession> CanMonitorSession::Create(
         return nullptr;
 
     // The constructor is private, so make_unique can't reach it.
-    return std::unique_ptr<CanMonitorSession>(new(std::nothrow)
-            CanMonitorSession(token, port, mode, type, bitrate, data_bitrate, start_time_us, wake, std::move(ring)));
+    std::unique_ptr<CanMonitorSession> session(new(std::nothrow) CanMonitorSession(parameters, wake, std::move(ring)));
+
+#ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
+    if(session && parameters.is_delta && session->GetDeltaTable() == nullptr)
+        return nullptr;
+#endif
+
+    return session;
 }
 
 bool CanMonitorSession::SetFilters(std::span<const CanUnitFilter> filters) {
@@ -72,12 +83,13 @@ void CanMonitorSession::BindBus(Canbus* bus) {
     if(bus == nullptr)
         return;
 
-    device_ = bus->GetConfig().canbus_dev;
     last_rx_dropped_ = bus->GetRxDroppedCount();
     last_echo_lost_ = bus->GetTxEchoLostCount();
-#ifdef CONFIG_CAN_STATS
-    last_overruns_ = can_stats_get_rx_overruns(device_);
-#endif
+
+    if(counters_) {
+        error_baseline_ = counters_->Read();
+        last_overruns_ = error_baseline_.rx_overruns;
+    }
 }
 
 bool CanMonitorSession::PassesFilter(uint32_t id, bool ext) {
@@ -110,13 +122,13 @@ void CanMonitorSession::CollectLosses() {
         last_echo_lost_ = echoes;
     }
 
-#ifdef CONFIG_CAN_STATS
-    const uint32_t overruns = can_stats_get_rx_overruns(device_);
-    if(overruns != last_overruns_) {
-        writer_.AddLoss(CanGapCause::CONTROLLER, static_cast<uint32_t>(overruns - last_overruns_));
-        last_overruns_ = overruns;
+    if(counters_) {
+        const uint32_t overruns = counters_->Read().rx_overruns;
+        if(overruns != last_overruns_) {
+            writer_.AddLoss(CanGapCause::CONTROLLER, static_cast<uint32_t>(overruns - last_overruns_));
+            last_overruns_ = overruns;
+        }
     }
-#endif
 }
 
 // Whole µs go to the counter the sender reads; the nanoseconds left over wait for the next frame, so the
@@ -212,6 +224,38 @@ void CanMonitorSession::OnFilterSwap(bool may_have_missed, uint64_t time_us) {
     const size_t size_before = ring_->Size();
     writer_.WriteTap(time_us, may_have_missed ? CanTapMark::MAY_HAVE_MISSED : CanTapMark::MAY_HAVE_REPEATED);
     WakeSender(size_before);
+}
+
+CanStatistics CanMonitorSession::Totals() {
+    const ScopedMutex guard(totals_lock_);
+
+    CanStatistics totals;
+    totals.frames_received = received_total_.Update(frames_received_.load(std::memory_order_relaxed));
+    totals.frames_sent = sent_total_.Update(frames_sent_.load(std::memory_order_relaxed));
+    totals.busy_us = busy_total_.Update(busy_us_.load(std::memory_order_relaxed));
+    totals.filtered = filtered_total_.Update(filtered_.load(std::memory_order_relaxed));
+
+    const auto lost = [this](CanGapCause cause) {
+        return lost_totals_[static_cast<size_t>(cause) - 1].Update(writer_.LostCount(cause));
+    };
+    totals.lost[CanStatistics::LOST_CONTROLLER] = lost(CanGapCause::CONTROLLER);
+    totals.lost[CanStatistics::LOST_RECEIVE_QUEUE] = lost(CanGapCause::RECEIVE_QUEUE);
+    totals.lost[CanStatistics::LOST_RING] = lost(CanGapCause::RING) + discarded_;
+    totals.lost[CanStatistics::LOST_ECHOES] = lost(CanGapCause::ECHO_POOL);
+
+    if(counters_) {
+        const CanErrorCounts now = counters_->Read();
+        for(size_t i = 0; i < totals.errors.size(); ++i)
+            totals.errors[i] = error_totals_[i].Update(now.errors[i] - error_baseline_.errors[i]);
+    }
+
+    return totals;
+}
+
+void CanMonitorSession::AddDiscarded(uint64_t frames) {
+    const ScopedMutex guard(totals_lock_);
+
+    discarded_ += frames;
 }
 
 } // namespace eerie_leap::domain::can_monitor_domain::services

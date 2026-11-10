@@ -18,6 +18,9 @@ using models::CanbusType;
 using models::CanMonitorMode;
 using models::CanMonitorOpenAnswer;
 using models::CanMonitorOpenRequest;
+using models::CanMonitorPortStatus;
+using models::CanMonitorStats;
+using models::CanMonitorStatus;
 using models::CanSyntheticParameters;
 
 namespace {
@@ -71,13 +74,12 @@ bool DecodeSynthetic(zcbor_state_t* zsd, CanMonitorMgmtGroup::SyntheticRequest* 
 } // namespace
 
 const mgmt_handler CanMonitorMgmtGroup::HANDLERS[COMMAND_COUNT] = {
-    // 0 STATUS (Phase 3).
-    { .mh_read = nullptr, .mh_write = nullptr },
+    { .mh_read = Dispatch<&CanMonitorMgmtGroup::HandleStatus>, .mh_write = nullptr },
     { .mh_read = nullptr, .mh_write = Dispatch<&CanMonitorMgmtGroup::HandleOpen> },
     { .mh_read = nullptr, .mh_write = Dispatch<&CanMonitorMgmtGroup::HandleClose> },
-    // 3 FILTER, 4 STATS (Phase 3), 5 ARM, 6 SEND, 7 PERIODIC, 8 REPLAY (Phase 4).
-    { .mh_read = nullptr, .mh_write = nullptr },
-    { .mh_read = nullptr, .mh_write = nullptr },
+    { .mh_read = nullptr, .mh_write = Dispatch<&CanMonitorMgmtGroup::HandleFilter> },
+    { .mh_read = Dispatch<&CanMonitorMgmtGroup::HandleStats>, .mh_write = nullptr },
+    // 5 ARM, 6 SEND, 7 PERIODIC, 8 REPLAY (Phase 4).
     { .mh_read = nullptr, .mh_write = nullptr },
     { .mh_read = nullptr, .mh_write = nullptr },
     { .mh_read = nullptr, .mh_write = nullptr },
@@ -196,6 +198,128 @@ int CanMonitorMgmtGroup::HandleOpen(smp_streamer* ctxt) {
         && zcbor_uint32_put(zse, answer.data_bitrate)
         && zcbor_tstr_put_lit(zse, "lease_ms")
         && zcbor_uint32_put(zse, answer.lease_ms);
+
+    return MGMT_RETURN_CHECK(ok);
+}
+
+int CanMonitorMgmtGroup::HandleStatus(smp_streamer* ctxt) {
+    const CanMonitorStatus status = service_->GetStatus();
+    zcbor_state_t* zse = ctxt->writer->zs;
+
+    bool ok = zcbor_tstr_put_lit(zse, "version")
+        && zcbor_uint32_put(zse, models::CAN_MONITOR_VERSION)
+        && zcbor_tstr_put_lit(zse, "ports")
+        && zcbor_list_start_encode(zse, CanMonitorService::MAX_PORTS);
+
+    for(const CanMonitorPortStatus& port : status.ports) {
+        ok = ok
+            && zcbor_map_start_encode(zse, 7)
+            && zcbor_tstr_put_lit(zse, "ch")
+            && zcbor_uint32_put(zse, port.ch)
+            && zcbor_tstr_put_lit(zse, "types")
+            && zcbor_list_start_encode(zse, 2)
+            && zcbor_uint32_put(zse, std::to_underlying(CanbusType::CLASSICAL_CAN))
+            && (!port.is_fd_capable || zcbor_uint32_put(zse, std::to_underlying(CanbusType::CANFD)))
+            && zcbor_list_end_encode(zse, 2)
+            && zcbor_tstr_put_lit(zse, "configured")
+            && zcbor_bool_put(zse, port.is_configured)
+            && zcbor_tstr_put_lit(zse, "state")
+            && zcbor_uint32_put(zse, port.state)
+            && zcbor_tstr_put_lit(zse, "bitrate")
+            && zcbor_uint32_put(zse, port.bitrate)
+            && zcbor_tstr_put_lit(zse, "data_bitrate")
+            && zcbor_uint32_put(zse, port.data_bitrate)
+            && zcbor_tstr_put_lit(zse, "session")
+            && zcbor_bool_put(zse, port.has_session)
+            && zcbor_map_end_encode(zse, 7);
+    }
+
+    ok = ok
+        && zcbor_list_end_encode(zse, CanMonitorService::MAX_PORTS)
+        && zcbor_tstr_put_lit(zse, "filters_max")
+        && zcbor_uint32_put(zse, status.filters_max)
+        && zcbor_tstr_put_lit(zse, "ring_bytes")
+        && zcbor_uint32_put(zse, status.ring_bytes)
+        && zcbor_tstr_put_lit(zse, "notify_max")
+        && zcbor_uint32_put(zse, status.notify_max)
+        && zcbor_tstr_put_lit(zse, "tx")
+        && zcbor_bool_put(zse, status.has_tx)
+        && zcbor_tstr_put_lit(zse, "synthetic")
+        && zcbor_bool_put(zse, status.has_synthetic)
+        && zcbor_tstr_put_lit(zse, "delta")
+        && zcbor_bool_put(zse, status.has_delta);
+
+    return MGMT_RETURN_CHECK(ok);
+}
+
+int CanMonitorMgmtGroup::HandleFilter(smp_streamer* ctxt) {
+    uint32_t token = 0;
+    filter_list_.count = 0;
+
+    std::array keys = {
+        SmpMapKey("tok", zcbor_uint32_decode, &token),
+        SmpMapKey("filters", DecodeFilters, &filter_list_),
+    };
+
+    if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found || !keys[1].found)
+        return MGMT_ERR_EINVAL;
+
+    if(filter_list_.count > filter_list_.filters.size())
+        return MGMT_ERR_EINVAL;
+
+    const auto result = service_->SetFilters(
+        token, std::span<const CanUnitFilter>(filter_list_.filters).first(filter_list_.count)
+    );
+    if(!result.has_value())
+        return SmpAddGroupError(ctxt, SmpGroupId::CAN_MONITOR, std::to_underlying(result.error()));
+
+    return MGMT_ERR_EOK;
+}
+
+int CanMonitorMgmtGroup::HandleStats(smp_streamer* ctxt) {
+    uint32_t token = 0;
+    std::array keys = {
+        SmpMapKey("tok", zcbor_uint32_decode, &token),
+    };
+
+    if(!SmpDecodeRequest(ctxt, keys) || !keys[0].found)
+        return MGMT_ERR_EINVAL;
+
+    const auto result = service_->GetStats(token);
+    if(!result.has_value())
+        return SmpAddGroupError(ctxt, SmpGroupId::CAN_MONITOR, std::to_underlying(result.error()));
+
+    const CanMonitorStats& stats = *result;
+    zcbor_state_t* zse = ctxt->writer->zs;
+
+    bool ok = zcbor_tstr_put_lit(zse, "state")
+        && zcbor_uint32_put(zse, stats.state)
+        && zcbor_tstr_put_lit(zse, "tec")
+        && zcbor_uint32_put(zse, stats.tec)
+        && zcbor_tstr_put_lit(zse, "rec")
+        && zcbor_uint32_put(zse, stats.rec)
+        && zcbor_tstr_put_lit(zse, "rx")
+        && zcbor_uint64_put(zse, stats.frames_received)
+        && zcbor_tstr_put_lit(zse, "tx")
+        && zcbor_uint64_put(zse, stats.frames_sent)
+        && zcbor_tstr_put_lit(zse, "busy_us")
+        && zcbor_uint64_put(zse, stats.busy_us)
+        && zcbor_tstr_put_lit(zse, "errors")
+        && zcbor_list_start_encode(zse, stats.errors.size());
+    for(const uint64_t value : stats.errors)
+        ok = ok && zcbor_uint64_put(zse, value);
+
+    ok = ok
+        && zcbor_list_end_encode(zse, stats.errors.size())
+        && zcbor_tstr_put_lit(zse, "lost")
+        && zcbor_list_start_encode(zse, stats.lost.size());
+    for(const uint64_t value : stats.lost)
+        ok = ok && zcbor_uint64_put(zse, value);
+
+    ok = ok
+        && zcbor_list_end_encode(zse, stats.lost.size())
+        && zcbor_tstr_put_lit(zse, "filtered")
+        && zcbor_uint64_put(zse, stats.filtered);
 
     return MGMT_RETURN_CHECK(ok);
 }

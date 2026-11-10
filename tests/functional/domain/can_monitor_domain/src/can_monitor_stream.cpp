@@ -8,11 +8,6 @@ using namespace can_monitor_test;
 
 namespace {
 
-// A failing assertion skips the harness, so the controller is stopped separately.
-void ResetControllers(void*) {
-    can_stop(ConfiguredDevice());
-}
-
 /// The frames of the stream, in order.
 std::vector<const DecodedRecord*> FramesOf(const std::vector<DecodedNotification>& notifications) {
     return RecordsOf(notifications, CanRecordKind::FRAME);
@@ -133,7 +128,7 @@ ZTEST(can_monitor_stream, test_statistics_come_each_second_and_add_up) {
     Harness harness;
 
     const auto answer = harness.OpenSynthetic(100, 2, 4);
-    k_msleep(2600);
+    harness.Sleep(answer.tok, 2600);
     harness.CloseAndDrain(answer.tok);
 
     const auto notifications = DecodeAll(harness.notifier->Notifications());
@@ -323,9 +318,12 @@ ZTEST(can_monitor_stream, test_a_disconnect_ends_the_sessions_with_no_record) {
     harness.OpenSynthetic(100, 2);
     k_msleep(100);
 
+    // The handler runs on the system work queue: the sessions end on the domain's own.
     harness.service->OnDisconnected();
 
-    zassert_equal(harness.service->GetSessionCount(), 0);
+    zassert_true(WaitUntil([&] {
+        return harness.service->GetSessionCount() == 0;
+    }));
     zassert_equal(harness.holds.load(), harness.releases.load());
 
     // Nothing can drain into a link that is gone: the sender lets go of the session and of what is in flight.

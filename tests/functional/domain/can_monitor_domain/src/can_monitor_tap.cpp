@@ -18,10 +18,6 @@ constexpr uint32_t OTHER_ID = 0x200;
 // 47 bit times of overhead and 3 data bytes at 500 kbit/s: 71 x 2 µs.
 constexpr uint64_t BUSY_US_PER_FRAME = 142;
 
-void ResetControllers(void*) {
-    can_stop(ConfiguredDevice());
-}
-
 // A consumer of can0: counts the frames its handler is given, from the receive thread.
 class Consumer {
 private:

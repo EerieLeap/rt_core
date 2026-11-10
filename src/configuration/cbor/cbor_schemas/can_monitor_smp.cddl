@@ -1,0 +1,140 @@
+; The requests and answers of the `canmon` SMP group (74) of the CAN monitor. Not a stored configuration:
+; this file documents the group's CBOR and is not compiled. Every request and answer is a map with text keys.
+; Commands 0 and 4 are SMP reads, the others writes. Keys marked `?` may be left out. Unknown keys in a
+; request are skipped.
+;
+; An error is the SMP v2 `err` map {group: 74, rc: CanMonitorError} (SMP v1 clients get an `rc` mapped from
+; it: NO_SESSION, BAD_TOKEN and NOT_FOUND to ENOENT; BUSY and RATE to EBUSY; BAD_MODE, BAD_BITRATE and
+; BAD_SEQ to EINVAL; NOT_LISTENING, NOT_ARMED and BUS_OFF to EBADSTATE; NO_MEMORY and NO_ROOM to ENOMEM;
+; RESERVED to EACCESSDENIED; TX_UNSUPPORTED to ENOTSUP; UNKNOWN to EUNKNOWN). A request that is malformed
+; (a missing key, a value out of range) is MGMT_ERR_EINVAL instead. A command the build does not have
+; answers MGMT_ERR_ENOTSUP, as firmware without the group does.
+;
+; CanMonitorError
+;   1 UNKNOWN          2 NO_SESSION       3 BAD_TOKEN        4 BUSY             5 NOT_FOUND
+;   6 BAD_MODE         7 BAD_BITRATE      8 NOT_LISTENING    9 NO_MEMORY       10 NOT_ARMED
+;  11 RESERVED        12 RATE            13 BUS_OFF         14 NO_ROOM         15 TX_UNSUPPORTED
+;  16 BAD_SEQ
+;
+; Every request that carries `tok` renews the session's lease (`lease_ms` of OPEN's answer) and ends the
+; grace in which a repeated OPEN gets the same token. A wrong token is NO_SESSION, a token of 0 BAD_TOKEN.
+
+; 0 STATUS (read)
+CanMonitorStatusRequest = {}
+CanMonitorStatusAnswer = {
+    version: uint,                              ; of the records and of this answer: 1
+    ports: [0*8 CanMonitorPort],                ; every CAN port of the devicetree; the synthetic one is not listed
+    filters_max: uint,                          ; unit filters a session takes
+    ring_bytes: uint,                           ; bytes of each session's ring
+    notify_max: uint,                           ; the largest `bus` notification now; 0 while notifications are off
+    tx: bool,                                   ; the build has transmit and replay
+    synthetic: bool,                            ; the build has the synthetic source
+    delta: bool                                 ; the build has changed-bytes records
+}
+CanMonitorPort = {
+    ch: uint,
+    types: [1*2 CanMonitorBusType],             ; what the controller can run: classical, and CAN FD where it can
+    configured: bool,                           ; the stored configuration runs the port (TAP is for these)
+    state: CanMonitorBusState,
+    bitrate: uint,                              ; the channel's, or the session's own bus; 0 until detected
+    data_bitrate: uint,                         ; 0 on a classical port
+    session: bool                               ; a session holds the port
+}
+CanMonitorBusType = 1 / 2                       ; 1 classical CAN, 2 CAN FD (the stored CanbusType)
+CanMonitorBusState = 0..4                       ; 0 error active, 1 warning, 2 passive, 3 bus-off, 4 stopped
+
+; 1 OPEN (write)
+CanMonitorOpenRequest = {
+    ? ch: uint .le 254,                         ; the port; required without `synthetic`, otherwise ignored
+    ? mode: CanMonitorMode,                     ; required without `synthetic`, otherwise ignored
+    ? type: CanMonitorBusType,                  ; a session on its own bus: classical by default
+    ? bitrate: uint,                            ; a session on its own bus: 0 or absent detects it
+    ? data_bitrate: uint,                       ; CAN FD: absent or 0 uses the nominal bitrate
+    ? filters: [0*16 CanMonitorFilter],         ; up to `filters_max`; absent or empty passes every frame
+    ? delta: bool,                              ; changed-bytes records, where the build has them
+    ? synthetic: CanMonitorSynthetic            ; frames generated, with no bus
+}
+CanMonitorMode = 0 / 1 / 2                      ; 0 TAP (a configured channel), 1 LISTEN_ONLY, 2 ACTIVE (an unconfigured port)
+CanMonitorFilter = [
+    id: uint,
+    mask: uint,                                 ; a frame passes when (frame id & mask) == (id & mask) ...
+    ext: bool                                   ; ... and its IDE equals ext
+]
+CanMonitorSynthetic = {
+    fps: uint .ge 1 .le 200000,                 ; frames a second
+    ids: uint .ge 1 .le 2048,                   ; distinct identifiers in turn
+    dlc: uint .le 15,                           ; 0 to 8, or up to 15 with fd
+    ? ext: bool,                                ; 29-bit identifiers
+    ? fd: bool                                  ; CAN FD frames with a bit rate switch
+}
+CanMonitorOpenAnswer = {
+    tok: uint,                                  ; never 0
+    ch: uint,                                   ; 255 for a synthetic session
+    mode: CanMonitorMode,                       ; 0 for a synthetic session
+    type: uint,                                 ; the bus's: 1, 2; 0 for a synthetic session
+    bitrate: uint,                              ; 0 until detected
+    data_bitrate: uint,
+    lease_ms: uint                              ; the session ends this long after the last request with its token
+}
+
+; 2 CLOSE (write)
+CanMonitorCloseRequest = { tok: uint }
+CanMonitorCloseAnswer = {}
+
+; 3 FILTER (write): replaces the unit filters; an empty list passes every frame, more than `filters_max` is invalid
+CanMonitorFilterRequest = { tok: uint, filters: [0*16 CanMonitorFilter] }
+CanMonitorFilterAnswer = {}
+
+; 4 STATS (read): totals since OPEN; the state, as in STATUS, and the counters are those of the controller now
+CanMonitorStatsRequest = { tok: uint }
+CanMonitorStatsAnswer = {
+    state: CanMonitorBusState,
+    tec: uint,
+    rec: uint,
+    rx: uint,                                   ; frames received
+    tx: uint,                                   ; frames sent
+    busy_us: uint,                              ; bit times of the frames, without stuffing
+    errors: [5*5 uint],                         ; bit, stuff, CRC, form, acknowledgement
+    lost: [4*4 uint],                           ; controller, receive queue, ring, echoes
+    filtered: uint                              ; frames the unit filter left out
+}
+
+; The commands below are built only with EERIE_LEAP_CAN_MONITOR_TX (TX_UNSUPPORTED otherwise).
+
+; 5 ARM (write): armed frames may be sent; a listen-only session is BAD_MODE
+CanMonitorArmRequest = { tok: uint, on: bool }
+CanMonitorArmAnswer = {
+    armed: bool,
+    share_pct: uint,                            ; the cap on the bus time the session transmits
+    reserved: [0*8 [from: uint, to: uint, ext: bool]]   ; identifiers the COM channel keeps (RESERVED)
+}
+
+; 6 SEND (write): at most 16 frames, each through the cap
+CanMonitorSendRequest = { tok: uint, frames: [1*16 CanMonitorSendFrame] }
+CanMonitorSendFrame = [id: uint, flags: CanMonitorFrameFlags, data: bstr .size (0..64)]
+CanMonitorFrameFlags = uint .le 15              ; bit 0 IDE, bit 1 FDF, bit 2 BRS, bit 3 RTR
+CanMonitorSendAnswer = { sent: uint, refused: uint }
+
+; 7 PERIODIC (write): replaces the list; an empty list stops them all
+CanMonitorPeriodicRequest = { tok: uint, list: [0*16 CanMonitorPeriodicFrame] }
+CanMonitorPeriodicFrame = {
+    slot: uint,
+    id: uint,
+    flags: CanMonitorFrameFlags,
+    data: bstr .size (0..64),
+    period_ms: uint .ge 1,
+    ? count: uint                               ; stops after this many frames
+}
+CanMonitorPeriodicAnswer = {}
+
+; 8 REPLAY (write): the unit plays a buffer the client keeps filled ahead
+CanMonitorReplayRequest = {
+    tok: uint,
+    op: CanMonitorReplayOp,
+    ? speed_pct: uint,                          ; op 0: 100 by default
+    ? loop: bool,                               ; op 0
+    ? seq: uint,                                ; op 1: chunks come in order (BAD_SEQ)
+    ? data: bstr                                ; op 1: records of kind 0, at most `room` bytes (NO_ROOM)
+}
+CanMonitorReplayOp = 0 / 1 / 2 / 3              ; 0 start, 1 chunk, 2 stop, 3 no more chunks
+CanMonitorReplayAnswer = { room: uint }         ; the buffer's free bytes

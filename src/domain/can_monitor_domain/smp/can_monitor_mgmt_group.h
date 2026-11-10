@@ -19,8 +19,9 @@ using eerie_leap::subsys::smp::SmpGroup;
 /**
  * @brief SMP `canmon` group (74): CAN monitor sessions.
  *
- * Phase 2 implements OPEN and CLOSE; the other commands are empty entries, which MCUmgr answers with
- * ENOTSUP until their phase fills them.
+ * STATUS, OPEN, CLOSE, FILTER and STATS are served; ARM, SEND, PERIODIC and REPLAY are empty entries,
+ * which MCUmgr answers with ENOTSUP until Phase 4 fills them. Every request that carries a token renews
+ * its session's lease.
  *
  * Handlers run on the MCUmgr work queue and call the service, which has its own lock.
  */
@@ -28,7 +29,8 @@ class CanMonitorMgmtGroup : public SmpGroup<CanMonitorMgmtGroup> {
 public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
-        /// Read (Phase 3).
+        /// Read `{}`: `{version, ports: [{ch, types: [uint], configured, state, bitrate, data_bitrate, session}],
+        /// filters_max, ring_bytes, notify_max, tx, synthetic, delta}`.
         STATUS = 0,
         /// Write `{ch, mode, ? type, ? bitrate, ? data_bitrate, ? filters: [[id, mask, ext]], ? delta,
         /// ? synthetic: {fps, ids, dlc, ? ext, ? fd}}`: `{tok, ch, mode, type, bitrate, data_bitrate, lease_ms}`.
@@ -36,9 +38,11 @@ public:
         OPEN = 1,
         /// Write `{tok}`: `{}`. BAD_TOKEN for 0, NO_SESSION for a token no session holds.
         CLOSE = 2,
-        /// Write (Phase 3).
+        /// Write `{tok, filters: [[id, mask, ext]]}`: `{}`. Replaces the unit filters; an empty list passes
+        /// every frame; more than `filters_max` is EINVAL.
         FILTER = 3,
-        /// Read (Phase 3).
+        /// Read `{tok}`: `{state, tec, rec, rx, tx, busy_us, errors: [bit, stuff, crc, form, ack],
+        /// lost: [controller, queue, ring, echoes], filtered}`, totals since OPEN.
         STATS = 4,
         /// Write (Phase 4).
         ARM = 5,
@@ -76,8 +80,11 @@ private:
     // Only touched on the MCUmgr work queue.
     FilterList filter_list_;
 
+    int HandleStatus(smp_streamer* ctxt);
     int HandleOpen(smp_streamer* ctxt);
     int HandleClose(smp_streamer* ctxt);
+    int HandleFilter(smp_streamer* ctxt);
+    int HandleStats(smp_streamer* ctxt);
 
     static int TranslateError(uint16_t error);
 
