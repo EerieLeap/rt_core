@@ -211,6 +211,13 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_DOMAIN_CAN_MONITOR)
+        list(APPEND SRC
+            "${SRC_DIR}/domain/can_monitor_domain/*.c"
+            "${SRC_DIR}/domain/can_monitor_domain/*.cpp"
+        )
+    endif()
+
     if(CONFIG_EERIE_LEAP_DOMAIN_SCRIPT)
         list(APPEND SRC
             "${SRC_DIR}/domain/script_domain/*.c"
@@ -298,6 +305,12 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
         )
     endif()
 
+    if(CONFIG_EERIE_LEAP_CONTROLLER_CAN_MONITOR)
+        list(APPEND SRC
+            "${SRC_DIR}/controllers/can_monitor_controller.cpp"
+        )
+    endif()
+
     # Logging control serves units with and without a log writer, so it builds with its controller
     # rather than with the logging domain.
     if(CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
@@ -342,6 +355,24 @@ if(CONFIG_EERIE_LEAP_RT_CORE)
     # Its smp/ group takes the controller's control the same way.
     if(NOT CONFIG_EERIE_LEAP_CONTROLLER_LOGGING)
         list(FILTER SRC EXCLUDE REGEX "/domain/logging_domain/(control|smp)/")
+    endif()
+
+    # The CAN monitor domain's group needs SMP, its transmit/ part EERIE_LEAP_CAN_MONITOR_TX, and its
+    # synthetic source and changed-bytes table their own options.
+    if(NOT CONFIG_EERIE_LEAP_SMP)
+        list(FILTER SRC EXCLUDE REGEX "/domain/can_monitor_domain/smp/")
+    endif()
+
+    if(NOT CONFIG_EERIE_LEAP_CAN_MONITOR_TX)
+        list(FILTER SRC EXCLUDE REGEX "/domain/can_monitor_domain/transmit/")
+    endif()
+
+    if(NOT CONFIG_EERIE_LEAP_CAN_MONITOR_SYNTHETIC)
+        list(FILTER SRC EXCLUDE REGEX "/domain/can_monitor_domain/services/can_synthetic_source\\.cpp$")
+    endif()
+
+    if(NOT CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA)
+        list(FILTER SRC EXCLUDE REGEX "/domain/can_monitor_domain/utilities/can_delta_table\\.cpp$")
     endif()
 
     # A unit with both the logging domain and its controller globs control/ twice.

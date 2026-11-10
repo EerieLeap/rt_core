@@ -1,0 +1,128 @@
+config EERIE_LEAP_DOMAIN_CAN_MONITOR
+    bool "EerieLeap CAN monitor domain"
+    depends on EERIE_LEAP_DOMAIN_CANBUS
+    select EERIE_LEAP_THREADING
+    help
+      Sessions that stream the frames of a CAN port to a client: the
+      records, the ring they wait in, the sender and, with EERIE_LEAP_SMP,
+      the canmon SMP group (74). The domain does not depend on a transport:
+      CanMonitorController gives it the BLE access point's `bus`
+      characteristic.
+
+menu "EerieLeap CAN monitor domain config"
+    depends on EERIE_LEAP_DOMAIN_CAN_MONITOR
+
+    config EERIE_LEAP_CAN_MONITOR_MAX_SESSIONS
+        int "Sessions at once"
+        range 1 8
+        default 2
+        help
+          Sessions open at the same time, at most one a port.
+
+    config EERIE_LEAP_CAN_MONITOR_LEASE_MS
+        int "Session lease in milliseconds"
+        range 100 600000
+        default 5000
+        help
+          A session that no request carrying its token renews for this long
+          ends.
+
+    config EERIE_LEAP_CAN_MONITOR_RING_SIZE
+        int "Bytes of each session's ring"
+        range 1024 16777216
+        default 262144
+        help
+          The records a session has not sent yet wait in a ring of this many
+          bytes, allocated from the external memory resource (PSRAM where the
+          board has it) when the session opens. A power of two.
+
+    config EERIE_LEAP_CAN_MONITOR_FLUSH_MS
+        int "Longest a record waits for its notification to fill, in ms"
+        range 1 1000
+        default 20
+
+    config EERIE_LEAP_CAN_MONITOR_IN_FLIGHT
+        int "Notifications awaiting completion"
+        range 1 16
+        default 4
+        help
+          The rest of the link's ATT buffers stay for SMP and the live values.
+
+    config EERIE_LEAP_CAN_MONITOR_SENDER_PRIORITY
+        int "Priority of the sender thread (preemptible)"
+        range 0 127
+        default 4
+        help
+          Below the cooperative CAN bus threads, and above a renderer the
+          stream must not wait for.
+
+    config EERIE_LEAP_CAN_MONITOR_SENDER_STACK_SIZE
+        int "Stack size of the sender thread"
+        default 2048
+
+    config EERIE_LEAP_CAN_MONITOR_MAX_FILTERS
+        int "Unit filters a session takes"
+        range 1 64
+        default 16
+
+    config EERIE_LEAP_CAN_MONITOR_DELTA
+        bool "Changed-bytes records"
+        help
+          A frame whose identifier the session has seen is sent as the bytes
+          that changed since its last payload (record kind 1), when OPEN asks
+          for it.
+
+    config EERIE_LEAP_CAN_MONITOR_DELTA_IDS
+        int "Identifiers whose last payload a session keeps"
+        depends on EERIE_LEAP_CAN_MONITOR_DELTA
+        range 1 4096
+        default 256
+
+    config EERIE_LEAP_CAN_MONITOR_TX
+        bool "Transmit and replay"
+        help
+          ARM, SEND, PERIODIC and REPLAY in the canmon group. Without it they
+          answer TX_UNSUPPORTED.
+
+    config EERIE_LEAP_CAN_MONITOR_TX_SHARE_PERCENT
+        int "Cap on the bus time a session transmits, in percent"
+        depends on EERIE_LEAP_CAN_MONITOR_TX
+        range 1 100
+        default 50
+
+    config EERIE_LEAP_CAN_MONITOR_TX_BURST_FRAMES
+        int "Frames sent back to back after idle"
+        depends on EERIE_LEAP_CAN_MONITOR_TX
+        range 1 64
+        default 8
+
+    config EERIE_LEAP_CAN_MONITOR_PERIODIC_SLOTS
+        int "Periodic frames a session sends"
+        depends on EERIE_LEAP_CAN_MONITOR_TX
+        range 1 64
+        default 16
+
+    config EERIE_LEAP_CAN_MONITOR_REPLAY_BUFFER_SIZE
+        int "Bytes of the replay buffer"
+        depends on EERIE_LEAP_CAN_MONITOR_TX
+        range 1024 16777216
+        default 65536
+        help
+          Allocated from the external memory resource while a replay runs.
+
+    config EERIE_LEAP_CAN_MONITOR_REPLAY_LATE_MS
+        int "A replayed frame later than this is counted late, in ms"
+        depends on EERIE_LEAP_CAN_MONITOR_TX
+        range 1 10000
+        default 10
+
+    config EERIE_LEAP_CAN_MONITOR_SYNTHETIC
+        bool "Synthetic source"
+        help
+          OPEN with `synthetic` streams generated frames with no bus (port
+          255), to measure the link. For debug and bench builds.
+
+    module = EERIE_LEAP_CAN_MONITOR
+    module-str = eerie_leap_can_monitor
+    source "subsys/logging/Kconfig.template.log_config"
+endmenu
