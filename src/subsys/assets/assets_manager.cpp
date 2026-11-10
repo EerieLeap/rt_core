@@ -33,6 +33,16 @@ bool AssetsManager::Register(AssetProvider provider) {
         return false;
     }
 
+    // The upload session keeps only this many bytes of a file's head for the check.
+    if(provider.content_head_size > MAX_CONTENT_HEAD_SIZE) {
+        LOG_ERR(
+            "Asset kind %d asks for %u bytes of an upload's head, at most %u are kept.", static_cast<int>(index),
+            static_cast<unsigned>(provider.content_head_size), static_cast<unsigned>(MAX_CONTENT_HEAD_SIZE)
+        );
+
+        return false;
+    }
+
     // A built-in is served under a name the kind could store, once, and has a size the protocol can say (a 32-bit
     // number) that the kind could take as an upload, if it takes any.
     for(size_t i = 0; i < provider.built_ins.size(); i++) {

@@ -4203,6 +4203,749 @@ ZTEST_F(smp_assets_group, test_changed_is_a_bad_state_for_the_client) {
     zassert_equal(response.error.value_or(0), 17);
 }
 
+// ======== Image files ========
+
+namespace {
+
+using eerie_leap::subsys::assets::AssetImageInfo;
+using eerie_leap::subsys::assets::MAX_CONTENT_HEAD_SIZE;
+
+constexpr std::array<std::string_view, 2> LVIMG_EXTENSIONS = { ".bin", ".lvimg" };
+constexpr std::array<uint32_t, 2> LVIMG_FORMATS = { 0x12, 0x14 };
+constexpr std::array<uint32_t, 1> LVIMG_COMPRESSIONS = { 2 };
+constexpr uint8_t LVIMG_MAGIC = 0x19;
+// The test check judges the first bytes of a file: the magic and the byte of flags behind two others.
+constexpr uint8_t LVIMG_HEAD_SIZE = 4;
+constexpr size_t LVIMG_FLAGS_AT = 3;
+constexpr std::string_view SHIPPED_IMAGE = "shipped.lvimg";
+
+// A kind of self-describing image files as the test stands one in: what its callbacks were asked, and what they
+// answer.
+struct ImageKind {
+    // The facts get_info gives, by name; a file with no entry is no image.
+    std::map<std::string, AssetImageInfo, std::less<>> infos;
+    std::vector<std::string> info_calls;
+    bool info_throws = false;
+
+    struct Check {
+        std::string name;
+        size_t length = 0;
+        Bytes head;
+    };
+
+    std::vector<Check> checks;
+    bool check_throws = false;
+};
+
+// What the check says of the head of a ".lvimg": it starts with the magic and has no flags. Other names are not judged.
+std::optional<std::string> JudgeImageHead(std::string_view name, std::span<const uint8_t> head) {
+    if(!name.ends_with(".lvimg"))
+        return std::nullopt;
+
+    if(head.empty())
+        return "An image file is not empty.";
+
+    if(head[0] != LVIMG_MAGIC)
+        return "Not an image file: it starts with byte " + std::to_string(head[0]) + ".";
+
+    if(head.size() > LVIMG_FLAGS_AT && head[LVIMG_FLAGS_AT] != 0)
+        return "The header's flags are not allowed in an image file.";
+
+    return std::nullopt;
+}
+
+// A file whose head the test check takes: the magic, a colour format, no flags.
+Bytes ImageFile(size_t size, uint8_t format = 0x12) {
+    Bytes data = Pattern(size, 9);
+    data[0] = LVIMG_MAGIC;
+    if(size > 1)
+        data[1] = format;
+    if(size > 2)
+        data[2] = 0;
+    if(size > LVIMG_FLAGS_AT)
+        data[LVIMG_FLAGS_AT] = 0;
+
+    return data;
+}
+
+// Registers the images kind anew as a kind of image files, on the store it has.
+void RegisterImageKind(Harness& harness, ImageKind& kind, bool has_built_in = false) {
+    static constexpr std::array<uint8_t, 8> SHIPPED_BYTES = { LVIMG_MAGIC, 0x12, 0, 0, 1, 2, 3, 4 };
+    static constexpr std::array<BuiltInAsset, 1> BUILT_INS = { { { .name = SHIPPED_IMAGE, .data = SHIPPED_BYTES } } };
+
+    harness.registry->Unregister(AssetKind::IMAGES);
+    zassert_true(harness.registry->Register(
+        {
+            .kind = AssetKind::IMAGES,
+            .name = "images",
+            .store = harness.images_store,
+            .extensions = LVIMG_EXTENSIONS,
+            .access = ALL_ACCESS,
+            .max_size = IMAGES_MAX_SIZE,
+            .is_in_use =
+                [&harness](AssetAccess operation, std::string_view name) {
+                    harness.in_use.calls.emplace_back(operation, std::string(name));
+
+                    return harness.in_use.names.contains(name);
+                },
+            .built_ins = has_built_in ? std::span<const BuiltInAsset>(BUILT_INS) : std::span<const BuiltInAsset>(),
+            .image =
+                {
+                    .formats = LVIMG_FORMATS,
+                    .compressions = LVIMG_COMPRESSIONS,
+                    .get_info =
+                        [&kind](std::string_view name) -> std::optional<AssetImageInfo> {
+                            kind.info_calls.emplace_back(name);
+
+                            if(kind.info_throws)
+                                throw std::runtime_error("get_info failed");
+
+                            const auto it = kind.infos.find(name);
+
+                            return it == kind.infos.end() ? std::nullopt : std::optional(it->second);
+                        },
+                },
+            .content_head_size = LVIMG_HEAD_SIZE,
+            .check_content =
+                [&kind](std::string_view name, size_t length, std::span<const uint8_t> head) {
+                    kind.checks.push_back({ std::string(name), length, Bytes(head.begin(), head.end()) });
+
+                    if(kind.check_throws)
+                        throw std::runtime_error("check_content failed");
+
+                    return JudgeImageHead(name, head);
+                },
+        }
+    ));
+}
+
+// The reason an answer carries.
+std::string ReasonOf(const Response& response) {
+    zassert_true(response.texts.contains("msg"), "A refusal for the content carries its reason");
+
+    return response.texts.at("msg");
+}
+
+} // namespace
+
+ZTEST_F(smp_assets_group, test_kinds_lists_the_formats_and_compressions_of_a_kind_with_image_files) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+
+    const auto response = harness.Kinds();
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 5);
+    zassert_equal(response.entries[0].at("kind"), IMAGES);
+    zassert_true(response.entry_uint_lists[0].at("fmts") == std::vector<uint32_t>({ 0x12, 0x14 }));
+    zassert_true(response.entry_uint_lists[0].at("cmps") == std::vector<uint32_t>({ 2 }));
+    // The rest of the entry is as it is for any kind.
+    zassert_true(response.entry_lists[0].at("ext") == std::vector<std::string>({ ".bin", ".lvimg" }));
+    zassert_true(response.entry_flags[0].at("avail"));
+    zassert_true(response.entries[0].contains("free"));
+    zassert_false(response.entries[0].contains("fmt"), "A kind of image files sets no raw format by itself");
+
+    for(size_t i = 1; i < response.entries.size(); i++) {
+        zassert_false(
+            response.entry_uint_lists[i].contains("fmts"), "Kind %u has no image files", static_cast<unsigned>(i)
+        );
+        zassert_false(
+            response.entry_uint_lists[i].contains("cmps"), "Kind %u has no image files", static_cast<unsigned>(i)
+        );
+    }
+}
+
+ZTEST_F(smp_assets_group, test_kinds_lists_the_formats_alone_of_a_kind_that_has_no_compressions) {
+    Harness& harness = *fixture->harness;
+
+    harness.registry->Unregister(AssetKind::IMAGES);
+    zassert_true(harness.registry->Register(
+        {
+            .kind = AssetKind::IMAGES,
+            .name = "images",
+            .store = harness.images_store,
+            .extensions = LVIMG_EXTENSIONS,
+            .access = ALL_ACCESS,
+            .max_size = IMAGES_MAX_SIZE,
+            .pixel_format = 0x14,
+            .image = { .formats = LVIMG_FORMATS },
+        }
+    ));
+
+    const auto response = harness.Kinds();
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries[0].at("fmt"), 0x14);
+    zassert_true(response.entry_uint_lists[0].at("fmts") == std::vector<uint32_t>({ 0x12, 0x14 }));
+    zassert_false(response.entry_uint_lists[0].contains("cmps"));
+    zassert_true(response.entry_flags[0].at("avail"));
+}
+
+ZTEST_F(smp_assets_group, test_kinds_lists_neither_for_a_kind_that_sets_no_image_traits) {
+    Harness& harness = *fixture->harness;
+
+    const auto response = harness.Kinds();
+
+    zassert_true(response.IsOk());
+    for(size_t i = 0; i < response.entries.size(); i++) {
+        zassert_true(response.entry_uint_lists[i].empty(), "Kind %u lists numbers", static_cast<unsigned>(i));
+        zassert_true(response.entry_maps[i].empty(), "Kind %u lists a map", static_cast<unsigned>(i));
+    }
+}
+
+ZTEST_F(smp_assets_group, test_list_gives_the_facts_of_the_image_files_that_have_them) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    kind.infos["bg.lvimg"] = { .width = 466, .height = 466, .format = 0x12, .compression = 0 };
+    kind.infos["needle.lvimg"] = { .width = 15, .height = 220, .format = 0x14, .compression = 2 };
+    RegisterImageKind(harness, kind);
+
+    harness.Put("images/bg.lvimg", Pattern(30, 1));
+    harness.Put("images/needle.lvimg", Pattern(40, 2));
+    // A file whose head does not read, and a raw one: no facts.
+    harness.Put("images/odd.lvimg", Pattern(50, 3));
+    harness.Put("images/raw.bin", Pattern(60, 4));
+
+    const auto response = harness.List(IMAGES);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 4);
+    zassert_equal(kind.info_calls.size(), 4, "The facts are asked once for each listed file");
+
+    for(size_t i = 0; i < response.entries.size(); i++) {
+        const std::string& name = response.entry_texts[i].at("name");
+        const auto& maps = response.entry_maps[i];
+
+        if(name == "bg.lvimg") {
+            zassert_true(maps.contains("img"));
+            const Entry& img = maps.at("img");
+            zassert_equal(img.size(), 3, "No compression method for an image that is not compressed");
+            zassert_equal(img.at("w"), 466);
+            zassert_equal(img.at("h"), 466);
+            zassert_equal(img.at("cf"), 0x12);
+            zassert_equal(response.entries[i].at("size"), 30);
+        } else if(name == "needle.lvimg") {
+            zassert_true(maps.contains("img"));
+            const Entry& img = maps.at("img");
+            zassert_equal(img.size(), 4);
+            zassert_equal(img.at("w"), 15);
+            zassert_equal(img.at("h"), 220);
+            zassert_equal(img.at("cf"), 0x14);
+            zassert_equal(img.at("cmp"), 2);
+            zassert_equal(response.entries[i].at("size"), 40);
+        } else {
+            zassert_true(maps.empty(), "%s has no facts", name.c_str());
+        }
+    }
+
+    zassert_false(response.Has("next"));
+}
+
+ZTEST_F(smp_assets_group, test_list_gives_no_facts_for_a_kind_without_image_traits) {
+    Harness& harness = *fixture->harness;
+    harness.Put("scripts/a.lua", Pattern(10, 1));
+    harness.Put("images/b.bin", Pattern(10, 2));
+
+    const auto scripts = harness.List(SENSOR_SCRIPTS);
+    zassert_true(scripts.IsOk());
+    zassert_equal(scripts.entries.size(), 1);
+    zassert_true(scripts.entry_maps[0].empty());
+    // The entry is as it was before the facts existed.
+    zassert_equal(scripts.entries[0].size(), 1);
+    zassert_equal(scripts.entry_texts[0].size(), 1);
+
+    const auto images = harness.List(IMAGES);
+    zassert_true(images.IsOk());
+    zassert_equal(images.entries.size(), 1);
+    zassert_true(images.entry_maps[0].empty());
+}
+
+ZTEST_F(smp_assets_group, test_list_gives_no_facts_for_a_built_in_and_does_not_ask_for_them) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    kind.infos[std::string(SHIPPED_IMAGE)] = { .width = 8, .height = 8, .format = 0x12, .compression = 0 };
+    kind.infos["mine.lvimg"] = { .width = 4, .height = 2, .format = 0x14, .compression = 0 };
+    RegisterImageKind(harness, kind, true);
+    harness.Put("images/mine.lvimg", Pattern(20, 1));
+
+    const auto response = harness.List(IMAGES);
+
+    zassert_true(response.IsOk());
+    zassert_equal(response.entries.size(), 2);
+    zassert_str_equal(response.entry_texts[0].at("name").c_str(), std::string(SHIPPED_IMAGE).c_str());
+    zassert_true(response.entry_flags[0].at("builtin"));
+    zassert_true(response.entry_maps[0].empty(), "A built-in carries no facts");
+    zassert_str_equal(response.entry_texts[1].at("name").c_str(), "mine.lvimg");
+    zassert_true(response.entry_maps[1].contains("img"));
+
+    zassert_equal(kind.info_calls.size(), 1, "Only the stored file is asked about");
+    zassert_str_equal(kind.info_calls[0].c_str(), "mine.lvimg");
+}
+
+ZTEST_F(smp_assets_group, test_list_whose_facts_callback_throws_is_an_error_with_nothing_half_written) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    kind.infos["a.lvimg"] = { .width = 1, .height = 1, .format = 0x12, .compression = 0 };
+    kind.infos["b.lvimg"] = { .width = 2, .height = 2, .format = 0x12, .compression = 0 };
+    RegisterImageKind(harness, kind);
+    harness.Put("images/a.lvimg", Pattern(10, 1));
+    harness.Put("images/b.lvimg", Pattern(10, 2));
+
+    kind.info_throws = true;
+
+    const auto failed = harness.List(IMAGES);
+
+    AssertError(failed, Error::UNKNOWN);
+    zassert_false(failed.list_sizes.contains("entries"), "The error is not appended to a half-written list");
+    zassert_true(failed.entries.empty());
+
+    // The group goes on.
+    kind.info_throws = false;
+    const auto listed = harness.List(IMAGES);
+    zassert_true(listed.IsOk());
+    zassert_equal(listed.entries.size(), 2);
+}
+
+ZTEST_F(smp_assets_group, test_list_pages_through_the_largest_image_entries_without_losing_one) {
+    Harness& harness = *fixture->harness;
+    constexpr size_t FILES = 40;
+    constexpr uint32_t WIDEST = UINT16_MAX;
+    constexpr uint32_t LARGEST_BYTE = UINT8_MAX;
+
+    ImageKind kind;
+    std::map<std::string, size_t> names;
+    for(size_t i = 0; i < FILES; i++) {
+        // The longest name, the widest size and the largest numbers: the largest entry there is.
+        const std::string name = NameOfLength(i, CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH - 4);
+        kind.infos[name] = {
+            .width = UINT16_MAX,
+            .height = UINT16_MAX,
+            .format = UINT8_MAX,
+            .compression = UINT8_MAX,
+        };
+        harness.Put("images/" + name, Pattern(i, 1));
+        names[name] = i;
+    }
+
+    RegisterImageKind(harness, kind);
+
+    std::set<std::string> listed;
+    size_t pages = 0;
+    std::optional<uint32_t> offset;
+
+    while(true) {
+        const auto response = harness.List(IMAGES, offset);
+        zassert_true(response.IsOk(), "The page is answered, not refused for its size");
+        pages++;
+
+        zassert_false(response.entries.empty(), "A page holds at least one of the largest entries");
+
+        for(size_t i = 0; i < response.entries.size(); i++) {
+            const std::string& name = response.entry_texts[i].at("name");
+            zassert_true(names.contains(name), "%s is no file", name.c_str());
+            zassert_true(listed.insert(name).second, "%s is listed twice", name.c_str());
+
+            const Entry& img = response.entry_maps[i].at("img");
+            zassert_equal(img.at("w"), WIDEST);
+            zassert_equal(img.at("h"), WIDEST);
+            zassert_equal(img.at("cf"), LARGEST_BYTE);
+            zassert_equal(img.at("cmp"), LARGEST_BYTE);
+        }
+
+        if(!response.Has("next"))
+            break;
+
+        zassert_equal(response.Value("next"), listed.size(), "`next` resumes at the first entry not listed");
+        offset = response.Value("next");
+        zassert_true(pages < 100);
+    }
+
+    zassert_true(pages > 1, "The entries do not fit one response");
+    zassert_equal(listed.size(), FILES, "Every file is listed once");
+}
+
+ZTEST_F(smp_assets_group, test_write_refuses_a_head_the_kind_does_not_take_with_its_reason_and_stores_nothing) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+
+    Bytes data = ImageFile(100);
+    data[0] = 0x42;
+
+    const auto response = harness.WriteFirst(IMAGES, "bad.lvimg", data, data.size(), Crc(data));
+
+    AssertError(response, Error::BAD_CONTENT);
+    zassert_str_equal(ReasonOf(response).c_str(), "Not an image file: it starts with byte 66.");
+    zassert_false(response.Has("tok"), "No upload was opened");
+    zassert_false(harness.volume->Exists("images/bad.lvimg"));
+    zassert_false(harness.IsStaged());
+
+    zassert_equal(kind.checks.size(), 1);
+    zassert_str_equal(kind.checks[0].name.c_str(), "bad.lvimg");
+    zassert_equal(kind.checks[0].length, 100);
+    zassert_true(kind.checks[0].head == Bytes(data.begin(), data.begin() + LVIMG_HEAD_SIZE), "The head is judged");
+
+    // No session is left: another upload starts at once.
+    const Bytes good = ImageFile(100);
+    zassert_true(harness.UploadAll(IMAGES, "good.lvimg", good).IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_write_takes_a_head_the_kind_takes_and_judges_it_once) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+    const Bytes data = ImageFile(1300);
+
+    const auto response = harness.UploadAll(IMAGES, "good.lvimg", data);
+
+    zassert_true(response.IsOk());
+    zassert_true(harness.FileContent("images/good.lvimg") == data);
+    zassert_equal(kind.checks.size(), 1, "The last chunk is not judged again");
+    zassert_equal(kind.checks[0].head.size(), LVIMG_HEAD_SIZE);
+}
+
+ZTEST_F(smp_assets_group, test_write_refuses_a_head_split_over_chunks_on_the_chunk_that_completes_it) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+
+    // What the unit has stays as it was.
+    const Bytes old = Pattern(77, 5);
+    harness.Put("images/split.lvimg", old);
+
+    Bytes data = ImageFile(60);
+    data[LVIMG_FLAGS_AT] = 7;
+    const std::span<const uint8_t> all(data);
+
+    const auto first = harness.WriteFirst(IMAGES, "split.lvimg", all.first(1), data.size(), Crc(data));
+    zassert_true(first.IsOk());
+    const uint32_t token = first.Value("tok");
+    zassert_true(harness.IsStaged());
+
+    const auto second = harness.WriteNext(IMAGES, "split.lvimg", 1, token, all.subspan(1, 1));
+    zassert_true(second.IsOk());
+    zassert_true(kind.checks.empty(), "The head is not whole yet");
+
+    const auto third = harness.WriteNext(IMAGES, "split.lvimg", 2, token, all.subspan(2, 10));
+
+    AssertError(third, Error::BAD_CONTENT);
+    zassert_str_equal(ReasonOf(third).c_str(), "The header's flags are not allowed in an image file.");
+    zassert_equal(kind.checks.size(), 1);
+    zassert_true(kind.checks[0].head == Bytes(data.begin(), data.begin() + LVIMG_HEAD_SIZE));
+
+    zassert_false(harness.IsStaged(), "The staged file is deleted");
+    zassert_true(harness.FileContent("images/split.lvimg") == old, "The asset stays as it was");
+
+    // The upload is over.
+    AssertError(harness.WriteNext(IMAGES, "split.lvimg", 12, token, all.subspan(12, 10)), Error::BAD_TOKEN);
+
+    // And so is the room it held: another client is not told the unit is busy.
+    zassert_true(harness.UploadAll(IMAGES, "other.lvimg", ImageFile(80)).IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_write_takes_a_head_split_over_chunks_when_it_is_good) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+    const Bytes data = ImageFile(60);
+    const std::span<const uint8_t> all(data);
+
+    const auto first = harness.WriteFirst(IMAGES, "split.lvimg", all.first(3), data.size(), Crc(data));
+    zassert_true(first.IsOk());
+    zassert_true(kind.checks.empty());
+
+    // The chunk that completes the head also carries more than it needs.
+    const auto second = harness.WriteNext(IMAGES, "split.lvimg", 3, first.Value("tok"), all.subspan(3, 20));
+    zassert_true(second.IsOk());
+    zassert_equal(kind.checks.size(), 1);
+    zassert_true(kind.checks[0].head == Bytes(data.begin(), data.begin() + LVIMG_HEAD_SIZE));
+
+    zassert_true(harness.WriteNext(IMAGES, "split.lvimg", 23, first.Value("tok"), all.subspan(23)).IsOk());
+    zassert_equal(kind.checks.size(), 1);
+    zassert_true(harness.FileContent("images/split.lvimg") == data);
+}
+
+ZTEST_F(smp_assets_group, test_write_judges_a_file_shorter_than_the_head_on_its_only_chunk) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+
+    // Two bytes: the head is the whole file.
+    const Bytes good = ImageFile(2);
+    zassert_true(harness.WriteFirst(IMAGES, "short.lvimg", good, good.size(), Crc(good)).IsOk());
+    zassert_equal(kind.checks.size(), 1);
+    zassert_equal(kind.checks[0].length, 2);
+    zassert_true(kind.checks[0].head == good);
+    zassert_true(harness.FileContent("images/short.lvimg") == good);
+
+    Bytes bad = good;
+    bad[0] = 0;
+    const auto response = harness.WriteFirst(IMAGES, "short2.lvimg", bad, bad.size(), Crc(bad));
+    AssertError(response, Error::BAD_CONTENT);
+    zassert_false(harness.volume->Exists("images/short2.lvimg"));
+    zassert_false(harness.IsStaged());
+
+    // An empty file has an empty head.
+    const Bytes empty;
+    AssertError(harness.WriteFirst(IMAGES, "none.lvimg", empty, 0, Crc(empty)), Error::BAD_CONTENT);
+    zassert_false(harness.volume->Exists("images/none.lvimg"));
+    zassert_true(kind.checks.back().head.empty());
+}
+
+ZTEST_F(smp_assets_group, test_write_answers_a_first_chunk_sent_again_the_same_way) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+
+    // Refused: the answer to the first request got lost, and the second is refused alike.
+    Bytes bad = ImageFile(100);
+    bad[0] = 0;
+    const auto refused = harness.WriteFirst(IMAGES, "bad.lvimg", bad, bad.size(), Crc(bad));
+    const auto refused_again = harness.WriteFirst(IMAGES, "bad.lvimg", bad, bad.size(), Crc(bad));
+
+    AssertError(refused, Error::BAD_CONTENT);
+    AssertError(refused_again, Error::BAD_CONTENT);
+    zassert_str_equal(ReasonOf(refused).c_str(), ReasonOf(refused_again).c_str());
+    zassert_equal(kind.checks.size(), 2, "A first chunk sent again is judged again");
+
+    // Taken: the upload that is open answers with its token again.
+    const Bytes data = ImageFile(1000);
+    const std::span<const uint8_t> all(data);
+    const auto first = harness.WriteFirst(IMAGES, "good.lvimg", all.first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data));
+    const auto again = harness.WriteFirst(IMAGES, "good.lvimg", all.first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data));
+
+    zassert_true(first.IsOk());
+    zassert_true(again.IsOk());
+    zassert_equal(again.Value("tok"), first.Value("tok"));
+    zassert_equal(again.Value("off"), UPLOAD_CHUNK_SIZE);
+    zassert_equal(kind.checks.size(), 4);
+
+    zassert_true(harness.SendRest(IMAGES, "good.lvimg", data, first.Value("tok"), UPLOAD_CHUNK_SIZE).IsOk());
+    zassert_true(harness.FileContent("images/good.lvimg") == data);
+    zassert_equal(kind.checks.size(), 4, "The last chunk is not judged");
+}
+
+ZTEST_F(smp_assets_group, test_write_judges_the_content_after_the_size_and_before_what_is_in_use_or_busy) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind, true);
+
+    Bytes bad = ImageFile(100);
+    bad[0] = 0;
+
+    // The kind, its WRITE bit, the name, a built-in and the volume come first.
+    AssertError(harness.WriteFirst(77, "a.lvimg", bad, bad.size(), Crc(bad)), Error::UNKNOWN_KIND);
+    AssertError(harness.WriteFirst(IMAGES, "a.txt", bad, bad.size(), Crc(bad)), Error::BAD_NAME);
+    AssertError(harness.WriteFirst(IMAGES, SHIPPED_IMAGE, bad, bad.size(), Crc(bad)), Error::BUILT_IN);
+    harness.images_volume->available = false;
+    AssertError(harness.WriteFirst(IMAGES, "a.lvimg", bad, bad.size(), Crc(bad)), Error::UNAVAILABLE);
+    harness.images_volume->available = true;
+    zassert_true(kind.checks.empty(), "None of them is judged");
+
+    // The size comes before the content.
+    AssertError(harness.WriteFirst(IMAGES, "a.lvimg", bad, IMAGES_MAX_SIZE + 1, Crc(bad)), Error::TOO_LARGE);
+    zassert_true(kind.checks.empty());
+
+    // The content comes before the file being in use.
+    harness.in_use.names.insert("used.lvimg");
+    AssertError(harness.WriteFirst(IMAGES, "used.lvimg", bad, bad.size(), Crc(bad)), Error::BAD_CONTENT);
+    zassert_true(harness.in_use.calls.empty(), "The kind is not asked about a file it refuses");
+    // A good head is refused as in use then.
+    const Bytes good = ImageFile(100);
+    AssertError(harness.WriteFirst(IMAGES, "used.lvimg", good, good.size(), Crc(good)), Error::IN_USE);
+
+    // And before another client's upload being open.
+    const Bytes data = ImageFile(1000);
+    zassert_true(harness
+            .WriteFirst(IMAGES, "open.lvimg", std::span(data).first(UPLOAD_CHUNK_SIZE), data.size(), Crc(data))
+            .IsOk());
+    AssertError(harness.WriteFirst(IMAGES, "b.lvimg", good, good.size(), Crc(good)), Error::BUSY);
+    AssertError(harness.WriteFirst(IMAGES, "b.lvimg", bad, bad.size(), Crc(bad)), Error::BAD_CONTENT);
+}
+
+ZTEST_F(smp_assets_group, test_write_whose_check_throws_leaves_no_upload) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+    const Bytes data = ImageFile(100);
+
+    // On the first chunk.
+    kind.check_throws = true;
+    AssertError(harness.WriteFirst(IMAGES, "a.lvimg", data, data.size(), Crc(data)), Error::UNKNOWN);
+    zassert_false(harness.IsStaged());
+    zassert_false(harness.volume->Exists("images/a.lvimg"));
+
+    kind.check_throws = false;
+    zassert_true(harness.UploadAll(IMAGES, "a.lvimg", data).IsOk(), "Not busy");
+
+    // On the chunk that completes a split head.
+    const Bytes other = ImageFile(100);
+    const std::span<const uint8_t> all(other);
+    const auto first = harness.WriteFirst(IMAGES, "b.lvimg", all.first(2), other.size(), Crc(other));
+    zassert_true(first.IsOk());
+
+    kind.check_throws = true;
+    AssertError(harness.WriteNext(IMAGES, "b.lvimg", 2, first.Value("tok"), all.subspan(2, 10)), Error::UNKNOWN);
+    zassert_false(harness.IsStaged(), "The staged file does not outlive the exception");
+    AssertError(harness.WriteNext(IMAGES, "b.lvimg", 12, first.Value("tok"), all.subspan(12, 10)), Error::BAD_TOKEN);
+}
+
+ZTEST_F(smp_assets_group, test_write_of_a_kind_without_a_check_takes_any_content) {
+    Harness& harness = *fixture->harness;
+    const Bytes data = Pattern(300, 77);
+
+    zassert_true(harness.WriteFirst(SENSOR_SCRIPTS, "any.lua", data, data.size(), Crc(data)).IsOk());
+    zassert_true(harness.FileContent("scripts/any.lua") == data);
+
+    zassert_true(harness.UploadAll(IMAGES, "any.bin", Pattern(1300, 5)).IsOk());
+}
+
+ZTEST_F(smp_assets_group, test_write_of_a_name_the_check_does_not_judge_is_stored) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind);
+    const Bytes raw = Pattern(100, 5);
+
+    zassert_true(harness.WriteFirst(IMAGES, "raw.bin", raw, raw.size(), Crc(raw)).IsOk());
+    zassert_true(harness.FileContent("images/raw.bin") == raw);
+    zassert_equal(kind.checks.size(), 1, "The kind is asked, and says the name is not its image");
+}
+
+ZTEST_F(smp_assets_group, test_register_refuses_a_provider_that_asks_for_a_longer_head_than_is_kept) {
+    Harness& harness = *fixture->harness;
+    auto fonts_provider = [&harness](uint8_t head_size) {
+        return eerie_leap::subsys::assets::AssetProvider{
+            .kind = AssetKind::FONTS,
+            .name = "fonts",
+            .store = harness.images_store,
+            .extensions = FONT_EXTENSIONS,
+            .access = ALL_ACCESS,
+            .max_size = FONTS_MAX_SIZE,
+            .content_head_size = head_size,
+            .check_content =
+                [](std::string_view, size_t, std::span<const uint8_t>) {
+                    return std::nullopt;
+                },
+        };
+    };
+
+    zassert_false(harness.registry->Register(fonts_provider(static_cast<uint8_t>(MAX_CONTENT_HEAD_SIZE + 1))));
+    zassert_true(harness.registry->Find(AssetKind::FONTS) == nullptr, "A refused provider is not registered");
+
+    // The most that is kept is taken.
+    zassert_true(harness.registry->Register(fonts_provider(MAX_CONTENT_HEAD_SIZE)));
+}
+
+ZTEST_F(smp_assets_group, test_write_judges_a_head_of_the_largest_size_kept) {
+    Harness& harness = *fixture->harness;
+    std::vector<size_t> head_sizes;
+
+    harness.registry->Unregister(AssetKind::IMAGES);
+    zassert_true(harness.registry->Register(
+        {
+            .kind = AssetKind::IMAGES,
+            .name = "images",
+            .store = harness.images_store,
+            .extensions = LVIMG_EXTENSIONS,
+            .access = ALL_ACCESS,
+            .max_size = IMAGES_MAX_SIZE,
+            .content_head_size = MAX_CONTENT_HEAD_SIZE,
+            .check_content =
+                [&head_sizes](std::string_view, size_t, std::span<const uint8_t> head) {
+                    head_sizes.push_back(head.size());
+
+                    return head.back() == 0xFF ? std::optional<std::string>("no") : std::nullopt;
+                },
+        }
+    ));
+
+    // The head is split over chunks of 7 bytes.
+    Bytes data = Pattern(100, 1);
+    data[MAX_CONTENT_HEAD_SIZE - 1] = 0xFF;
+    const std::span<const uint8_t> all(data);
+    constexpr size_t PIECE = 7;
+
+    const auto first = harness.WriteFirst(IMAGES, "big.bin", all.first(PIECE), data.size(), Crc(data));
+    zassert_true(first.IsOk());
+
+    size_t offset = PIECE;
+    while(offset + PIECE < MAX_CONTENT_HEAD_SIZE) {
+        zassert_true(
+            harness.WriteNext(IMAGES, "big.bin", offset, first.Value("tok"), all.subspan(offset, PIECE)).IsOk()
+        );
+        offset += PIECE;
+    }
+
+    zassert_true(head_sizes.empty());
+    AssertError(
+        harness.WriteNext(IMAGES, "big.bin", offset, first.Value("tok"), all.subspan(offset, PIECE)), Error::BAD_CONTENT
+    );
+    zassert_equal(head_sizes.size(), 1);
+    zassert_equal(head_sizes[0], MAX_CONTENT_HEAD_SIZE);
+}
+
+ZTEST_F(smp_assets_group, test_rename_across_extensions_is_a_bad_name) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind, true);
+    const Bytes data = ImageFile(100);
+    harness.Put("images/a.bin", data);
+    harness.Put("images/b.lvimg", data);
+
+    AssertError(harness.Rename(IMAGES, "a.bin", "a.lvimg"), Error::BAD_NAME);
+    AssertError(harness.Rename(IMAGES, "b.lvimg", "b.bin"), Error::BAD_NAME);
+    AssertError(harness.Rename(IMAGES, "b.lvimg", "c.bin"), Error::BAD_NAME);
+
+    zassert_true(harness.FileContent("images/a.bin") == data);
+    zassert_true(harness.FileContent("images/b.lvimg") == data);
+    zassert_false(harness.volume->Exists("images/a.lvimg"));
+    zassert_false(harness.volume->Exists("images/b.bin"));
+}
+
+ZTEST_F(smp_assets_group, test_rename_within_an_extension_is_as_it_was) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind, true);
+    const Bytes data = ImageFile(100);
+    harness.Put("images/a.lvimg", data);
+    harness.Put("images/x.bin", data);
+
+    zassert_true(harness.Rename(IMAGES, "a.lvimg", "b.lvimg").IsOk());
+    zassert_true(harness.FileContent("images/b.lvimg") == data);
+    zassert_false(harness.volume->Exists("images/a.lvimg"));
+
+    // The extension is compared as names are, ignoring ASCII case.
+    zassert_true(harness.Rename(IMAGES, "b.lvimg", "c.LVIMG").IsOk());
+    zassert_true(harness.Rename(IMAGES, "x.bin", "y.bin").IsOk());
+    zassert_true(harness.volume->Exists("images/y.bin"));
+}
+
+ZTEST_F(smp_assets_group, test_rename_checks_the_extension_after_the_case_and_before_a_built_in) {
+    Harness& harness = *fixture->harness;
+    ImageKind kind;
+    RegisterImageKind(harness, kind, true);
+    harness.Put("images/a.bin", ImageFile(100));
+    harness.Put("images/b.lvimg", ImageFile(100));
+
+    // Two names that differ only in case are a bad name whatever the extensions.
+    AssertError(harness.Rename(IMAGES, "b.lvimg", "B.LVIMG"), Error::BAD_NAME);
+
+    // A built-in is what the rename is refused for only when the extensions agree.
+    AssertError(harness.Rename(IMAGES, "b.lvimg", SHIPPED_IMAGE), Error::BUILT_IN);
+    AssertError(harness.Rename(IMAGES, "a.bin", SHIPPED_IMAGE), Error::BAD_NAME);
+}
+
+ZTEST_F(smp_assets_group, test_rename_across_extensions_of_a_kind_without_a_check_is_a_bad_name_too) {
+    Harness& harness = *fixture->harness;
+    harness.Put("images/a.png", Pattern(100, 1));
+
+    AssertError(harness.Rename(IMAGES, "a.png", "a.bin"), Error::BAD_NAME);
+    zassert_true(harness.volume->Exists("images/a.png"));
+
+    zassert_true(harness.Rename(IMAGES, "a.png", "b.PNG").IsOk());
+}
+
 // ======== Dispatch ========
 
 ZTEST_F(smp_assets_group, test_unregistered_group_is_not_supported) {

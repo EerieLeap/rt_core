@@ -1246,6 +1246,106 @@ ZTEST(asset_store, test_open_read_of_a_missing_asset_is_ENOENT) {
     zassert_false(reader.IsOpen());
 }
 
+ZTEST(asset_store, test_read_head_reads_the_start_of_a_file_and_its_size) {
+    auto store = MakeStore();
+    const auto blob = MakeBlob(10000, 17);
+
+    zassert_true(store.Save("image.bin", blob));
+
+    std::array<uint8_t, 24> head{};
+    size_t size = 0;
+
+    zassert_equal(store.ReadHead("image.bin", head, size), 24);
+    zassert_equal(size, 10000);
+    zassert_mem_equal(head.data(), blob.data(), head.size());
+
+    // A shorter head is a prefix of the same bytes.
+    std::array<uint8_t, 5> short_head{};
+    zassert_equal(store.ReadHead("image.bin", short_head, size), 5);
+    zassert_mem_equal(short_head.data(), blob.data(), short_head.size());
+
+    // A head of nothing still tells the size.
+    size = 0;
+    zassert_equal(store.ReadHead("image.bin", std::span<uint8_t>(), size), 0);
+    zassert_equal(size, 10000);
+}
+
+ZTEST(asset_store, test_read_head_of_a_file_shorter_than_the_head_gives_what_there_is) {
+    auto store = MakeStore();
+    const auto blob = MakeBlob(10, 3);
+
+    zassert_true(store.Save("short.bin", blob));
+    zassert_true(store.Save("empty.bin", std::span<const uint8_t>{}));
+
+    std::array<uint8_t, 24> head{};
+    head.fill(0xEE);
+    size_t size = 0;
+
+    zassert_equal(store.ReadHead("short.bin", head, size), 10);
+    zassert_equal(size, 10);
+    zassert_mem_equal(head.data(), blob.data(), blob.size());
+    zassert_equal(head[10], 0xEE, "Nothing is written past what was read");
+
+    zassert_equal(store.ReadHead("empty.bin", head, size), 0);
+    zassert_equal(size, 0);
+}
+
+ZTEST(asset_store, test_read_head_reads_the_head_alone_without_a_block) {
+    auto store = MakeStore();
+    zassert_true(store.Save("image.bin", MakeBlob(10000, 17)));
+
+    std::array<uint8_t, 24> head{};
+    size_t size = 0;
+
+    Recorder().Start();
+    zassert_equal(store.ReadHead("image.bin", head, size), 24);
+    Recorder().Stop();
+
+    // A reader would have read a block of 4096 bytes.
+    zassert_equal(Recorder().reads.size(), 1);
+    zassert_equal(Recorder().reads[0].size, 24);
+    zassert_equal(Recorder().reads[0].result, 24);
+}
+
+ZTEST(asset_store, test_read_head_of_a_missing_file_or_a_directory_is_ENOENT) {
+    auto store = MakeStore();
+    std::array<uint8_t, 24> head{};
+    size_t size = 77;
+
+    zassert_equal(store.ReadHead("missing.bin", head, size), -ENOENT);
+    zassert_equal(size, 0, "No size for a file that was not opened");
+
+    zassert_equal(store.ReadHead("", head, size), -ENOENT);
+
+    zassert_true(GetFsService()->CreateDirectory(std::string(ASSETS_DIR) + "/folder"));
+    size = 77;
+    zassert_equal(store.ReadHead("folder", head, size), -ENOENT, "FAT and littlefs say it differently");
+    zassert_equal(size, 0);
+}
+
+ZTEST(asset_store, test_read_head_of_an_unmounted_volume_is_ENODEV) {
+    AssetStore store(std::make_shared<UnavailableFsService>(), ASSETS_DIR);
+    std::array<uint8_t, 24> head{};
+    size_t size = 77;
+
+    zassert_equal(store.ReadHead("asset.bin", head, size), -ENODEV);
+    zassert_equal(size, 0);
+
+    // A volume that is mounted but reported unavailable, as an SD card is that was pulled.
+    const auto scripted = std::make_shared<ScriptedFsService>(GetFsService());
+    AssetStore pulled(scripted, ASSETS_DIR);
+
+    zassert_true(pulled.Save("there.bin", MakeBlob(16)));
+
+    scripted->unavailable = true;
+
+    zassert_equal(pulled.ReadHead("there.bin", head, size), -ENODEV);
+
+    scripted->unavailable = false;
+
+    zassert_equal(pulled.ReadHead("there.bin", head, size), 16);
+}
+
 ZTEST(asset_store, test_reader_that_was_never_opened_is_closed) {
     AssetReader reader;
     std::vector<uint8_t> out(8);

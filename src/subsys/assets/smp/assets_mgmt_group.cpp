@@ -60,15 +60,28 @@ static_assert(CONFIG_EERIE_LEAP_ASSETS_MAX_NAME_LENGTH < 256);
 // The largest unsigned integer: a head byte and eight value bytes (`end_ms`).
 constexpr size_t MAX_UINT64_SIZE = 9;
 
+// The largest unsigned integers of the 16 and 8 bits an image's facts are: a head byte and the value bytes.
+constexpr size_t MAX_UINT16_SIZE = 3;
+constexpr size_t MAX_UINT8_SIZE = 2;
+
+// What an image's `img` map takes besides its key: the map, then `w` and `h` (16 bits), `cf` and `cmp` (8 bits), each
+// a key and an unsigned integer.
+constexpr size_t MAX_IMG_SIZE = 1 + 2 * (KeySize(1) + MAX_UINT16_SIZE) + (KeySize(2) + MAX_UINT8_SIZE)
+    + (KeySize(3) + MAX_UINT8_SIZE);
+
 // Room an entry of a list needs besides its name: the map, the `name` and `size` keys, the name's
 // head, a 32-bit size, the `end_ms` key with a 64-bit value and the end of the map. That is 35 bytes
 // at most. A built-in's entry has the `builtin` key and a bool instead of `end_ms`: 28 bytes, and so
-// has an entry that is growing (`growing` and a bool; it has no end).
-constexpr size_t LIST_ENTRY_OVERHEAD = 40;
+// has an entry that is growing (`growing` and a bool; it has no end). The largest is a stored image
+// with its `img` key and map and no `end_ms`: 45 bytes.
+constexpr size_t LIST_ENTRY_OVERHEAD = 48;
 static_assert(
     LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(6) + MAX_UINT64_SIZE + MAP_END_SIZE
 );
 static_assert(LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(7) + 1 + MAP_END_SIZE);
+static_assert(
+    LIST_ENTRY_OVERHEAD >= 1 + KeySize(4) + 2 + KeySize(4) + MAX_UINT_SIZE + KeySize(3) + MAX_IMG_SIZE + MAP_END_SIZE
+);
 
 // Room kept behind the last entry that is listed: the end of the list, `next` and the end of the
 // response map. That is 12 bytes at most.
@@ -95,13 +108,43 @@ GetGrowingSizes(const AssetProvider& provider, const std::vector<AssetEntry>& en
     return growing_sizes;
 }
 
+// The facts that the provider says its image files have, one per entry (nothing for a file that is no image, or whose
+// head does not read). Asked before anything is encoded, for the reason the growing sizes are.
+std::vector<std::optional<AssetImageInfo>>
+GetImageInfos(const AssetProvider& provider, const std::vector<AssetEntry>& entries) {
+    std::vector<std::optional<AssetImageInfo>> infos(entries.size());
+    if(provider.image.get_info) {
+        for(size_t i = 0; i < entries.size(); i++)
+            infos[i] = provider.image.get_info(entries[i].name);
+    }
+    return infos;
+}
+
+// Encodes `img`: the width, height and colour format of an image, and the compression method when it has one.
+bool PutImageFacts(zcbor_state_t* zse, const AssetImageInfo& image) {
+    const bool is_compressed = image.compression != 0;
+    const uint32_t pairs = is_compressed ? 4 : 3;
+
+    return zcbor_tstr_put_lit(zse, "img")
+        && zcbor_map_start_encode(zse, pairs)
+        && zcbor_tstr_put_lit(zse, "w")
+        && zcbor_uint32_put(zse, image.width)
+        && zcbor_tstr_put_lit(zse, "h")
+        && zcbor_uint32_put(zse, image.height)
+        && zcbor_tstr_put_lit(zse, "cf")
+        && zcbor_uint32_put(zse, image.format)
+        && (!is_compressed || (zcbor_tstr_put_lit(zse, "cmp") && zcbor_uint32_put(zse, image.compression)))
+        && zcbor_map_end_encode(zse, pairs);
+}
+
 // Encodes the map of one stored file of a LIST page. A file that is growing has the size its writer has synced, which
-// is what a read serves, and no end yet.
+// is what a read serves, and no end yet. An image file has its facts in `img`.
 bool PutStoredEntry(
     zcbor_state_t* zse,
     const AssetProvider& provider,
     const AssetEntry& entry,
-    const std::optional<uint64_t>& growing_size
+    const std::optional<uint64_t>& growing_size,
+    const std::optional<AssetImageInfo>& image
 ) {
     const bool is_growing = growing_size.has_value();
 
@@ -112,7 +155,7 @@ bool PutStoredEntry(
     if(provider.get_end_ms && !is_growing)
         end_ms = provider.get_end_ms(entry.name);
     const bool has_end = end_ms.has_value() && *end_ms >= 0;
-    const uint32_t pairs = (has_end || is_growing) ? 3 : 2;
+    const uint32_t pairs = ((has_end || is_growing) ? 3 : 2) + (image.has_value() ? 1 : 0);
 
     return zcbor_map_start_encode(zse, pairs)
         && zcbor_tstr_put_lit(zse, "name")
@@ -121,6 +164,7 @@ bool PutStoredEntry(
         && zcbor_uint32_put(zse, size)
         && (!has_end || (zcbor_tstr_put_lit(zse, "end_ms") && zcbor_uint64_put(zse, static_cast<uint64_t>(*end_ms))))
         && (!is_growing || (zcbor_tstr_put_lit(zse, "growing") && zcbor_bool_put(zse, true)))
+        && (!image.has_value() || PutImageFacts(zse, *image))
         && zcbor_map_end_encode(zse, pairs);
 }
 
@@ -196,6 +240,22 @@ void RenameShadowedFiles(const AssetProvider& provider) {
         if(!is_moved)
             LOG_ERR("The stored asset %s is shadowed by a built-in and found no free name to move to.", name.c_str());
     }
+}
+
+// The extension of the valid name @p name: the longest of the kind's that it ends with, ASCII case ignored.
+std::string_view ExtensionOf(const AssetProvider& provider, std::string_view name) {
+    std::string_view longest;
+
+    for(const std::string_view extension : provider.extensions) {
+        if(extension.size() > longest.size()
+            && name.size() >= extension.size()
+            && EqualsIgnoreAsciiCase(name.substr(name.size() - extension.size()), extension)) {
+
+            longest = extension;
+        }
+    }
+
+    return longest;
 }
 
 std::string_view ToView(const zcbor_string& text) {
@@ -437,9 +497,13 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
         const std::string& directory = store.GetDirectory();
         const bool is_available = store.IsAvailable();
         const AssetStore::Space space = is_available ? store.GetSpace() : AssetStore::Space{};
-        // fmt joins the entry of a raw pixel kind, free and used while the volume is mounted.
+        // fmt joins the entry of a raw pixel kind, fmts and cmps that of a kind with image files, free and used
+        // while the volume is mounted.
         const bool has_format = provider->pixel_format != 0;
-        const size_t entry_size = 7 + (has_format ? 1 : 0) + (is_available ? 2 : 0);
+        const bool has_formats = !provider->image.formats.empty();
+        const bool has_compressions = !provider->image.compressions.empty();
+        const size_t entry_size = 7 + (has_format ? 1 : 0) + (has_formats ? 1 : 0) + (has_compressions ? 1 : 0)
+            + (is_available ? 2 : 0);
 
         ok = ok
             && zcbor_map_start_encode(zse, entry_size)
@@ -466,6 +530,26 @@ int AssetsMgmtGroup::ExecuteKinds(smp_streamer* ctxt) {
 
         if(has_format)
             ok = ok && zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, provider->pixel_format);
+
+        if(has_formats) {
+            ok = ok && zcbor_tstr_put_lit(zse, "fmts") && zcbor_list_start_encode(zse, provider->image.formats.size());
+
+            for(const uint32_t format : provider->image.formats)
+                ok = ok && zcbor_uint32_put(zse, format);
+
+            ok = ok && zcbor_list_end_encode(zse, provider->image.formats.size());
+        }
+
+        if(has_compressions) {
+            ok = ok
+                && zcbor_tstr_put_lit(zse, "cmps")
+                && zcbor_list_start_encode(zse, provider->image.compressions.size());
+
+            for(const uint32_t compression : provider->image.compressions)
+                ok = ok && zcbor_uint32_put(zse, compression);
+
+            ok = ok && zcbor_list_end_encode(zse, provider->image.compressions.size());
+        }
 
         if(is_available) {
             ok = ok
@@ -576,6 +660,7 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
     }
 
     const auto growing_sizes = GetGrowingSizes(*provider, entries);
+    const auto image_infos = GetImageInfos(*provider, entries);
 
     zcbor_state_t* zse = ctxt->writer->zs;
     const size_t candidates = built_in_page + entries.size();
@@ -610,7 +695,7 @@ int AssetsMgmtGroup::ExecuteList(smp_streamer* ctxt) {
         if(Remaining(zse) < LIST_ENTRY_OVERHEAD + entry.name.size() + LIST_TAIL_SIZE)
             break;
 
-        ok = PutStoredEntry(zse, *provider, entry, growing_sizes[listed]);
+        ok = PutStoredEntry(zse, *provider, entry, growing_sizes[listed], image_infos[listed]);
         listed++;
     }
 
@@ -1044,6 +1129,19 @@ int AssetsMgmtGroup::WriteFirstChunk(
 
     const uint32_t chunk_crc = crc32_ieee(chunk.data(), chunk.size());
 
+    // The head the check judges is what the kind asks for or the whole file, whichever is shorter. A first chunk
+    // that holds it is judged now, before anything is looked at that costs another client or the volume something;
+    // a shorter one is judged when the chunk that completes the head arrives.
+    const bool has_check = static_cast<bool>(provider->check_content);
+    const size_t head_needed = has_check ? std::min<size_t>(length, provider->content_head_size) : 0;
+    const bool is_head_whole = chunk.size() >= head_needed;
+
+    if(has_check && is_head_whole) {
+        const std::optional<std::string> reason = provider->check_content(name, length, chunk.first(head_needed));
+        if(reason.has_value())
+            return Fail(ctxt, Error::BAD_CONTENT, *reason);
+    }
+
     // The answer to a file of one chunk got lost: it is stored, and the client learns so, whatever
     // else is going on and whether the file is in use by now.
     if(!has_token && IsStoredFirstChunkRepeat(*provider, name, length, crc, chunk.size(), chunk_crc))
@@ -1100,6 +1198,10 @@ int AssetsMgmtGroup::WriteFirstChunk(
     upload_.received = 0;
     upload_.first_length = chunk.size();
     upload_.first_crc = chunk_crc;
+    upload_.head_needed = head_needed;
+    upload_.head_count = std::min(chunk.size(), head_needed);
+    std::copy_n(chunk.begin(), upload_.head_count, upload_.head.begin());
+    upload_.is_content_checked = !has_check || is_head_whole;
     upload_.last_activity_ms = k_uptime_get();
 
     return AcceptChunk(ctxt, provider, 0, chunk, chunk_crc);
@@ -1147,6 +1249,39 @@ int AssetsMgmtGroup::WriteNextChunk(
         AbortUpload();
 
         return Fail(ctxt, Error::TOO_LARGE);
+    }
+
+    // The head was split over chunks: the one that completes it is judged, and a refusal ends the upload.
+    if(!upload_.is_content_checked) {
+        std::optional<std::string> reason;
+
+        // The staged file does not outlive an exception either.
+        try {
+            const size_t taken = std::min(chunk.size(), upload_.head_needed - upload_.head_count);
+            std::copy_n(chunk.begin(), taken, upload_.head.begin() + static_cast<ptrdiff_t>(upload_.head_count));
+            upload_.head_count += taken;
+
+            if(upload_.head_count == upload_.head_needed) {
+                upload_.is_content_checked = true;
+
+                // The kind may have been registered anew since the upload began.
+                if(provider->check_content) {
+                    reason = provider->check_content(
+                        upload_.name, upload_.length, std::span<const uint8_t>(upload_.head).first(upload_.head_needed)
+                    );
+                }
+            }
+        } catch(...) {
+            AbortUpload();
+
+            throw;
+        }
+
+        if(reason.has_value()) {
+            AbortUpload();
+
+            return Fail(ctxt, Error::BAD_CONTENT, *reason);
+        }
     }
 
     return AcceptChunk(ctxt, provider, offset, chunk, chunk_crc);
@@ -1357,6 +1492,11 @@ int AssetsMgmtGroup::ExecuteRename(smp_streamer* ctxt) {
     if(EqualsIgnoreAsciiCase(asset_name, to_name))
         return Fail(ctxt, Error::BAD_NAME);
 
+    // The content of an upload is judged for the extension it was uploaded under: a rename across extensions would
+    // give a file the other extension's meaning without that judgement.
+    if(!EqualsIgnoreAsciiCase(ExtensionOf(*provider, asset_name), ExtensionOf(*provider, to_name)))
+        return Fail(ctxt, Error::BAD_NAME);
+
     // A built-in can be neither taken away nor replaced.
     if(FindBuiltIn(*provider, asset_name) != nullptr || FindBuiltIn(*provider, to_name) != nullptr)
         return Fail(ctxt, Error::BUILT_IN);
@@ -1436,6 +1576,15 @@ int AssetsMgmtGroup::Fail(smp_streamer* ctxt, Error error, std::string_view extr
 
     if(ok && !extra_key.empty())
         ok = zcbor_tstr_encode_ptr(zse, extra_key.data(), extra_key.size()) && zcbor_uint32_put(zse, extra_value);
+
+    return MGMT_RETURN_CHECK(ok);
+}
+
+int AssetsMgmtGroup::Fail(smp_streamer* ctxt, Error error, const std::string& message) {
+    zcbor_state_t* zse = ctxt->writer->zs;
+    const bool ok = smp_add_cmd_err(zse, std::to_underlying(SmpGroupId::ASSETS), std::to_underlying(error))
+        && zcbor_tstr_put_lit(zse, "msg")
+        && zcbor_tstr_encode_ptr(zse, message.data(), message.size());
 
     return MGMT_RETURN_CHECK(ok);
 }
@@ -1789,6 +1938,9 @@ void AssetsMgmtGroup::ResetUpload() {
     upload_.received = 0;
     upload_.first_length = 0;
     upload_.first_crc = 0;
+    upload_.head_count = 0;
+    upload_.head_needed = 0;
+    upload_.is_content_checked = true;
     upload_.last_activity_ms = 0;
 }
 
@@ -1848,6 +2000,7 @@ int AssetsMgmtGroup::TranslateError(uint16_t error) {
         case Error::BAD_OFFSET:
         case Error::BAD_TOKEN:
         case Error::TOO_LARGE:
+        case Error::BAD_CONTENT:
             return MGMT_ERR_EINVAL;
         case Error::DENIED:
         case Error::BUILT_IN:

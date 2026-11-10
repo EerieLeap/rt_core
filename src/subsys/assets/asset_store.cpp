@@ -598,6 +598,73 @@ int AssetStore::OpenRead(std::string_view name, AssetReader& reader) const {
     return 0;
 }
 
+ssize_t AssetStore::ReadHead(std::string_view name, std::span<uint8_t> head, size_t& file_size) const {
+    file_size = 0;
+
+    if(!fs_service_->IsAvailable())
+        return -ENODEV;
+
+    if(name.empty())
+        return -ENOENT;
+
+    std::string path;
+
+    try {
+        path = GetPath(name);
+    } catch(const std::bad_alloc&) {
+        LOG_ERR("Not enough memory to read the head of an asset.");
+
+        return -ENOMEM;
+    }
+
+    fs_file_t file{};
+
+    int rc = fs_service_->OpenFile(path, FS_O_READ, &file);
+
+    // A directory is no file to read; FAT says no such file, littlefs says it is a directory.
+    if(rc == -EISDIR)
+        rc = -ENOENT;
+
+    if(rc < 0)
+        return rc;
+
+    // The size comes from the open file, so that it and the head belong to the same file.
+    rc = fs_seek(&file, 0, FS_SEEK_END);
+
+    off_t size = 0;
+    if(rc == 0) {
+        size = fs_tell(&file);
+        rc = size < 0 ? static_cast<int>(size) : fs_seek(&file, 0, FS_SEEK_SET);
+    }
+
+    size_t total = 0;
+
+    while(rc >= 0 && total < head.size()) {
+        const ssize_t read = fs_read(&file, head.data() + total, head.size() - total);
+        if(read < 0) {
+            rc = static_cast<int>(read);
+
+            break;
+        }
+
+        // The end of the file.
+        if(read == 0)
+            break;
+
+        total += static_cast<size_t>(read);
+    }
+
+    // The file system releases the handle whether or not it reports an error.
+    fs_close(&file);
+
+    if(rc < 0)
+        return rc;
+
+    file_size = static_cast<size_t>(size);
+
+    return static_cast<ssize_t>(total);
+}
+
 int AssetStore::BeginWrite(std::string_view name, AssetWriter& writer) {
     // A writer that is still open owns the staged file and a file slot; both go first.
     writer.Abort();

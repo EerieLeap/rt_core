@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 #include "utilities/string/ascii_case.h"
@@ -13,6 +14,34 @@
 #include "asset_store.h"
 
 namespace eerie_leap::subsys::assets {
+
+/// The most bytes of an upload's head that AssetProvider::check_content may ask for.
+inline constexpr uint8_t MAX_CONTENT_HEAD_SIZE = 32;
+
+/** @brief The facts an image file's header gives: LVGL's numbers, with no LVGL types. */
+struct AssetImageInfo {
+    uint16_t width = 0;
+    uint16_t height = 0;
+    /// The LVGL colour format.
+    uint8_t format = 0;
+    /// The LVGL compression method; 0 for none.
+    uint8_t compression = 0;
+};
+
+/** @brief What a kind of self-describing image files says of them; empty for every other kind. */
+struct AssetImageTraits {
+    /// The LVGL colour formats the kind's image files may be in (KINDS `fmts`), in static storage.
+    std::span<const uint32_t> formats;
+    /// The LVGL compression methods they may use (KINDS `cmps`), in static storage.
+    std::span<const uint32_t> compressions;
+    /**
+     * The facts of the file @p name, from its head; nullopt for a file of the kind that is not such an
+     * image (a raw `.bin`, an `.svg`) or whose head does not read. LIST asks it once per listed stored
+     * file, on the configuration work queue without the registry's lock. It may read the file's first
+     * bytes; it must not take the LVGL lock.
+     */
+    std::function<std::optional<AssetImageInfo>(std::string_view name)> get_info;
+};
 
 /**
  * @brief A file of a kind that is part of the firmware: read in place from flash, never stored on the
@@ -73,6 +102,19 @@ struct AssetProvider {
      * group lists it as `fmt`. 0: not a raw pixel kind, nothing is listed.
      */
     uint32_t pixel_format = 0;
+    /// What the kind's self-describing image files are; empty for any other kind.
+    AssetImageTraits image;
+    /// How many of an upload's first bytes check_content needs, at most MAX_CONTENT_HEAD_SIZE; 0 with no check.
+    uint8_t content_head_size = 0;
+    /**
+     * Whether an upload of @p name, @p length bytes long, may be stored, judged from its first
+     * min(length, content_head_size) bytes: nullopt to go on, else why not, a sentence the group
+     * sends as `msg` with BAD_CONTENT. Called at most once per upload, on the configuration work queue
+     * without the registry's lock: no file I/O, no waiting. Must not take the LVGL lock. Empty: the
+     * kind takes any content.
+     */
+    std::function<std::optional<std::string>(std::string_view name, size_t length, std::span<const uint8_t> head)>
+        check_content;
 };
 
 /** @return The built-in of @p provider that @p name names, ASCII case ignored as names compare on FAT; null when none. */
