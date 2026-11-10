@@ -1,0 +1,16 @@
+/ {
+        aliases {
+                can0 = &can_loopback0;
+                can1 = &can_loopback1;
+        };
+
+        can_loopback0: can_loopback0 {
+                status = "okay";
+                compatible = "zephyr,can-loopback";
+        };
+
+        can_loopback1: can_loopback1 {
+                status = "okay";
+                compatible = "zephyr,can-loopback";
+        };
+};

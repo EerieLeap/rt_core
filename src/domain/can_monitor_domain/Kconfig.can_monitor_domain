@@ -2,6 +2,9 @@ config EERIE_LEAP_DOMAIN_CAN_MONITOR
     bool "EerieLeap CAN monitor domain"
     depends on EERIE_LEAP_DOMAIN_CANBUS
     select EERIE_LEAP_THREADING
+    # The canmon group's requests nest lists in lists in the request map (OPEN's and FILTER's
+    # filters, SEND's frames, PERIODIC's list of maps): four levels of zcbor decoding state.
+    select MCUMGR_SMP_CBOR_MIN_DECODING_LEVEL_4 if EERIE_LEAP_SMP
     help
       Sessions that stream the frames of a CAN port to a client: the
       records, the ring they wait in, the sender and, with EERIE_LEAP_SMP,
