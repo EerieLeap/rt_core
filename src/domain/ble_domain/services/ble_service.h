@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -8,6 +9,7 @@
 #include "domain/sensor_domain/services/sensors_processing_service.h"
 #include "domain/sensor_domain/utilities/sensor_readings_frame.hpp"
 #include "subsys/bluetooth/access_point/access_point_service.h"
+#include "subsys/bluetooth/i_ble_notifier.h"
 #include "subsys/smp/ble/smp_ble_router.h"
 #include "subsys/smp/i_smp_forwarder.h"
 
@@ -16,6 +18,7 @@ namespace eerie_leap::domain::ble_domain::services {
 using eerie_leap::domain::ble_domain::smp::LiveMgmtGroup;
 using eerie_leap::domain::sensor_domain::services::SensorsProcessingService;
 using eerie_leap::domain::sensor_domain::utilities::SensorReadingsFrame;
+using eerie_leap::subsys::bluetooth::IBleNotifier;
 using eerie_leap::subsys::bluetooth::access_point::AccessPointService;
 using eerie_leap::subsys::smp::ISmpForwarder;
 using eerie_leap::subsys::smp::ble::SmpBleRouter;
@@ -72,6 +75,19 @@ public:
 
     bool Initialize();
     static bool Start();
+
+    // For the CAN monitor. All of them are empty, false or no-ops before Initialize() has made the
+    // access point.
+
+    /** @brief Notifier of the `bus` characteristic; nullptr before Initialize(). */
+    [[nodiscard]] std::shared_ptr<IBleNotifier> GetBusNotifier() const;
+    /** @brief Takes a hold on the fast link; each call needs one ReleaseFast(). See AccessPointService::HoldFast(). */
+    void HoldFast();
+    void ReleaseFast();
+    /** @brief Whether an SMP response is waiting for its notifications; the stream waits while it is. */
+    [[nodiscard]] bool IsSmpNotifying() const;
+    /** @brief Replaces the handler of `bus` notification completions. See AccessPointService::SetBusSentHandler(). */
+    void SetBusSentHandler(std::function<void()> handler);
 };
 
 } // namespace eerie_leap::domain::ble_domain::services

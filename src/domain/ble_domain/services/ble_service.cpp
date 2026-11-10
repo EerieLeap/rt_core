@@ -124,6 +124,29 @@ bool BleService::InitializeAccessPoint() {
     return true;
 }
 
+std::shared_ptr<IBleNotifier> BleService::GetBusNotifier() const {
+    return access_point_service_ != nullptr ? access_point_service_->GetBusNotifier() : nullptr;
+}
+
+void BleService::HoldFast() {
+    if(access_point_service_ != nullptr)
+        access_point_service_->HoldFast();
+}
+
+void BleService::ReleaseFast() {
+    if(access_point_service_ != nullptr)
+        access_point_service_->ReleaseFast();
+}
+
+bool BleService::IsSmpNotifying() const {
+    return smp_router_ != nullptr && smp_router_->IsNotifying();
+}
+
+void BleService::SetBusSentHandler(std::function<void()> handler) {
+    if(access_point_service_ != nullptr)
+        access_point_service_->SetBusSentHandler(std::move(handler));
+}
+
 bool BleService::Start() {
     if(!is_initialized)
         return false;

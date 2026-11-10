@@ -250,6 +250,8 @@ int SmpBleRouter::Output(net_buf* packet) {
 
 void SmpBleRouter::EnqueueTx(uint8_t route, uint8_t generation, SmpPacket packet) {
     UserData(*packet) = { .route = route, .generation = generation };
+    // Before the put: ProcessTx() may take the packet at once.
+    tx_pending_++;
     k_fifo_put(&tx_queue_, packet.release());
 
     // Keeps a pending retry delay; OnNotificationSent() cuts it short.
@@ -278,7 +280,7 @@ void SmpBleRouter::ProcessTx() {
         const size_t max_size = notifier_->GetMaxNotificationSize();
 
         if(user_data.generation != generation_.load() || max_size == 0) {
-            tx_packet_.reset();
+            FinishTxPacket();
             tx_dropped_++;
             continue;
         }
@@ -304,23 +306,31 @@ void SmpBleRouter::ProcessTx() {
 
         if(result != 0) {
             LOG_WRN("Dropping an SMP response, notification failed: %d", result);
-            tx_packet_.reset();
+            FinishTxPacket();
             tx_dropped_++;
             continue;
         }
 
         tx_offset_ += fragment.size();
         if(tx_offset_ == total)
-            tx_packet_.reset();
+            FinishTxPacket();
     }
 }
 
-void SmpBleRouter::DropTx() {
+void SmpBleRouter::FinishTxPacket() {
     tx_packet_.reset();
+    tx_pending_--;
+}
+
+void SmpBleRouter::DropTx() {
+    if(tx_packet_ != nullptr)
+        FinishTxPacket();
 
     // NOLINTBEGIN(misc-const-correctness): the variable is declared inside the k_fifo_get macro
-    while(auto* packet = static_cast<net_buf*>(k_fifo_get(&tx_queue_, K_NO_WAIT)))
+    while(auto* packet = static_cast<net_buf*>(k_fifo_get(&tx_queue_, K_NO_WAIT))) {
         smp_packet_free(packet);
+        tx_pending_--;
+    }
     // NOLINTEND(misc-const-correctness)
 }
 

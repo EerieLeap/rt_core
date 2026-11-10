@@ -13,6 +13,7 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 
+#include "subsys/bluetooth/access_point/fast_link_policy.h"
 #include "subsys/bluetooth/i_ble_notifier.h"
 
 namespace eerie_leap::subsys::bluetooth::access_point {
@@ -23,10 +24,13 @@ namespace eerie_leap::subsys::bluetooth::access_point {
 #define BT_UUID_ACCESS_POINT_SERVICE_VAL BT_UUID_ACCESS_POINT_ENCODE(0)
 
 /**
- * @brief GATT service of an access point: `smp` (SMP with a route prefix), `live` and `info`.
+ * @brief GATT service of an access point: `smp` (SMP with a route prefix), `live`, `info` and `bus`
+ * (the CAN monitor's stream).
  *
- * While SMP writes arrive the connection is asked for a short interval and the 2M PHY; after an
- * idle period it is asked for a long interval again.
+ * While SMP writes arrive, or while a hold (HoldFast()) is held, the connection is asked for a
+ * short interval and the 2M PHY; some time after the last of them it is asked for a long interval
+ * again. When the short request leaves an interval above 15 ms, one request for 15 to 30 ms follows
+ * (FastLinkPolicy).
  *
  * Only one instance may exist, because the GATT table is static.
  */
@@ -39,6 +43,8 @@ public:
         std::function<void()> on_smp_sent;
         /// A `live` notification left, on the system work queue.
         std::function<void()> on_live_sent;
+        /// A `bus` notification left, on the system work queue. SetBusSentHandler() replaces it.
+        std::function<void()> on_bus_sent;
     };
 
     static constexpr size_t MAX_INFO_SIZE = 16;
@@ -71,12 +77,23 @@ private:
     size_t info_size_ = 0;
     std::shared_ptr<Notifier> smp_notifier_;
     std::shared_ptr<Notifier> live_notifier_;
+    std::shared_ptr<Notifier> bus_notifier_;
 
-    std::atomic<bool> is_fast_ = false;
+    // Held by BusSentCallback() while on_bus_sent runs, so replacing it waits for a running call.
+    k_mutex bus_sent_mutex_{};
+
+    // Events come from the BT RX thread, the system work queue and the callers of HoldFast(). The
+    // lock covers the policy and the work calls that carry out its decisions, so those cannot be
+    // reordered between threads (an idle work left scheduled after the last release would keep the
+    // link fast for ever). The Bluetooth calls themselves run in the work handlers.
+    k_spinlock policy_lock_{};
+    FastLinkPolicy policy_;
     k_work fast_work_{};
+    k_work fallback_work_{};
     k_work_delayable idle_work_{};
     int connected_handler_id_ = -1;
     int disconnected_handler_id_ = -1;
+    int parameters_updated_handler_id_ = -1;
 
     static ssize_t SmpWriteCallback(
         bt_conn* conn,
@@ -89,11 +106,18 @@ private:
     static ssize_t InfoReadCallback(bt_conn* conn, const bt_gatt_attr* attr, void* buf, uint16_t len, uint16_t offset);
     static void SmpSentCallback(bt_conn* conn, void* user_data);
     static void LiveSentCallback(bt_conn* conn, void* user_data);
+    static void BusSentCallback(bt_conn* conn, void* user_data);
     static void FastWorkHandler(k_work* work);
+    static void FallbackWorkHandler(k_work* work);
     static void IdleWorkHandler(k_work* work);
 
     void OnSmpActivity();
-    static void RequestConnectionParameters(bool is_fast);
+    void OnParametersUpdated(uint16_t interval);
+    /// Carries out the work calls of a decision; call with policy_lock_ held.
+    void ApplyLocked(const FastLinkPolicy::Decision& decision);
+    void RequestFast();
+    static void RequestFallback();
+    void RequestIdle();
 
 public:
     /** @throws std::logic_error if another instance exists. */
@@ -115,6 +139,29 @@ public:
     [[nodiscard]] std::shared_ptr<IBleNotifier> GetLiveNotifier() const {
         return live_notifier_;
     }
+    [[nodiscard]] std::shared_ptr<IBleNotifier> GetBusNotifier() const {
+        return bus_notifier_;
+    }
+
+    /**
+     * @brief Takes a hold on the fast link; callable from any thread, never blocks.
+     *
+     * Holds are counted. While any is held the fast parameters and the 2M PHY stay requested (at the
+     * first hold, and again on a new connection) and SMP traffic does not start the idle work. Every
+     * call needs one ReleaseFast(); the CAN monitor holds from the opening of a session to its end.
+     */
+    void HoldFast();
+    /** @brief Gives a hold back; the idle work starts IDLE_TIMEOUT_MS after the last one. */
+    void ReleaseFast();
+
+    /**
+     * @brief Replaces on_bus_sent, which runs on the system work queue.
+     *
+     * Safe against a completion running at the same moment: the call waits for a running handler to
+     * return, so once it has returned with an empty handler the old one is no longer running. It must
+     * not wait for something the handler waits for, and a handler may replace itself.
+     */
+    void SetBusSentHandler(std::function<void()> handler);
 };
 
 } // namespace eerie_leap::subsys::bluetooth::access_point

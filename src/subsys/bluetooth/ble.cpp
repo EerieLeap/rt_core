@@ -44,6 +44,7 @@ k_work_delayable Ble::pairing_finished_work;
 
 std::unordered_map<int, Ble::ConnectedHandler> Ble::connected_handlers;
 std::unordered_map<int, Ble::DisconnectedHandler> Ble::disconnected_handlers;
+std::unordered_map<int, Ble::ParametersUpdatedHandler> Ble::parameters_updated_handlers;
 std::unordered_map<int, Ble::PairingStartedHandler> Ble::pairing_started_handlers;
 std::unordered_map<int, Ble::PairingFinishedHandler> Ble::pairing_finished_handlers;
 
@@ -180,7 +181,7 @@ void Recycled() {
     Ble::StartAdvertising();
 }
 
-void ParamertersUpdated(bt_conn* /*conn*/, uint16_t interval, uint16_t latency, uint16_t timeout) {
+void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
     const double connection_interval_ms = interval * 1.25;
     const uint16_t supervision_timeout_ms = timeout * 10;
 
@@ -188,6 +189,16 @@ void ParamertersUpdated(bt_conn* /*conn*/, uint16_t interval, uint16_t latency, 
         "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms", connection_interval_ms,
         latency, supervision_timeout_ms
     );
+
+    for(auto& [_, handler] : Ble::parameters_updated_handlers) {
+        try {
+            handler(conn, interval, latency, timeout);
+        } catch(const std::exception& e) {
+            LOG_ERR("Parameters updated handler threw: %s", e.what());
+        } catch(...) {
+            LOG_ERR("Parameters updated handler threw an unknown exception");
+        }
+    }
 }
 
 // NOTE: Any logging from this callback will cause a crash,
@@ -311,6 +322,11 @@ int Ble::RegisterDisconnectedHandler(DisconnectedHandler handler) {
     disconnected_handlers[id] = std::move(handler);
     return id++;
 }
+int Ble::RegisterParametersUpdatedHandler(ParametersUpdatedHandler handler) {
+    static int id = 0;
+    parameters_updated_handlers[id] = std::move(handler);
+    return id++;
+}
 int Ble::RegisterPairingStartedHandler(PairingStartedHandler handler) {
     static int id = 0;
     pairing_started_handlers[id] = std::move(handler);
@@ -327,6 +343,9 @@ void Ble::UnregisterConnectedHandler(int id) {
 }
 void Ble::UnregisterDisconnectedHandler(int id) {
     disconnected_handlers.erase(id);
+}
+void Ble::UnregisterParametersUpdatedHandler(int id) {
+    parameters_updated_handlers.erase(id);
 }
 void Ble::UnregisterPairingStartedHandler(int id) {
     pairing_started_handlers.erase(id);
