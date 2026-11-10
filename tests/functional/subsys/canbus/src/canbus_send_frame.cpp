@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -32,12 +33,9 @@ std::vector<uint8_t> MakePayload(size_t size, uint8_t seed = 1) {
 }
 
 bool IsFdLength(size_t size) {
-    for(const size_t length : FD_LENGTHS) {
-        if(length == size)
-            return true;
-    }
-
-    return false;
+    return std::ranges::any_of(FD_LENGTHS, [size](size_t length) {
+        return length == size;
+    });
 }
 
 CanFrame MakeFrame(uint32_t id, bool ide, std::span<const uint8_t> payload = {}) {

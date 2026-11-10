@@ -23,7 +23,6 @@ using models::CanMonitorError;
 using models::CanMonitorPeriodic;
 using models::CanMonitorReplayOp;
 using models::CanMonitorReplayRequest;
-using models::CanMonitorReservedRange;
 using models::CanMonitorSendResult;
 using models::CanMonitorTxFrame;
 using utilities::CanTxEvent;
@@ -101,7 +100,7 @@ void CanSessionTransmitter::OnBusState(can_state state) {
 }
 
 void CanSessionTransmitter::BusOffHandler(k_work* work) {
-    Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
+    const Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
 
     item->owner->Disarm(CanTxEvent::BUS_OFF);
 }
@@ -225,7 +224,7 @@ CanSessionTransmitter::Send(std::span<const CanMonitorTxFrame> frames) {
         if(!converted)
             return std::unexpected(converted.error());
 
-        built.push_back(std::move(*converted));
+        built.push_back(*converted);
     }
 
     for(const CanFrame& frame : built) {
@@ -284,7 +283,7 @@ std::expected<void, CanMonitorError> CanSessionTransmitter::SetPeriodic(std::spa
             slot->work.slot = slot.get();
             k_work_init_delayable(&slot->work.work, PeriodicHandler);
             slot->slot = entry.slot;
-            slot->frame = std::move(*frame);
+            slot->frame = *frame;
             slot->period_us = static_cast<uint64_t>(entry.period_ms) * 1000;
             slot->has_count = entry.count.has_value();
             slot->remaining = entry.count.value_or(0);
@@ -333,7 +332,7 @@ std::expected<void, CanMonitorError> CanSessionTransmitter::SetPeriodic(std::spa
 }
 
 void CanSessionTransmitter::PeriodicHandler(k_work* work) {
-    Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
+    const Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
 
     item->owner->RunPeriodic(*static_cast<PeriodicSlot*>(item->slot));
 }
@@ -382,7 +381,7 @@ void CanSessionTransmitter::NoteSkipped(uint64_t now_us, uint64_t count) {
 }
 
 void CanSessionTransmitter::SkipHandler(k_work* work) {
-    Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
+    const Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
 
     item->owner->RunSkipReport();
 }
@@ -408,7 +407,7 @@ void CanSessionTransmitter::ScheduleReplay(k_timeout_t delay) {
 }
 
 void CanSessionTransmitter::ReplayHandler(k_work* work) {
-    Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
+    const Work* item = CONTAINER_OF(k_work_delayable_from_work(work), Work, work);
 
     item->owner->RunReplay();
 }

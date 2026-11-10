@@ -103,7 +103,7 @@ private:
     static void SkipHandler(k_work* work);
 
     [[nodiscard]] std::expected<eerie_leap::subsys::canbus::CanFrame, models::CanMonitorError>
-    BuildFrame(const models::CanMonitorTxFrame& frame) const;
+    BuildFrame(const models::CanMonitorTxFrame& tx) const;
     [[nodiscard]] std::expected<void, models::CanMonitorError> CheckReady() const;
     void Disarm(utilities::CanTxEvent reason);
     void StopWork();
