@@ -200,7 +200,7 @@ struct CanCounterWidener {
     uint32_t last = 0;
 
     uint64_t Update(uint32_t now) {
-        total += static_cast<uint32_t>(now - last);
+        total += now - last;
         last = now;
 
         return total;

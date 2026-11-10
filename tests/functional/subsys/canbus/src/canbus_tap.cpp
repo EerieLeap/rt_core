@@ -22,7 +22,7 @@ constexpr size_t MAX_FILTERS = CONFIG_CAN_LOOPBACK_MAX_FILTERS;
 
 // Accepts every extended id addressed to 0x07 in bits 8..15.
 constexpr uint32_t TARGET_MASK = 0x1FFFFF00;
-const CanFilter TARGET_FILTER = CanFilter::Masked(CanId::Extended(0x1FF00700), TARGET_MASK);
+constexpr CanFilter TARGET_FILTER = CanFilter::Masked(CanId::Extended(0x1FF00700), TARGET_MASK);
 
 struct TapEvent {
     enum class Kind {
@@ -251,7 +251,9 @@ std::vector<uint64_t> RunSequence(Canbus& canbus, FrameCollector& collector) {
     std::vector<uint64_t> calls;
     for(size_t i = start; i < collector.Count(); i++) {
         const CanFrame frame = collector.At(i);
-        calls.push_back(frame.id | (static_cast<uint64_t>(frame.is_extended) << 32) | (uint64_t(frame.data[0]) << 40));
+        calls.push_back(
+            frame.id | (static_cast<uint64_t>(frame.is_extended) << 32) | (static_cast<uint64_t>(frame.data[0]) << 40)
+        );
     }
 
     return calls;

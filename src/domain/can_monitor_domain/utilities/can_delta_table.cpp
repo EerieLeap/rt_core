@@ -43,8 +43,10 @@ CanDeltaTable::CanDeltaTable(std::pmr::memory_resource* memory, void* block, siz
     // The widest first, so that each part stays aligned: payloads, keys, index, lengths.
     auto* bytes = static_cast<uint8_t*>(block);
     payloads_ = bytes;
+    // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast): one block holds every part, each aligned for its type
     keys_ = reinterpret_cast<uint32_t*>(bytes + (capacity * MAX_PAYLOAD_SIZE));
     index_ = reinterpret_cast<uint16_t*>(bytes + (capacity * MAX_PAYLOAD_SIZE) + (capacity * sizeof(uint32_t)));
+    // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
     lengths_ = bytes + (capacity * MAX_PAYLOAD_SIZE) + (capacity * sizeof(uint32_t)) + (slots_ * sizeof(uint16_t));
 
     Reset();
@@ -167,7 +169,7 @@ std::optional<size_t> CanDeltaDecoder::Apply(const CanRecord& record, std::span<
             if(payload_out.size() < record.payload.size())
                 return std::nullopt;
 
-            std::copy(record.payload.begin(), record.payload.end(), payload_out.begin());
+            std::ranges::copy(record.payload, payload_out.begin());
             if(!record.rtr)
                 table_.Store(record.id, record.ide, record.payload);
 
@@ -179,7 +181,7 @@ std::optional<size_t> CanDeltaDecoder::Apply(const CanRecord& record, std::span<
             if(previous.size() != length || payload_out.size() < length)
                 return std::nullopt;
 
-            std::copy(previous.begin(), previous.end(), payload_out.begin());
+            std::ranges::copy(previous, payload_out.begin());
 
             size_t next_changed = 0;
             for(size_t i = 0; i < length; ++i) {

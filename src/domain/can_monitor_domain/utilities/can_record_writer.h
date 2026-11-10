@@ -81,7 +81,8 @@ size_t EncodeTap(std::span<uint8_t> out, uint64_t dt_us, CanTapMark mark);
 class CanRecordWriter {
 private:
     ByteRing& ring_;
-    CanDeltaTable* delta_;
+    // Unused without CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA.
+    [[maybe_unused]] CanDeltaTable* delta_;
     uint64_t last_time_us_;
 
     std::array<uint64_t, CAN_GAP_CAUSE_COUNT> pending_{};
@@ -104,8 +105,12 @@ public:
      */
     CanRecordWriter(ByteRing& ring, uint64_t start_time_us, CanDeltaTable* delta = nullptr);
 
+    ~CanRecordWriter() = default;
+
     CanRecordWriter(const CanRecordWriter&) = delete;
     CanRecordWriter& operator=(const CanRecordWriter&) = delete;
+    CanRecordWriter(CanRecordWriter&&) = delete;
+    CanRecordWriter& operator=(CanRecordWriter&&) = delete;
 
     /**
      * @brief Writes a frame (kind 0, or 1 through the table).

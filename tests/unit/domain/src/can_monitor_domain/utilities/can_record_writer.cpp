@@ -357,6 +357,7 @@ void ExpectDecodes(const Drained& drained, CanDeltaDecoder& decoder, const std::
 
 std::vector<CanRecordKind> KindsOf(const Drained& drained) {
     std::vector<CanRecordKind> kinds;
+    kinds.reserve(drained.records.size());
     for(const CanRecord& record : drained.records)
         kinds.push_back(record.kind);
 

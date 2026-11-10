@@ -100,7 +100,7 @@ ZTEST(can_monitor_bit_time, test_DataBitrateZeroMeansNominal) {
     const auto same = CanBitTime::Compute(false, true, true, false, 8, NOMINAL, 0);
     zassert_equal(same.nominal_bits, 30U);
     zassert_equal(same.data_bits, 96U);
-    zassert_equal(same.time_ns, 126U * 2000U);
+    zassert_equal(same.time_ns, uint64_t{ 126 } * 2000U);
 }
 
 ZTEST(can_monitor_bit_time, test_TimesRoundToTheNearestNanosecond) {

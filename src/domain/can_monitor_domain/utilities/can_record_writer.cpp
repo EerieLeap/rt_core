@@ -280,7 +280,7 @@ void CanRecordWriter::AddLoss(CanGapCause cause, uint64_t count) {
 }
 
 bool CanRecordWriter::FlushLosses() {
-    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer;
+    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer{};
 
     for(size_t index = 0; index < pending_.size(); ++index) {
         if(pending_[index] == 0)
@@ -312,7 +312,7 @@ bool CanRecordWriter::WriteFrame(uint64_t time_us, const CanRecordFrame& frame) 
 
     const uint64_t dt_us = DeltaSince(time_us);
 
-    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer;
+    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer{};
     size_t size = 0;
 #ifdef CONFIG_EERIE_LEAP_CAN_MONITOR_DELTA
     if(delta_ != nullptr)
@@ -353,7 +353,7 @@ bool CanRecordWriter::WriteState(
 
     const uint64_t dt_us = DeltaSince(time_us);
 
-    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer;
+    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer{};
     const size_t size = EncodeState(buffer, dt_us, state, tec, rec, detected_bitrate);
     if(!WriteRecord(std::span<const uint8_t>(buffer).first(size), dt_us)) {
         CountLost(CanGapCause::RING, 1);
@@ -374,7 +374,7 @@ bool CanRecordWriter::WriteTap(uint64_t time_us, CanTapMark mark) {
 
     const uint64_t dt_us = DeltaSince(time_us);
 
-    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer;
+    std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer{};
     const size_t size = EncodeTap(buffer, dt_us, mark);
     if(!WriteRecord(std::span<const uint8_t>(buffer).first(size), dt_us)) {
         CountLost(CanGapCause::RING, 1);

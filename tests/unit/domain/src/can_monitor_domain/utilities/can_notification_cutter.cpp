@@ -160,7 +160,8 @@ TimedStream MakeStream(uint64_t start, size_t count) {
 
     for(size_t i = 0; i < count; ++i) {
         // 0 now and then, one byte, two bytes, three bytes.
-        const uint64_t dt = (i % 5 == 0) ? 0 : (i % 5 == 1) ? 7 : (i % 5 == 2) ? 300 : (i % 5 == 3) ? 20000 : 128;
+        constexpr std::array<uint64_t, 5> DTS = { 0, 7, 300, 20000, 128 };
+        const uint64_t dt = DTS[i % DTS.size()];
         time += dt;
 
         size_t size = 0;

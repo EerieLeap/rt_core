@@ -342,7 +342,7 @@ ZTEST(can_monitor_delta_table, test_ARandomStreamRoundTrips) {
     Pair pair(64);
 
     uint32_t state = 12345;
-    auto next = [&state]() {
+    auto next = [&state] {
         state = (state * 1664525U) + 1013904223U;
         return state >> 8;
     };
