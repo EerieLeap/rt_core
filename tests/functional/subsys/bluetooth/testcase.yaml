@@ -1,0 +1,11 @@
+common:
+  tags:
+    - functional
+    - subsys.bluetooth
+  # The only board with an HCI driver for the Bluetooth stack to link against.
+  platform_allow: native_sim
+  integration_platforms:
+    - native_sim
+
+tests:
+  functional.subsys.bluetooth: {}

@@ -93,13 +93,17 @@ const bt_gatt_attr AccessPointService::ATTRIBUTES[] = {
         nullptr
     ),
 
-    // Appended after `info` so that no existing handle moves; a bonded central learns of it through
-    // Service Changed. Subscribing is open like `live`'s.
+    // Appended after `info` so that none of this service's handles move; a bonded central learns of it
+    // through Service Changed. Subscribing is open like `live`'s.
     BT_GATT_CHARACTERISTIC(BT_UUID_ACCESS_POINT_BUS, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, nullptr, nullptr, nullptr),
     BT_GATT_CCC(nullptr, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
-const STRUCT_SECTION_ITERABLE(bt_gatt_service_static, AccessPointService::gatt_service_) = BT_GATT_SERVICE(ATTRIBUTES);
+// The linker orders the services by section name, and one named after this variable would start with the class
+// name and sort ahead of Zephyr's `_1_gatt_svc`. Sorted after `_2_gap_svc`, this service can grow without
+// moving Service Changed, whose handle must stay put while a central is bonded (Core Specification, Vol 3, Part G).
+const STRUCT_SECTION_ITERABLE_NAMED(bt_gatt_service_static, _3_access_point_svc, AccessPointService::GATT_SERVICE) =
+    BT_GATT_SERVICE(ATTRIBUTES);
 
 AccessPointService::AccessPointService() :
     smp_notifier_(std::make_shared<Notifier>(&ATTRIBUTES[SMP_VALUE_INDEX], SmpSentCallback)),
