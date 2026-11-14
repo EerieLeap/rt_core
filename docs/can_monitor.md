@@ -360,8 +360,16 @@ and the events keep the order their kinds first waited in.
 - **The unit's own frames** appear as TX only while a tap is set and a slot is free, at their completion.
 - **A bus detecting its bitrate** streams nothing, and `busy_us` is 0, until the bitrate is found.
 - **Load.** With a tap set the controller hands over every frame on the bus, and the receive thread stamps,
-  converts, dispatches and taps each one. The cost is not characterized here; measure on the unit with its own
-  load (its display, its sensors).
+  converts, dispatches and taps each one. On the MCP2518FD the driver's interrupt thread first reads each frame
+  over SPI, at 8 MHz at most with a 20 MHz oscillator; `patches/zephyr/can_mcp251xfd_rx_read_by_dlc.patch` has a
+  CAN FD build read a frame's header and first 8 data bytes, and the rest only for a longer payload, instead of the
+  whole 72-byte item. A classical frame then costs the gauge about 80 µs in that thread and 20 µs in the receive
+  thread, against 120 µs for a frame on a 1 Mbit/s bus, so a burst of back-to-back frames overruns the controller's
+  FIFO whenever the thread is held up. Zephyr's interrupt thread also slept 10 ms after 10 passes of its loop that
+  found the interrupt line still asserted, a guard against a flag it cannot clear that a long burst also tripped,
+  overrunning the FIFO once a burst; `patches/zephyr/can_mcp251xfd_sleep_only_when_stalled.patch` keeps that sleep
+  for passes that read no frame, and has a pass that did pause a tick (100 µs on the S3) every 10, which the FIFO
+  bridges. Measure on the unit with its own load (its display, its sensors).
 - **Memory.** Each session takes a ring (`EERIE_LEAP_CAN_MONITOR_RING_SIZE`, 256 KiB) from the external memory
   resource, allocated at OPEN (`NO_MEMORY` when it cannot be had; the size must be a power of two), a changed-bytes
   table with `delta`, and the replay buffer while a replay runs. In internal RAM: the receive queue's

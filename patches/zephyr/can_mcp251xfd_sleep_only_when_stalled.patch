@@ -1,0 +1,81 @@
+diff --git a/drivers/can/can_mcp251xfd.c b/drivers/can/can_mcp251xfd.c
+--- a/drivers/can/can_mcp251xfd.c
++++ b/drivers/can/can_mcp251xfd.c
+@@ -872,6 +872,9 @@
+ 		}
+ 	}
+
++	/* The items read: the interrupt loop tells a busy bus from a stuck flag by them */
++	ret = ui_inc;
++
+ done:
+ 	k_mutex_unlock(&dev_data->mutex);
+ 	return ret;
+@@ -1073,8 +1076,11 @@
+ 	uint32_t reg_int;
+ 	int ret;
+ 	uint8_t consecutive_calls = 0;
++	uint8_t busy_calls = 0;
++	bool progress;
+
+ 	while (1) {
++		progress = false;
+ 		k_mutex_lock(&dev_data->mutex, K_FOREVER);
+ 		reg_int_hw = mcp251xfd_read_crc(dev, MCP251XFD_REG_INT, sizeof(*reg_int_hw));
+
+@@ -1107,6 +1113,8 @@
+ 							 MCP251XFD_FIFO_TYPE_RX);
+ 			if (ret < 0) {
+ 				LOG_ERR("Error handling RXIF [%d]", ret);
++			} else if (ret > 0) {
++				progress = true;
+ 			}
+ 		}
+
+@@ -1115,6 +1123,8 @@
+ 							 MCP251XFD_FIFO_TYPE_TEF);
+ 			if (ret < 0) {
+ 				LOG_ERR("Error handling TEFIF [%d]", ret);
++			} else if (ret > 0) {
++				progress = true;
+ 			}
+ 		}
+
+@@ -1155,14 +1165,23 @@
+ #endif
+
+ 		/* Break from loop if INT pin is inactive */
+-		consecutive_calls++;
+ 		ret = gpio_pin_get_dt(&dev_cfg->int_gpio_dt);
+ 		if (ret < 0) {
+ 			LOG_ERR("Couldn't read INT pin [%d]", ret);
+ 		} else if (ret == 0) {
+ 			/* All interrupt flags handled */
+ 			break;
+-		} else if (consecutive_calls % MCP251XFD_MAX_INT_HANDLER_CALLS == 0) {
++		} else if (progress) {
++			/*
++			 * Frames keep arriving: a busy bus, not a stuck flag. Keep draining,
++			 * but let lower priority threads run for a tick now and then; the
++			 * RX FIFO holds what arrives meanwhile.
++			 */
++			consecutive_calls = 0;
++			if (++busy_calls % MCP251XFD_MAX_INT_HANDLER_CALLS == 0) {
++				k_sleep(K_USEC(MCP251XFD_INT_HANDLER_BUSY_SLEEP_USEC));
++			}
++		} else if (++consecutive_calls % MCP251XFD_MAX_INT_HANDLER_CALLS == 0) {
+ 			/* If there are clock problems, then MODIF cannot be cleared. */
+ 			/* This is detected if there are too many consecutive calls. */
+ 			/* Sleep this thread if this happens. */
+diff --git a/drivers/can/can_mcp251xfd.h b/drivers/can/can_mcp251xfd.h
+--- a/drivers/can/can_mcp251xfd.h
++++ b/drivers/can/can_mcp251xfd.h
+@@ -68,6 +68,8 @@
+
+ #define MCP251XFD_MAX_INT_HANDLER_CALLS  10
+ #define MCP251XFD_INT_HANDLER_SLEEP_USEC 10000
++/* A busy interrupt loop's pause: a tick or two, which the RX FIFO bridges */
++#define MCP251XFD_INT_HANDLER_BUSY_SLEEP_USEC 100
+
+ /* Delay time found experimentally to fix occasional init issue */
+ #define MCP251XFD_RESET_DELAY_USEC 5000
