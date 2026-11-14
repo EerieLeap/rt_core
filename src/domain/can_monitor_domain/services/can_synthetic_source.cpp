@@ -11,12 +11,14 @@
 
     #include "subsys/canbus/can_frame.h"
     #include "subsys/canbus/canbus_time.h"
+    #include "utilities/memory/memory_resource_manager.h"
 
 namespace eerie_leap::domain::can_monitor_domain::services {
 
 using eerie_leap::subsys::canbus::CAN_FRAME_MAX_DATA_LENGTH;
 using eerie_leap::subsys::canbus::CanFrame;
 using eerie_leap::subsys::canbus::NowUs;
+using eerie_leap::utilities::memory::Mrm;
 
 namespace {
 
@@ -54,7 +56,10 @@ bool CanSyntheticSource::Start() {
     is_stopping_ = false;
 
     if(!thread_) {
-        thread_ = std::make_unique<Thread>("can_synthetic", this, THREAD_STACK_SIZE, THREAD_PRIORITY, false);
+        // External RAM: the kernel heap of a display unit has no 8 KB to spare for a bench thread.
+        thread_ = std::make_unique<Thread>(
+            "can_synthetic", this, THREAD_STACK_SIZE, THREAD_PRIORITY, false, Mrm::GetExtPmr()
+        );
         if(!thread_->Initialize()) {
             thread_.reset();
             return false;
