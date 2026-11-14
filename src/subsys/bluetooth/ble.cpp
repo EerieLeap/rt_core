@@ -144,7 +144,9 @@ void Connected(bt_conn* conn, uint8_t err) {
 
     char addr[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-    LOG_INF("Connected: %s", addr);
+    bt_conn_info info{}; // NOLINT(bugprone-invalid-enum-default-initialization): read only once filled.
+    const unsigned int interval_us = bt_conn_get_info(conn, &info) == 0 ? info.le.interval_us : 0;
+    LOG_INF("Connected: %s, interval %u us", addr, interval_us);
 
     k_mutex_lock(&Ble::conn_mutex, K_FOREVER);
     if(Ble::active_conn)
@@ -185,9 +187,20 @@ void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint
     const double connection_interval_ms = interval * 1.25;
     const uint16_t supervision_timeout_ms = timeout * 10;
 
+    // The PHY and data length updates log nothing themselves (see DataLengthUpdated).
+    bt_conn_info info{}; // NOLINT(bugprone-invalid-enum-default-initialization): read only once filled.
+    const bool has_info = bt_conn_get_info(conn, &info) == 0;
+    const unsigned int tx_length = has_info ? info.le.data_len->tx_max_len : 0;
+#ifdef CONFIG_BT_USER_PHY_UPDATE
+    const unsigned int tx_phy = has_info ? info.le.phy->tx_phy : 0;
+#else
+    const unsigned int tx_phy = 0;
+#endif
+
     LOG_INF(
-        "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms", connection_interval_ms,
-        latency, supervision_timeout_ms
+        "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms; TX PHY %u, TX data "
+        "length %u B",
+        connection_interval_ms, latency, supervision_timeout_ms, tx_phy, tx_length
     );
 
     for(auto& [_, handler] : Ble::parameters_updated_handlers) {
