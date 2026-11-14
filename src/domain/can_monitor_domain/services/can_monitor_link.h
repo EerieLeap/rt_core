@@ -19,7 +19,8 @@ using eerie_leap::subsys::bluetooth::IBleNotifier;
 struct CanMonitorLink {
     /// The `bus` characteristic.
     std::shared_ptr<IBleNotifier> notifier;
-    /// Holds the fast link parameters; one call for each session opened, balanced by release_fast.
+    /// Holds the fast link parameters; one call for each session opened, balanced by release_fast once the
+    /// session's end record is built (CanMonitorSender).
     std::function<void()> hold_fast;
     std::function<void()> release_fast;
     /// True while an SMP response is being notified: the stream waits. Called from the sender thread.

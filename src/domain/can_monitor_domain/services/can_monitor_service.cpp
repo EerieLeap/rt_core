@@ -628,9 +628,7 @@ void CanMonitorService::EndSession(OpenSession& open, CanEndReason reason) {
     if(open.own_bus && !open.own_bus->Stop())
         LOG_ERR("CAN monitor: the bus of port %u would not stop.", open.answer.ch);
 
-    if(link_.release_fast)
-        link_.release_fast();
-
+    // The sender keeps the session's hold on the fast link while it drains.
     sender_.End(open.session, reason);
 
     LOG_INF("CAN monitor: session %08x ended (%u).", open.answer.tok, static_cast<unsigned>(reason));

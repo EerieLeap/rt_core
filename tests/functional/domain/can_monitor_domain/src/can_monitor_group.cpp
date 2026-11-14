@@ -76,7 +76,12 @@ ZTEST(can_monitor_group, test_open_and_close_answer_with_the_session) {
     const auto closed = unit.Close(opened.Value("tok"));
     zassert_true(closed.IsOk());
     zassert_equal(unit.harness.service->GetSessionCount(), 0U);
-    zassert_equal(unit.harness.releases.load(), 1);
+    zassert_true(
+        WaitUntil([&] {
+            return unit.harness.releases.load() == 1;
+        }),
+        "The fast link is released with the end record"
+    );
 
     // The port is free again.
     zassert_true(unit.OpenTap().IsOk());

@@ -279,6 +279,13 @@ void CanRecordWriter::AddLoss(CanGapCause cause, uint64_t count) {
         CountLost(cause, count);
 }
 
+void CanRecordWriter::AddPendingGap(CanGapCause cause, uint64_t count) {
+    // The cause comes from a parsed record, which the reader does not check.
+    const size_t index = static_cast<size_t>(cause) - 1;
+    if(index < pending_.size())
+        pending_[index] += count;
+}
+
 bool CanRecordWriter::FlushLosses() {
     std::array<uint8_t, CAN_MAX_RECORD_SIZE> buffer{};
 

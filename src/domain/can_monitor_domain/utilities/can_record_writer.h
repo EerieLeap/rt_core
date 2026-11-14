@@ -128,6 +128,12 @@ public:
     /** @brief Counts @p count frames lost for a cause seen elsewhere (receive queue, controller, echoes). */
     void AddLoss(CanGapCause cause, uint64_t count);
 
+    /**
+     * @brief Owes a gap record's frames again, without counting them lost a second time: the sender
+     * cut the record from the ring (CanMonitorSender, a drain out of time).
+     */
+    void AddPendingGap(CanGapCause cause, uint64_t count);
+
     /** @brief Writes the pending gaps; false when one doesn't fit. Every write does it first. */
     bool FlushLosses();
 

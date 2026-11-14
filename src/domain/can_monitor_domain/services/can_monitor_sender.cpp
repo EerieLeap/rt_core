@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstring>
 #include <exception>
+#include <optional>
 #include <span>
 
 #include <zephyr/logging/log.h>
@@ -52,6 +53,10 @@ CanMonitorSender::CanMonitorSender(CanMonitorLink link) :
 CanMonitorSender::~CanMonitorSender() {
     Stop();
     thread_.reset();
+
+    // Sessions still draining are freed with the sender.
+    for(auto& slot : slots_)
+        ReleaseFast(*slot);
 }
 
 bool CanMonitorSender::Start() {
@@ -114,18 +119,29 @@ void CanMonitorSender::Discard(const CanMonitorSession* session) {
 }
 
 void CanMonitorSender::End(const CanMonitorSession* session, CanEndReason reason) {
+    bool is_found = false;
+
     {
         const ScopedMutex guard(slots_lock_);
 
         for(auto& slot : slots_) {
-            if(slot->session.get() != session || slot->is_ending)
+            if(slot->session.get() != session)
+                continue;
+
+            is_found = true;
+            if(slot->is_ending)
                 continue;
 
             slot->is_ending = true;
+            slot->holds_fast = true;
             slot->end_reason = reason;
             slot->drain_deadline_ms = k_uptime_get() + DRAIN_TIMEOUT_MS;
         }
     }
+
+    // No slot to keep the hold until the end record.
+    if(!is_found && link_.release_fast)
+        link_.release_fast();
 
     wake_.Wake();
 }
@@ -209,13 +225,28 @@ void CanMonitorSender::HandleEvents() {
 
 void CanMonitorSender::Sweep() {
     for(auto& slot : slots_) {
-        if(slot->is_done && built_.slot == slot.get())
+        if(!slot->is_done)
+            continue;
+
+        if(built_.slot == slot.get())
             built_.is_valid = false;
+
+        ReleaseFast(*slot);
     }
 
     std::erase_if(slots_, [](const std::unique_ptr<Slot>& slot) {
         return slot->is_done;
     });
+}
+
+// The link may slow down once a session's end record is built, or the session is freed without one.
+void CanMonitorSender::ReleaseFast(Slot& slot) const {
+    if(!slot.holds_fast)
+        return;
+
+    slot.holds_fast = false;
+    if(link_.release_fast)
+        link_.release_fast();
 }
 
 void CanMonitorSender::ThreadEntry() {
@@ -314,10 +345,22 @@ bool CanMonitorSender::Serve(Slot& slot, int64_t now_ms, size_t notify_max, bool
     ByteRing& ring = slot.session->GetRing();
 
     if(slot.is_ending) {
-        // No link to drain into, or it has not drained in time.
-        if(notify_max == 0 || slot.end_reason == CanEndReason::DISCONNECTED || now_ms >= slot.drain_deadline_ms) {
+        // No link to drain into.
+        if(notify_max == 0 || slot.end_reason == CanEndReason::DISCONNECTED) {
             slot.is_done = true;
             return true;
+        }
+
+        if(now_ms >= slot.drain_deadline_ms) {
+            // Not even the end record left: the link is stuck.
+            if(slot.is_cut) {
+                slot.is_done = true;
+                return true;
+            }
+
+            CutDrain(slot);
+            slot.is_cut = true;
+            slot.drain_deadline_ms = now_ms + END_RECORD_TIMEOUT_MS;
         }
 
         next_ms = std::min(next_ms, slot.drain_deadline_ms);
@@ -354,6 +397,45 @@ bool CanMonitorSender::Serve(Slot& slot, int64_t now_ms, size_t notify_max, bool
         return is_built;
 
     return Submit(now_ms);
+}
+
+// The ring has not drained in time: what it still holds is dropped, its frames lost to the ring and its gap
+// records owed again, so the gap the end record follows accounts for all of them. Nothing is built from the
+// ring when this runs.
+void CanMonitorSender::CutDrain(Slot& slot) {
+    ByteRing& ring = slot.session->GetRing();
+    size_t frames = 0;
+
+    while(ring.Size() != 0) {
+        const std::span<uint8_t> window = std::span(scratch_).first(std::min(ring.Size(), scratch_.size()));
+        ring.Peek(0, window);
+
+        size_t offset = 0;
+        while(offset < window.size()) {
+            const std::optional<CanRecord> record = ParseRecord(window.subspan(offset));
+            if(!record.has_value())
+                break;
+
+            if(record->kind == CanRecordKind::FRAME || record->kind == CanRecordKind::CHANGED_BYTES)
+                ++frames;
+            else if(record->kind == CanRecordKind::GAP)
+                slot.session->RestoreGapAfterStop(record->gap_cause, record->frames_lost);
+
+            slot.running_us += record->dt_us;
+            offset += record->size;
+        }
+
+        // Cannot happen with a writer that puts whole records in: the rest goes uncounted.
+        if(offset == 0) {
+            ring.Consume(ring.Size());
+            break;
+        }
+
+        ring.Consume(offset);
+    }
+
+    slot.session->LoseAfterStop(frames);
+    LOG_WRN("CAN monitor session %u did not drain in time; %zu frames cut", slot.session->GetToken(), frames);
 }
 
 // What the session counted since the previous statistics record. The totals are the session's: STATS asks
@@ -499,6 +581,7 @@ bool CanMonitorSender::Build(Slot& slot, size_t notify_max) {
             records += needed;
             slot.statistics_size = 0;
             built.is_final = true;
+            ReleaseFast(slot);
         }
     }
 
@@ -528,7 +611,8 @@ bool CanMonitorSender::Submit(int64_t now_ms) {
 
     ReleaseInFlight();
 
-    if(result == -ENOMEM) {
+    // No buffer, or a link going away whose disconnect has not been reported: OnDisconnected() drops it.
+    if(result == -ENOMEM || result == -ENOTCONN) {
         retry_at_ms_ = now_ms
             + (in_flight_.load(std::memory_order_relaxed) == 0 ? NO_BUFFER_RETRY_MS : COMPLETION_FALLBACK_MS);
         return false;

@@ -51,7 +51,7 @@ interval (7.5-15 ms) and the 2M PHY; after 3 s without SMP traffic it asks for a
 are counted. While any is held the short interval and the 2M PHY are requested at once (on the
 first hold, and again on a new connection) and SMP traffic does not start the 3 s timer; the
 timer starts when the last hold is released. The CAN monitor holds from the opening of a session
-to its end.
+until its `end` record is built, so the session drains on the short interval.
 
 **The 15-30 ms fallback.** Apple's accessory guidelines ask for an interval of 15 ms or more, so
 an iOS central may refuse the 7.5 ms minimum. When the update that answers a short request still

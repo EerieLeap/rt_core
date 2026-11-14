@@ -358,7 +358,6 @@ ZTEST(can_monitor_sessions, test_a_reconfiguration_ends_every_session_and_frees_
     // What CanbusController::Reconfigure() does around CanbusService::Configure().
     zassert_true(harness.service->Stop());
     zassert_equal(harness.service->GetSessionCount(), 0U);
-    zassert_equal(harness.holds.load(), harness.releases.load());
     zassert_is_null(harness.service->GetOwnBus(own->tok));
 
     // Each session ends its own stream.
@@ -373,6 +372,7 @@ ZTEST(can_monitor_sessions, test_a_reconfiguration_ends_every_session_and_frees_
         const StreamSummary summary = Summarize(OnPort(harness.notifier->Notifications(), port));
         zassert_equal(summary.ends[0], CanEndReason::CONFIGURATION_STORED);
     }
+    zassert_equal(harness.holds.load(), harness.releases.load());
 
     // The service takes OPEN again, and the port of the own bus is free.
     zassert_true(harness.service->Start());

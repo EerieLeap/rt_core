@@ -283,6 +283,88 @@ ZTEST(can_monitor_stream, test_a_refused_notification_is_dropped_and_seq_shows_t
     zassert_true(frames[0]->time_us >= notifications[0].base_us);
 }
 
+ZTEST(can_monitor_stream, test_a_notify_refused_by_a_link_going_away_is_kept_not_dropped) {
+    Harness harness;
+    // What the stack answers between the end of the link and the report of the disconnect.
+    harness.notifier->SetResult(-ENOTCONN);
+
+    const auto answer = harness.OpenSynthetic(500, 4);
+    k_msleep(300);
+
+    zassert_equal(harness.notifier->Count(), 0);
+    zassert_true(harness.notifier->GetRefused() > 0, "The sender tried");
+
+    harness.notifier->SetResult(0);
+    zassert_true(WaitUntil([&] {
+        return harness.notifier->Count() >= 1;
+    }));
+    harness.CloseAndDrain(answer.tok);
+
+    const auto notifications = DecodeAll(harness.notifier->Notifications());
+    ExpectChain(notifications);
+    zassert_equal(SumStatistics(notifications).lost[CanStatistics::LOST_RING], 0, "Nothing was dropped");
+}
+
+ZTEST(can_monitor_stream, test_a_drain_out_of_time_is_cut_into_a_gap_and_still_ends) {
+    Harness harness;
+    harness.is_auto_complete = false;
+
+    const auto answer = harness.OpenSynthetic(2000, 4);
+
+    // The ring fills behind the first notifications; a few completions let a gap record in, and it fills again.
+    k_msleep(1000);
+    for(int i = 0; i < CONFIG_EERIE_LEAP_CAN_MONITOR_IN_FLIGHT; ++i)
+        harness.service->OnNotificationSent();
+    k_msleep(300);
+    zassert_true(harness.service->Close(answer.tok).has_value());
+
+    k_msleep(CanMonitorSender::DRAIN_TIMEOUT_MS / 2);
+    zassert_false(harness.HasEnded());
+    zassert_equal(harness.releases.load(), 0, "The session drains on the fast link");
+
+    // Past the drain's time the ring is cut, and the end record goes with the next completion.
+    k_msleep(CanMonitorSender::DRAIN_TIMEOUT_MS / 2 + 200);
+    harness.is_auto_complete = true;
+    zassert_true(
+        WaitUntil([&] {
+            harness.service->OnNotificationSent();
+            return harness.HasEnded();
+        }),
+        "The end record follows the cut"
+    );
+    zassert_equal(harness.holds.load(), harness.releases.load());
+
+    // seq has no hole; base_us chains up to the cut and keeps the time of what was cut.
+    const auto notifications = DecodeAll(harness.notifier->Notifications());
+    zassert_true(notifications.size() >= 2);
+    const std::vector<DecodedNotification> before(notifications.begin(), notifications.end() - 1);
+    ExpectChain(before);
+    const DecodedNotification& last = notifications.back();
+    zassert_equal(last.sequence, static_cast<uint16_t>(before.size()));
+    zassert_true(last.base_us > before.back().EndTimeUs(), "The cut records' time is kept");
+
+    // The last notification: the cut's gap, the last statistics and the end record.
+    const auto& records = last.records;
+    zassert_true(records.size() >= 3);
+    const CanRecord& gap = records[records.size() - 3].record;
+    zassert_equal(gap.kind, CanRecordKind::GAP);
+    zassert_equal(gap.gap_cause, CanGapCause::RING);
+    zassert_true(gap.frames_lost > 0);
+    zassert_equal(records[records.size() - 2].record.kind, CanRecordKind::STATISTICS);
+    zassert_equal(records.back().record.kind, CanRecordKind::END);
+    zassert_equal(records.back().record.end_reason, CanEndReason::CLOSED);
+
+    // Every frame is in the stream or in a gap: the cut gap also carries the gaps it cut.
+    const CanStatistics sum = SumStatistics(notifications);
+    const uint64_t lost = sum.lost[CanStatistics::LOST_RING];
+    uint64_t gap_frames = 0;
+    for(const DecodedRecord* record : RecordsOf(notifications, CanRecordKind::GAP))
+        gap_frames += record->record.frames_lost;
+
+    zassert_equal(sum.frames_received, FramesOf(notifications).size() + lost);
+    zassert_equal(gap_frames, lost, "The gaps count every lost frame once");
+}
+
 ZTEST(can_monitor_stream, test_stop_ends_the_sessions_for_a_new_configuration) {
     Harness harness;
     const auto answer = harness.OpenSynthetic(100, 2);
@@ -290,11 +372,12 @@ ZTEST(can_monitor_stream, test_stop_ends_the_sessions_for_a_new_configuration) {
 
     zassert_true(harness.service->Stop());
     zassert_equal(harness.service->GetSessionCount(), 0);
-    zassert_equal(harness.holds.load(), harness.releases.load(), "The fast link is released");
 
     zassert_true(WaitUntil([&] {
         return harness.HasEnded();
     }));
+    zassert_equal(harness.holds.load(), harness.releases.load(), "The fast link is released with the end record");
+
     const auto notifications = DecodeAll(harness.notifier->Notifications());
     const auto ends = RecordsOf(notifications, CanRecordKind::END);
     zassert_equal(ends.size(), 1);
@@ -324,12 +407,12 @@ ZTEST(can_monitor_stream, test_a_disconnect_ends_the_sessions_with_no_record) {
     zassert_true(WaitUntil([&] {
         return harness.service->GetSessionCount() == 0;
     }));
-    zassert_equal(harness.holds.load(), harness.releases.load());
 
     // Nothing can drain into a link that is gone: the sender lets go of the session and of what is in flight.
     zassert_true(WaitUntil([&] {
         return harness.service->GetSenderSessionCount() == 0 && harness.service->GetInFlight() == 0;
     }));
+    zassert_equal(harness.holds.load(), harness.releases.load());
 
     const size_t before = harness.notifier->Count();
     k_msleep(100);

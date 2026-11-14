@@ -32,6 +32,7 @@ using eerie_leap::domain::can_monitor_domain::models::CanMonitorMode;
 using eerie_leap::domain::can_monitor_domain::models::CanUnitFilter;
 using eerie_leap::domain::can_monitor_domain::utilities::ByteRing;
 using eerie_leap::domain::can_monitor_domain::utilities::CanCounterWidener;
+using eerie_leap::domain::can_monitor_domain::utilities::CanGapCause;
 using eerie_leap::domain::can_monitor_domain::utilities::CanRecordFrame;
 using eerie_leap::domain::can_monitor_domain::utilities::CanRecordWriter;
 using eerie_leap::domain::can_monitor_domain::utilities::CanStatistics;
@@ -223,6 +224,18 @@ public:
      */
     bool FlushLossesAfterStop() {
         return writer_.FlushLosses();
+    }
+
+    /**
+     * @brief What the sender cut from the ring of a session that ends: @p frames count as lost to the ring,
+     * and a cut gap record's frames are owed again. FlushLossesAfterStop() writes them. Only once the
+     * producer has stopped.
+     */
+    void LoseAfterStop(uint64_t frames) {
+        writer_.AddLoss(CanGapCause::RING, frames);
+    }
+    void RestoreGapAfterStop(CanGapCause cause, uint64_t frames) {
+        writer_.AddPendingGap(cause, frames);
     }
 
     // Sender thread.

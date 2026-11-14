@@ -61,9 +61,12 @@ connection.
 
 **How a session ends.** The producer stops first (the tap removed, the own bus stopped, the source joined);
 then, while the link is up, the sender drains the ring, adds a last `statistics` record and the `end` record,
-and frees the session. A ring that does not drain in 5 s is freed anyway. The port is free for a new OPEN at
-once; a client that reopens the same port waits for the old session's `end` record before it reads the new
-stream (the header carries no token).
+and frees the session. The session keeps the fast link until its `end` record is built. A ring still not
+drained after 5 s is cut: what it holds is dropped, its frames counted lost to the ring, and one `gap` record a
+cause (the cut frames, and the gap records cut with them) goes ahead of the last `statistics` and the `end`
+record; a link that does not take even those within another second frees the session without them. The port
+is free for a new OPEN at once; a client that reopens the same port waits for the old session's `end` record
+before it reads the new stream (the header carries no token).
 
 | Cause | `end` reason | Record |
 | --- | --- | --- |
@@ -142,12 +145,12 @@ finds room, with the number of frames and the cause:
 | --- | --- | --- |
 | Ring | 1 | The session's ring was full: the link or the sender could not keep up. |
 | Receive queue | 2 | The bus's receive queue overflowed before the tap saw the frames (`EERIE_LEAP_CANBUS_RX_QUEUE_SIZE`). |
-| Controller | 3 | The CAN controller overran its receive buffer (needs `CONFIG_CAN_STATS`, see below). |
+| Controller | 3 | The CAN controller overran its receive buffer (needs `CONFIG_CAN_STATS`, see below). Zephyr counts an overrun once, however many frames it dropped, so the gap is a floor. |
 | Echo pool | 4 | The unit sent frames with no echo (no free `EERIE_LEAP_CAN_MONITOR_TX_SLOTS` slot, or the queue was full). The frames went out; they are missing from the stream. |
 
-A notification the link refuses for good (any error but `-ENOMEM`) is dropped: its frames are counted as lost
-in the ring, no `gap` record is written, and `seq` shows the hole. Frames the unit filter leaves out are not
-lost; they are counted as `filtered`.
+A notification the link refuses for good (any error but `-ENOMEM` and `-ENOTCONN`) is dropped: its frames are
+counted as lost in the ring, no `gap` record is written, and `seq` shows the hole. Frames the unit filter leaves
+out are not lost; they are counted as `filtered`.
 
 ### The `tap` record
 
@@ -196,7 +199,9 @@ below the cooperative bus threads, and above a renderer it must not wait for.
   nothing and looks again after 5 ms: a stream never delays an answer.
 - **No buffer.** A notify the stack refuses with `-ENOMEM` is built once and tried again after the next
   completion, or after 5 ms with none of the stream's in flight (100 ms otherwise), never dropped, so `seq`
-  has no gap. Any other refusal drops the notification: `seq` advances and the frames are counted lost.
+  has no gap. `-ENOTCONN`, a link going away before its disconnect is reported, waits the same way; the
+  disconnect then frees the sessions. Any other refusal drops the notification: `seq` advances and the frames
+  are counted lost.
 - **Several sessions** are served in turn.
 
 The ring is a single-producer byte ring in PSRAM: the receive thread (a meta-IRQ on the gauge, which cannot
@@ -211,8 +216,9 @@ Changed, which needs `CONFIG_BT_GATT_SERVICE_CHANGED`.
 
 The access point asks for the short connection interval and the 2M PHY only while SMP writes arrive, and for
 the long one 3 s after the last write; a stream makes no writes. A session therefore **holds** the fast
-parameters from its OPEN to its end (`HoldFast()`, counted), and a hold that leaves the interval above 15 ms is
-followed once by a request for 15-30 ms, which Apple's accessory rules accept.
+parameters from its OPEN until its `end` record is built, the drain included (`HoldFast()`, counted), and a
+hold that leaves the interval above 15 ms is followed once by a request for 15-30 ms, which Apple's accessory
+rules accept.
 
 What the link carries depends on the central's interval, PHY and MTU. A fully loaded 500 kbit/s bus is about
 4,500 frames a second, about 58 kB/s of 13-byte records, which the default 256 KiB ring holds for about 4.5 s

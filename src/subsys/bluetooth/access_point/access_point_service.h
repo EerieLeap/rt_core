@@ -145,7 +145,8 @@ public:
      *
      * Holds are counted. While any is held the fast parameters and the 2M PHY stay requested (at the
      * first hold, and again on a new connection) and SMP traffic does not start the idle work. Every
-     * call needs one ReleaseFast(); the CAN monitor holds from the opening of a session to its end.
+     * call needs one ReleaseFast(); the CAN monitor holds from the opening of a session until its end
+     * record is built.
      */
     void HoldFast();
     /** @brief Gives a hold back; the idle work starts IDLE_TIMEOUT_MS after the last one. */

@@ -35,11 +35,14 @@ using eerie_leap::subsys::threading::Thread;
  * - At most EERIE_LEAP_CAN_MONITOR_IN_FLIGHT notifications, over all sessions, await OnNotificationSent().
  * - A notify refused with -ENOMEM keeps the built notification (the ring is consumed only after a
  *   successful notify) and tries again after the next completion, or after a few ms; `seq` never skips.
- *   Any other error drops the notification (its frames count as lost, `seq` advances).
+ *   -ENOTCONN (a link going away, before its disconnect is reported) waits the same way. Any other error
+ *   drops the notification (its frames count as lost, `seq` advances).
  * - While link.is_smp_busy() holds, nothing is sent.
  * - Each second a session gets a statistics record with the values since the previous one.
  * - A session that ends drains its ring when the link is up, then gets a final statistics record and the
- *   end record; with no link it is freed at once.
+ *   end record; with no link it is freed at once. A ring still not drained after DRAIN_TIMEOUT_MS is cut:
+ *   what it holds becomes a gap, and the end record follows. It keeps the session's hold on the fast link
+ *   until its end record is built.
  *
  * Locks: slots_lock_ guards the session list between the sender thread and Attach/End; it is taken
  * after the service's own lock, never before. The tap never touches it.
@@ -55,8 +58,10 @@ public:
     static constexpr int64_t NO_BUFFER_RETRY_MS = 5;
     /// The longest a session waits for the sender to look at the link while there is nothing to do.
     static constexpr int64_t IDLE_POLL_MS = 50;
-    /// A session that ends is freed after this long even if its ring never drained.
+    /// A session that ends has this long to drain its ring before what is left is cut.
     static constexpr int64_t DRAIN_TIMEOUT_MS = 5000;
+    /// After a cut, the end record has this long to leave before the session is freed without it.
+    static constexpr int64_t END_RECORD_TIMEOUT_MS = 1000;
 
 private:
     /// A tx event record waiting for the next notification of its session.
@@ -86,10 +91,14 @@ private:
         /// -1 while nothing waits.
         int64_t first_waiting_ms = -1;
         bool is_ending = false;
+        /// The session's hold on the fast link, which End() takes over.
+        bool holds_fast = false;
         /// The final statistics record has been made (staged or sent).
         bool is_final_staged = false;
         CanEndReason end_reason = CanEndReason::CLOSED;
         int64_t drain_deadline_ms = 0;
+        /// The drain ran out of time and the ring was cut.
+        bool is_cut = false;
         bool is_done = false;
     };
 
@@ -132,6 +141,7 @@ private:
     [[nodiscard]] bool CanSend(int64_t now_ms, size_t notify_max, int64_t& next_ms) const;
 
     bool Serve(Slot& slot, int64_t now_ms, size_t notify_max, bool can_send, int64_t& next_ms);
+    void CutDrain(Slot& slot);
     static void StageStatistics(Slot& slot, int64_t now_ms);
     [[nodiscard]] static CanStatistics TakeStatistics(Slot& slot);
     bool Build(Slot& slot, size_t notify_max);
@@ -141,6 +151,7 @@ private:
     void Drop(int64_t now_ms);
     void Sweep();
     void ReleaseInFlight();
+    void ReleaseFast(Slot& slot) const;
 
 public:
     explicit CanMonitorSender(CanMonitorLink link);
@@ -176,7 +187,8 @@ public:
 
     /**
      * @brief Ends a session: drains it when the link is up, with a final statistics record and the end
-     * record, then frees it. The producer must be stopped.
+     * record, then frees it. The producer must be stopped. The sender takes over the session's hold on the
+     * fast link and releases it once the end record is built, or the session is freed without one.
      */
     void End(const CanMonitorSession* session, CanEndReason reason);
 
