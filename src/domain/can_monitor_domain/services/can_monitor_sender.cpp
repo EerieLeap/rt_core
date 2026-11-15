@@ -435,7 +435,7 @@ void CanMonitorSender::CutDrain(Slot& slot) {
     }
 
     slot.session->LoseAfterStop(frames);
-    LOG_WRN("CAN monitor session %u did not drain in time; %zu frames cut", slot.session->GetToken(), frames);
+    LOG_WRN("CAN monitor session %08x did not drain in time; %zu frames cut", slot.session->GetToken(), frames);
 }
 
 // What the session counted since the previous statistics record. The totals are the session's: STATS asks
@@ -675,7 +675,7 @@ void CanMonitorSender::Drop(int64_t now_ms) {
     }
 
     slot.session->AddDiscarded(frames);
-    LOG_WRN("CAN monitor dropped a notification of session %u (%zu frames)", slot.session->GetToken(), frames);
+    LOG_WRN("CAN monitor dropped a notification of session %08x (%zu frames)", slot.session->GetToken(), frames);
 
     Commit(now_ms);
 }
