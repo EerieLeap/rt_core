@@ -371,6 +371,10 @@ and the events keep the order their kinds first waited in.
   overrunning the FIFO once a burst; `patches/zephyr/can_mcp251xfd_sleep_only_when_stalled.patch` keeps that sleep
   for passes that read no frame, and has a pass that did pause a tick (100 µs on the S3) every 10, which the FIFO
   bridges. Measure on the unit with its own load (its display, its sensors).
+- **Transmit order.** Zephyr's MCP2518FD driver queued frames in the controller's transmit queue, which sends
+  the lowest identifier first and was seen sending frames of one identifier out of the order they were queued;
+  `patches/zephyr/can_mcp251xfd_tx_fifo_in_order.patch` sends from a transmit FIFO instead, in the order the
+  frames were queued, as the Linux driver does.
 - **Memory.** Each session takes a ring (`EERIE_LEAP_CAN_MONITOR_RING_SIZE`, 256 KiB) from the external memory
   resource, allocated at OPEN (`NO_MEMORY` when it cannot be had; the size must be a power of two), a changed-bytes
   table with `delta`, and the replay buffer while a replay runs. In internal RAM: the receive queue's
