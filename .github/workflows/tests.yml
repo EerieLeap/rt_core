@@ -41,9 +41,11 @@ jobs:
           app-path: rt_core
           toolchains: arm-zephyr-eabi:aarch64-zephyr-elf:riscv64-zephyr-elf:mips-zephyr-elf
 
+      # QEMU suites run several times slower on the shared runner than alone: the volume-filling fs and
+      # assets suites took 4-5 s locally and passed 60 s here.
       - name: Run tests
         working-directory: rt_core
-        run: west twister -c --disable-warnings-as-errors --inline-logs -O ./twister-out -T ./tests
+        run: west twister -c --disable-warnings-as-errors --inline-logs --timeout-multiplier 3 -O ./twister-out -T ./tests
 
       - name: Upload test results
         if: always()

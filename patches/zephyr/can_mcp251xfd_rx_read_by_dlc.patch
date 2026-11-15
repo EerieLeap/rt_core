@@ -1,0 +1,107 @@
+diff --git a/drivers/can/can_mcp251xfd.c b/drivers/can/can_mcp251xfd.c
+--- a/drivers/can/can_mcp251xfd.c
++++ b/drivers/can/can_mcp251xfd.c
+@@ -717,6 +717,44 @@
+ 	return CONFIG_CAN_MCP251XFD_MAX_FILTERS;
+ }
+ 
++/*
++ * An RX FIFO item of a CAN FD build has room for 64 data bytes: read its header and first
++ * 8 data bytes, and the rest only when the DLC asks for them, so a classical frame does not
++ * cost the SPI time of a whole item.
++ */
++static int mcp251xfd_read_rx_item(const struct device *dev, uint16_t memory_addr,
++				  struct mcp251xfd_rxobj *rxobj)
++{
++	const int head_len = offsetof(struct mcp251xfd_rxobj, data) + 8;
++	uint32_t flags;
++	uint8_t *data;
++	int len;
++
++	data = mcp251xfd_read_reg(dev, memory_addr, head_len);
++	if (!data) {
++		return -EINVAL;
++	}
++	memcpy(rxobj, data, head_len);
++
++	flags = sys_le32_to_cpu(rxobj->flags);
++	if ((flags & MCP251XFD_OBJ_FLAGS_RTR) != 0) {
++		return 0;
++	}
++
++	len = MIN(can_dlc_to_bytes(FIELD_GET(MCP251XFD_OBJ_FLAGS_DLC_MASK, flags)), CAN_MAX_DLEN);
++	if (len <= 8) {
++		return 0;
++	}
++
++	data = mcp251xfd_read_reg(dev, memory_addr + head_len, len - 8);
++	if (!data) {
++		return -EINVAL;
++	}
++	memcpy(&rxobj->data[8], data, len - 8);
++
++	return 0;
++}
++
+ static int mcp251xfd_handle_fifo_read(const struct device *dev, const struct mcp251xfd_fifo *fifo,
+ 				      uint8_t fifo_type)
+ {
+@@ -792,15 +830,30 @@
+ 		memory_addr = MCP251XFD_RAM_START_ADDR + fifo->ram_start_addr +
+ 			      fifo_tail_index * fifo->item_size;
+ 
+-		data = mcp251xfd_read_reg(dev, memory_addr, len * fifo->item_size);
+-		if (!data) {
+-			LOG_ERR("Error fetching batch message");
+-			ret = -EINVAL;
+-			goto done;
+-		}
++		if (IS_ENABLED(CONFIG_CAN_FD_MODE) && fifo_type == MCP251XFD_FIFO_TYPE_RX) {
++			for (int i = 0; i < len; i++) {
++				struct mcp251xfd_rxobj rxobj;
++
++				ret = mcp251xfd_read_rx_item(dev, memory_addr + i * fifo->item_size,
++							     &rxobj);
++				if (ret < 0) {
++					LOG_ERR("Error fetching message");
++					goto done;
++				}
+ 
+-		for (int i = 0; i < len; i++) {
+-			fifo->msg_handler(dev, (void *)(&data[i * fifo->item_size]));
++				fifo->msg_handler(dev, &rxobj);
++			}
++		} else {
++			data = mcp251xfd_read_reg(dev, memory_addr, len * fifo->item_size);
++			if (!data) {
++				LOG_ERR("Error fetching batch message");
++				ret = -EINVAL;
++				goto done;
++			}
++
++			for (int i = 0; i < len; i++) {
++				fifo->msg_handler(dev, (void *)(&data[i * fifo->item_size]));
++			}
+ 		}
+ 
+ 		fifo_tail_index = (fifo_tail_index + len) % fifo->capacity;
+diff --git a/drivers/can/can_mcp251xfd.h b/drivers/can/can_mcp251xfd.h
+--- a/drivers/can/can_mcp251xfd.h
++++ b/drivers/can/can_mcp251xfd.h
+@@ -454,9 +454,16 @@
+ 	uint32_t flags;
+ } __packed;
+ 
++#if defined(CONFIG_CAN_FD_MODE)
++/* The RX FIFO is read an item at a time, and a TX object is written whole. */
++#define MCP251XFD_MAX_READ_FIFO_BUF_SIZE                                                           \
++	MAX(MAX(MCP251XFD_RX_FIFO_ITEM_SIZE, MCP251XFD_TX_QUEUE_ITEM_SIZE),                        \
++	    (MCP251XFD_TEF_FIFO_ITEM_SIZE * MCP251XFD_TEF_FIFO_ITEMS))
++#else
+ #define MCP251XFD_MAX_READ_FIFO_BUF_SIZE                                                           \
+ 	MAX((MCP251XFD_RX_FIFO_ITEM_SIZE * MCP251XFD_RX_FIFO_ITEMS),                               \
+ 	    (MCP251XFD_TEF_FIFO_ITEM_SIZE * MCP251XFD_TEF_FIFO_ITEMS))
++#endif
+ 
+ #define MCP251XFD_MAX_READ_CRC_BUF_SIZE                                                            \
+ 	(MCP251XFD_SPI_CRC_LEN + 2 * MCP251XFD_REG_SIZE)

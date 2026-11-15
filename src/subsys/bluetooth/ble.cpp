@@ -44,6 +44,7 @@ k_work_delayable Ble::pairing_finished_work;
 
 std::unordered_map<int, Ble::ConnectedHandler> Ble::connected_handlers;
 std::unordered_map<int, Ble::DisconnectedHandler> Ble::disconnected_handlers;
+std::unordered_map<int, Ble::ParametersUpdatedHandler> Ble::parameters_updated_handlers;
 std::unordered_map<int, Ble::PairingStartedHandler> Ble::pairing_started_handlers;
 std::unordered_map<int, Ble::PairingFinishedHandler> Ble::pairing_finished_handlers;
 
@@ -143,7 +144,9 @@ void Connected(bt_conn* conn, uint8_t err) {
 
     char addr[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-    LOG_INF("Connected: %s", addr);
+    bt_conn_info info{}; // NOLINT(bugprone-invalid-enum-default-initialization): read only once filled.
+    const unsigned int interval_us = bt_conn_get_info(conn, &info) == 0 ? info.le.interval_us : 0;
+    LOG_INF("Connected: %s, interval %u us", addr, interval_us);
 
     k_mutex_lock(&Ble::conn_mutex, K_FOREVER);
     if(Ble::active_conn)
@@ -180,14 +183,35 @@ void Recycled() {
     Ble::StartAdvertising();
 }
 
-void ParamertersUpdated(bt_conn* /*conn*/, uint16_t interval, uint16_t latency, uint16_t timeout) {
+void ParamertersUpdated(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout) {
     const double connection_interval_ms = interval * 1.25;
     const uint16_t supervision_timeout_ms = timeout * 10;
 
+    // The PHY and data length updates log nothing themselves (see DataLengthUpdated).
+    bt_conn_info info{}; // NOLINT(bugprone-invalid-enum-default-initialization): read only once filled.
+    const bool has_info = bt_conn_get_info(conn, &info) == 0;
+    const unsigned int tx_length = has_info ? info.le.data_len->tx_max_len : 0;
+#ifdef CONFIG_BT_USER_PHY_UPDATE
+    const unsigned int tx_phy = has_info ? info.le.phy->tx_phy : 0;
+#else
+    const unsigned int tx_phy = 0;
+#endif
+
     LOG_INF(
-        "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms", connection_interval_ms,
-        latency, supervision_timeout_ms
+        "Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms; TX PHY %u, TX data "
+        "length %u B",
+        connection_interval_ms, latency, supervision_timeout_ms, tx_phy, tx_length
     );
+
+    for(auto& [_, handler] : Ble::parameters_updated_handlers) {
+        try {
+            handler(conn, interval, latency, timeout);
+        } catch(const std::exception& e) {
+            LOG_ERR("Parameters updated handler threw: %s", e.what());
+        } catch(...) {
+            LOG_ERR("Parameters updated handler threw an unknown exception");
+        }
+    }
 }
 
 // NOTE: Any logging from this callback will cause a crash,
@@ -311,6 +335,11 @@ int Ble::RegisterDisconnectedHandler(DisconnectedHandler handler) {
     disconnected_handlers[id] = std::move(handler);
     return id++;
 }
+int Ble::RegisterParametersUpdatedHandler(ParametersUpdatedHandler handler) {
+    static int id = 0;
+    parameters_updated_handlers[id] = std::move(handler);
+    return id++;
+}
 int Ble::RegisterPairingStartedHandler(PairingStartedHandler handler) {
     static int id = 0;
     pairing_started_handlers[id] = std::move(handler);
@@ -327,6 +356,9 @@ void Ble::UnregisterConnectedHandler(int id) {
 }
 void Ble::UnregisterDisconnectedHandler(int id) {
     disconnected_handlers.erase(id);
+}
+void Ble::UnregisterParametersUpdatedHandler(int id) {
+    parameters_updated_handlers.erase(id);
 }
 void Ble::UnregisterPairingStartedHandler(int id) {
     pairing_started_handlers.erase(id);

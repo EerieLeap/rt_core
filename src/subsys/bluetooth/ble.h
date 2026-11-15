@@ -25,6 +25,10 @@ class Ble {
 public:
     using ConnectedHandler = std::function<void(bt_conn* conn)>;
     using DisconnectedHandler = std::function<void(bt_conn* conn)>;
+    /// @param interval In units of 1.25 ms.
+    /// @param timeout Supervision timeout in units of 10 ms.
+    using ParametersUpdatedHandler =
+        std::function<void(bt_conn* conn, uint16_t interval, uint16_t latency, uint16_t timeout)>;
     using PairingStartedHandler = std::function<void()>;
     using PairingFinishedHandler = std::function<void()>;
 
@@ -47,6 +51,7 @@ private:
 
     static std::unordered_map<int, ConnectedHandler> connected_handlers;
     static std::unordered_map<int, DisconnectedHandler> disconnected_handlers;
+    static std::unordered_map<int, ParametersUpdatedHandler> parameters_updated_handlers;
     static std::unordered_map<int, PairingStartedHandler> pairing_started_handlers;
     static std::unordered_map<int, PairingFinishedHandler> pairing_finished_handlers;
 
@@ -87,11 +92,14 @@ public:
 
     static int RegisterConnectedHandler(ConnectedHandler handler);
     static int RegisterDisconnectedHandler(DisconnectedHandler handler);
+    /// Handlers run on the BT RX thread, so they only submit work.
+    static int RegisterParametersUpdatedHandler(ParametersUpdatedHandler handler);
     static int RegisterPairingStartedHandler(PairingStartedHandler handler);
     static int RegisterPairingFinishedHandler(PairingFinishedHandler handler);
 
     static void UnregisterConnectedHandler(int id);
     static void UnregisterDisconnectedHandler(int id);
+    static void UnregisterParametersUpdatedHandler(int id);
     static void UnregisterPairingStartedHandler(int id);
     static void UnregisterPairingFinishedHandler(int id);
 };

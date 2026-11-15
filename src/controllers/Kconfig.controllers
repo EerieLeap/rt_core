@@ -64,6 +64,15 @@ config EERIE_LEAP_CONTROLLER_BLE
     help
       Add EerieLeap BLE Controller.
 
+config EERIE_LEAP_CONTROLLER_CAN_MONITOR
+    bool "EerieLeap CAN Monitor Controller"
+    depends on EERIE_LEAP_DOMAIN_CAN_MONITOR && EERIE_LEAP_SMP
+    depends on EERIE_LEAP_CONTROLLER_CANBUS && EERIE_LEAP_CONTROLLER_BLE
+    help
+      Add EerieLeap CAN Monitor Controller: the CAN monitor sessions on the
+      BLE access point's `bus` characteristic, the canmon SMP group, and
+      their end on a stored CAN configuration or a disconnect.
+
 config EERIE_LEAP_CONTROLLER_LOGGING
     bool "EerieLeap Logging Controller"
     depends on EERIE_LEAP_CONFIGURATION && EERIE_LEAP_EVENT_BUS

@@ -16,6 +16,27 @@ Base UUID `e7a1b2c3-d4e5-6f78-9a0b-c1d2e3f4xxxx`:
 | `info` | `0001` | read, no pairing needed | `[protocol version][max packet size: u16 LE][requests in flight]` |
 | `smp` | `0002` | write and write without response (encrypted link required), notify | SMP packets with a route prefix |
 | `live` | `0003` | notify | Live value notifications |
+| `bus` | `0004` | notify | The CAN monitor's stream ([can_monitor.md](can_monitor.md)) |
+
+`bus` is appended after `info`, and its client configuration descriptor is open like `live`'s. The
+characteristic is always present; whether anything streams on it depends on the
+[CAN monitor](can_monitor.md).
+
+**Attribute handles.** The linker orders the static services by section name. This service's
+section is `_3_access_point_svc`, after Zephyr's GATT (`_1_gatt_svc`) and GAP (`_2_gap_svc`)
+services and before services such as Device Information (`dis_svc`), so Service Changed keeps
+handle 0x0003 (its client configuration 0x0004) whatever this service holds. It must: its handle
+may not change while a central is bonded (Core Specification, Vol 3, Part G), and Zephyr restores a
+bonded central's client configurations by handle. A new characteristic goes last, so that none of
+this service's handles move; the services after it do move, and a bonded central that cached the
+table learns of that through Service Changed (`CONFIG_BT_GATT_SERVICE_CHANGED`; with
+`CONFIG_BT_SETTINGS`, Zephyr indicates the whole table to its bonded centrals when the table's hash
+differs from the one stored at the last boot). `tests/functional/subsys/bluetooth` checks the order.
+
+Firmware before this order had the service first (a section named after its variable,
+`AccessPointService::gatt_service_`, sorts ahead of `_1_gatt_svc`), so adding `bus` moved Service
+Changed and bonded centrals were never told. The move shifts every handle once more: a central
+bonded to such firmware has to forget the unit (remove the pairing) once after the update.
 
 **Advertising.** The advertisement carries the flags, the service UUID and manufacturer data
 (7 bytes: `company 0xFFFF`, product ID, feature bits, revision, little-endian, from the system
@@ -24,7 +45,19 @@ restarts after a disconnect. A client can read `info` and subscribe before pairi
 writes are refused until the link is encrypted.
 
 **Connection parameters.** While SMP writes arrive the service asks for a short connection
-interval and the 2M PHY; after 3 s without SMP traffic it asks for a long interval again.
+interval (7.5-15 ms) and the 2M PHY; after 3 s without SMP traffic it asks for a long interval
+(30-50 ms) again. A stream makes no SMP writes, so the access point also gives out holds:
+`HoldFast()` takes one and `ReleaseFast()` gives it back, and each call needs one release. Holds
+are counted. While any is held the short interval and the 2M PHY are requested at once (on the
+first hold, and again on a new connection) and SMP traffic does not start the 3 s timer; the
+timer starts when the last hold is released. The CAN monitor holds from the opening of a session
+until its `end` record is built, so the session drains on the short interval.
+
+**The 15-30 ms fallback.** Apple's accessory guidelines ask for an interval of 15 ms or more, so
+an iOS central may refuse the 7.5 ms minimum. When the update that answers a short request still
+gives an interval above 15 ms, the service asks once (once per short request) for 15-30 ms and
+logs the interval it got. The decisions are `FastLinkPolicy`, a header with no Bluetooth in it,
+unit tested in `tests/unit/subsys/bluetooth`.
 
 **Pairing** pauses the sensor processing service and resumes it when pairing finishes, so the
 crypto work does not disturb sampling.
@@ -37,6 +70,10 @@ unit's own CDMP address reaches the local SMP server, another reachable CDMP add
 over CAN through the `ISmpForwarder` (the COM service), anything else is answered with
 `MGMT_ERR_ENOENT`. A response carries the route of the unit that answered. Dropped packets
 (malformed, oversized, no buffer, unreachable) are counted.
+
+`SmpBleRouter::IsNotifying()` is true from the moment a response is queued until its last
+fragment has been handed to the stack (or it was dropped). The CAN monitor's sender waits while it
+is true, so an SMP answer never waits behind the stream.
 
 | Symbol | Range / default | Meaning |
 | --- | --- | --- |
@@ -80,3 +117,7 @@ Zephyr's own Bluetooth options (`CONFIG_BT_DEVICE_NAME`, security, MTU, PHY) app
 single `BleService`, initializes the stack, the access point, the SMP router and the live data
 service, and `Start()` begins advertising. Pass the CAN COM service as the forwarder to reach
 other units, or `nullptr` on a unit that only serves itself.
+
+For the CAN monitor `BleService` hands out `GetBusNotifier()`, `HoldFast()` and `ReleaseFast()`,
+`IsSmpNotifying()` and `SetBusSentHandler()`, which replaces the handler of `bus` notification
+completions (it runs on the system work queue; the call waits for a running handler to return).

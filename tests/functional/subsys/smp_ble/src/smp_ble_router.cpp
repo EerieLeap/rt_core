@@ -5,6 +5,22 @@
 
 using namespace smp_ble_test;
 
+namespace {
+
+template<typename Condition>
+bool WaitUntil(Condition condition) {
+    for(int waited_ms = 0; waited_ms < RESPONSE_TIMEOUT_MS; waited_ms += 10) {
+        if(condition())
+            return true;
+
+        k_msleep(10);
+    }
+
+    return condition();
+}
+
+} // namespace
+
 ZTEST_SUITE(smp_ble_router, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(smp_ble_router, test_local_route_reaches_the_smp_server) {
@@ -226,6 +242,128 @@ ZTEST(smp_ble_router, test_oversized_packets_and_responses_are_skipped) {
     zassert_equal(packets.size(), 1);
     ExpectEchoResponse(packets[0], 0, "after", 25);
     zassert_equal(harness.router->GetRxDroppedCount(), 2);
+}
+
+ZTEST(smp_ble_router, test_is_notifying_from_the_queued_response_to_its_last_fragment) {
+    const RouterHarness harness;
+    zassert_false(harness.router->IsNotifying());
+
+    // One fragment goes, then the link has no buffer: the response stays queued and is retried.
+    harness.link->SetBudget(1);
+    const std::string text = LongText(60);
+    harness.router->OnReceive(Routed(0, MakeEchoRequest(text, 30)));
+
+    zassert_true(WaitUntil([&] {
+        return harness.link->Sizes().size() == 1;
+    }));
+    zassert_true(harness.router->IsNotifying(), "The first fragment is out, the rest is not");
+    k_msleep(50);
+    zassert_true(harness.router->IsNotifying(), "A refused notification keeps the response queued");
+    zassert_equal(harness.link->Sizes().size(), 1);
+
+    // The last fragment leaves the flag with it.
+    harness.link->SetBudget(-1);
+    harness.router->OnNotificationSent();
+
+    auto packets = harness.link->WaitForPackets(1);
+    zassert_equal(packets.size(), 1);
+    ExpectEchoResponse(packets[0], 0, text, 30);
+    zassert_true(harness.link->Sizes().size() > 2, "The response spans several notifications");
+    zassert_true(WaitUntil([&] {
+        return !harness.router->IsNotifying();
+    }));
+}
+
+ZTEST(smp_ble_router, test_is_notifying_while_a_refused_response_waits_for_the_first_fragment) {
+    const RouterHarness harness;
+    harness.link->SetBudget(0);
+
+    harness.router->OnReceive(Routed(0, MakeEchoRequest("wait", 31)));
+
+    zassert_true(WaitUntil([&] {
+        return harness.router->IsNotifying();
+    }));
+    k_msleep(50);
+    zassert_true(harness.router->IsNotifying());
+    zassert_true(harness.link->Stream().empty());
+
+    harness.link->SetBudget(-1);
+    harness.router->OnNotificationSent();
+
+    zassert_equal(harness.link->WaitForPackets(1).size(), 1);
+    zassert_true(WaitUntil([&] {
+        return !harness.router->IsNotifying();
+    }));
+}
+
+ZTEST(smp_ble_router, test_is_notifying_until_every_queued_response_is_out) {
+    const RouterHarness harness;
+    harness.link->SetBudget(0);
+
+    harness.router->OnReceive(Routed(0, MakeEchoRequest("one", 32)));
+    harness.router->OnReceive(Routed(0, MakeEchoRequest("two", 33)));
+    k_msleep(50);
+    zassert_true(harness.router->IsNotifying());
+
+    harness.link->SetBudget(-1);
+    harness.router->OnNotificationSent();
+
+    zassert_equal(harness.link->WaitForPackets(2).size(), 2);
+    zassert_true(WaitUntil([&] {
+        return !harness.router->IsNotifying();
+    }));
+}
+
+ZTEST(smp_ble_router, test_is_notifying_ends_when_a_response_is_dropped) {
+    {
+        const RouterHarness harness;
+        harness.link->SetBudget(0);
+
+        harness.router->OnReceive(Routed(0, MakeEchoRequest("late", 34)));
+        zassert_true(WaitUntil([&] {
+            return harness.router->IsNotifying();
+        }));
+
+        harness.router->OnDisconnected();
+        zassert_true(WaitUntil([&] {
+            return !harness.router->IsNotifying();
+        }));
+        zassert_equal(harness.router->GetTxDroppedCount(), 1);
+    }
+
+    {
+        // No notification fits at all, as on a link nobody subscribed to.
+        const RouterHarness harness;
+        harness.link->SetMaxSize(0);
+
+        harness.router->OnReceive(Routed(0, MakeEchoRequest("none", 35)));
+        zassert_true(WaitUntil([&] {
+            return harness.router->GetTxDroppedCount() == 1;
+        }));
+        zassert_false(harness.router->IsNotifying());
+    }
+}
+
+ZTEST(smp_ble_router, test_is_notifying_ends_with_a_response_from_another_unit) {
+    const RouterHarness harness;
+    harness.forwarder->address = 5;
+    harness.forwarder->reachable = { 7 };
+    harness.link->SetBudget(0);
+
+    Bytes body = { 0xA1, 0x61, 'r' };
+    const Bytes text = CborText("peer");
+    body.insert(body.end(), text.begin(), text.end());
+    harness.router->OnResponse(7, ToSmpPacket(MakePacket(SmpOperation::WRITE_RESPONSE, 0, 0, 36, body)));
+
+    zassert_true(harness.router->IsNotifying());
+
+    harness.link->SetBudget(-1);
+    harness.router->OnNotificationSent();
+
+    zassert_equal(harness.link->WaitForPackets(1).size(), 1);
+    zassert_true(WaitUntil([&] {
+        return !harness.router->IsNotifying();
+    }));
 }
 
 ZTEST(smp_ble_router, test_info_reports_version_packet_size_and_requests_in_flight) {

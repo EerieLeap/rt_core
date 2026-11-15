@@ -66,6 +66,10 @@ private:
     size_t tx_offset_ = 0;
     std::array<uint8_t, CONFIG_EERIE_LEAP_SMP_BLE_MAX_FIRST_FRAGMENT_SIZE> tx_first_fragment_{};
 
+    // Responses queued or being notified: counted from EnqueueTx() until the last fragment is handed
+    // over or the response is dropped.
+    std::atomic<uint32_t> tx_pending_ = 0;
+
     std::atomic<uint32_t> rx_dropped_ = 0;
     std::atomic<uint32_t> tx_dropped_ = 0;
 
@@ -79,6 +83,8 @@ private:
     void EnqueueTx(uint8_t route, uint8_t generation, SmpPacket packet);
     void ProcessTx();
     void DropTx();
+    /// Frees the response being notified, sent or dropped.
+    void FinishTxPacket();
 
 public:
     /**
@@ -108,6 +114,17 @@ public:
 
     /** @brief The `info` characteristic: `[version][max packet size: u16 LE][requests in flight]`. */
     static std::array<uint8_t, INFO_SIZE> GetInfo();
+
+    /**
+     * @brief Whether a response waits for its notifications: true from the moment one is queued until its
+     * last fragment has been handed to the notifier or it was dropped, with nothing else queued.
+     *
+     * The CAN monitor's sender waits while it is true, so an answer never waits behind a stream.
+     * Callable from any thread.
+     */
+    [[nodiscard]] bool IsNotifying() const {
+        return tx_pending_.load() > 0;
+    }
 
     /** @brief Received packets dropped: malformed, oversized, not a request, no buffer or not forwardable. */
     [[nodiscard]] uint32_t GetRxDroppedCount() const {

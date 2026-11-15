@@ -1,0 +1,53 @@
+/* The second scenario (lint.bluetooth.can_monitor): the devicetree the CAN bus controller needs, with the
+ * internal filesystem and two CAN ports. */
+/ {
+	aliases {
+		intfs0 = &intfs0;
+		can0 = &can_loopback0;
+		can1 = &can_loopback1;
+	};
+
+	can_loopback0: can_loopback0 {
+		status = "okay";
+		compatible = "zephyr,can-loopback";
+	};
+
+	can_loopback1: can_loopback1 {
+		status = "okay";
+		compatible = "zephyr,can-loopback";
+	};
+
+	fstab {
+		compatible = "zephyr,fstab";
+		intfs0: intfs0 {
+			compatible = "zephyr,fstab,littlefs";
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+			partition = <&intfs0_partition>;
+			mount-point = "/intfs0";
+			automount;
+		};
+	};
+};
+
+&flashcontroller0 {
+	reg = <0x00000000 DT_SIZE_M(4)>;
+};
+
+&flash0 {
+	reg = <0x00000000 DT_SIZE_M(4)>;
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		intfs0_partition: partition@1000 {
+			label = "intfs0_storage";
+			reg = <0x00001000 DT_SIZE_M(1)>;
+		};
+	};
+};
