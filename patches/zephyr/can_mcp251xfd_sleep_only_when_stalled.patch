@@ -41,9 +41,7 @@ diff --git a/drivers/can/can_mcp251xfd.c b/drivers/can/can_mcp251xfd.c
  			}
  		}
 
-@@ -1155,14 +1165,23 @@
- #endif
-
+@@ -1157,12 +1167,21 @@
  		/* Break from loop if INT pin is inactive */
 -		consecutive_calls++;
  		ret = gpio_pin_get_dt(&dev_cfg->int_gpio_dt);
