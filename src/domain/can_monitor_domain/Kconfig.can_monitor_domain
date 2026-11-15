@@ -99,6 +99,8 @@ menu "EerieLeap CAN monitor domain config"
 
     config EERIE_LEAP_CAN_MONITOR_TX
         bool "Transmit and replay"
+        # The periodic frames are kept on the tick with absolute timeouts.
+        select TIMEOUT_64BIT
         help
           ARM, SEND, PERIODIC and REPLAY in the canmon group. Without it they
           answer TX_UNSUPPORTED.

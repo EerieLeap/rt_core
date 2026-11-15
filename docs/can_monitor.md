@@ -304,15 +304,16 @@ through the cap; the first that the cap holds back or the bus refuses ends the r
 **PERIODIC.** `list: [{slot, id, flags, data, period_ms, ? count}]` replaces the list; an empty list stops every
 slot. At most `EERIE_LEAP_CAN_MONITOR_PERIODIC_SLOTS` (16) entries, with distinct slots and a period of 1 ms or
 more, each frame as SEND checks it; a request that cannot be kept leaves the list as it was. Each slot sends at
-once and then every `period_ms` from the domain's own work queue, at a fixed rate (a slot that fell a period
-behind does not burst to catch up). The work queue runs on the kernel tick, so a period shorter than a tick
-(`CONFIG_SYS_CLOCK_TICKS_PER_SEC`: 100 µs on the S3 build, 1 ms on the P4) is rounded up to whole ticks, and so is the
-replay's timing. A frame the cap holds back or the bus refuses is skipped and does not count towards `count`; a slot
-with a `count` stops after that many frames sent, and `count` 0 sends none.
+once and then every `period_ms` from the domain's own work queue, at a fixed rate (a slot that fell periods
+behind, because the work queue ran late, does not burst to catch up). The work queue runs on the kernel tick, so a
+period shorter than a tick (`CONFIG_SYS_CLOCK_TICKS_PER_SEC`: 100 µs on the S3 build, 1 ms on the P4) is rounded up
+to whole ticks, and so is the replay's timing. A frame the cap holds back or the bus refuses, and a period the slot
+missed, is skipped and does not count towards `count`; a slot with a `count` stops after that many frames sent, and
+`count` 0 sends none.
 
-**Skipped frames** (the periodic ones, and a replay's frames with a reserved ID or that the bus refused) are
-counted and reported as `tx event` 3 with the number skipped since the last report: the first at once, then at
-most once a second, so a count still waiting goes out at the end of that second (or at the disarm).
+**Skipped frames** (the periodic ones and missed periods, and a replay's frames with a reserved ID or that the bus
+refused) are counted and reported as `tx event` 3 with the number skipped since the last report: the first at
+once, then at most once a second, so a count still waiting goes out at the end of that second (or at the disarm).
 
 **REPLAY.** The app cannot time frames over Bluetooth, so the unit plays a buffer the app keeps filled ahead.
 `{tok, op: 0, ? speed_pct, ? loop}` starts a replay (speed 100 by default, 1 to 10000; a replay already running

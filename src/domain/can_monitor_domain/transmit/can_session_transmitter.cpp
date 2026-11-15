@@ -284,7 +284,8 @@ std::expected<void, CanMonitorError> CanSessionTransmitter::SetPeriodic(std::spa
             k_work_init_delayable(&slot->work.work, PeriodicHandler);
             slot->slot = entry.slot;
             slot->frame = *frame;
-            slot->period_us = static_cast<uint64_t>(entry.period_ms) * 1000;
+            // The period is whole ticks of the kernel's, at least one.
+            slot->period_ticks = static_cast<int64_t>(k_ms_to_ticks_ceil64(entry.period_ms));
             slot->has_count = entry.count.has_value();
             slot->remaining = entry.count.value_or(0);
             // A count of 0 sends nothing.
@@ -320,9 +321,9 @@ std::expected<void, CanMonitorError> CanSessionTransmitter::SetPeriodic(std::spa
     if(const auto ready = CheckReady(); !ready)
         return ready;
 
-    const uint64_t now_us = NowUs();
+    const int64_t now_tick = k_uptime_ticks();
     for(auto& slot : fresh) {
-        slot->due_us = now_us;
+        slot->due_tick = now_tick;
         if(slot->is_active)
             k_work_schedule_for_queue(queue_, &slot->work.work, K_NO_WAIT);
     }
@@ -356,12 +357,18 @@ void CanSessionTransmitter::RunPeriodic(PeriodicSlot& slot) {
         NoteSkipped(now_us, 1);
     }
 
-    // A fixed rate; a slot that fell a whole period behind does not make up for it with a burst.
-    slot.due_us += slot.period_us;
-    if(slot.due_us <= now_us)
-        slot.due_us = now_us + slot.period_us;
+    // A fixed rate on the kernel's tick, kept with absolute timeouts: a relative one adds a tick, so a period of one
+    // tick would take two. A slot that fell whole periods behind (the work queue ran late) does not make up for them
+    // with a burst: they are skipped.
+    const int64_t now_tick = k_uptime_ticks();
+    slot.due_tick += slot.period_ticks;
+    if(slot.due_tick <= now_tick) {
+        const int64_t missed = (now_tick - slot.due_tick) / slot.period_ticks + 1;
+        NoteSkipped(now_us, static_cast<uint64_t>(missed));
+        slot.due_tick += missed * slot.period_ticks;
+    }
 
-    k_work_reschedule_for_queue(queue_, &slot.work.work, WaitFor(static_cast<int64_t>(slot.due_us - now_us)));
+    k_work_reschedule_for_queue(queue_, &slot.work.work, K_TIMEOUT_ABS_TICKS(slot.due_tick));
 }
 
 // A frame the cap held back, or a replay frame that the reserved IDs or the bus refused. Counted, and

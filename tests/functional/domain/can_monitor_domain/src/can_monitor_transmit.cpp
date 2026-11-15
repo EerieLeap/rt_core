@@ -479,6 +479,43 @@ ZTEST(can_monitor_transmit, test_periodic_frames_repeat_until_their_count_or_the
     zassert_equal(CountSent(harness, 0x321), stopped);
 }
 
+ZTEST(can_monitor_transmit, test_a_slot_keeps_its_rate_and_skips_the_periods_it_missed) {
+    Harness harness;
+    const auto answer = OpenActive(harness);
+    Arm(harness, answer.tok);
+
+    // A period of one native_sim tick, which a relative timeout's added tick would make two.
+    const std::array<CanMonitorPeriodic, 1> list = { MakePeriodic(1, MakeFrame(0x321, 0, { 1 }), 10) };
+    zassert_true(harness.service->SetPeriodic(answer.tok, list).has_value());
+    zassert_true(WaitUntil([&] {
+        return CountSent(harness, 0x321) >= 1;
+    }));
+
+    const size_t start = CountSent(harness, 0x321);
+    k_msleep(500);
+    const size_t in_half_a_second = CountSent(harness, 0x321) - start;
+    zassert_true(
+        in_half_a_second >= 45 && in_half_a_second <= 55, "%u frames in 500 ms", static_cast<unsigned>(in_half_a_second)
+    );
+    zassert_equal(CountEvents(harness, CanTxEvent::FRAMES_SKIPPED), 0U);
+
+    // The test thread is cooperative: busy, it holds the domain's work queue back for 10 periods.
+    k_busy_wait(100'000);
+    const size_t after_the_wait = CountSent(harness, 0x321);
+
+    zassert_true(WaitUntil([&] {
+        return CountEvents(harness, CanTxEvent::FRAMES_SKIPPED) == 1;
+    }));
+    const uint64_t skipped = EventCount(harness, CanTxEvent::FRAMES_SKIPPED);
+    zassert_true(skipped >= 8 && skipped <= 11, "%llu periods skipped", static_cast<unsigned long long>(skipped));
+
+    // The rate goes on, with no more periods missed.
+    zassert_true(WaitUntil([&] {
+        return CountSent(harness, 0x321) >= after_the_wait + 20;
+    }));
+    zassert_equal(CountEvents(harness, CanTxEvent::FRAMES_SKIPPED), 1U);
+}
+
 ZTEST(can_monitor_transmit, test_disarming_reports_the_frames_that_were_not_sent) {
     Harness harness;
     const auto answer = OpenActive(harness);

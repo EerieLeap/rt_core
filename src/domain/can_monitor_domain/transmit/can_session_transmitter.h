@@ -33,8 +33,9 @@ namespace eerie_leap::domain::can_monitor_domain::transmit {
  *   a tx event: disarmed or bus-off, with the number of frames that were not sent (the frames still due of the
  *   periodic slots that have a count, and the replay's frames left).
  * - **The cap.** SEND goes through it in order and stops at the first frame over it; a replay frame over it
- *   waits; a periodic frame over it is skipped and counted. Skipped frames (those, and the replay's frames with
- *   a reserved ID or that the bus refused) are reported as tx event 3, at most once a second: the first one
+ *   waits; a periodic frame over it is skipped and counted. Skipped frames (those, the periods a periodic slot
+ *   missed because the work queue ran late, and the replay's frames with a reserved ID or that the bus refused)
+ *   are reported as tx event 3, at most once a second: the first one
  *   at once, a later one when a second has passed since the last report, even if no further frame is skipped.
  * - **Threads.** The control calls come from one thread at a time (the service's lock). The periodic frames and
  *   the replay run as delayable work on the work queue the transmitter is given; they and the control calls
@@ -64,11 +65,12 @@ private:
         Work work;
         uint32_t slot = 0;
         eerie_leap::subsys::canbus::CanFrame frame;
-        uint64_t period_us = 0;
+        // On the kernel's tick, which the work queue runs on.
+        int64_t period_ticks = 0;
         bool has_count = false;
         uint32_t remaining = 0;
         bool is_active = true;
-        uint64_t due_us = 0;
+        int64_t due_tick = 0;
     };
 
     eerie_leap::subsys::canbus::Canbus& bus_;
