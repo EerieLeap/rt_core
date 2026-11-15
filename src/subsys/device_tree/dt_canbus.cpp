@@ -18,7 +18,7 @@ void DtCanbus::Initialize() {
 #endif
 
 #ifdef CAN1_NODE
-    auto can1_dev = DEVICE_DT_GET(CAN1_NODE);
+    const auto* can1_dev = DEVICE_DT_GET(CAN1_NODE);
     canbus_devs.emplace(1, can1_dev);
     LOG_INF("CAN1 initialized.");
 #endif
