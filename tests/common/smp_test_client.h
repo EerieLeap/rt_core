@@ -112,6 +112,10 @@ using ListEntry = std::map<std::string, std::vector<std::string>>;
 using WideEntry = std::map<std::string, uint64_t>;
 // Byte string values.
 using BytesEntry = std::map<std::string, std::vector<uint8_t>>;
+// Lists of unsigned values.
+using UintListEntry = std::map<std::string, std::vector<uint32_t>>;
+// Maps of unsigned values.
+using MapEntry = std::map<std::string, Entry>;
 
 // A decoded response body: unsigned values, floats, booleans, byte and text strings, one list of maps
 // of unsigned, text, boolean and text list values, and the group error.
@@ -134,6 +138,9 @@ struct Response {
     std::vector<WideEntry> entry_wide;
     // Their byte string values, index for index.
     std::vector<BytesEntry> entry_bytes;
+    // Their lists of unsigned values and their maps of unsigned values, index for index.
+    std::vector<UintListEntry> entry_uint_lists;
+    std::vector<MapEntry> entry_maps;
     // The number of maps in each list of the body, by key; says an empty list was there.
     std::map<std::string, size_t> list_sizes;
     // Lists of plain unsigned values and of text values, by key.
@@ -245,9 +252,68 @@ inline bool DecodeBytes(zcbor_state_t* zsd, const std::string& name, BytesEntry*
     return true;
 }
 
+// A list under @p name: of text values into @p lists, of unsigned values into @p uint_lists, whichever is given
+// (an empty list is one of text values). A list of a kind that is not given fails the decode.
+inline bool DecodeListValue(zcbor_state_t* zsd, const std::string& name, ListEntry* lists, UintListEntry* uint_lists) {
+    if(!zcbor_list_start_decode(zsd))
+        return false;
+
+    const bool is_unsigned = !zcbor_array_at_end(zsd) && MajorType(zsd) == 0;
+
+    if(is_unsigned) {
+        if(uint_lists == nullptr)
+            return false;
+
+        std::vector<uint32_t>& items = (*uint_lists)[name];
+
+        while(!zcbor_array_at_end(zsd)) {
+            uint32_t item = 0;
+            if(!zcbor_uint32_decode(zsd, &item))
+                return false;
+
+            items.push_back(item);
+        }
+    } else {
+        if(lists == nullptr)
+            return false;
+
+        std::vector<std::string>& items = (*lists)[name];
+
+        while(!zcbor_array_at_end(zsd)) {
+            zcbor_string item{};
+            if(!zcbor_tstr_decode(zsd, &item))
+                return false;
+
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
+            items.emplace_back(reinterpret_cast<const char*>(item.value), item.len);
+        }
+    }
+
+    return zcbor_list_end_decode(zsd);
+}
+
+// A map of unsigned values into @p entry.
+inline bool DecodeUnsignedMap(zcbor_state_t* zsd, Entry& entry) {
+    if(!zcbor_map_start_decode(zsd))
+        return false;
+
+    while(!zcbor_array_at_end(zsd)) {
+        zcbor_string key{};
+        uint32_t value = 0;
+        if(!zcbor_tstr_decode(zsd, &key) || !zcbor_uint32_decode(zsd, &value))
+            return false;
+
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): zcbor hands out text as bytes
+        entry[std::string(reinterpret_cast<const char*>(key.value), key.len)] = value;
+    }
+
+    return zcbor_map_end_decode(zsd);
+}
+
 // Decodes a map of unsigned values into entry; its text values into texts, its booleans into flags
-// its lists of text values into lists, its unsigned values above 32 bits into wide and its byte
-// strings into bytes, when given.
+// its lists of text values into lists, its unsigned values above 32 bits into wide, its byte
+// strings into bytes, its lists of unsigned values into uint_lists and its maps of unsigned values
+// into maps, when given.
 inline bool DecodeEntry(
     zcbor_state_t* zsd,
     Entry& entry,
@@ -255,7 +321,9 @@ inline bool DecodeEntry(
     FlagEntry* flags = nullptr,
     ListEntry* lists = nullptr,
     WideEntry* wide = nullptr,
-    BytesEntry* bytes = nullptr
+    BytesEntry* bytes = nullptr,
+    UintListEntry* uint_lists = nullptr,
+    MapEntry* maps = nullptr
 ) {
 
     if(!zcbor_map_start_decode(zsd))
@@ -278,8 +346,15 @@ inline bool DecodeEntry(
             continue;
         }
 
-        if(lists != nullptr && MajorType(zsd) == 4) {
-            if(!DecodeTextList(zsd, (*lists)[name]))
+        if((lists != nullptr || uint_lists != nullptr) && MajorType(zsd) == 4) {
+            if(!DecodeListValue(zsd, name, lists, uint_lists))
+                return false;
+
+            continue;
+        }
+
+        if(maps != nullptr && MajorType(zsd) == 5) {
+            if(!DecodeUnsignedMap(zsd, (*maps)[name]))
                 return false;
 
             continue;
@@ -389,7 +464,9 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                     ListEntry lists;
                     WideEntry wide;
                     BytesEntry bytes;
-                    if(!DecodeEntry(zsd, entry, &texts, &flags, &lists, &wide, &bytes))
+                    UintListEntry uint_lists;
+                    MapEntry maps;
+                    if(!DecodeEntry(zsd, entry, &texts, &flags, &lists, &wide, &bytes, &uint_lists, &maps))
                         return false;
                     response.entries.push_back(entry);
                     response.entry_texts.push_back(texts);
@@ -397,6 +474,8 @@ inline bool DecodeBody(std::span<const uint8_t> body, Response& response) {
                     response.entry_lists.push_back(lists);
                     response.entry_wide.push_back(wide);
                     response.entry_bytes.push_back(bytes);
+                    response.entry_uint_lists.push_back(uint_lists);
+                    response.entry_maps.push_back(maps);
                     size++;
                 }
                 if(!zcbor_list_end_decode(zsd))

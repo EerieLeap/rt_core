@@ -93,6 +93,11 @@ when the store is, if the volume is available, otherwise when a write needs it.
   names are valid for the extensions; directories and other names are skipped but counted, and each
   kept entry carries its directory position. A directory that does not exist lists nothing.
 - `OpenRead(name, reader)` and `BeginWrite(name, writer)` stream a file (below).
+- `ReadHead(name, head, file_size)` reads up to `head.size()` bytes from the start of a file with no read
+  buffer, so a listing can look at the head of every file it lists, where `OpenRead` would allocate a block
+  of 4 KiB for each. It returns the bytes read (fewer for a shorter file, 0 for an empty one), `-ENODEV` while
+  the volume is unavailable and `-ENOENT` for a file that is missing or is a directory; `file_size` gets the
+  size of the file as opened (0 when it was not).
 
 **`AssetReader` and `AssetWriter`** stream a file through a buffer of `BUFFER_SIZE` (4 KiB) bytes on
 the external heap, aligned to 32 bytes for block devices that transfer by DMA. A reader fills the
@@ -123,6 +128,24 @@ name)` that refuses an operation on a file, an optional span of `built_ins` and 
 (the LVGL colour-format number of a kind's raw pixel files, which carry no header; `KINDS` reports it as `fmt`). The `is_in_use` callback
 runs on the configuration work queue without the registry's lock and must not take the LVGL lock.
 `MakeScriptProvider()` builds the two script kinds.
+
+Two optional parts describe and judge a kind's files, both kind-neutral (the provider knows image facts as
+numbers, with no LVGL in it):
+
+- `image` (`AssetImageTraits`) is for a kind of self-describing image files: `formats` and `compressions`,
+  the LVGL colour formats and compression methods such a file may use, in static storage (`KINDS` reports
+  them as `fmts` and `cmps`), and `get_info(name)`, which answers an `AssetImageInfo` (width, height, colour
+  format, compression method) from the head of a stored file, or nothing for a file that is no such image
+  (`LIST` reports it as `img`). It may read the file's first bytes, for instance with `AssetStore::ReadHead`.
+  A kind with no `formats` has none of this and its `KINDS` and `LIST` answers are as they always were.
+- `check_content(name, length, head)` judges an upload from its first `min(length, content_head_size)` bytes,
+  `content_head_size` being at most `MAX_CONTENT_HEAD_SIZE` (32): nothing to go on, or a sentence the
+  `assets` group sends as `msg` with `BAD_CONTENT` ([smp.md](smp.md#assets-asset-kinds)). It is called once
+  per upload, once the group holds the head, with no file I/O and no waiting. Without it the kind takes any
+  content. `Register()` refuses a provider that asks for a longer head than is kept.
+
+Both `get_info` and `check_content` run on the configuration work queue without the registry's lock and must
+not take the LVGL lock.
 
 A **built-in** (`BuiltInAsset{name, data}`) is a file of the kind that is part of the firmware: bytes in
 static storage (flash) that the `assets` group serves as a read-only file, in place, with no copy and no

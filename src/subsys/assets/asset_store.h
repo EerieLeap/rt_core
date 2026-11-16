@@ -267,6 +267,18 @@ public:
     int OpenRead(std::string_view name, AssetReader& reader) const;
 
     /**
+     * @brief Reads up to @p head.size() bytes from the start of @p name, with no read buffer and no
+     *        allocation besides the file's path: a listing of many files asks it once for each, where
+     *        OpenRead() would allocate a block for each.
+     * @param file_size Gets the size of the file when it was opened; 0 when none was.
+     * @return The bytes read (fewer for a shorter file, 0 for an empty one or an empty @p head), or a
+     *         negative errno: -ENODEV when unavailable, -ENOENT when the file is missing or is a
+     *         directory, another negative errno of the file system (-ENOMEM when the path cannot be
+     *         built or the file system has no free file slot).
+     */
+    ssize_t ReadHead(std::string_view name, std::span<uint8_t> head, size_t& file_size) const;
+
+    /**
      * @brief Starts a staged write of @p name: data goes to STAGING_PATH on this store's volume
      *        (created, or truncated when a stale one is there) until AssetWriter::Commit() renames
      *        it onto the asset. A writer that is still open is aborted first.

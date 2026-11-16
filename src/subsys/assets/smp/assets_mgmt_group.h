@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -82,18 +83,25 @@ class AssetsMgmtGroup : public SmpGroup<AssetsMgmtGroup> {
 public:
     /** @brief Command IDs. */
     enum class Command : uint8_t {
-        /// Read, empty body: `{kinds: [{kind, name, dir, access, max, ext: [tstr...], avail, free?,
-        /// used?}]}`, ordered by `kind`. `name` is the kind's name, `dir` its directory on the volume,
+        /// Read, empty body: `{kinds: [{kind, name, dir, access, max, ext: [tstr...], avail, fmt?, fmts?,
+        /// cmps?, free?, used?}]}`, ordered by `kind`. `name` is the kind's name, `dir` its directory on the volume,
         /// `access` the AssetAccess bits, `max` the largest upload (0 for none), `ext` the extensions
         /// with their dot and `avail` whether the volume is mounted now. `free` and `used` (bytes on the
         /// kind's volume) are sent only while `avail` is true; `free` is the number WRITE checks `len`
         /// against, and only a hint: files take whole blocks, so a `len` below it can still be NO_SPACE.
+        /// `fmt` (the LVGL colour format of the kind's raw pixel files) is there for a kind that sets
+        /// AssetProvider::pixel_format. `fmts` and `cmps` (the colour formats and the compression methods,
+        /// LVGL's numbers, of the kind's self-describing image files) are there for a kind that sets
+        /// AssetProvider::image.formats and image.compressions. None of the three is sent otherwise.
         KINDS = 0,
-        /// Read `{kind, off?}`: `{entries: [{name, size, end_ms?, builtin?, growing?}], next?}`. The files of the
+        /// Read `{kind, off?}`: `{entries: [{name, size, end_ms?, builtin?, growing?, img?}], next?}`. The files of the
         /// kind with a valid name from position `off` (0 when absent), as many as fit into the response.
         /// Request the rest from `next` until it is absent: a page can be empty, and `next` present,
         /// when the entries around it are no assets. Needs no access bit. An entry the provider reports
-        /// as growing has the size it reports and `growing: true`, and no `end_ms`.
+        /// as growing has the size it reports and `growing: true`, and no `end_ms`. A stored file of a kind
+        /// with AssetProvider::image.get_info, when that answers its facts, has `img: {w, h, cf, cmp?}`: the
+        /// image's width and height in pixels, its LVGL colour format and, only when it is compressed, the
+        /// LVGL compression method. A built-in never has it.
         ///
         /// The positions are the kind's built-in files first (AssetProvider::built_ins: position n is
         /// the n-th, listed with `builtin: true`), then the stored files, at the number of built-ins
@@ -126,11 +134,19 @@ public:
         /// start where the last one ended: otherwise the error carries `off`, where to go on.
         ///
         /// The first chunk is checked in this order: the kind, its WRITE bit, the name, whether it is
-        /// a built-in's (BUILT_IN), the volume, the size (TOO_LARGE), whether the file is in use,
-        /// whether an upload is open (BUSY, unless it is this chunk sent again, or the owner's token
-        /// starts it over) and the room on the volume (NO_SPACE). The owner's restart aborts its old upload before the room is looked at, so the
-        /// room its staged file held counts. A staged file left on the volume with no upload open is
-        /// stale and deleted before the room is looked at.
+        /// a built-in's (BUILT_IN), the volume, the size (TOO_LARGE), the content (BAD_CONTENT), whether
+        /// the file is in use, whether an upload is open (BUSY, unless it is this chunk sent again, or the
+        /// owner's token starts it over) and the room on the volume (NO_SPACE). The owner's restart aborts
+        /// its old upload before the room is looked at, so the room its staged file held counts. A staged
+        /// file left on the volume with no upload open is stale and deleted before the room is looked at.
+        ///
+        /// A kind with AssetProvider::check_content has the first min(`len`, content_head_size) bytes of
+        /// the file judged as soon as the unit holds them: on the first chunk when it is that long, which
+        /// every real client's is. BAD_CONTENT carries `msg`, the reason. When a client's chunks split the
+        /// head, the chunk that completes it is refused, which ends the upload: the staged file is deleted
+        /// and the asset stays as it was. A first chunk sent again, its answer lost, is judged again and
+        /// answered the same. The last chunk is not judged again: its CRC proves the bytes are those the
+        /// head described.
         ///
         /// The last chunk can answer IN_USE as well: the file is asked again whether it is in use just
         /// before it is replaced, and the upload ends if it is.
@@ -154,8 +170,9 @@ public:
         STAT = 5,
         /// Write `{kind, name, to}`: `{}`. Renames a file of the kind, replacing `to` as a WRITE would.
         /// Checked in this order: the kind, then its WRITE and DELETE bits (DENIED), both names
-        /// (BAD_NAME), two names that differ only in ASCII case (BAD_NAME: FAT would delete the file),
-        /// whether either name is a built-in's (BUILT_IN), the volume, whether `name` exists
+        /// (BAD_NAME), two names that differ only in ASCII case (BAD_NAME: FAT would delete the file), two
+        /// names with different extensions (BAD_NAME: a file's content is judged for the extension it was
+        /// uploaded under, and a rename would skip that), whether either name is a built-in's (BUILT_IN), the volume, whether `name` exists
         /// (NOT_FOUND), whether `name` is in use for DELETE and `to` for WRITE (IN_USE), and whether
         /// an upload of either name is open (BUSY). A download of either name is closed first. The checkpoint of `name` goes on as one of `to`.
         RENAME = 6,
@@ -186,6 +203,9 @@ public:
         /// The file was closed by its writer after the session or checkpoint a `growing: true` READ
         /// would continue was taken: the close rewrote bytes of its header. Read it again from `off = 0`.
         CHANGED = 17,
+        /// The file's content is not what the kind takes (AssetProvider::check_content). The error carries
+        /// `msg`, the reason.
+        BAD_CONTENT = 18,
     };
 
     /// Directory entries read for one LIST request: more than one response holds.
@@ -232,6 +252,13 @@ private:
         // Of the first chunk, to tell a first chunk sent again from another client's.
         size_t first_length = 0;
         uint32_t first_crc = 0;
+        // The first bytes of the file, kept until check_content has judged them: as many as the check
+        // needs, min(length, content_head_size).
+        std::array<uint8_t, MAX_CONTENT_HEAD_SIZE> head{};
+        size_t head_count = 0;
+        size_t head_needed = 0;
+        // Whether the head was judged, or the kind has no check.
+        bool is_content_checked = true;
         AssetWriter writer;
         int64_t last_activity_ms = 0;
     };
@@ -373,6 +400,8 @@ private:
 
     /** @param extra_key Sent with @p extra_value next to the error, unless empty. */
     static int Fail(smp_streamer* ctxt, Error error, std::string_view extra_key = {}, uint32_t extra_value = 0);
+    /** @brief Answers with @p error and @p message as `msg`, the reason a client can show. */
+    static int Fail(smp_streamer* ctxt, Error error, const std::string& message);
     /** @brief Maps a negative errno of the asset store to a group error. */
     static Error ToError(int rc);
 

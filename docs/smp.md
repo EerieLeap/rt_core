@@ -161,8 +161,8 @@ so a unit serves the kinds it has the services for, and `KINDS` says which.
 
 | Command | Request | Response |
 | --- | --- | --- |
-| `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail, fmt?, free?, used?}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) whether the volume is mounted now, `fmt` for a kind whose raw pixel files carry no header (the number of the LVGL colour format they are in: `0x14` RGB565A8, `0x15` AL88; absent for any other kind, and a `.svg` or other non-raw file of the kind does not follow it) and, only while the volume is mounted, `free` and `used` (bytes on the kind's volume). `free` is the number `WRITE` checks `len` against, and only a hint: files take whole blocks, so a `len` below it can still end in `NO_SPACE`. A unit without kinds answers an empty list. |
-| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size, end_ms?, builtin?}], next?}`; `builtin: true` marks a built-in file (absent for a stored one) |
+| `KINDS` (read) | | `{kinds: [{kind, name, dir, access, max, ext, avail, fmt?, fmts?, cmps?, free?, used?}]}` ordered by `kind`: the number, the name (`"images"`), the directory on the volume, the allowed operations as bits (1 download, 2 upload, 4 delete), the largest upload in bytes (0: none), the extensions with their dot (`[".bin"]`) whether the volume is mounted now, `fmt` for a kind whose raw pixel files carry no header (the number of the LVGL colour format they are in: `0x14` RGB565A8, `0x15` AL88; absent for any other kind, and a `.svg` or other non-raw file of the kind does not follow it), `fmts` and `cmps` for a kind of self-describing image files (the LVGL colour formats such a file may be in, and the LVGL compression methods it may use; each absent for a kind that has none, so an answer without them is a unit whose kind has no such files) and, only while the volume is mounted, `free` and `used` (bytes on the kind's volume). `free` is the number `WRITE` checks `len` against, and only a hint: files take whole blocks, so a `len` below it can still end in `NO_SPACE`. A unit without kinds answers an empty list. |
+| `LIST` (read) | `{kind, off?}` | `{entries: [{name, size, end_ms?, builtin?, growing?, img?}], next?}`; `builtin: true` marks a built-in file (absent for a stored one); `img: {w, h, cf, cmp?}` gives the width and height in pixels, the LVGL colour format and, only for a compressed image, the LVGL compression method of a stored image file whose head the kind reads (absent for any other file and for a built-in) |
 | `READ` (read) | `{kind, name, off}` | `{off, data}`; at `off = 0` also `len`, the size of the file; the chunk that ends at `len` also `crc`, the CRC32 of the whole file |
 | `WRITE` (write) | `{kind, name, off, data}`; at `off = 0` also `len` and `crc`, the size and the CRC32 of the whole file; `tok` on every later chunk | `{off, tok}` with the next offset, `len` once the file is stored; `tok` is given on the first chunk |
 | `DELETE` (write) | `{kind, name}` | `{}` |
@@ -204,6 +204,12 @@ or a rotation; not a file left unfinalized, a log from before the index, or one 
 [system.md](system.md#clock)), like the start in its name; the duration is `end_ms` less that start. A file the writer has open
 ([growing](#reading-a-growing-file)) is listed with its size as of the writer's last sync, `growing:
 true` and no `end_ms`.
+
+`img` is read from the first bytes of each listed file (`AssetProvider::image.get_info`, one small read per
+file, asked for the whole page before anything is encoded), so a client learns an image's size and format from
+the listing alone. A file whose head the kind does not read (a raw file, a document of another sort, a head
+that is damaged) is listed without it. The largest entry takes 45 bytes besides its name, which a page
+always has room for.
 
 The entries come from position `off` (0 when absent), at most 48 per request: the built-ins first, in
 the firmware's order, at positions 0 to n - 1 for n built-ins, then the stored files in the file
@@ -252,10 +258,22 @@ volume, which no kind lists (the `files` group lists directories as they are, so
 `.assets_tmp/` at the root of the card, and `upload.part` in it while an upload is staged). With the
 last chunk the unit checks the CRC32 of everything it received and renames the staged file onto the
 asset, replacing it (the kind's directory is created when missing). The first chunk is checked after the
-kind, access, name, built-in and volume, in this order: the size (`TOO_LARGE`: `len` above `max`, or more data than `len`), whether the file is in use
+kind, access, name, built-in and volume, in this order: the size (`TOO_LARGE`: `len` above `max`, or more data than `len`), the content
+(`BAD_CONTENT`, below), whether the file is in use
 (`IN_USE`), whether an upload is open (`BUSY`) and the room (`NO_SPACE`: `len` above the free space
 of the volume, checked once; the old file counts as used until it is replaced, so replacing a file
 needs room for both).
+
+- **Content.** A kind may judge what it is sent (`AssetProvider::check_content`): the unit keeps the first
+  `content_head_size` bytes of the upload (at most 32) and, once it holds `min(len, content_head_size)` of
+  them, asks the kind whether the file may be stored. That is the first chunk whenever it is at least that
+  long, which every real client's is, so a file that is no image the unit draws is refused before the rest of
+  it crosses the link. The answer is `BAD_CONTENT` with `msg`, a sentence that says why, as the `config`
+  group's `APPLY_FAILED` carries one: `{err: {group: 70, rc: 18}, msg}`. A client whose chunks split the head
+  is refused on the chunk that completes it, which ends the upload: the staged file is deleted and the asset
+  stays as it was. A first chunk sent again, its answer lost, is judged again and answered the same way. The
+  last chunk is not judged again: its CRC proves the bytes are those the head described. A kind with no check
+  takes any content.
 
 - A later chunk is matched to the open upload by its token, kind and exact name (`BAD_TOKEN` when
   there is none or they differ), then checked for the kind (`UNKNOWN_KIND`), the volume
@@ -336,7 +354,9 @@ LIST   entries                           -> {name, size, end_ms?, builtin?, grow
 takes a name away and makes one, so the kind needs both the upload and the delete bit. Checked in this
 order: the kind (`UNKNOWN_KIND`), its access (`DENIED`), both names (`BAD_NAME`), two names that differ
 only in ASCII case (`BAD_NAME`: FAT would delete the file; a case change needs a copy and a delete),
-whether either name is a built-in's (`BUILT_IN`), the volume (`UNAVAILABLE`), whether `name` exists
+two names with different extensions (`BAD_NAME`: a file's content is judged for the extension it was uploaded
+under, and a rename across extensions would give it the other one's meaning without that judgement; for every
+kind, though most have one extension), whether either name is a built-in's (`BUILT_IN`), the volume (`UNAVAILABLE`), whether `name` exists
 (`NOT_FOUND`), whether the kind uses `name` (as for `DELETE`) or `to` (as for `WRITE`) (`IN_USE`), and
 whether an upload of either name is open (`BUSY`). A download of either name is closed first.
 
@@ -374,9 +394,10 @@ buffer (`MCUMGR_TRANSPORT_NETBUF_SIZE` bytes of external RAM) is left out and th
 | `NO_MEMORY` | 15 | No memory, or no free file slot. |
 | `BUILT_IN` | 16 | The asset is built into the firmware: it can't be replaced, renamed or deleted. |
 | `CHANGED` | 17 | `READ` with `growing: true`: the writer closed the file since the session or checkpoint the request would continue was taken. Read it again from `off = 0`. |
+| `BAD_CONTENT` | 18 | `WRITE`: the file's content is not what the kind takes; the response carries `msg`, the reason. |
 
 SMP v1 clients get `rc` instead: `ENOENT` for `UNKNOWN_KIND` and `NOT_FOUND`, `EBADSTATE` for
-`UNAVAILABLE` and `CHANGED`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN` and `TOO_LARGE`, `EACCESSDENIED`
+`UNAVAILABLE` and `CHANGED`, `EINVAL` for `BAD_NAME`, `BAD_OFFSET`, `BAD_TOKEN`, `TOO_LARGE` and `BAD_CONTENT`, `EACCESSDENIED`
 for `DENIED` and `BUILT_IN`, `EBUSY` for `IN_USE` and `BUSY`, `ENOMEM` for `NO_SPACE` and `NO_MEMORY`,
 `ECORRUPT` for `CRC_MISMATCH` and `EUNKNOWN` for the rest.
 
